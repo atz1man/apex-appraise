@@ -31,10 +31,11 @@ const MILESTONE_EXPLAINERS: Record<string, string> = {
 export default function BuyerPortal() {
   const navigate = useNavigate();
   const principal = getPrincipal();
+  const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.buyer.myUnit.useQuery(undefined, { retry: false });
 
-  // local e-sign state — real signing runs through the DocuSign integration
-  const [signedIds, setSignedIds] = useState<Record<string, boolean>>({});
+  // persisted e-sign — the server stamps signedAt (DocuSign in prod)
+  const sign = trpc.buyer.sign.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
 
   const signOut = () => {
     clearSession();
@@ -216,7 +217,7 @@ export default function BuyerPortal() {
                   ) : (
                     <div className="mt-2.5 flex flex-col">
                       {data.documentsToSign.map((d) => {
-                        const isSigned = d.signed || !!signedIds[d.id];
+                        const isSigned = d.signed;
                         return (
                           <div key={d.id} className="flex items-center gap-2.5 py-2.5 border-b border-border-faint last:border-b-0">
                             <span
@@ -229,7 +230,7 @@ export default function BuyerPortal() {
                             {isSigned ? (
                               <StatusChip status="green" label="SIGNED" />
                             ) : (
-                              <Button variant="secondary" className="h-[32px] px-3 text-[12px]" onClick={() => setSignedIds((s) => ({ ...s, [d.id]: true }))}>
+                              <Button variant="secondary" className="h-[32px] px-3 text-[12px]" disabled={sign.isPending} onClick={() => sign.mutate(d.id)}>
                                 <Icon d="M12 20h9|M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={13} />
                                 Review &amp; sign
                               </Button>

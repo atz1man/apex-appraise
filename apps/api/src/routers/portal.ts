@@ -94,11 +94,27 @@ export const buyerRouter = router({
       },
       development: { name: unit.deal.name, address: unit.deal.address },
       milestones: unit.milestones.map((m) => ({ name: m.name, index: m.index, done: m.done, date: m.date })),
-      documentsToSign: docs.map((d) => ({ id: d.id, name: d.name, signed: false })),
+      documentsToSign: docs.map((d) => ({ id: d.id, name: d.name, signed: d.signedAt != null, signedAt: d.signedAt })),
       payments: [
         { kind: 'Reservation fee', amount: 2_000, paid: true, date: unit.reservedAt },
         { kind: 'Exchange deposit (10%)', amount: unit.agreedValue != null ? P(unit.agreedValue) * 0.1 : 0, paid: unit.progress >= 5, date: null },
       ],
     };
+  }),
+
+  /** Buyer signs a buyer-visible document on their own development (DocuSign in prod). */
+  sign: buyerProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
+    const unit = await ctx.prisma.unit.findFirst({ where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId } });
+    if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+    const doc = await ctx.prisma.document.findFirst({
+      where: { id: input, dealId: unit.dealId, orgId: ctx.principal.orgId, buyerVisible: true },
+    });
+    if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+    const signed = await ctx.prisma.document.update({ where: { id: doc.id }, data: { signedAt: new Date() } });
+    await ctx.prisma.activityEvent.create({
+      data: { orgId: ctx.principal.orgId, dealId: unit.dealId, actor: ctx.principal.name, action: 'signed', target: doc.name },
+    });
+    return { id: signed.id, signedAt: signed.signedAt };
   }),
 });

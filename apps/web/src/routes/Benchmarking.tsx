@@ -109,9 +109,18 @@ export default function Benchmarking() {
   const [region, setRegion] = useState('South West');
   const [useClass, setUseClass] = useState('INDUSTRIAL');
 
+  const utils = trpc.useUtils();
   const metricsQ = trpc.benchmarks.metrics.useQuery({ region, useClass });
   const trendQ = trpc.benchmarks.trend.useQuery({ region, useClass });
   const contribQ = trpc.benchmarks.contributions.useQuery();
+  const dealsQ = trpc.deals.list.useQuery({});
+  const [contribDealId, setContribDealId] = useState('');
+  const contribute = trpc.benchmarks.contribute.useMutation({
+    onSuccess: () => {
+      utils.benchmarks.invalidate();
+    },
+  });
+  const effectiveContribId = contribDealId || dealsQ.data?.deals.find((d) => d.name.startsWith('Northgate'))?.id || dealsQ.data?.deals[0]?.id || '';
 
   const M = metricsQ.data;
   const trend = trendQ.data ?? [];
@@ -426,6 +435,26 @@ export default function Benchmarking() {
                       <Spinner />
                     )}
                   </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <select className="flex-1 h-9 text-[12px]" value={effectiveContribId} onChange={(e) => setContribDealId(e.target.value)}>
+                      {(dealsQ.data?.deals ?? []).map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="h-9 px-3 rounded-[9px] bg-brand-700 text-white text-[12px] font-semibold hover:bg-brand-600 disabled:opacity-50"
+                      disabled={!effectiveContribId || contribute.isPending}
+                      onClick={() => contribute.mutate(effectiveContribId)}
+                    >
+                      {contribute.isPending ? '…' : 'Contribute'}
+                    </button>
+                  </div>
+                  {contribute.data && (
+                    <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-700">
+                      Contributed to {contribute.data.region} · {contribute.data.useClass.toLowerCase()} · {contribute.data.period}.
+                    </div>
+                  )}
+                  {contribute.error && <div className="mt-2 text-[11px] text-status-red">{contribute.error.message}</div>}
                 </section>
 
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">

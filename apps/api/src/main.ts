@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import { createContext } from './context.js';
 import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
+import { registerReports } from './reports.js';
 
 const PORT = Number(process.env.PORT ?? 4100);
 
@@ -15,6 +16,7 @@ async function main() {
     trpcOptions: { router: appRouter, createContext },
   });
   await registerUploads(app);
+  registerReports(app);
   app.get('/health', async () => ({ ok: true, service: 'apex-api' }));
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`apex-api listening on :${PORT}`);

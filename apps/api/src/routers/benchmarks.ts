@@ -1,5 +1,14 @@
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { appraisalRowToEngineInput, P } from '../mappers.js';
+import { computeAppraisal } from '@apex/appraisal-engine';
 import { internalProcedure, router } from '../trpc.js';
+
+const REGION_BY_COUNTY: Array<[RegExp, string]> = [
+  [/dorset|bournemouth|poole|hampshire|devon|somerset|bristol/i, 'South West'],
+  [/london/i, 'London'],
+  [/kent|surrey|sussex|berkshire|oxford/i, 'South East'],
+];
 
 const quantile = (sorted: number[], q: number) => {
   if (!sorted.length) return 0;
@@ -70,5 +79,51 @@ export const benchmarksRouter = router({
     const total = await ctx.prisma.benchmarkPoint.count({ where: { isOwn: false } });
     const yours = await ctx.prisma.benchmarkPoint.count({ where: { isOwn: true, orgId: ctx.principal.orgId } });
     return { total, yours };
+  }),
+
+  /**
+   * The data moat: contribute a deal's appraisal metrics (build £/ft², GDV £/ft²,
+   * profit on cost) into the anonymised aggregate. Region inferred from the address;
+   * only derived ratios leave the org — never absolute money or the address itself.
+   */
+  contribute: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+    const row = await ctx.prisma.appraisal.findFirst({
+      where: { dealId: deal.id, orgId: ctx.principal.orgId, isCurrent: true },
+    });
+    if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save an appraisal before contributing' });
+    const R = computeAppraisal(appraisalRowToEngineInput(row));
+    if (R.gia <= 0 || R.gdv <= 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Appraisal has no areas/revenue yet' });
+    const region = REGION_BY_COUNTY.find(([re]) => re.test(deal.address))?.[1] ?? 'South West';
+    const now = new Date();
+    const period = `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
+    const points: Array<[string, number]> = [
+      ['buildPsf', R.buildRate],
+      ['gdvPsf', R.gdv / R.gia],
+      ['poc', R.poc],
+    ];
+    // replace this deal's previous contribution for the period, then write fresh points
+    await ctx.prisma.benchmarkPoint.deleteMany({
+      where: { isOwn: true, orgId: ctx.principal.orgId, dealName: deal.name, period },
+    });
+    for (const [metric, value] of points) {
+      await ctx.prisma.benchmarkPoint.create({
+        data: {
+          region,
+          useClass: deal.assetType,
+          metric,
+          period,
+          value,
+          isOwn: true,
+          orgId: ctx.principal.orgId,
+          dealName: deal.name,
+        },
+      });
+    }
+    await ctx.prisma.activityEvent.create({
+      data: { orgId: ctx.principal.orgId, dealId: deal.id, actor: ctx.principal.name, action: 'contributed to benchmark', target: `${region} · ${deal.assetType.toLowerCase()} · ${period}` },
+    });
+    return { region, useClass: deal.assetType, period };
   }),
 });

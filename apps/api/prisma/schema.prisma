@@ -279,6 +279,7 @@ model Document {
   url      String @default("")
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
   buyerVisible Boolean @default(false)
+  signedAt DateTime? // buyer e-sign timestamp (DocuSign in prod)
   addedById String?
   addedAt  DateTime @default(now())
 }

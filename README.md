@@ -73,11 +73,19 @@ lines) so dev and prod never drift by hand-editing. `JWT_SECRET` is mandatory wh
   (`apps/api/uploads/`, gitignored) and served at `/uploads/files/*` — swap the write
   for S3 presigned uploads in prod, the URL contract stays the same.
 
+## Reports
+
+Both reports render in-app as print-ready A4 pages, and the API also renders them
+**server-side to real PDFs** (headless chromium prints the same React routes — one
+source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
+`GET /reports/:dealId/redbook.pdf?t=<jwt>`, wired to the "Download PDF" buttons.
+
 ## Tests
 
 - Engine: `pnpm --filter @apex/appraisal-engine test` (48 golden tests).
-- e2e: `pnpm --filter @apex/web test:e2e` (Playwright golden path + portal isolation;
-  needs the dev stack running and `npx playwright install chromium` once).
+- e2e: `pnpm --filter @apex/web test:e2e` (16 Playwright tests — golden path, portal
+  isolation, and a happy-path per screen; needs the dev stack running and
+  `npx playwright install chromium` once).
 
 ## Documented deviations from the handoff spec
 

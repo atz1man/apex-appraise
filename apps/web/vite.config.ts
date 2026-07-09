@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/trpc': { target: 'http://localhost:4100', changeOrigin: true },
       '/uploads': { target: 'http://localhost:4100', changeOrigin: true },
+      '/reports': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {
