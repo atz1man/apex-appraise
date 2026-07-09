@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-canvas text-ink font-ui antialiased;
+  font-size: 14px;
+}
+
+/* Figures are always mono (DESIGN_SYSTEM.md §2) */
+.fig {
+  @apply font-mono;
+  font-variant-numeric: tabular-nums;
+}
+
+/* mono uppercase micro-label */
+.label-mono {
+  @apply font-mono uppercase;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
+
+.eyebrow {
+  @apply font-mono uppercase text-brand-500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+input,
+select,
+textarea {
+  @apply bg-surface border border-border-strong rounded-input px-2.5 py-1.5 text-[13px] text-ink outline-none;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #14503b;
+  box-shadow: 0 0 0 3px rgba(20, 80, 59, 0.08);
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dad9d2;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

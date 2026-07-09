@@ -1,0 +1,368 @@
+// Apex Appraise — Prisma schema (DATA_MODEL.md).
+// Dev uses SQLite so the repo runs with zero infrastructure; production uses PostgreSQL
+// (rewrite the datasource in CI/Docker). SQLite does not support native enums, so enum-like
+// fields are String with TypeScript union types in packages/types — same values as the spec.
+// Money is integer pence (BigInt). Areas are sqft.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ---- Tenancy & people ----
+model Organisation {
+  id        String     @id @default(cuid())
+  name      String
+  users     User[]
+  deals     Deal[]
+  contractors Contractor[]
+  investors Investor[]
+  createdAt DateTime   @default(now())
+}
+
+model User {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organisation @relation(fields: [orgId], references: [id])
+  email     String   @unique
+  password  String   // demo: plain seed value hashed with sha256; swap for Auth.js in prod
+  name      String
+  role      String   @default("ANALYST") // ADMIN | ANALYST | SURVEYOR | VIEWER
+  principalType String @default("internal") // internal | buyer | investor
+  initials  String
+  investorId String? // set when principalType=investor
+  buyerUnitId String? // set when principalType=buyer
+  deals     Deal[]
+  createdAt DateTime @default(now())
+}
+
+// ---- Deals / pipeline ----
+model Deal {
+  id           String  @id @default(cuid())
+  orgId        String
+  org          Organisation @relation(fields: [orgId], references: [id])
+  name         String
+  address      String
+  postcode     String?
+  assetType    String  // INDUSTRIAL | RESIDENTIAL | COMMERCIAL | MIXED_USE
+  stage        String  @default("SOURCING") // SOURCING | APPRAISAL | OFFER | ACQUISITION | CONSTRUCTION | SALES_LETTING | COMPLETED
+  figureStatus String  @default("ESTIMATE") // ESTIMATE | COMMITTED | ACTUAL
+  probability  Int     @default(50)
+  gdv          BigInt  @default(0) // pence
+  forecastProfit BigInt @default(0)
+  roc          Float   @default(0)
+  equityRequired BigInt @default(0)
+  viability    String  @default("CAUTION") // PROCEED | CAUTION | DECLINE
+  nextMilestone String?
+  nextMilestoneDate DateTime?
+  ownerId      String?
+  owner        User?   @relation(fields: [ownerId], references: [id])
+  appraisals   Appraisal[]
+  units        Unit[]
+  tenancies    Tenancy[]
+  comparables  Comparable[]
+  scenarios    Scenario[]
+  inspections  Inspection[]
+  costPackages CostPackage[]
+  sitePhotos   SitePhoto[]
+  documents    Document[]
+  tasks        Task[]
+  holdings     Holding[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ---- Appraisal (inputs; results derived by the engine, cached) ----
+model Appraisal {
+  id         String  @id @default(cuid())
+  orgId      String
+  dealId     String
+  deal       Deal    @relation(fields: [dealId], references: [id])
+  isCurrent  Boolean @default(true)
+  label      String  @default("Base")
+  source     String  @default("manual") // manual | ai | field
+  efficiency Float   @default(90)
+  units      String  // JSON AppraisalUnit[] {label,count,area,cap,conf,source} — cap in £/sqft
+  trades     String  // JSON BuildTrade[] {label, rate £/ft²}
+  otherCosts String  // JSON {label, amount pence}[]
+  profFeePct Float   @default(11)
+  contingencyPct Float @default(5)
+  ltcPct     Float   @default(60)
+  ratePct    Float   @default(7.5)
+  periodMonths Int   @default(18)
+  salesMonths Int    @default(3)
+  arrangementFeePct Float @default(1.5)
+  drawFactorPct Float @default(55)
+  spendProfile String @default("SCURVE") // SCURVE | EVEN | FRONT | BACK
+  mezzToPct  Float?
+  mezzRatePct Float?
+  siteMode   String  @default("RESIDUAL") // RESIDUAL | PROFIT
+  landFixed  BigInt  @default(0) // pence
+  acqPct     Float   @default(6.8)
+  agentPct   Float   @default(1.5)
+  legalPct   Float   @default(0.5)
+  targetProfitOnGdvPct Float @default(20)
+  jvGpCoinvestPct Float @default(10)
+  jvPrefPct  Float   @default(8)
+  jvPromotePct Float @default(20)
+  planningStatus String?
+  cilPerSqm  Float   @default(0)
+  s106       BigInt  @default(0) // pence
+  planningRisk Int?
+  startYear  Int?
+  startMonth Int?
+  resultCache String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ---- Comparables ----
+model Comparable {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  address String
+  meta    String @default("")
+  basePsf Float
+  adjSize Float  @default(0)
+  adjCondition Float @default(0)
+  adjDate Float  @default(0)
+  adjLocation Float @default(0)
+  lat     Float?
+  lng     Float?
+}
+
+// ---- Scenarios ----
+model Scenario {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  name    String
+  descriptor String @default("")
+  blendedPsf Float
+  buildPsf Float
+  gia     Int
+  targetProfitPct Float
+}
+
+// ---- Field inspection ----
+model Inspection {
+  id         String @id @default(cuid())
+  orgId      String
+  dealId     String
+  deal       Deal   @relation(fields: [dealId], references: [id])
+  surveyorId String?
+  inspectedAt DateTime?
+  rooms      String // JSON {name, condition, photos[], notes}[]
+  reconciledValue BigInt?
+  approachWeights String // JSON {salesComparison, cost, income}
+  status     String @default("draft")
+}
+
+// ---- Sales & lettings ----
+model Unit {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  name    String
+  spec    String
+  level   Int    @default(0)
+  appraisedValue BigInt // pence
+  agreedValue BigInt?
+  status  String @default("AVAILABLE") // AVAILABLE | RESERVED | EXCHANGED | COMPLETED | HANDOVER
+  buyerName String?
+  buyerSolicitor String?
+  leadSource String?
+  incentive String?
+  depositHeld BigInt?
+  reservedAt DateTime?
+  progress Int   @default(0) // 0-7 conveyancing milestone index
+  stalled Boolean @default(false)
+  milestones SalesMilestone[]
+}
+
+model SalesMilestone {
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id])
+  name   String
+  index  Int
+  done   Boolean @default(false)
+  date   DateTime?
+}
+
+model Tenancy {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  name    String
+  spec    String
+  level   Int    @default(0)
+  ervPcm  BigInt // pence
+  agreedRentPcm BigInt?
+  tenantName String?
+  leadSource String?
+  incentive String?
+  status  String @default("AVAILABLE") // AVAILABLE | APPLICATION | REFERENCING | SIGNED | OCCUPIED
+  progress Int   @default(0) // 0-5 letting milestone index
+  appliedAt DateTime?
+  stalled Boolean @default(false)
+  arrears BigInt @default(0)
+}
+
+// ---- Construction cost monitoring ----
+model Contractor {
+  id     String @id @default(cuid())
+  orgId  String
+  org    Organisation @relation(fields: [orgId], references: [id])
+  name   String
+  trade  String
+  status String @default("On site")
+  rating String @default("—")
+  nextCert String @default("—")
+  retentionRelease String @default("50% at PC")
+  timesheetRate BigInt? // pence/day
+  operatives Int?
+  weeks  String // JSON hours[] sparkline
+  packages CostPackage[]
+  photos SitePhoto[]
+}
+
+model CostPackage {
+  id       String @id @default(cuid())
+  orgId    String
+  dealId   String
+  deal     Deal   @relation(fields: [dealId], references: [id])
+  name     String
+  budget   BigInt // pence
+  committed BigInt @default(0)
+  spent    BigInt @default(0)
+  forecast BigInt
+  retentionPct Float @default(5)
+  certificates Int @default(0)
+  progressPct Int @default(0)
+  contractorId String?
+  contractor Contractor? @relation(fields: [contractorId], references: [id])
+}
+
+model SitePhoto {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  caption String
+  contractorId String?
+  contractor Contractor? @relation(fields: [contractorId], references: [id])
+  url     String @default("")
+  takenAt DateTime
+  weekCommencing DateTime
+}
+
+// ---- Documents / data room ----
+model Document {
+  id       String @id @default(cuid())
+  orgId    String
+  dealId   String
+  deal     Deal   @relation(fields: [dealId], references: [id])
+  name     String
+  category String // Architectural | Planning | Cost plans | Legal | Finance
+  ext      String
+  sizeBytes BigInt
+  url      String @default("")
+  extraction String @default("STORED") // EXTRACTED | LINKED | STORED
+  buyerVisible Boolean @default(false)
+  addedById String?
+  addedAt  DateTime @default(now())
+}
+
+model ActivityEvent {
+  id     String @id @default(cuid())
+  orgId  String
+  dealId String
+  actor  String
+  action String
+  target String
+  at     DateTime @default(now())
+}
+
+// ---- Tasks ----
+model Task {
+  id      String @id @default(cuid())
+  orgId   String
+  dealId  String
+  deal    Deal   @relation(fields: [dealId], references: [id])
+  title   String
+  aspect  String
+  assignee String @default("AO") // initials
+  due     DateTime?
+  done    Boolean @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ---- Investors ----
+model Investor {
+  id      String @id @default(cuid())
+  orgId   String
+  org     Organisation @relation(fields: [orgId], references: [id])
+  name    String
+  initials String @default("IN")
+  contactFirst String @default("")
+  sharePct Float @default(100) // of the LP base
+  holdings Holding[]
+  cashflows Cashflow[]
+  documents String // JSON {name, date, size}[]
+}
+
+model Holding {
+  id         String @id @default(cuid())
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id])
+  dealId     String
+  deal       Deal @relation(fields: [dealId], references: [id])
+  sharePct   Float
+  committed  BigInt // pence — 100% LP basis, scale by investor share
+  called     BigInt @default(0)
+  distributed BigInt @default(0)
+  irr        Float @default(0)
+}
+
+model Cashflow {
+  id         String @id @default(cuid())
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id])
+  dealId     String?
+  kind       String // dist | call
+  label      String @default("")
+  amount     BigInt // pence, signed on 100% basis
+  date       DateTime
+}
+
+// ---- Benchmarking (anonymised aggregate) ----
+model BenchmarkPoint {
+  id       String @id @default(cuid())
+  region   String
+  useClass String
+  metric   String // buildPsf | gdvPsf | poc
+  value    Float
+  period   String // e.g. "2026-Q2"
+  isOwn    Boolean @default(false)
+  orgId    String?
+  dealName String? // only for own points
+}
+
+// ---- Integrations ----
+model IntegrationConnection {
+  id       String @id @default(cuid())
+  orgId    String
+  provider String
+  status   String @default("NOT_CONNECTED") // CONNECTED | ATTENTION | NOT_CONNECTED
+  lastSync DateTime?
+}
