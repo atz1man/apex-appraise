@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, Spinner, TopBar } from '../components/ui';
+
+/** providers with a demo/mock sync that populates real deal data */
+const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
 
 type Status = 'CONNECTED' | 'ATTENTION' | 'NOT_CONNECTED';
 
@@ -58,6 +62,19 @@ export default function Integrations() {
   const utils = trpc.useUtils();
   const { data: rows, isLoading } = trpc.integrations.list.useQuery();
   const connect = trpc.integrations.connect.useMutation({ onSuccess: () => utils.integrations.list.invalidate() });
+  const { data: dealsData } = trpc.deals.list.useQuery({});
+  const [syncDealId, setSyncDealId] = useState('');
+  const [syncResult, setSyncResult] = useState<Record<string, string>>({});
+  const sync = trpc.integrations.sync.useMutation({
+    onSuccess: (res, vars) => {
+      setSyncResult((s) => ({ ...s, [vars.provider]: res.created }));
+      utils.integrations.list.invalidate();
+      utils.comparables.list.invalidate();
+      utils.documents.list.invalidate();
+    },
+  });
+  const deals = dealsData?.deals ?? [];
+  const effectiveDealId = syncDealId || deals.find((d) => d.name.startsWith('Northgate'))?.id || deals[0]?.id || '';
 
   const byProvider = new Map((rows ?? []).map((r) => [r.provider, r]));
   const connected = (rows ?? []).filter((r) => r.status === 'CONNECTED').length;
@@ -88,6 +105,16 @@ export default function Integrations() {
             Live data feeds make extraction trustworthy and appraisals defensible — comparable evidence, planning, EPCs and mapping flow
             straight into every deal.
           </div>
+          {deals.length > 0 && (
+            <div className="mt-3 flex items-center gap-2.5">
+              <span className="label-mono text-ink-3">Sync target deal</span>
+              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8">
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -126,12 +153,28 @@ export default function Integrations() {
                       </div>
                       <div className="mt-3.5 text-[15px] font-semibold">{item.name}</div>
                       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed flex-1">{item.desc}</div>
+                      {syncResult[item.provider] && (
+                        <div className="mt-2.5 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-700">
+                          Pulled {syncResult[item.provider]} onto the selected deal.
+                        </div>
+                      )}
                       <div className="mt-3.5 flex items-center justify-between">
                         <span className="fig text-[10.5px] text-ink-3">{meta}</span>
                         {status === 'CONNECTED' ? (
-                          <Button variant="secondary" className="h-8 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
-                            {pending ? <Spinner /> : 'Manage'}
-                          </Button>
+                          <div className="flex gap-1.5">
+                            {SYNCABLE.has(item.provider) && effectiveDealId && (
+                              <Button
+                                className="h-8 px-3.5 text-[11.5px]"
+                                disabled={sync.isPending && sync.variables?.provider === item.provider}
+                                onClick={() => sync.mutate({ provider: item.provider, dealId: effectiveDealId })}
+                              >
+                                {sync.isPending && sync.variables?.provider === item.provider ? <Spinner /> : 'Sync to deal'}
+                              </Button>
+                            )}
+                            <Button variant="secondary" className="h-8 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
+                              {pending ? <Spinner /> : 'Manage'}
+                            </Button>
+                          </div>
                         ) : status === 'ATTENTION' ? (
                           <button
                             className="inline-flex items-center justify-center h-8 px-3.5 rounded-[9px] text-[11.5px] font-semibold text-white transition-all disabled:opacity-50"

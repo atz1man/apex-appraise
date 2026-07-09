@@ -5,6 +5,7 @@ import { appraisalRouter, autoAppraisalRouter, comparablesRouter, scenariosRoute
 import { salesRouter } from './routers/sales.js';
 import { costRouter, documentsRouter, integrationsRouter, orgRouter, photosRouter, tasksRouter } from './routers/ops.js';
 import { buyerRouter, investorsRouter } from './routers/portal.js';
+import { inspectionsRouter } from './routers/inspections.js';
 import { benchmarksRouter } from './routers/benchmarks.js';
 
 export const appRouter = router({
@@ -16,6 +17,7 @@ export const appRouter = router({
   comparables: comparablesRouter,
   scenarios: scenariosRouter,
   sales: salesRouter,
+  inspections: inspectionsRouter,
   cost: costRouter,
   photos: photosRouter,
   tasks: tasksRouter,

@@ -31,6 +31,8 @@ export default function Hub() {
         ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`],
         ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`],
         ['dataroom', 'Data room', 'Deal documents with live extraction', `/deal/${flagship.id}/dataroom`],
+        ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`],
+        ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field'],
         ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking'],
         ['investor', 'Investor portal', 'LP positions, cashflows, capital calls', '/portal/investor'],
         ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board'],

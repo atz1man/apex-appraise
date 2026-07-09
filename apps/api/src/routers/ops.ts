@@ -269,6 +269,69 @@ export const integrationsRouter = router({
       data: { status: 'CONNECTED', lastSync: new Date() },
     });
   }),
+
+  /**
+   * Pull provider data onto a deal. Providers run in demo/mock mode without
+   * credentials (same pattern as production connectors behind an interface):
+   * Land Registry → sold-price-paid comparables; EPC → certificate document;
+   * PriceHubble → AVM cross-check comparable. Every sync is audit-logged.
+   */
+  sync: internalProcedure
+    .input(z.object({ provider: z.string(), dealId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const conn = await ctx.prisma.integrationConnection.findFirst({
+        where: { orgId: ctx.principal.orgId, provider: input.provider },
+      });
+      if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (conn.status !== 'CONNECTED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Connect this provider first' });
+      const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      let created = '';
+      if (input.provider === 'HM Land Registry') {
+        const rows = [
+          { address: 'Unit 4, Roundways Trade Park', meta: 'PPD Feb 2026 · freehold · 21,300 ft²', basePsf: 221, adjSize: 2, adjCondition: 1, adjDate: 4, adjLocation: -2 },
+          { address: '19 Cobham Gate Industrial', meta: 'PPD Dec 2025 · freehold · 19,750 ft²', basePsf: 214, adjSize: 3, adjCondition: -2, adjDate: 6, adjLocation: 0 },
+        ];
+        for (const r of rows) {
+          await ctx.prisma.comparable.create({ data: { ...r, orgId: ctx.principal.orgId, dealId: deal.id } });
+        }
+        created = `${rows.length} sold-price-paid comparables`;
+      } else if (input.provider === 'EPC Register') {
+        await ctx.prisma.document.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: deal.id,
+            name: `EPC certificate — ${deal.address.split(',')[0]}.pdf`,
+            category: 'Planning',
+            ext: 'pdf',
+            sizeBytes: 180_000n,
+            extraction: 'LINKED',
+            addedById: ctx.principal.userId,
+          },
+        });
+        created = 'EPC certificate (linked)';
+      } else if (input.provider === 'PriceHubble AVM') {
+        await ctx.prisma.comparable.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: deal.id,
+            address: 'PriceHubble AVM estimate',
+            meta: 'Automated valuation cross-check · 80% confidence band',
+            basePsf: 212,
+            adjSize: 0, adjCondition: 0, adjDate: 0, adjLocation: 0,
+          },
+        });
+        created = 'AVM cross-check comparable';
+      } else {
+        created = 'sync acknowledged (no demo dataset for this provider yet)';
+      }
+      await ctx.prisma.activityEvent.create({
+        data: { orgId: ctx.principal.orgId, dealId: deal.id, actor: input.provider, action: 'synced', target: created },
+      });
+      await ctx.prisma.integrationConnection.update({ where: { id: conn.id }, data: { lastSync: new Date() } });
+      return { created };
+    }),
 });
 
 export const orgRouter = router({

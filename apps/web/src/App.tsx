@@ -16,6 +16,11 @@ import Benchmarking from './routes/Benchmarking';
 import Integrations from './routes/Integrations';
 import InvestorPortal from './routes/InvestorPortal';
 import BuyerPortal from './routes/BuyerPortal';
+import FieldApp from './routes/FieldApp';
+import Workbench from './routes/Workbench';
+import AppraisalReport from './routes/AppraisalReport';
+import RedBookReport from './routes/RedBookReport';
+import Landing from './routes/Landing';
 
 function Protected({ children, portal }: { children: JSX.Element; portal?: 'buyer' | 'investor' }) {
   const location = useLocation();
@@ -37,6 +42,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/welcome" element={<Landing />} />
           <Route path="/" element={<Protected><Hub /></Protected>} />
           <Route path="/board" element={<Protected><Board /></Protected>} />
           <Route path="/deal/:dealId/appraisal" element={<Protected><DevelopmentAppraisal /></Protected>} />
@@ -46,6 +52,10 @@ export default function App() {
           <Route path="/deal/:dealId/costs" element={<Protected><CostMonitoring /></Protected>} />
           <Route path="/deal/:dealId/sales" element={<Protected><SalesCrm /></Protected>} />
           <Route path="/deal/:dealId/dataroom" element={<Protected><DataRoom /></Protected>} />
+          <Route path="/field" element={<Protected><FieldApp /></Protected>} />
+          <Route path="/deal/:dealId/workbench" element={<Protected><Workbench /></Protected>} />
+          <Route path="/deal/:dealId/report" element={<Protected><AppraisalReport /></Protected>} />
+          <Route path="/deal/:dealId/redbook" element={<Protected><RedBookReport /></Protected>} />
           <Route path="/benchmarking" element={<Protected><Benchmarking /></Protected>} />
           <Route path="/integrations" element={<Protected><Integrations /></Protected>} />
           <Route path="/portal/investor" element={<Protected portal="investor"><InvestorPortal /></Protected>} />
