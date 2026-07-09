@@ -72,8 +72,19 @@ export const costRouter = router({
         spent: toPence(spent),
         forecast: toPence(forecast),
       };
-      if (id) return ctx.prisma.costPackage.update({ where: { id }, data });
-      return ctx.prisma.costPackage.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
+      const row = id
+        ? await ctx.prisma.costPackage.update({ where: { id }, data })
+        : await ctx.prisma.costPackage.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId,
+          actor: ctx.principal.name,
+          action: id ? 'updated cost package' : 'created cost package',
+          target: `${input.name} — forecast £${Math.round(forecast).toLocaleString('en-GB')}`,
+        },
+      });
+      return row;
     }),
 
   contractors: internalProcedure.query(async ({ ctx }) => {

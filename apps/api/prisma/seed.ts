@@ -5,10 +5,10 @@
  * investors, comparables, scenarios and benchmark aggregate.
  */
 import { PrismaClient } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { hashPassword } from '../src/auth/password.js';
 
 const prisma = new PrismaClient();
-const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+const hash = (s: string) => hashPassword(s);
 /** pounds → integer pence */
 const p = (pounds: number) => BigInt(Math.round(pounds * 100));
 

@@ -1,0 +1,17 @@
+{
+  "name": "Apex Appraise",
+  "short_name": "Apex",
+  "description": "UK property development — appraisal to completion in one workfile",
+  "start_url": "/field",
+  "display": "standalone",
+  "background_color": "#F3F4F1",
+  "theme_color": "#14503B",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

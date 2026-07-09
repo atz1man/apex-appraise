@@ -4,7 +4,13 @@ import jwt from 'jsonwebtoken';
 
 export const prisma = new PrismaClient();
 
-export const JWT_SECRET = process.env.JWT_SECRET ?? 'apex-dev-secret-change-in-prod';
+export const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production');
+  }
+  return secret ?? 'apex-dev-secret-change-in-prod';
+})();
 
 export interface Principal {
   userId: string;

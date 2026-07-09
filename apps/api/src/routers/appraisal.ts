@@ -115,6 +115,16 @@ export const appraisalRouter = router({
           viability: result.poc >= 0.17 ? 'PROCEED' : result.poc >= 0.1 ? 'CAUTION' : 'DECLINE',
         },
       });
+      // audit trail on every financial mutation
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          actor: ctx.principal.name,
+          action: 'saved appraisal',
+          target: `GDV £${Math.round(result.gdv).toLocaleString('en-GB')} · profit £${Math.round(result.profit).toLocaleString('en-GB')}`,
+        },
+      });
       return { id: row.id, result, jv };
     }),
 

@@ -7,6 +7,7 @@ export default defineConfig({
     port: Number(process.env.PORT ?? 5273),
     proxy: {
       '/trpc': { target: 'http://localhost:4100', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {

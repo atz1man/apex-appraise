@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
-import { trpc } from '../lib/trpc';
+import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Spinner, StatusChip, TopBar } from '../components/ui';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
@@ -93,6 +93,9 @@ export default function DataRoom() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({ name: '', category: 'Architectural' });
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openForm = () => {
     setDraft((d) => ({ ...d, category: folder === 'all' ? 'Architectural' : folder }));
@@ -104,6 +107,32 @@ export default function DataRoom() {
     const name = draft.name.trim().includes('.') ? draft.name.trim() : `${draft.name.trim()}.pdf`;
     // metadata only — no real file transfer; size is a plausible placeholder
     addDoc.mutate({ dealId, name, category: draft.category, sizeBytes: Math.round(120_000 + Math.random() * 6_000_000) });
+  };
+
+  /** real multipart upload to the API's local/S3-compatible store */
+  const uploadFiles = async (files: FileList | File[]) => {
+    setUploadError('');
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append('dealId', dealId);
+        form.append('category', folder === 'all' ? 'Architectural' : folder);
+        form.append('file', file);
+        const res = await fetch('/uploads/document', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${getToken() ?? ''}` },
+          body: form,
+        });
+        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      }
+      utils.documents.list.invalidate();
+      utils.documents.activity.invalidate(dealId);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const docs = data?.documents ?? [];
@@ -163,18 +192,44 @@ export default function DataRoom() {
             </div>
           </div>
 
-          {/* dropzone / inline add form */}
+          {/* dropzone — real uploads; click also opens the metadata-only form */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files?.length && uploadFiles(e.target.files)}
+          />
           <div
             className="border-[1.5px] border-dashed border-[#DAD9D2] rounded-[14px] p-5 mb-4 bg-sunken cursor-pointer"
-            onClick={() => !formOpen && openForm()}
+            onClick={() => !formOpen && fileInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+            }}
           >
             <div className="flex items-center gap-3.5">
               <div className="w-[42px] h-[42px] rounded-[11px] bg-tint-success flex items-center justify-center shrink-0">
-                <Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} />
+                {uploading ? <Spinner /> : <Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} />}
               </div>
               <div className="flex-1">
-                <div className="text-[13.5px] font-semibold">Drop drawings, cost plans or planning docs here</div>
-                <div className="mt-0.5 text-[12px] text-ink-3">PDF, DWG, XLSX · up to 100 MB. Documents feed the AI extraction.</div>
+                <div className="text-[13.5px] font-semibold">
+                  {uploading ? 'Uploading…' : 'Drop drawings, cost plans or planning docs here'}
+                </div>
+                <div className="mt-0.5 text-[12px] text-ink-3">
+                  PDF, DWG, XLSX · up to 100 MB. Documents feed the AI extraction.{' '}
+                  <button
+                    className="text-brand-500 font-semibold hover:text-brand-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openForm();
+                    }}
+                  >
+                    Add by name instead
+                  </button>
+                </div>
+                {uploadError && <div className="mt-1 text-[11.5px] text-status-red">{uploadError}</div>}
               </div>
             </div>
             {formOpen && (
@@ -227,7 +282,13 @@ export default function DataRoom() {
                         {d.ext}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium truncate">{d.name}</div>
+                        {d.url ? (
+                          <a href={d.url} target="_blank" rel="noreferrer" className="text-[13px] font-medium truncate block hover:text-brand-700">
+                            {d.name}
+                          </a>
+                        ) : (
+                          <div className="text-[13px] font-medium truncate">{d.name}</div>
+                        )}
                         <div className="text-[10.5px] text-ink-3">{STATUS_SUB[d.extraction] ?? ''}</div>
                       </div>
                     </div>

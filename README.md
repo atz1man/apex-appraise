@@ -49,22 +49,52 @@ own `compute()` output.)
 returns *inputs only* (validated by `zExtraction`); the engine computes outputs.
 Without `ANTHROPIC_API_KEY` the API uses a deterministic demo extraction.
 
+## Production deployment (Docker + PostgreSQL)
+
+```bash
+JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
+# web on :8080, API on :4100, Postgres 16 with a persistent volume
+```
+
+The committed Prisma schema pins `sqlite` for zero-infra local dev;
+`infra/api.Dockerfile` rewrites the datasource to Postgres at build time (two `sed`
+lines) so dev and prod never drift by hand-editing. `JWT_SECRET` is mandatory when
+`NODE_ENV=production` — the API refuses to boot without it.
+
+## Security & storage
+
+- Passwords are **scrypt-hashed** with per-user salts; login is throttled with a
+  **5-failure / 15-minute lockout** per email (in-memory — move to Redis for multi-instance).
+- **Audit trail**: every financial mutation (appraisal save, stage transition, cost
+  package change), document upload and integration sync writes an `ActivityEvent`,
+  surfaced in the data-room activity feed.
+- **Real file uploads**: the data room dropzone and site photo log accept real files
+  via multipart (`/uploads/document`, `/uploads/photo`), stored on local disk in dev
+  (`apps/api/uploads/`, gitignored) and served at `/uploads/files/*` — swap the write
+  for S3 presigned uploads in prod, the URL contract stays the same.
+
+## Tests
+
+- Engine: `pnpm --filter @apex/appraisal-engine test` (48 golden tests).
+- e2e: `pnpm --filter @apex/web test:e2e` (Playwright golden path + portal isolation;
+  needs the dev stack running and `npx playwright install chromium` once).
+
 ## Documented deviations from the handoff spec
 
-- **SQLite in dev** (spec: Postgres 15). `.env`-free local boot; the schema avoids
-  Postgres-only features. Enum-like fields are `String` + TS unions, JSON columns are
-  JSON-encoded `String` (SQLite/Prisma limitation) — parsed in `apps/api/src/mappers.ts`.
-  Production should switch the datasource to Postgres and restore native enums/Json.
+- **SQLite in dev** (spec: Postgres 15) — see the Docker section for the prod path.
+  Enum-like fields are `String` + TS unions, JSON columns are JSON-encoded `String`
+  (SQLite/Prisma limitation) — parsed in `apps/api/src/mappers.ts`.
 - **Money over the wire is £ (number)**; the DB stores integer pence (BigInt) per the
   spec. Conversion happens once in the API mappers (`P`/`toPence`).
-- **Auth** is a minimal JWT credential login (demo). Swap for Auth.js/Clerk for prod.
-- Site photos / documents are metadata-only (no S3 yet); photo cards render as
-  gradient placeholders per the prototype's image-slot pattern.
-- Field app (Phase 10), PDF report rendering (Phase 11) and live integrations
-  (Phase 12) are not built yet; the Integrations screen is a working catalogue over
-  seeded connection state.
+- **Auth** is credential + JWT (scrypt, lockout). Swap for Auth.js/Clerk for SSO/MFA.
+- The field app ships as an installable PWA route (`/field`, manifest included);
+  a native Expo build is a packaging exercise on the same API.
+- Integrations run in demo/mock mode without credentials (Land Registry → PPD
+  comparables, EPC → linked certificate, AVM → cross-check comp), behind the same
+  interface a production connector would implement.
 
 ## Env vars (apps/api)
 
-- `PORT` (default 4100), `JWT_SECRET` (dev default), `ANTHROPIC_API_KEY` (optional —
-  enables real LLM extraction for Auto-Appraisal).
+- `PORT` (default 4100), `JWT_SECRET` (required in production), `ANTHROPIC_API_KEY`
+  (optional — enables real LLM extraction for Auto-Appraisal), `DATABASE_URL`
+  (Postgres, via Docker).

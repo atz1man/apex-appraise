@@ -105,10 +105,20 @@ export const dealsRouter = router({
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       // stage transitions harden the figure status: estimate → committed → actual
-      return ctx.prisma.deal.update({
+      const updated = await ctx.prisma.deal.update({
         where: { id: deal.id },
         data: { stage: input.stage, figureStatus: figureStatusForStage[input.stage] },
       });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: deal.id,
+          actor: ctx.principal.name,
+          action: 'moved deal to',
+          target: `${input.stage.replace('_', ' / ').toLowerCase()} (figures ${figureStatusForStage[input.stage].toLowerCase()})`,
+        },
+      });
+      return updated;
     }),
 
   update: internalProcedure

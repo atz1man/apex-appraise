@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "lint": "tsc --noEmit",
     "test": "echo 'no web unit tests yet' && exit 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@apex/appraisal-engine": "workspace:*",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@apex/ui-tokens": "workspace:*",
+    "@playwright/test": "^1.61.1",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",

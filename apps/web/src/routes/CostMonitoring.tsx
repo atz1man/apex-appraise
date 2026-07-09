@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
-import { trpc } from '../lib/trpc';
+import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 
@@ -124,6 +124,34 @@ export default function CostMonitoring() {
     if (!photoCap.trim() || addPhoto.isPending) return;
     addPhoto.mutate({ dealId, caption: photoCap.trim(), contractorId: photoCid || null, takenAt: photoDate });
     setPhotoCap('');
+  };
+
+  // real image upload → API local/S3-compatible store; falls back to the gradient card style
+  const photoFileRef = useRef<HTMLInputElement>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const uploadPhoto = async (file: File) => {
+    if (!photoCap.trim()) return;
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append('dealId', dealId);
+      form.append('caption', photoCap.trim());
+      if (photoCid) form.append('contractorId', photoCid);
+      form.append('takenAt', photoDate);
+      form.append('file', file);
+      const res = await fetch('/uploads/photo', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${getToken() ?? ''}` },
+        body: form,
+      });
+      if (res.ok) {
+        setPhotoCap('');
+        utils.photos.list.invalidate(dealId);
+      }
+    } finally {
+      setPhotoUploading(false);
+      if (photoFileRef.current) photoFileRef.current.value = '';
+    }
   };
 
   const submitWeek = (contractorId: string) => {
@@ -525,6 +553,16 @@ export default function CostMonitoring() {
                 ))}
               </select>
               <input type="date" className="h-8 py-0 fig text-[11.5px]" value={photoDate} onChange={(e) => setPhotoDate(e.target.value)} />
+              <input
+                ref={photoFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
+              />
+              <Button variant="secondary" className="!h-8" disabled={!photoCap.trim() || photoUploading} onClick={() => photoFileRef.current?.click()}>
+                {photoUploading ? <Spinner /> : '📷 Attach photo'}
+              </Button>
               <Button className="!h-8" disabled={!photoCap.trim() || addPhoto.isPending} onClick={submitPhoto}>+ Add entry</Button>
             </div>
           </div>
@@ -540,9 +578,13 @@ export default function CostMonitoring() {
               <div className="grid grid-cols-4 gap-3.5">
                 {g.items.map((ph, i) => (
                   <button key={ph.id} className="bg-surface border border-border-strong rounded-card overflow-hidden text-left shadow-rest transition-all hover:-translate-y-0.5 hover:shadow-float" onClick={() => setLightbox(ph)}>
-                    <div className="h-[130px] flex items-end p-2.5" style={{ background: PHOTO_GRADS[i % PHOTO_GRADS.length] }}>
-                      <span className="label-mono" style={{ color: 'rgba(255,255,255,0.75)' }}>Site photo</span>
-                    </div>
+                    {ph.url ? (
+                      <img src={ph.url} alt={ph.caption} className="h-[130px] w-full object-cover" />
+                    ) : (
+                      <div className="h-[130px] flex items-end p-2.5" style={{ background: PHOTO_GRADS[i % PHOTO_GRADS.length] }}>
+                        <span className="label-mono" style={{ color: 'rgba(255,255,255,0.75)' }}>Site photo</span>
+                      </div>
+                    )}
                     <div className="px-3 py-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[12.5px] font-semibold truncate">{ph.caption}</span>
@@ -584,9 +626,13 @@ export default function CostMonitoring() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="h-[480px] flex items-center justify-center" style={{ background: PHOTO_GRADS[0] }}>
-              <span className="label-mono" style={{ color: 'rgba(255,255,255,0.7)' }}>Site photo — {lightbox.caption}</span>
-            </div>
+            {lightbox.url ? (
+              <img src={lightbox.url} alt={lightbox.caption} className="max-h-[70vh] w-full object-contain bg-black" />
+            ) : (
+              <div className="h-[480px] flex items-center justify-center" style={{ background: PHOTO_GRADS[0] }}>
+                <span className="label-mono" style={{ color: 'rgba(255,255,255,0.7)' }}>Site photo — {lightbox.caption}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
