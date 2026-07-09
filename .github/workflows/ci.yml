@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - name: Engine golden tests
+        run: pnpm --filter @apex/appraisal-engine test
+      - name: Generate Prisma client (sqlite dev schema)
+        run: pnpm --filter @apex/api prisma:generate
+      - name: Typecheck API
+        run: pnpm --filter @apex/api build
+      - name: Typecheck web
+        run: pnpm --filter @apex/web lint
+
+  postgres-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex
+          POSTGRES_PASSWORD: apex
+          POSTGRES_DB: apex
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U apex"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - name: Rewrite datasource to postgres (same seds as the Docker image)
+        run: |
+          sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
+          sed -i 's|url      = "file:./dev.db"|url      = env("DATABASE_URL")|' apps/api/prisma/schema.prisma
+      - name: Push schema + seed against Postgres
+        env:
+          DATABASE_URL: postgresql://apex:apex@localhost:5432/apex
+        run: |
+          cd apps/api
+          npx prisma db push --skip-generate
+          npx prisma generate
+          npx tsx prisma/seed.ts
