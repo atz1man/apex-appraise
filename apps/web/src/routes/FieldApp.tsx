@@ -30,6 +30,10 @@ const PIN_POS = [
 // ---------- in-frame chrome ----------
 
 function StatusBar({ light = false }: { light?: boolean }) {
+  // real phones have a real status bar — the simulated one is desktop-demo chrome
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches) {
+    return <div className="flex-none h-2" />;
+  }
   return (
     <div className={`flex-none z-20 h-[50px] flex items-center justify-between px-[26px] pt-[15px] pb-2 ${light ? 'text-white' : 'text-ink'}`}>
       <div className="text-[16px] font-semibold tracking-[-0.2px]">9:41</div>
@@ -114,6 +118,13 @@ const netAdjColor = (pts: number) => (pts > 0 ? '#1E7A55' : pts < 0 ? '#B23A2E' 
 // ---------- main ----------
 
 export default function FieldApp() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 560px)');
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
   const utils = trpc.useUtils();
   const { data: dealsData, isLoading: dealsLoading } = trpc.deals.list.useQuery({});
   const deals = dealsData?.deals ?? [];
@@ -832,6 +843,33 @@ export default function FieldApp() {
     </>
   );
 
+  const screens = dealsLoading && !deals.length ? (
+    <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+  ) : (
+    <>
+      {screen === 'appraisals' && appraisalsScreen}
+      {screen === 'detail' && detailScreen}
+      {screen === 'inspection' && inspectionScreen}
+      {screen === 'comps' && compsScreen}
+      {screen === 'valuation' && valuationScreen}
+      {screen === 'sent' && sentScreen}
+    </>
+  );
+
+  // On a real phone (or installed PWA) the field app runs full-bleed — the
+  // actual mobile product, with safe-area padding. The desktop keeps the
+  // presentation bezel for demos.
+  if (isMobile) {
+    return (
+      <div
+        className="fixed inset-0 bg-canvas flex flex-col overflow-hidden"
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {screens}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <TopBar
@@ -853,18 +891,7 @@ export default function FieldApp() {
           <div className="relative w-[390px] h-[822px] rounded-[44px] overflow-hidden bg-canvas flex flex-col">
             {/* dynamic island */}
             <div className="absolute top-[11px] left-1/2 -translate-x-1/2 w-[118px] h-[34px] rounded-[20px] z-30" style={{ background: '#0c0c0a' }} />
-            {dealsLoading && !deals.length ? (
-              <div className="flex-1 flex items-center justify-center"><Spinner /></div>
-            ) : (
-              <>
-                {screen === 'appraisals' && appraisalsScreen}
-                {screen === 'detail' && detailScreen}
-                {screen === 'inspection' && inspectionScreen}
-                {screen === 'comps' && compsScreen}
-                {screen === 'valuation' && valuationScreen}
-                {screen === 'sent' && sentScreen}
-              </>
-            )}
+            {screens}
           </div>
         </div>
         <div className="label-mono text-ink-3 font-medium tracking-[1px]">Field companion app — ships as the native mobile build</div>

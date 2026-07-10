@@ -2,16 +2,21 @@
   "name": "Apex Appraise",
   "short_name": "Apex",
   "description": "UK property development — appraisal to completion in one workfile",
-  "start_url": "/field",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#F3F4F1",
   "theme_color": "#14503B",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Field inspection", "url": "/field", "description": "Capture an inspection on site" },
+    { "name": "Pipeline board", "url": "/board", "description": "Every deal across the lifecycle" },
+    { "name": "Calendar & tasks", "url": "/calendar", "description": "Team tasks and milestones" }
   ]
 }

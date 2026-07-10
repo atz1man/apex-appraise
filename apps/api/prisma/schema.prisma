@@ -77,6 +77,8 @@ model Deal {
   holdings     Holding[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([orgId, stage])
 }
 
 // ---- Appraisal (inputs; results derived by the engine, cached) ----
@@ -122,6 +124,8 @@ model Appraisal {
   resultCache String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([dealId, isCurrent])
 }
 
 // ---- Comparables ----
@@ -139,6 +143,8 @@ model Comparable {
   adjLocation Float @default(0)
   lat     Float?
   lng     Float?
+
+  @@index([dealId])
 }
 
 // ---- Scenarios ----
@@ -153,6 +159,8 @@ model Scenario {
   buildPsf Float
   gia     Int
   targetProfitPct Float
+
+  @@index([dealId])
 }
 
 // ---- Field inspection ----
@@ -167,6 +175,8 @@ model Inspection {
   reconciledValue BigInt?
   approachWeights String // JSON {salesComparison, cost, income}
   status     String @default("draft")
+
+  @@index([dealId])
 }
 
 // ---- Sales & lettings ----
@@ -190,6 +200,8 @@ model Unit {
   progress Int   @default(0) // 0-7 conveyancing milestone index
   stalled Boolean @default(false)
   milestones SalesMilestone[]
+
+  @@index([dealId, status])
 }
 
 model SalesMilestone {
@@ -220,6 +232,8 @@ model Tenancy {
   appliedAt DateTime?
   stalled Boolean @default(false)
   arrears BigInt @default(0)
+
+  @@index([dealId, status])
 }
 
 // ---- Construction cost monitoring ----
@@ -255,6 +269,8 @@ model CostPackage {
   progressPct Int @default(0)
   contractorId String?
   contractor Contractor? @relation(fields: [contractorId], references: [id])
+
+  @@index([dealId])
 }
 
 model SitePhoto {
@@ -268,6 +284,8 @@ model SitePhoto {
   url     String @default("")
   takenAt DateTime
   weekCommencing DateTime
+
+  @@index([dealId, weekCommencing])
 }
 
 // ---- Documents / data room ----
@@ -286,6 +304,8 @@ model Document {
   signedAt DateTime? // buyer e-sign timestamp (DocuSign in prod)
   addedById String?
   addedAt  DateTime @default(now())
+
+  @@index([dealId, category])
 }
 
 model ActivityEvent {
@@ -296,6 +316,8 @@ model ActivityEvent {
   action String
   target String
   at     DateTime @default(now())
+
+  @@index([dealId, at])
 }
 
 // ---- Tasks ----
@@ -310,6 +332,8 @@ model Task {
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())
+
+  @@index([orgId, dealId, done])
 }
 
 // ---- Investors ----
@@ -361,6 +385,8 @@ model Payment {
   stripeIntentId String?
   paidAt   DateTime?
   createdAt DateTime @default(now())
+
+  @@index([unitId, status])
 }
 
 // ---- Benchmarking (anonymised aggregate) ----
@@ -374,6 +400,8 @@ model BenchmarkPoint {
   isOwn    Boolean @default(false)
   orgId    String?
   dealName String? // only for own points
+
+  @@index([region, useClass, metric])
 }
 
 // ---- Integrations ----

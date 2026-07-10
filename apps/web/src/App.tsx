@@ -1,8 +1,9 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
+import { BrandMark } from './components/ui';
 
 /** Expired/invalid session anywhere → clean sign-out and back to login. */
 function handleAuthError(err: unknown): boolean {
@@ -15,30 +16,47 @@ function handleAuthError(err: unknown): boolean {
   }
   return false;
 }
-import Login from './routes/Login';
-import Hub from './routes/Hub';
-import Board from './routes/Board';
-import DevelopmentAppraisal from './routes/DevelopmentAppraisal';
-import AutoAppraisal from './routes/AutoAppraisal';
-import Comparables from './routes/Comparables';
-import Scenarios from './routes/Scenarios';
-import CostMonitoring from './routes/CostMonitoring';
-import SalesCrm from './routes/SalesCrm';
-import DataRoom from './routes/DataRoom';
-import Benchmarking from './routes/Benchmarking';
-import Integrations from './routes/Integrations';
-import InvestorPortal from './routes/InvestorPortal';
-import BuyerPortal from './routes/BuyerPortal';
-import FieldApp from './routes/FieldApp';
-import Workbench from './routes/Workbench';
-import AppraisalReport from './routes/AppraisalReport';
-import RedBookReport from './routes/RedBookReport';
-import Landing from './routes/Landing';
-import DealOverview from './routes/DealOverview';
-import Calendar from './routes/Calendar';
-import Settings from './routes/Settings';
-import Register from './routes/Register';
-import SitePack from './routes/SitePack';
+
+// Route-level code splitting: each screen ships as its own chunk — critical on
+// mobile connections. Heavy libs (exceljs, leaflet) are already lazy inside.
+const Login = lazy(() => import('./routes/Login'));
+const Hub = lazy(() => import('./routes/Hub'));
+const Board = lazy(() => import('./routes/Board'));
+const DevelopmentAppraisal = lazy(() => import('./routes/DevelopmentAppraisal'));
+const AutoAppraisal = lazy(() => import('./routes/AutoAppraisal'));
+const Comparables = lazy(() => import('./routes/Comparables'));
+const Scenarios = lazy(() => import('./routes/Scenarios'));
+const CostMonitoring = lazy(() => import('./routes/CostMonitoring'));
+const SalesCrm = lazy(() => import('./routes/SalesCrm'));
+const DataRoom = lazy(() => import('./routes/DataRoom'));
+const Benchmarking = lazy(() => import('./routes/Benchmarking'));
+const Integrations = lazy(() => import('./routes/Integrations'));
+const InvestorPortal = lazy(() => import('./routes/InvestorPortal'));
+const BuyerPortal = lazy(() => import('./routes/BuyerPortal'));
+const FieldApp = lazy(() => import('./routes/FieldApp'));
+const Workbench = lazy(() => import('./routes/Workbench'));
+const AppraisalReport = lazy(() => import('./routes/AppraisalReport'));
+const RedBookReport = lazy(() => import('./routes/RedBookReport'));
+const Landing = lazy(() => import('./routes/Landing'));
+const DealOverview = lazy(() => import('./routes/DealOverview'));
+const Calendar = lazy(() => import('./routes/Calendar'));
+const Settings = lazy(() => import('./routes/Settings'));
+const Register = lazy(() => import('./routes/Register'));
+const SitePack = lazy(() => import('./routes/SitePack'));
+
+/** Branded splash while a route chunk loads — calm, no layout jank. */
+function Splash() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-canvas">
+      <div className="flex flex-col items-center gap-3 animate-pulseDot">
+        <BrandMark size={40} />
+        <span className="text-[13px] font-semibold text-ink-3">
+          Apex <span className="text-brand-500">Appraise</span>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function Protected({ children, portal }: { children: JSX.Element; portal?: 'buyer' | 'investor' }) {
   const location = useLocation();
@@ -74,6 +92,7 @@ export default function App() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
+        <Suspense fallback={<Splash />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -101,6 +120,7 @@ export default function App() {
           <Route path="/portal/buyer" element={<Protected portal="buyer"><BuyerPortal /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </ToastProvider>
       </QueryClientProvider>
     </trpc.Provider>
