@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { status as statusTokens, brand, neutral, type StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { formatMoneyFull } from '@apex/appraisal-engine';
-import { Avatar, BrandMark, Button, Icon, Spinner, StatusChip } from '../components/ui';
+import { Avatar, BrandMark, Button, Icon, Skeleton, SkeletonRows, Spinner, StatusChip } from '../components/ui';
 import { StripePaymentModal } from '../components/StripePaymentModal';
 
 const fdate = (d: Date | string | null | undefined) =>
@@ -98,8 +98,22 @@ export default function BuyerPortal() {
 
       <main className="max-w-[960px] mx-auto px-6 pb-16">
         {isLoading ? (
-          <div className="mt-14 flex justify-center">
-            <Spinner />
+          <div aria-busy="true">
+            {/* hero placeholder */}
+            <Skeleton height={196} className="mt-7 rounded-[20px]" />
+            <div className="mt-[18px] grid gap-[18px] items-start" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              {/* timeline panel placeholder */}
+              <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
+                <Skeleton width={120} height={15} className="mb-4" />
+                <SkeletonRows rows={6} height={26} />
+              </section>
+              {/* right-hand panel placeholders */}
+              <div className="flex flex-col gap-[18px]">
+                <Skeleton height={190} className="rounded-panel" />
+                <Skeleton height={130} className="rounded-panel" />
+                <Skeleton height={130} className="rounded-panel" />
+              </div>
+            </div>
           </div>
         ) : error ? (
           <div className="mt-14 max-w-md mx-auto bg-surface border border-border-strong rounded-panel shadow-rest p-6 text-center">
@@ -255,8 +269,14 @@ export default function BuyerPortal() {
                               <StatusChip status="green" label="SIGNED" />
                             ) : (
                               <Button variant="secondary" className="h-[32px] px-3 text-[12px]" disabled={sign.isPending} onClick={() => sign.mutate(d.id)}>
-                                <Icon d="M12 20h9|M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={13} />
-                                Review &amp; sign
+                                {sign.isPending && sign.variables === d.id ? (
+                                  <Spinner />
+                                ) : (
+                                  <>
+                                    <Icon d="M12 20h9|M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={13} />
+                                    Review &amp; sign
+                                  </>
+                                )}
                               </Button>
                             )}
                           </div>
@@ -335,15 +355,17 @@ export default function BuyerPortal() {
               <div className="flex gap-2">
                 <a
                   href="mailto:sales@apexappraise.co.uk"
-                  className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken"
+                  className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
                   title="Email your sales team"
+                  aria-label="Email your sales team"
                 >
                   <Icon d="M4 4h16v12H5.2L4 17.2z" size={17} color={brand[700]} strokeWidth={1.9} />
                 </a>
                 <a
                   href="tel:+441202555555"
-                  className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken"
+                  className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
                   title="Call your sales team"
+                  aria-label="Call your sales team"
                 >
                   <Icon
                     d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2Z"

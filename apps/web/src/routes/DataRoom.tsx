@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
-import { Button, EmptyState, Icon, Spinner, StatusChip, TopBar } from '../components/ui';
+import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
@@ -104,7 +104,7 @@ export default function DataRoom() {
   };
 
   const submitDoc = () => {
-    if (!draft.name.trim()) return;
+    if (!draft.name.trim() || addDoc.isPending) return;
     const name = draft.name.trim().includes('.') ? draft.name.trim() : `${draft.name.trim()}.pdf`;
     // metadata only — no real file transfer; size is a plausible placeholder
     addDoc.mutate({ dealId, name, category: draft.category, sizeBytes: Math.round(120_000 + Math.random() * 6_000_000) });
@@ -152,7 +152,7 @@ export default function DataRoom() {
         }
         right={
           <Button onClick={openForm}>
-            <Icon d={UPLOAD_ICON} size={15} color="#fff" /> Upload
+            <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={15} color="#fff" /></span> Upload
           </Button>
         }
       />
@@ -170,9 +170,15 @@ export default function DataRoom() {
                 onClick={() => setFolder(f.key)}
                 className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[9px] mb-0.5 text-left transition-colors ${on ? 'bg-tint-success' : 'hover:bg-sunken'}`}
               >
-                <Icon d={FOLDER_ICON} size={16} color={on ? '#14503B' : '#9AA09A'} strokeWidth={1.9} />
-                <span className={`flex-1 text-[12.5px] ${on ? 'font-semibold text-brand-700' : 'font-medium text-ink-2'}`}>{f.label}</span>
-                <span className="fig text-[10px] font-medium text-ink-3b">{folderCount(f.key)}</span>
+                <span className="inline-flex shrink-0" aria-hidden="true">
+                  <Icon d={FOLDER_ICON} size={16} color={on ? '#14503B' : '#9AA09A'} strokeWidth={1.9} />
+                </span>
+                <span className={`flex-1 min-w-0 truncate text-[12.5px] ${on ? 'font-semibold text-brand-700' : 'font-medium text-ink-2'}`}>{f.label}</span>
+                {data ? (
+                  <span className="fig text-[10px] font-medium text-ink-3b">{folderCount(f.key)}</span>
+                ) : (
+                  <Skeleton height={10} width={14} />
+                )}
               </button>
             );
           })}
@@ -203,17 +209,24 @@ export default function DataRoom() {
             onChange={(e) => e.target.files?.length && uploadFiles(e.target.files)}
           />
           <div
+            tabIndex={0}
             className="border-[1.5px] border-dashed border-[#DAD9D2] rounded-[14px] p-5 mb-4 bg-sunken cursor-pointer"
-            onClick={() => !formOpen && fileInputRef.current?.click()}
+            onClick={() => !formOpen && !uploading && fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && !formOpen && !uploading && e.target === e.currentTarget) {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+              if (!uploading && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
             }}
           >
             <div className="flex items-center gap-3.5">
               <div className="w-[42px] h-[42px] rounded-[11px] bg-tint-success flex items-center justify-center shrink-0">
-                {uploading ? <Spinner /> : <Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} />}
+                {uploading ? <Spinner /> : <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} /></span>}
               </div>
               <div className="flex-1">
                 <div className="text-[13.5px] font-semibold">
@@ -244,7 +257,7 @@ export default function DataRoom() {
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && submitDoc()}
                 />
-                <select value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
+                <select aria-label="Document category" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
                   {CATEGORIES.map((c) => (
                     <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
@@ -258,13 +271,17 @@ export default function DataRoom() {
           </div>
 
           {isLoading ? (
-            <div className="mt-10 flex justify-center"><Spinner /></div>
+            <div className="bg-surface border border-border-strong rounded-card shadow-rest p-4">
+              <SkeletonRows rows={6} height={20} />
+            </div>
           ) : docs.length === 0 ? (
             <EmptyState cta={<Button variant="secondary" onClick={openForm}>Upload a document</Button>}>
               No documents in this folder yet.
             </EmptyState>
           ) : (
             <div className="bg-surface border border-border-strong rounded-card overflow-hidden shadow-rest">
+              <div className="overflow-x-auto">
+              <div className="min-w-[560px]">
               <div className="flex label-mono text-ink-3 border-b border-border-std" style={{ padding: '12px 18px' }}>
                 <div style={{ flex: 3 }}>Name</div>
                 <div style={{ flex: 1.2 }}>Type</div>
@@ -300,6 +317,7 @@ export default function DataRoom() {
                     <div className="flex justify-end" style={{ flex: 1.2 }}>
                       <button
                         title="Click to cycle extraction status"
+                        className="cursor-pointer transition-opacity disabled:opacity-50"
                         disabled={setExtraction.isPending}
                         onClick={() => setExtraction.mutate({ id: d.id, status: NEXT_STATUS[d.extraction] ?? 'EXTRACTED' })}
                       >
@@ -309,6 +327,8 @@ export default function DataRoom() {
                   </div>
                 );
               })}
+              </div>
+              </div>
             </div>
           )}
         </div>

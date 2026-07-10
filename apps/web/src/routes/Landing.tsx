@@ -117,7 +117,7 @@ function Split({
 
 function MockCard({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-surface border border-border-strong rounded-panel p-5" style={{ boxShadow: '0 20px 50px -28px rgba(20,30,25,0.4)' }}>
+    <div className="bg-surface border border-border-strong rounded-panel p-5" style={{ boxShadow: '0 20px 50px -28px rgba(20,30,25,0.4)' }} aria-hidden="true">
       {children}
     </div>
   );
@@ -252,7 +252,7 @@ function HeroAppMock() {
   ];
   const bars = [40, 62, 50, 78, 58, 88];
   return (
-    <div className={`${WRAP} relative`}>
+    <div className={`${WRAP} relative`} aria-hidden="true">
       <div
         className="rounded-t-[18px] border border-b-0 border-white/10 bg-brand-950 px-2.5 pt-2.5"
         style={{ boxShadow: '0 -20px 60px -20px rgba(0,0,0,0.5)' }}
@@ -372,7 +372,7 @@ export default function Landing() {
               className="flex items-center gap-[9px] h-[50px] px-[22px] rounded-[13px] text-[15px] font-semibold text-white hover:bg-white/5 transition-all"
               style={{ border: '1px solid rgba(255,255,255,0.22)' }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
               Watch 2-min tour
@@ -515,7 +515,7 @@ export default function Landing() {
       {/* QUOTE */}
       <div id="customers" className="bg-brand-800 text-white">
         <div className="max-w-[900px] mx-auto px-7 py-[72px] text-center">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="#3FD894" className="opacity-50 mx-auto">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="#3FD894" className="opacity-50 mx-auto" aria-hidden="true">
             <path d="M10 7L7 12h3v5H4v-7l3-3h3zm10 0l-3 5h3v5h-6v-7l3-3h3z" />
           </svg>
           <p className="mt-5 text-[22px] md:text-[28px] font-medium tracking-[-0.8px] leading-[1.3]">

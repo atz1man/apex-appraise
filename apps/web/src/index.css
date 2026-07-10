@@ -15,6 +15,35 @@ body,
 body {
   @apply bg-canvas text-ink font-ui antialiased;
   font-size: 14px;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(30, 122, 85, 0.18);
+}
+
+/* calm, springy motion everywhere interactive */
+button,
+a,
+select {
+  transition:
+    background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
+}
+button:active:not(:disabled) {
+  transform: scale(0.975);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Figures are always mono (DESIGN_SYSTEM.md §2) */
@@ -41,13 +70,53 @@ body {
 input,
 select,
 textarea {
-  @apply bg-surface border border-border-strong rounded-input px-2.5 py-1.5 text-[13px] text-ink outline-none;
+  @apply bg-surface rounded-input px-3 py-2 text-[13px] text-ink outline-none;
+  border: 1px solid rgba(20, 30, 25, 0.12);
+  box-shadow: 0 1px 2px rgba(20, 30, 25, 0.03) inset;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: rgba(20, 30, 25, 0.22);
 }
 input:focus,
 select:focus,
 textarea:focus {
   border-color: #14503b;
-  box-shadow: 0 0 0 3px rgba(20, 80, 59, 0.08);
+  box-shadow: 0 0 0 4px rgba(20, 80, 59, 0.1);
+}
+
+/* keyboard navigation: visible focus everywhere, without mouse-click rings */
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid #14503b;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* loading skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #ecebe5;
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: skeleton-sweep 1.4s infinite;
+}
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 ::-webkit-scrollbar {

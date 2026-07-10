@@ -42,7 +42,15 @@ const GLOBAL_NAV: Array<[string, string]> = [
 export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode }) {
   const internal = getPrincipal()?.principalType === 'internal';
   return (
-    <header className="sticky top-0 z-40 h-14 bg-surface border-b border-border-strong flex items-center gap-3 px-5">
+    <header
+      className="sticky top-0 z-40 h-14 flex items-center gap-3 px-5"
+      style={{
+        background: 'rgba(255,255,255,0.82)',
+        backdropFilter: 'blur(18px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.6)',
+        borderBottom: '1px solid rgba(20,30,25,0.07)',
+      }}
+    >
       <BrandLockup />
       {crumb && (
         <>
@@ -92,7 +100,7 @@ export function EyebrowTitle({ eyebrow, title, sub, actions }: { eyebrow: string
 
 export function StatCard({ label, value, tone, sub }: { label: string; value: ReactNode; tone?: string; sub?: ReactNode }) {
   return (
-    <div className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+    <div className="flex-1 min-w-[130px] bg-surface rounded-card shadow-rest px-4 py-3.5">
       <div className="label-mono text-ink-3">{label}</div>
       <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px]" style={tone ? { color: tone } : undefined}>
         {value}
@@ -105,7 +113,7 @@ export function StatCard({ label, value, tone, sub }: { label: string; value: Re
 export function Panel({ title, right, children, className = '', accent }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string }) {
   return (
     <section
-      className={`bg-surface border border-border-strong rounded-panel shadow-rest p-5 ${className}`}
+      className={`bg-surface rounded-panel shadow-rest p-5 ${className}`}
       style={accent ? { borderTop: `3px solid ${accent}` } : undefined}
     >
       {(title || right) && (
@@ -173,34 +181,53 @@ export function Button({
   className?: string;
 }) {
   const styles: Record<string, string> = {
-    primary: 'bg-brand-700 text-white hover:bg-brand-600',
-    secondary: 'bg-surface border border-border-strong text-ink-2 hover:bg-sunken',
+    primary: 'text-white',
+    secondary: 'bg-surface text-ink-2 hover:bg-sunken',
     ghost: 'text-ink-2 hover:bg-sunken-2',
-    danger: 'bg-surface border border-status-red text-status-red hover:bg-status-red-bg',
+    danger: 'bg-surface text-status-red hover:bg-status-red-bg',
+  };
+  const chrome: Record<string, React.CSSProperties> = {
+    // subtle top-light gradient + inner highlight — tactile, Apple-style primary
+    primary: {
+      background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
+    },
+    secondary: { border: '1px solid rgba(20,30,25,0.12)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
+    ghost: {},
+    danger: { border: '1px solid rgba(178,58,46,0.4)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
   };
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-[11px] px-3.5 h-[38px] text-[13px] font-semibold transition-all disabled:opacity-50 ${styles[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[12px] px-4 h-[38px] text-[13px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${styles[variant]} ${className}`}
+      style={chrome[variant]}
+      onMouseEnter={variant === 'primary' ? (e) => (e.currentTarget.style.filter = 'brightness(1.07)') : undefined}
+      onMouseLeave={variant === 'primary' ? (e) => (e.currentTarget.style.filter = '') : undefined}
     >
       {children}
     </button>
   );
 }
 
-/** Segmented control: active = white pill + subtle shadow on a #F0EFE9 track. */
+/** Segmented control — iOS-style: white pill glides on a recessed track. */
 export function SegmentedToggle<T extends string>({ options, value, onChange }: { options: Array<[T, string]>; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex bg-sunken-2 rounded-[11px] p-[3px] gap-[2px]">
+    <div
+      className="inline-flex rounded-[12px] p-[3px] gap-[2px]"
+      style={{ background: '#EDECE6', boxShadow: 'inset 0 1px 2px rgba(20,30,25,0.06)' }}
+      role="tablist"
+    >
       {options.map(([k, label]) => {
         const on = value === k;
         return (
           <button
             key={k}
+            role="tab"
+            aria-selected={on}
             onClick={() => onChange(k)}
-            className={`px-3 py-1.5 rounded-[9px] text-[12.5px] transition-all ${on ? 'bg-surface text-brand-700 font-semibold shadow-pill' : 'text-inactive font-medium'}`}
+            className={`px-3.5 py-1.5 rounded-[10px] text-[12.5px] ${on ? 'bg-surface text-brand-700 font-semibold shadow-pill' : 'text-inactive font-medium hover:text-ink-2'}`}
           >
             {label}
           </button>
@@ -238,9 +265,9 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(12,18,14,0.4)', backdropFilter: 'blur(2px)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(12,18,14,0.35)', backdropFilter: 'blur(6px) saturate(1.2)' }} onClick={onClose}>
       <div
-        className="h-full bg-surface shadow-drawer animate-slideIn overflow-y-auto"
+        className="h-full bg-surface shadow-drawer animate-slideIn overflow-y-auto rounded-l-[22px]"
         style={{ width, maxWidth: '94vw' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -273,6 +300,22 @@ export function Td({ children, right, fig, className = '', style }: { children?:
 }
 
 // ---------- Misc ----------
+
+/** Content-shaped loading placeholder — prefer over a bare Spinner for panels/tables. */
+export function Skeleton({ height = 14, width = '100%', className = '' }: { height?: number; width?: number | string; className?: string }) {
+  return <div className={`skeleton ${className}`} style={{ height, width }} aria-hidden="true" />;
+}
+
+/** A stack of skeleton rows approximating a table/list while it loads. */
+export function SkeletonRows({ rows = 5, height = 14 }: { rows?: number; height?: number }) {
+  return (
+    <div className="flex flex-col gap-2.5" role="status" aria-label="Loading">
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} height={height} width={`${100 - (i % 3) * 9}%`} />
+      ))}
+    </div>
+  );
+}
 
 export function Spinner() {
   return (

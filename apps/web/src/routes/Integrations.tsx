@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Skeleton, Spinner, TopBar } from '../components/ui';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -108,7 +108,7 @@ export default function Integrations() {
           {deals.length > 0 && (
             <div className="mt-3 flex items-center gap-2.5">
               <span className="label-mono text-ink-3">Sync target deal</span>
-              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8">
+              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8" aria-label="Sync target deal">
                 {deals.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -118,7 +118,11 @@ export default function Integrations() {
         </div>
 
         {isLoading ? (
-          <div className="mt-12 flex justify-center"><Spinner /></div>
+          <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))' }} aria-busy="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} height={196} className="rounded-card" />
+            ))}
+          </div>
         ) : total === 0 ? (
           <EmptyState>No integrations available for this workspace yet.</EmptyState>
         ) : (

@@ -12,6 +12,8 @@ import {
   Icon,
   Panel,
   ProgressBar,
+  Skeleton,
+  SkeletonRows,
   Spinner,
   StatCard,
   StatusChip,
@@ -93,7 +95,47 @@ export default function DealOverview() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Deal overview" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <main className="max-w-[1480px] mx-auto px-6 pb-14" role="status" aria-label="Loading">
+          {/* header skeleton */}
+          <div className="mt-6">
+            <Skeleton height={11} width={110} />
+            <Skeleton height={27} width={320} className="mt-2" />
+            <Skeleton height={13} width={240} className="mt-2.5" />
+          </div>
+          {/* lifecycle strip skeleton */}
+          <div className="mt-5 bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+            <Skeleton height={30} />
+          </div>
+          {/* KPI strip skeleton */}
+          <div className="mt-4 flex gap-3 flex-wrap">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="55%" />
+                <Skeleton height={21} width="45%" className="mt-2" />
+              </div>
+            ))}
+          </div>
+          {/* two-column body skeleton */}
+          <div className="mt-6 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(215px, 1fr))' }}>
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="bg-surface border border-border-strong rounded-panel shadow-rest p-4">
+                  <Skeleton height={32} width={32} />
+                  <Skeleton height={13} width="60%" className="mt-2.5" />
+                  <Skeleton height={11} width="85%" className="mt-1.5" />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-4">
+              {Array.from({ length: 2 }, (_, i) => (
+                <div key={i} className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+                  <Skeleton height={13} width="50%" />
+                  <div className="mt-3.5"><SkeletonRows rows={3} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -219,7 +261,7 @@ export default function DealOverview() {
                         }
                       >
                         {done ? (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M4 12l5 5L20 7" />
                           </svg>
                         ) : (
@@ -253,7 +295,14 @@ export default function DealOverview() {
 
         {/* ===== KPI strip ===== */}
         {appraisalLoading ? (
-          <div className="mt-4 flex justify-center py-6"><Spinner /></div>
+          <div className="mt-4 flex gap-3 flex-wrap" role="status" aria-label="Loading">
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="55%" />
+                <Skeleton height={21} width="45%" className="mt-2" />
+              </div>
+            ))}
+          </div>
         ) : result ? (
           <div className="mt-4 flex gap-3 flex-wrap">
             <StatCard label="GDV" value={fM(result.gdv)} />
@@ -272,7 +321,7 @@ export default function DealOverview() {
             <StatCard label="Equity required" value={fM(deal.equityRequired)} />
             <div className="flex-[1.6] min-w-[280px]">
               <EmptyState
-                icon={<Icon d={SPARKLE} size={22} />}
+                icon={<span aria-hidden="true" className="inline-flex"><Icon d={SPARKLE} size={22} /></span>}
                 cta={
                   <Link to={`/deal/${dealId}/auto`}>
                     <Button className="mt-1">Run the first appraisal</Button>
@@ -299,7 +348,7 @@ export default function DealOverview() {
                   className="group bg-surface border border-border-strong rounded-panel shadow-rest p-4 transition-all hover:-translate-y-1 hover:shadow-float"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] bg-tint-success text-brand-700">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] bg-tint-success text-brand-700" aria-hidden="true">
                       <Icon d={t.icon} size={16} strokeWidth={1.9} />
                     </span>
                     {t.count && <span className="fig text-[10.5px] text-ink-3 mt-0.5 whitespace-nowrap">{t.count}</span>}
@@ -316,7 +365,7 @@ export default function DealOverview() {
             {/* Construction cost health */}
             {costLoading ? (
               <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>}>
-                <div className="flex justify-center py-3"><Spinner /></div>
+                <SkeletonRows rows={3} />
               </Panel>
             ) : hasCost && costRollup ? (
               <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>} right={<StatusChip status={costOver ? 'red' : 'green'} label={costOver ? 'Over' : 'On track'} />}>
@@ -356,7 +405,7 @@ export default function DealOverview() {
             {/* Sales health */}
             {salesLoading ? (
               <Panel title={<span className="text-[13px] font-semibold">Sales health</span>}>
-                <div className="flex justify-center py-3"><Spinner /></div>
+                <SkeletonRows rows={3} />
               </Panel>
             ) : hasSales && salesRollup ? (
               <Panel title={<span className="text-[13px] font-semibold">Sales health</span>} right={<span className="fig text-[11px] text-ink-3">{plural(salesRollup.total, 'unit')}</span>}>
@@ -401,7 +450,7 @@ export default function DealOverview() {
               right={<span className="fig text-[11px] text-ink-3">{openTasks.length} open</span>}
             >
               {tasksLoading ? (
-                <div className="flex justify-center py-3"><Spinner /></div>
+                <SkeletonRows rows={4} />
               ) : openTasks.length === 0 ? (
                 <EmptyState>No open tasks on this deal — all clear.</EmptyState>
               ) : (
@@ -413,6 +462,7 @@ export default function DealOverview() {
                         <span
                           className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
                           style={{ background: '#fff', borderColor: neutral.dashed }}
+                          aria-hidden="true"
                         />
                         <span className="flex-1 min-w-0">
                           <span className="block text-[12px] truncate" title={t.title}>{t.title}</span>
@@ -435,7 +485,7 @@ export default function DealOverview() {
             {/* Recent activity */}
             <Panel title={<span className="text-[13px] font-semibold">Recent activity</span>}>
               {activityLoading ? (
-                <div className="flex justify-center py-3"><Spinner /></div>
+                <SkeletonRows rows={5} />
               ) : (activity ?? []).length === 0 ? (
                 <EmptyState>Nothing has happened on this deal yet — activity appears as the team works.</EmptyState>
               ) : (

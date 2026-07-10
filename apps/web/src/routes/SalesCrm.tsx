@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
-import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const MINUS = '−';
@@ -135,6 +135,7 @@ export default function SalesCrm() {
 
   const saving = upsertUnit.isPending || upsertTenancy.isPending;
   const advancing = advanceUnit.isPending || advanceTenancy.isPending;
+  const deleting = deleteUnit.isPending || deleteTenancy.isPending;
 
   // ---- normalise rows ----
   const rows: Row[] = useMemo(() => {
@@ -388,7 +389,31 @@ export default function SalesCrm() {
       <DealNav dealId={dealId} active="sales" />
       <main className="max-w-[1640px] mx-auto px-6 pb-14">
         {loading ? (
-          <div className="mt-16 flex justify-center"><Spinner /></div>
+          <>
+            {/* KPI strip skeleton */}
+            <div className="mt-5 flex gap-3 flex-wrap">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                  <Skeleton height={10} width="60%" />
+                  <Skeleton height={21} width="75%" className="mt-2.5" />
+                </div>
+              ))}
+            </div>
+            {/* unit rows + side rail skeleton */}
+            <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+              <Panel>
+                <SkeletonRows rows={8} height={18} />
+              </Panel>
+              <aside className="flex flex-col gap-4">
+                <Panel>
+                  <SkeletonRows rows={4} />
+                </Panel>
+                <Panel>
+                  <SkeletonRows rows={4} />
+                </Panel>
+              </aside>
+            </div>
+          </>
         ) : (
           <>
             {/* KPI strip */}
@@ -445,7 +470,8 @@ export default function SalesCrm() {
                   shown.length === 0 ? (
                     <EmptyState>No {isRent ? 'tenancies' : 'units'} match this filter.</EmptyState>
                   ) : (
-                    <table className="w-full">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[680px]">
                       <thead>
                         <tr>
                           <Th>Unit</Th>
@@ -462,7 +488,18 @@ export default function SalesCrm() {
                           const hasAgreed = r.agreed != null && r.agreed > 0;
                           const dv = hasAgreed ? r.agreed! - r.appraised : 0;
                           return (
-                            <tr key={r.id} className="cursor-pointer hover:bg-sunken transition-colors" onClick={() => openRow(r.id)}>
+                            <tr
+                              key={r.id}
+                              tabIndex={0}
+                              className="cursor-pointer hover:bg-sunken transition-colors"
+                              onClick={() => openRow(r.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  openRow(r.id);
+                                }
+                              }}
+                            >
                               <Td>
                                 <div className="flex items-center gap-2">
                                   <Dot color={statusTokens[d.key].dot} />
@@ -473,8 +510,8 @@ export default function SalesCrm() {
                                 </div>
                               </Td>
                               <Td>
-                                <div className="text-[12.5px] font-medium" style={{ color: r.party ? neutral.ink : neutral.ink3b }}>{r.party ?? labels.vacant}</div>
-                                <div className="text-[10.5px] text-ink-3">{(isRent ? r.lead : r.solicitor) ?? (r.party ? 'TBC' : '—')}</div>
+                                <div className="text-[12.5px] font-medium truncate max-w-[200px]" style={{ color: r.party ? neutral.ink : neutral.ink3b }}>{r.party ?? labels.vacant}</div>
+                                <div className="text-[10.5px] text-ink-3 truncate max-w-[200px]">{(isRent ? r.lead : r.solicitor) ?? (r.party ? 'TBC' : '—')}</div>
                               </Td>
                               <Td right fig className="text-ink-2b">{money(r.appraised)}</Td>
                               <Td right fig className="font-semibold">{hasAgreed ? money(r.agreed!) : '—'}</Td>
@@ -500,6 +537,7 @@ export default function SalesCrm() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   )
                 ) : (
                   <div>
@@ -683,7 +721,7 @@ export default function SalesCrm() {
             {sel.status === 'AVAILABLE' ? (
               <div className="bg-surface border border-border-strong rounded-card p-5 text-center">
                 <div className="w-12 h-12 rounded-[13px] bg-sunken-2 inline-flex items-center justify-center">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={neutral.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5 12 4l9 5.5" /><path d="M5 11v8h14v-8" /></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={neutral.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5" /><path d="M5 11v8h14v-8" /></svg>
                 </div>
                 <div className="mt-3 text-[15.5px] font-semibold">{labels.availTitle}</div>
                 <div className="mt-1.5 text-[12.5px] text-ink-3 leading-relaxed">
@@ -694,7 +732,7 @@ export default function SalesCrm() {
                     {advancing ? <Spinner /> : labels.availCta}
                   </Button>
                   <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                  <Button variant="danger" onClick={removeSel}>Delete</Button>
+                  <Button variant="danger" disabled={deleting} onClick={removeSel}>Delete</Button>
                 </div>
               </div>
             ) : (
@@ -755,7 +793,7 @@ export default function SalesCrm() {
                                 border: `2px solid ${done ? brand[700] : current ? statusTokens.amber.dot : neutral.dashed}`,
                               }}
                             >
-                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>}
+                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>}
                             </span>
                             {i < names.length - 1 && <span className="w-[2px] flex-1 min-h-[14px]" style={{ background: i < sel.progress - 1 ? brand[700] : neutral.border }} />}
                           </div>
@@ -772,7 +810,7 @@ export default function SalesCrm() {
                       {advancing ? <Spinner /> : sel.progress >= maxProg ? labels.doneCta : 'Advance milestone'}
                     </Button>
                     <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                    <Button variant="danger" onClick={removeSel}>Delete</Button>
+                    <Button variant="danger" disabled={deleting} onClick={removeSel}>Delete</Button>
                   </div>
                 </div>
               </>

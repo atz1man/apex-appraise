@@ -13,7 +13,7 @@ import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Spinner, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Skeleton, SkeletonRows, Spinner, StatCard, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
@@ -39,6 +39,12 @@ const PRESETS: Record<string, number[]> = {
 };
 
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const UNIT_COL_ARIA: Record<'count' | 'area' | 'cap', string> = {
+  count: 'number of units',
+  area: 'area sq ft',
+  cap: 'price per sq ft',
+};
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const DEFAULT_INPUT: AppraisalInput = {
@@ -213,7 +219,39 @@ export default function DevelopmentAppraisal() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Development appraisal" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <DealNav dealId={dealId} active="appraisal" />
+        <main className="max-w-[1640px] mx-auto px-6 pb-14">
+          {/* metrics-rail skeleton */}
+          <div className="mt-5 flex gap-3 flex-wrap">
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="60%" />
+                <Skeleton height={20} width="80%" className="mt-2" />
+              </div>
+            ))}
+          </div>
+          {/* tab panel + right rail skeleton */}
+          <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 330px' }}>
+            <div>
+              <div className="flex gap-4 border-b border-border-strong pb-2.5">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <Skeleton key={i} height={13} width={64} />
+                ))}
+              </div>
+              <Panel className="mt-4">
+                <SkeletonRows rows={8} height={16} />
+              </Panel>
+            </div>
+            <aside className="flex flex-col gap-4">
+              <Panel>
+                <SkeletonRows rows={6} height={14} />
+              </Panel>
+              <Panel>
+                <SkeletonRows rows={4} height={14} />
+              </Panel>
+            </aside>
+          </div>
+        </main>
       </div>
     );
   }
@@ -302,7 +340,8 @@ export default function DevelopmentAppraisal() {
                     title="Unit schedule"
                     right={<Button variant="secondary" onClick={() => set({ units: [...input.units, { label: 'New unit type', count: 1, area: 1000, cap: 200 }] })}>+ Add unit</Button>}
                   >
-                    <table className="w-full">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px]">
                       <thead>
                         <tr>
                           <th className="label-mono text-ink-3 text-left pb-2">Unit type</th>
@@ -317,13 +356,14 @@ export default function DevelopmentAppraisal() {
                         {input.units.map((u, i) => (
                           <tr key={i}>
                             <td className="py-1.5 pr-2 border-t border-border-faint">
-                              <input className="w-full" value={u.label} onChange={(e) => set({ units: input.units.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                              <input className="w-full" aria-label={`Unit type ${i + 1} label`} value={u.label} onChange={(e) => set({ units: input.units.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                             </td>
                             {(['count', 'area', 'cap'] as const).map((k) => (
                               <td key={k} className="py-1.5 px-1 border-t border-border-faint">
                                 <input
                                   type="number"
                                   className="w-full text-right fig"
+                                  aria-label={`${u.label} ${UNIT_COL_ARIA[k]}`}
                                   value={u[k]}
                                   onChange={(e) => set({ units: input.units.map((x, j) => (j === i ? { ...x, [k]: parseFloat(e.target.value) || 0 } : x)) })}
                                 />
@@ -331,12 +371,13 @@ export default function DevelopmentAppraisal() {
                             ))}
                             <td className="fig text-right text-[12.5px] font-semibold border-t border-border-faint">{fM(u.count * u.area * u.cap)}</td>
                             <td className="text-right border-t border-border-faint">
-                              <button className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ units: input.units.filter((_, j) => j !== i) })}>×</button>
+                              <button aria-label={`Remove ${u.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ units: input.units.filter((_, j) => j !== i) })}>×</button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     <div className="mt-3 flex gap-6 border-t border-border-std pt-3">
                       <Kv k="NIA" v={`${n0(R.nia)} ft²`} />
                       <Kv k="GIA (via efficiency)" v={`${n0(R.gia)} ft²`} />
@@ -373,6 +414,7 @@ export default function DevelopmentAppraisal() {
                       <input
                         type="number"
                         className="w-20 text-right fig"
+                        aria-label={`${t.label} rate per sq ft`}
                         value={t.rate}
                         onChange={(e) => set({ trades: input.trades.map((x, j) => (j === i ? { ...x, rate: parseFloat(e.target.value) || 0 } : x)) })}
                       />
@@ -397,14 +439,15 @@ export default function DevelopmentAppraisal() {
                 >
                   {input.otherCosts.map((o, i) => (
                     <div key={i} className="flex items-center gap-3 py-1.5 border-t border-border-faint first:border-t-0">
-                      <input className="flex-1" value={o.label} onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                      <input className="flex-1" aria-label={`Cost ${i + 1} label`} value={o.label} onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                       <input
                         type="number"
                         className="w-32 text-right fig"
+                        aria-label={`${o.label} amount`}
                         value={o.amount}
                         onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, amount: parseFloat(e.target.value) || 0 } : x)) })}
                       />
-                      <button className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ otherCosts: input.otherCosts.filter((_, j) => j !== i) })}>×</button>
+                      <button aria-label={`Remove ${o.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ otherCosts: input.otherCosts.filter((_, j) => j !== i) })}>×</button>
                     </div>
                   ))}
                   <div className="mt-3 border-t border-border-std pt-3">
@@ -506,12 +549,12 @@ export default function DevelopmentAppraisal() {
                         value={(input.finance.spendProfile ?? 'scurve') as never}
                         onChange={(p) => set({ finance: { ...input.finance, spendProfile: p } })}
                       />
-                      <select value={startM} onChange={(e) => set({ startMonth: parseInt(e.target.value) })}>
+                      <select aria-label="Start month" value={startM} onChange={(e) => set({ startMonth: parseInt(e.target.value) })}>
                         {MONTHS_FULL.map((m, i) => (
                           <option key={m} value={i}>{m}</option>
                         ))}
                       </select>
-                      <input type="number" className="w-20 fig" value={startY} onChange={(e) => set({ startYear: parseInt(e.target.value) || 2026 })} />
+                      <input type="number" aria-label="Start year" className="w-20 fig" value={startY} onChange={(e) => set({ startYear: parseInt(e.target.value) || 2026 })} />
                     </div>
                   }
                 >
@@ -534,8 +577,8 @@ export default function DevelopmentAppraisal() {
                     <span className="inline-flex items-center gap-1.5"><Dot color="#1E7A55" /> Revenue</span>
                     <span className="ml-auto">Peak debt <b className="fig">{fM(cash.peak)}</b></span>
                   </div>
-                  <div className="mt-4 max-h-[340px] overflow-y-auto">
-                    <table className="w-full">
+                  <div className="mt-4 max-h-[340px] overflow-y-auto overflow-x-auto">
+                    <table className="w-full min-w-[560px]">
                       <thead className="sticky top-0 bg-surface">
                         <tr>
                           {['Month', 'Cost', 'Interest', 'Revenue', 'Net', 'Cumulative'].map((h, i) => (
@@ -718,12 +761,18 @@ export default function DevelopmentAppraisal() {
             <Panel title={`Tasks — ${aspect}`} right={<span className="fig text-[11px] text-ink-3">{tasks?.filter((t) => !t.done).length ?? 0} open</span>}>
               <div className="flex flex-col gap-1.5">
                 {(tasks ?? []).map((t) => (
-                  <button key={t.id} className="flex items-center gap-2.5 py-1 text-left group" onClick={() => toggleTask.mutate(t.id)}>
+                  <button
+                    key={t.id}
+                    className="flex items-center gap-2.5 py-1 text-left group disabled:opacity-60"
+                    aria-pressed={t.done}
+                    disabled={toggleTask.isPending}
+                    onClick={() => toggleTask.mutate(t.id)}
+                  >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
                       style={{ background: t.done ? '#14503B' : '#fff', borderColor: t.done ? '#14503B' : '#D2D1CA' }}
                     >
-                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
+                      {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? '#B6B5AD' : '#16201B', textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <Avatar initials={t.assignee} size={20} />
@@ -738,14 +787,14 @@ export default function DevelopmentAppraisal() {
                   value={newTask}
                   onChange={(e) => setNewTask(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newTask.trim()) {
+                    if (e.key === 'Enter' && newTask.trim() && !createTask.isPending) {
                       createTask.mutate({ dealId, title: newTask.trim(), aspect, assignee: newWho });
                       setNewTask('');
                     }
                   }}
                 />
                 {['AO', 'DW', 'MV', 'PA'].map((w) => (
-                  <button key={w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid #14503B' : 'none', outlineOffset: 1 }}>
+                  <button key={w} aria-label={`Assign new task to ${w}`} aria-pressed={newWho === w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid #14503B' : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>
                 ))}
@@ -764,7 +813,7 @@ export default function DevelopmentAppraisal() {
             value={versionLabel}
             onChange={(e) => setVersionLabel(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && versionLabel.trim()) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
+              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
             }}
           />
           <Button

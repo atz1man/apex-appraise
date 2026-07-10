@@ -43,9 +43,9 @@ export default function Login() {
           <div className="eyebrow mb-1">Sign in</div>
           <h1 className="text-[19px] font-bold tracking-[-0.4px] mb-4">One connected workfile</h1>
           <label className="label-mono text-ink-3 block mb-1">Email</label>
-          <input className="w-full mb-3" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+          <input className="w-full mb-3" aria-label="Email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
           <label className="label-mono text-ink-3 block mb-1">Password</label>
-          <input className="w-full mb-4" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input className="w-full mb-4" type="password" aria-label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
           <Button type="submit" className="w-full justify-center" disabled={login.isPending}>
             {login.isPending ? <Spinner /> : 'Sign in'}

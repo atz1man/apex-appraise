@@ -98,7 +98,7 @@ const CONF_DOT: Record<'high' | 'med' | 'low', string> = {
 
 function Sparkle({ size = 16, color = '#fff' }: { size?: number; color?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" />
       <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z" />
     </svg>
@@ -110,7 +110,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Architectural drawings',
     sub: 'GIA / unit mix',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H3z" />
       </svg>
     ),
@@ -119,7 +119,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Cost plan',
     sub: 'Build £/ft²',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 3v18M3 9h18" />
         <rect x="3" y="3" width="18" height="18" rx="2" />
       </svg>
@@ -129,7 +129,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Planning decision',
     sub: 'Use / CIL / S106',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M7 3h7l4 4v14H7z" />
         <path d="M14 3v4h4" />
       </svg>
@@ -139,7 +139,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Comparables',
     sub: 'GDV £/ft²',
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.1" strokeLinecap="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.1" strokeLinecap="round">
         <path d="M5 20v-7M12 20V5M19 20v-9" />
       </svg>
     ),
@@ -180,6 +180,7 @@ function RateBox({ prefix, value, onChange }: { prefix: string; value: number; o
       <span className="text-[12px] text-ink-2b whitespace-nowrap">{prefix}</span>
       <input
         type="number"
+        aria-label={`${prefix} per ft²`}
         className="w-[54px] text-right fig text-[13px] font-semibold text-brand-700"
         style={{ border: 'none', boxShadow: 'none', padding: 0, background: 'transparent' }}
         value={Number.isFinite(value) ? value : 0}
@@ -466,6 +467,7 @@ export default function AutoAppraisal() {
                   return (
                     <button
                       key={t.label}
+                      aria-pressed={on}
                       onClick={() => setDocsOn((d) => (on ? d.filter((k) => k !== i) : [...d, i]))}
                       className="rounded-[12px] p-3.5 flex items-center gap-2.5 text-left transition-colors"
                       style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed #D2D1CA', background: on ? '#ECF3EF' : 'transparent' }}
@@ -490,6 +492,7 @@ export default function AutoAppraisal() {
                       return (
                         <button
                           key={d.id}
+                          aria-pressed={on}
                           onClick={() => toggleDoc(d.id)}
                           className="flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left transition-colors"
                           style={{ background: on ? '#ECF3EF' : 'transparent' }}
@@ -499,7 +502,7 @@ export default function AutoAppraisal() {
                             style={{ background: on ? '#14503B' : '#fff', borderColor: on ? '#14503B' : '#D2D1CA' }}
                           >
                             {on && (
-                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
+                              <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
                             )}
                           </span>
                           <span className="flex-1 min-w-0">
@@ -521,6 +524,7 @@ export default function AutoAppraisal() {
                 <MicroLabel>Scheme notes &amp; document text</MicroLabel>
               </div>
               <textarea
+                aria-label="Scheme notes and document text"
                 className="mt-2 w-full h-[208px] text-[12.5px] leading-relaxed resize-y p-3 rounded-[12px]"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -561,6 +565,7 @@ export default function AutoAppraisal() {
                 {manual.units.map((u, i) => (
                   <div key={i} className="flex items-center gap-1.5 mb-1.5">
                     <input
+                      aria-label={`Unit ${i + 1} label`}
                       className="min-w-0 h-8 px-2 text-[12px] font-medium rounded-[7px]"
                       style={{ flex: 2.2 }}
                       value={u.label}
@@ -568,6 +573,7 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
+                      aria-label={`${u.label} number of units`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 0.8 }}
                       value={u.count}
@@ -575,6 +581,7 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
+                      aria-label={`${u.label} area sq ft`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1.1 }}
                       value={u.area}
@@ -582,12 +589,14 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
+                      aria-label={`${u.label} price per sq ft`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1 }}
                       value={u.value}
                       onChange={(e) => setUnit(i, { value: parseFloat(e.target.value) || 0 })}
                     />
                     <button
+                      aria-label={`Remove ${u.label}`}
                       className="w-[22px] h-[22px] shrink-0 rounded-[6px] inline-flex items-center justify-center text-[#C0BFB8] hover:text-status-red hover:bg-status-red-bg"
                       onClick={() => setMan({ units: manual.units.filter((_, j) => j !== i) })}
                     >
@@ -599,7 +608,7 @@ export default function AutoAppraisal() {
                   className="inline-flex items-center gap-1.5 py-1 px-0.5 text-brand-700 text-[11.5px] font-semibold"
                   onClick={() => setMan({ units: [...manual.units, { label: 'New unit', count: 1, area: 1000, value: 200 }] })}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.4" strokeLinecap="round">
+                  <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.4" strokeLinecap="round">
                     <path d="M12 6v12M6 12h12" />
                   </svg>
                   Add unit
@@ -647,7 +656,7 @@ export default function AutoAppraisal() {
                   className="flex-1 h-[42px] inline-flex items-center justify-center gap-2 rounded-[11px] bg-brand-700 hover:bg-brand-600 text-white text-[14px] font-semibold transition-colors disabled:opacity-50"
                 >
                   Run appraisal
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
                 </button>
@@ -673,7 +682,7 @@ export default function AutoAppraisal() {
           {phase === 'loading' && (
             <Panel>
               <div className="flex items-center gap-3.5 py-2">
-                <div className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid #ECEBE5', borderTopColor: '#14503B' }} />
+                <div aria-hidden="true" className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid #ECEBE5', borderTopColor: '#14503B' }} />
                 <div className="text-[16px] font-semibold">AI Development Director analysing…</div>
               </div>
               <div className="mt-4 mb-2 flex flex-col gap-3">
@@ -697,12 +706,12 @@ export default function AutoAppraisal() {
               <section className="relative overflow-hidden rounded-panel p-[22px] text-white" style={{ background: 'linear-gradient(155deg,#1B6048,#13503B)' }}>
                 <div className="absolute -top-[26px] -right-[26px] w-[120px] h-[120px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
                 <div className="relative flex items-start justify-between gap-3">
-                  <div>
-                    <div className="label-mono" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '0.7px' }}>
+                  <div className="min-w-0">
+                    <div className="label-mono truncate" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '0.7px' }}>
                       {run.assetLabel} · {x.confidence}
                     </div>
-                    <div className="mt-1 text-[21px] font-bold tracking-[-0.4px]">{x.scheme}</div>
-                    <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.75)' }}>{x.address}</div>
+                    <div className="mt-1 text-[21px] font-bold tracking-[-0.4px] truncate">{x.scheme}</div>
+                    <div className="text-[12px] truncate" style={{ color: 'rgba(255,255,255,0.75)' }}>{x.address}</div>
                   </div>
                   <span
                     className="flex-none inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[9px] text-[11px] font-semibold"
@@ -723,7 +732,8 @@ export default function AutoAppraisal() {
                 title="Extracted accommodation"
                 right={<span className="fig text-[11px] text-ink-3">{n0(ind.gia)} ft² GIA · {n0(ind.nia)} ft² NIA</span>}
               >
-                <table className="w-full">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px]">
                   <thead>
                     <tr>
                       <Th>Use / unit</Th>
@@ -752,6 +762,7 @@ export default function AutoAppraisal() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </Panel>
 
               {/* auto-generated appraisal */}
@@ -838,12 +849,15 @@ export default function AutoAppraisal() {
                   />
                   <button
                     onClick={onAsk}
+                    aria-label="Send question"
                     disabled={whatIf.isPending || !chatInput.trim()}
                     className="flex-none w-[46px] h-10 rounded-[10px] bg-brand-700 hover:bg-brand-600 inline-flex items-center justify-center transition-colors disabled:opacity-50"
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" />
-                    </svg>
+                    {whatIf.isPending ? <Spinner /> : (
+                      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" />
+                      </svg>
+                    )}
                   </button>
                 </div>
                 {whatIf.isPending && <div className="mt-2 text-[11.5px] text-ink-3">Thinking…</div>}
@@ -861,7 +875,7 @@ export default function AutoAppraisal() {
                   ) : (
                     <>
                       Open full appraisal
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14M13 6l6 6-6 6" />
                       </svg>
                     </>

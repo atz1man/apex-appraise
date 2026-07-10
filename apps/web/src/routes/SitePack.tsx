@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Button, Dot, EmptyState, Panel, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap, type MapPin } from '../components/SiteMap';
 
@@ -109,10 +109,38 @@ export default function SitePack() {
         </div>
 
         {isLoading ? (
-          <div className="mt-14 flex flex-col items-center gap-3">
-            <Spinner />
-            <div className="text-[12.5px] text-ink-3">Querying HM Land Registry · planning.data.gov.uk · postcodes.io…</div>
-          </div>
+          <>
+            <div className="mt-6 flex items-center gap-3">
+              <Spinner />
+              <div className="text-[12.5px] text-ink-3">Querying HM Land Registry · planning.data.gov.uk · postcodes.io…</div>
+            </div>
+            {/* stat strip skeleton */}
+            <div className="mt-4 flex gap-3 flex-wrap">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                  <Skeleton height={10} width="55%" />
+                  <Skeleton height={20} width="70%" className="mt-2" />
+                </div>
+              ))}
+            </div>
+            {/* sold-price table + map placeholder skeletons */}
+            <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+              <Panel>
+                <Skeleton height={18} width={260} />
+                <div className="mt-4">
+                  <SkeletonRows rows={8} height={16} />
+                </div>
+              </Panel>
+              <div className="flex flex-col gap-4">
+                <Panel>
+                  <Skeleton height={260} className="rounded-[10px]" />
+                </Panel>
+                <Panel>
+                  <SkeletonRows rows={3} height={14} />
+                </Panel>
+              </div>
+            </div>
+          </>
         ) : data?.status === 'no-postcode' ? (
           <div className="mt-8">
             <EmptyState>
@@ -163,8 +191,8 @@ export default function SitePack() {
                 ) : soldItems.length === 0 ? (
                   <EmptyState>No sold-price records within ~1km of {ok.geo.postcode} in the Price Paid dataset.</EmptyState>
                 ) : (
-                  <div className="max-h-[480px] overflow-y-auto">
-                    <table className="w-full">
+                  <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
+                    <table className="w-full min-w-[640px]">
                       <thead className="sticky top-0 bg-surface">
                         <tr>
                           <Th className="w-8" />
@@ -181,14 +209,21 @@ export default function SitePack() {
                           return (
                             <tr key={k} className="hover:bg-sunken cursor-pointer" onClick={() => toggle(k)}>
                               <Td>
-                                <span
+                                <button
+                                  type="button"
+                                  aria-label={`Select ${s.address}`}
+                                  aria-pressed={selected.has(k)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggle(k);
+                                  }}
                                   className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center"
                                   style={{ background: selected.has(k) ? '#14503B' : '#fff', borderColor: selected.has(k) ? '#14503B' : '#D2D1CA' }}
                                 >
                                   {selected.has(k) && (
-                                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
+                                    <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
                                   )}
-                                </span>
+                                </button>
                               </Td>
                               <Td>
                                 <div className="text-[12px] font-medium leading-tight">{s.address}</div>
@@ -279,7 +314,7 @@ export default function SitePack() {
                             <span className="fig w-6 h-6 rounded-[6px] bg-tint-success-2 text-brand-500 text-[11px] font-semibold inline-flex items-center justify-center">
                               {r.rating || '—'}
                             </span>
-                            <span className="flex-1 text-[11.5px] leading-tight">{r.address}</span>
+                            <span className="flex-1 min-w-0 truncate text-[11.5px] leading-tight">{r.address}</span>
                             <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{Math.round(r.floorAreaSqm * 10.764).toLocaleString('en-GB')} ft²</span>
                           </div>
                         ))}

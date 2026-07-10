@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
-import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 /** Contractor avatar gradients — per the design handoff prototype. */
@@ -91,6 +91,14 @@ export default function CostMonitoring() {
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lightbox, setLightbox] = useState<Photo | null>(null);
 
+  // close the photo lightbox on Escape
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setLightbox(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
   const packages = cost?.packages ?? [];
   const rollup = cost?.rollup;
   const over = (rollup?.variance ?? 0) > 0;
@@ -166,7 +174,29 @@ export default function CostMonitoring() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Cost monitoring" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <DealNav dealId={dealId} active="costs" />
+        <main className="max-w-[1640px] mx-auto px-6 pb-14">
+          {/* KPI strip skeleton */}
+          <div className="mt-5 flex gap-3 flex-wrap">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="60%" />
+                <Skeleton height={21} width="75%" className="mt-2.5" />
+              </div>
+            ))}
+          </div>
+          {/* package table + side rail skeleton */}
+          <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <Panel>
+              <SkeletonRows rows={7} height={18} />
+            </Panel>
+            <aside className="flex flex-col gap-4">
+              <Panel>
+                <SkeletonRows rows={5} />
+              </Panel>
+            </aside>
+          </div>
+        </main>
       </div>
     );
   }
@@ -218,7 +248,8 @@ export default function CostMonitoring() {
             {packages.length === 0 ? (
               <EmptyState>No cost packages for this deal yet — packages appear once the build cost plan is broken out.</EmptyState>
             ) : (
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
                 <thead>
                   <tr>
                     <Th>Package</Th>
@@ -242,6 +273,7 @@ export default function CostMonitoring() {
                             <GradDot grad={gradOf(pk.contractorId)} label={pk.contractor ? initialsOf(pk.contractor.name) : '—'} />
                             <select
                               className="h-[30px] py-0 text-[11.5px] min-w-0 flex-1"
+                              aria-label={`Contractor for ${pk.name}`}
                               value={pk.contractorId ?? ''}
                               disabled={upsertPkg.isPending}
                               onChange={(e) =>
@@ -295,6 +327,7 @@ export default function CostMonitoring() {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             )}
           </Panel>
 
@@ -404,7 +437,7 @@ export default function CostMonitoring() {
                         <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-3">
                           <span>{c.trade} · {pkgCount === 1 ? '1 package' : `${pkgCount} packages`}</span>
                           <span className="inline-flex items-center gap-1 font-semibold" style={{ color: ratingTone(c.rating) }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill={ratingTone(c.rating)}><path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" /></svg>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill={ratingTone(c.rating)} aria-hidden="true"><path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" /></svg>
                             {c.rating}
                           </span>
                         </div>
@@ -465,6 +498,7 @@ export default function CostMonitoring() {
                             type="number"
                             min={0}
                             className="flex-1 min-w-0 h-[30px] py-0 fig text-[12px]"
+                            aria-label={`Log hours for ${c.name}`}
                             placeholder="Log hours…"
                             value={hoursDraft[c.id] ?? ''}
                             onChange={(e) => setHoursDraft((s) => ({ ...s, [c.id]: e.target.value }))}
@@ -485,12 +519,17 @@ export default function CostMonitoring() {
             <Panel title="Actions — Cost monitoring" right={<span className="fig text-[11px] text-ink-3">{openTasks} open</span>}>
               <div className="flex flex-col gap-1.5">
                 {(tasks ?? []).map((t) => (
-                  <button key={t.id} className="flex items-center gap-2.5 py-1 text-left" onClick={() => toggleTask.mutate(t.id)}>
+                  <button
+                    key={t.id}
+                    className="flex items-center gap-2.5 py-1 px-1 -mx-1 rounded-[8px] text-left cursor-pointer hover:bg-sunken transition-colors disabled:opacity-50"
+                    disabled={toggleTask.isPending}
+                    onClick={() => toggleTask.mutate(t.id)}
+                  >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
                       style={{ background: t.done ? brand[700] : '#fff', borderColor: t.done ? brand[700] : neutral.dashed }}
                     >
-                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
+                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <span className="fig text-[10.5px]" style={{ color: !t.done && t.due && t.due.getTime() < Date.now() ? statusTokens.red.text : neutral.ink3 }}>{t.due ? fmtDay(t.due) : '—'}</span>
@@ -506,14 +545,14 @@ export default function CostMonitoring() {
                   value={taskDraft}
                   onChange={(e) => setTaskDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && taskDraft.trim()) {
+                    if (e.key === 'Enter' && taskDraft.trim() && !createTask.isPending) {
                       createTask.mutate({ dealId, title: taskDraft.trim(), aspect: 'Cost monitoring', assignee: taskWho });
                       setTaskDraft('');
                     }
                   }}
                 />
                 {['AO', 'DW', 'MV'].map((w) => (
-                  <button key={w} onClick={() => setTaskWho(w)} className="rounded-full shrink-0" style={{ outline: taskWho === w ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
+                  <button key={w} aria-pressed={taskWho === w} onClick={() => setTaskWho(w)} className="rounded-full shrink-0 cursor-pointer" style={{ outline: taskWho === w ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>
                 ))}
@@ -548,13 +587,13 @@ export default function CostMonitoring() {
                 onChange={(e) => setPhotoCap(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitPhoto()}
               />
-              <select className="h-8 py-0 text-[11.5px]" value={photoCid} onChange={(e) => setPhotoCid(e.target.value)}>
+              <select className="h-8 py-0 text-[11.5px]" aria-label="Photo contractor" value={photoCid} onChange={(e) => setPhotoCid(e.target.value)}>
                 <option value="">No contractor</option>
                 {(contractors ?? []).map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <input type="date" className="h-8 py-0 fig text-[11.5px]" value={photoDate} onChange={(e) => setPhotoDate(e.target.value)} />
+              <input type="date" className="h-8 py-0 fig text-[11.5px]" aria-label="Photo date" value={photoDate} onChange={(e) => setPhotoDate(e.target.value)} />
               <input
                 ref={photoFileRef}
                 type="file"
@@ -612,7 +651,14 @@ export default function CostMonitoring() {
           style={{ background: 'rgba(12,18,14,0.72)', backdropFilter: 'blur(4px)' }}
           onClick={() => setLightbox(null)}
         >
-          <div className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card" style={{ background: neutral.ink }} onClick={(e) => e.stopPropagation()}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={lightbox.caption}
+            className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card"
+            style={{ background: neutral.ink }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
               <div className="min-w-0">
                 <div className="text-[15px] font-semibold text-white truncate">{lightbox.caption}</div>
@@ -621,11 +667,12 @@ export default function CostMonitoring() {
                 </div>
               </div>
               <button
-                className="shrink-0 w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white"
+                aria-label="Close"
+                className="shrink-0 w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
                 style={{ background: 'rgba(255,255,255,0.1)' }}
                 onClick={() => setLightbox(null)}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
             {lightbox.url ? (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { formatMoneyFull, n0 } from '../lib/format';
-import { Button, Dot, EmptyState, Panel, Spinner, StatCard, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 type Weights = { salesComparison: number; cost: number; income: number };
@@ -106,7 +106,48 @@ export default function Workbench() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Valuation workbench" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <DealNav dealId={dealId} active="workbench" />
+        <main className="max-w-[1500px] mx-auto px-6 pb-14">
+          <div className="mt-6">
+            <Skeleton height={12} width={140} />
+            <Skeleton height={26} width={300} className="mt-2.5" />
+          </div>
+          {/* KPI row skeleton */}
+          <div className="mt-5 flex gap-3 flex-wrap">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[160px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="60%" />
+                <Skeleton height={21} width="75%" className="mt-2.5" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="min-w-0 flex flex-col gap-4">
+              {/* approach cards skeleton */}
+              <div className="grid grid-cols-3 gap-3.5">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className="bg-surface border border-border-strong rounded-card shadow-rest p-4">
+                    <Skeleton height={12} width="55%" />
+                    <Skeleton height={21} width="70%" className="mt-3" />
+                    <Skeleton height={30} className="mt-3.5" />
+                    <Skeleton height={30} className="mt-2.5" />
+                  </div>
+                ))}
+              </div>
+              <Panel>
+                <SkeletonRows rows={5} height={16} />
+              </Panel>
+            </div>
+            <aside className="flex flex-col gap-4 min-w-0">
+              <Panel>
+                <SkeletonRows rows={4} />
+              </Panel>
+              <Panel>
+                <SkeletonRows rows={5} />
+              </Panel>
+            </aside>
+          </div>
+        </main>
       </div>
     );
   }
@@ -137,7 +178,7 @@ export default function Workbench() {
       {isSynced && !dismissed && (
         <div className="flex items-center gap-3 px-6 py-2.5 bg-tint-success border-b border-[#D6E6DD]">
           <span className="flex-none w-[30px] h-[30px] rounded-[9px] bg-brand-700 flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[12.5px] font-semibold text-brand-700">Synced from field inspection · {inspectedOn}</div>
@@ -151,7 +192,7 @@ export default function Workbench() {
             className="flex-none w-[26px] h-[26px] rounded-[7px] flex items-center justify-center hover:bg-tint-success-2"
             style={{ color: '#5E8C76' }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
       )}
@@ -244,7 +285,7 @@ export default function Workbench() {
               title="Comparable evidence grid"
               right={
                 <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-700">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#14503B"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#14503B" aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
                   Auto-adjusted
                 </span>
               }
@@ -418,7 +459,7 @@ export default function Workbench() {
               ) : (
                 <EmptyState
                   icon={
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
                   }
                   cta={
                     <Link to="/field" className="text-[12px] font-semibold text-brand-700 hover:underline">

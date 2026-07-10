@@ -99,7 +99,7 @@ export default function Register() {
         <ul className="mt-5 flex flex-col gap-1.5">
           {REASSURANCE.map((line) => (
             <li key={line} className="flex items-center gap-2 justify-center text-[12px] text-accent-muted-3">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-bright shrink-0" />
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-bright shrink-0" aria-hidden="true" />
               {line}
             </li>
           ))}

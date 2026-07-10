@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Panel, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 type Role = (typeof ROLES)[number];
@@ -39,7 +39,16 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
   if (isLoading || !org) {
     return (
       <Panel title="Organisation">
-        <div className="py-6 flex justify-center"><Spinner /></div>
+        <div className="max-w-[460px]">
+          <Skeleton width={110} height={10} className="mb-2" />
+          <Skeleton height={38} className="mb-3" />
+          <Skeleton width={200} height={10} />
+        </div>
+        <div className="mt-4 flex gap-3 flex-wrap">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} width={150} height={72} className="rounded-card" />
+          ))}
+        </div>
       </Panel>
     );
   }
@@ -59,7 +68,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
               if (dirty) update.mutate({ name: draft.trim() });
             }}
           >
-            <input className="flex-1" value={draft} onChange={(e) => setName(e.target.value)} />
+            <input className="flex-1" aria-label="Workspace name" value={draft} onChange={(e) => setName(e.target.value)} />
             <Button type="submit" disabled={!dirty || update.isPending}>
               {update.isPending ? <Spinner /> : 'Save'}
             </Button>
@@ -146,8 +155,8 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         <input id="invite-email" className="w-full" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       </div>
       <div>
-        <label className="label-mono text-ink-3 block mb-1">Role</label>
-        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
+        <label htmlFor="invite-role" className="label-mono text-ink-3 block mb-1">Role</label>
+        <select id="invite-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
           {ROLES.map((r) => (
             <option key={r} value={r}>{r}</option>
           ))}
@@ -184,7 +193,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
     >
       {inviting && <InviteForm onDone={() => setInviting(false)} />}
       {isLoading ? (
-        <div className="py-6 flex justify-center"><Spinner /></div>
+        <SkeletonRows rows={4} height={30} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -210,12 +219,13 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                         </span>
                       </span>
                     </td>
-                    <td className="py-2.5 px-2 border-t border-border-faint text-[12.5px] text-ink-2">{m.email}</td>
+                    <td className="py-2.5 px-2 border-t border-border-faint text-[12.5px] text-ink-2 max-w-[240px] truncate">{m.email}</td>
                     <td className="py-2.5 px-2 border-t border-border-faint fig text-[12px] text-ink-2b">{dateGB(m.createdAt)}</td>
                     <td className="py-2.5 px-2 border-t border-border-faint">
                       {isAdmin && !isSelf ? (
                         <select
                           value={m.role}
+                          aria-label={`Role for ${m.name}`}
                           disabled={setRole.isPending && setRole.variables?.userId === m.id}
                           onChange={(e) => setRole.mutate({ userId: m.id, role: e.target.value as Role })}
                         >
@@ -268,11 +278,11 @@ function SecurityPanel() {
         }}
       >
         <label className="label-mono text-ink-3 block mb-1">Current password</label>
-        <input className="w-full mb-3" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+        <input className="w-full mb-3" type="password" aria-label="Current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
         <label className="label-mono text-ink-3 block mb-1">New password</label>
-        <input className="w-full mb-3" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+        <input className="w-full mb-3" type="password" aria-label="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
         <label className="label-mono text-ink-3 block mb-1">Confirm new password</label>
-        <input className="w-full mb-3" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <input className="w-full mb-3" type="password" aria-label="Confirm new password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
         <Button type="submit" disabled={!current || !next || !confirm || change.isPending}>
           {change.isPending ? <Spinner /> : 'Change password'}
@@ -331,7 +341,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
   const toast = useToast();
   const utils = trpc.useUtils();
   const [params, setParams] = useSearchParams();
-  const { data } = trpc.billing.config.useQuery();
+  const { data, isLoading } = trpc.billing.config.useQuery();
   const sync = trpc.billing.sync.useMutation({
     onSuccess: (res) => {
       utils.billing.config.invalidate();
@@ -355,6 +365,17 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (isLoading) {
+    return (
+      <Panel title="Billing & plan">
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={200} className="rounded-card" />
+          ))}
+        </div>
+      </Panel>
+    );
+  }
   if (!data) return null;
   return (
     <Panel

@@ -4,7 +4,7 @@ import { status as statusTokens, brand, neutral } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { formatPct } from '@apex/appraisal-engine';
-import { Avatar, Button, Icon, Spinner, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Icon, Skeleton, SkeletonRows, Td, Th, TopBar } from '../components/ui';
 
 const fdate = (d: Date | string | null | undefined) =>
   d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -69,6 +69,7 @@ export default function InvestorPortal() {
                 <span className="text-[12px] text-ink-3">Viewing as</span>
                 <select
                   className="h-[34px] font-semibold text-[12.5px]"
+                  aria-label="Viewing as investor"
                   value={effectiveId ?? ''}
                   onChange={(e) => setSelectedId(e.target.value)}
                 >
@@ -89,8 +90,28 @@ export default function InvestorPortal() {
       />
       <main className="max-w-[1320px] mx-auto px-6 pb-14">
         {isLoading ? (
-          <div className="mt-14 flex justify-center">
-            <Spinner />
+          <div aria-busy="true">
+            <div className="mt-6">
+              <Skeleton width={240} height={11} />
+              <Skeleton width={340} height={26} className="mt-3" />
+            </div>
+            {/* position card placeholders */}
+            <div className="mt-[18px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} height={92} className="rounded-card" />
+              ))}
+            </div>
+            <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+              {/* holdings row placeholders */}
+              <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+                <Skeleton width={140} height={16} className="mb-4" />
+                <SkeletonRows rows={5} height={30} />
+              </section>
+              <div className="flex flex-col gap-4">
+                <Skeleton height={150} className="rounded-card" />
+                <Skeleton height={110} className="rounded-card" />
+              </div>
+            </div>
           </div>
         ) : error || !inv ? (
           <div className="mt-14 max-w-md mx-auto bg-surface border border-border-strong rounded-panel shadow-rest p-6 text-center">
@@ -158,6 +179,7 @@ export default function InvestorPortal() {
                 {/* holdings */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
                   <h3 className="text-[16px] font-semibold tracking-[-0.3px] mb-3.5">Your holdings</h3>
+                  <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
@@ -196,6 +218,7 @@ export default function InvestorPortal() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </section>
 
                 {/* cashflow history */}
@@ -216,7 +239,7 @@ export default function InvestorPortal() {
                               <Icon d={isDist ? 'M12 19V5|M5 12l7-7 7 7' : 'M12 5v14|M5 12l7 7 7-7'} size={16} color={tone.text} />
                             </span>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-semibold">{c.label}</div>
+                              <div className="text-[13px] font-semibold truncate">{c.label}</div>
                               <div className="text-[10.5px] text-ink-3">{fdate(c.date)}</div>
                             </div>
                             <span className="fig text-[14px] font-semibold" style={{ color: tone.text }}>
@@ -277,8 +300,9 @@ export default function InvestorPortal() {
                       inv.documents.map((d) => (
                         <button
                           key={d.name}
-                          className="flex items-center gap-2.5 py-2 border-b border-border-faint last:border-b-0 text-left group"
+                          className="flex items-center gap-2.5 py-2 px-1 -mx-1 border-b border-border-faint last:border-b-0 text-left group cursor-pointer hover:bg-sunken transition-colors"
                           title={`Download ${d.name}`}
+                          aria-label={`Download ${d.name}`}
                         >
                           <span
                             className="shrink-0 w-[26px] h-8 rounded-[5px] flex items-center justify-center fig text-[7px] font-semibold"
@@ -310,8 +334,9 @@ export default function InvestorPortal() {
                     </div>
                     <a
                       href="mailto:arthur@apexappraise.co.uk"
-                      className="w-[34px] h-[34px] rounded-[9px] border border-border-strong flex items-center justify-center hover:bg-sunken"
+                      className="w-[34px] h-[34px] rounded-[9px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
                       title="Email Arthur"
+                      aria-label="Email Arthur"
                     >
                       <Icon d="M4 4h16v12H5.2L4 17.2z" size={16} color={brand[700]} strokeWidth={1.9} />
                     </a>

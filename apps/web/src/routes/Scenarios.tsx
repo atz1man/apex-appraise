@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { autoAppraise } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
-import { Button, Dot, EmptyState, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Skeleton, SkeletonRows, Spinner, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 /**
@@ -158,7 +158,23 @@ export default function Scenarios() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Scenario comparison" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <DealNav dealId={dealId} active="scenarios" />
+        <main className="max-w-[1500px] mx-auto px-6 pb-14">
+          <div className="mt-6">
+            <Skeleton height={22} width={280} />
+            <Skeleton height={13} width={440} className="mt-2" />
+          </div>
+          {/* comparison-grid skeleton: label column + three option columns */}
+          <div className="mt-4 bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+            <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: '200px repeat(3, minmax(0,1fr))' }}>
+              <div />
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} height={18} width="70%" />
+              ))}
+            </div>
+            <SkeletonRows rows={9} height={16} />
+          </div>
+        </main>
       </div>
     );
   }
@@ -202,8 +218,9 @@ export default function Scenarios() {
           </div>
         </div>
 
+        <div className="mt-4 overflow-x-auto">
         <div
-          className="mt-4 grid bg-surface border border-border-strong rounded-panel overflow-hidden shadow-rest"
+          className="grid bg-surface border border-border-strong rounded-panel overflow-hidden shadow-rest min-w-[880px]"
           style={{ gridTemplateColumns: '200px repeat(3, minmax(0,1fr))' }}
         >
           {/* header row */}
@@ -246,15 +263,20 @@ export default function Scenarios() {
                         <span className="fig text-[13px] font-semibold">{lever.fmt(s[lever.key])}</span>
                         <input
                           type="number"
+                          aria-label={`${s.name} ${lever.label}`}
                           className="fig w-[76px] h-[26px] py-0 px-1.5 text-right text-[11.5px]"
                           value={s[lever.key]}
                           step={lever.step}
                           onChange={(e) => setLever(s.id, lever.key, parseFloat(e.target.value) || 0)}
                           onBlur={() => persist(s)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                          }}
                         />
                       </div>
                       <input
                         type="range"
+                        aria-label={`${s.name} ${lever.label} slider`}
                         className="scn mt-2"
                         min={lever.min}
                         max={lever.max}
@@ -340,6 +362,7 @@ export default function Scenarios() {
               </div>
             );
           })}
+        </div>
         </div>
       </main>
     </div>

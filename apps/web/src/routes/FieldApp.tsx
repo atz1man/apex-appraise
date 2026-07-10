@@ -34,9 +34,9 @@ function StatusBar({ light = false }: { light?: boolean }) {
     <div className={`flex-none z-20 h-[50px] flex items-center justify-between px-[26px] pt-[15px] pb-2 ${light ? 'text-white' : 'text-ink'}`}>
       <div className="text-[16px] font-semibold tracking-[-0.2px]">9:41</div>
       <div className="flex items-center gap-[7px]">
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1" /><rect x="5" y="5" width="3" height="7" rx="1" /><rect x="10" y="2.5" width="3" height="9.5" rx="1" /><rect x="15" y="0" width="3" height="12" rx="1" opacity="0.35" /></svg>
-        <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2C11.3 2 13.9 3.1 15.8 4.9L17 3.6C14.8 1.4 11.8 0 8.5 0S2.2 1.4 0 3.6L1.2 4.9C3.1 3.1 5.7 2 8.5 2Z" /><path d="M8.5 6C9.9 6 11.2 6.6 12.2 7.5L13.4 6.2C12 4.9 10.3 4 8.5 4S5 4.9 3.6 6.2L4.8 7.5C5.8 6.6 7.1 6 8.5 6Z" /><circle cx="8.5" cy="10" r="1.8" /></svg>
-        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" stroke="currentColor" opacity="0.4" /><rect x="2" y="2" width="17" height="9" rx="2" fill="currentColor" /><path d="M24.5 4.5V8.5C25.5 8.2 26 7.4 26 6.5S25.5 4.8 24.5 4.5Z" fill="currentColor" /></svg>
+        <svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1" /><rect x="5" y="5" width="3" height="7" rx="1" /><rect x="10" y="2.5" width="3" height="9.5" rx="1" /><rect x="15" y="0" width="3" height="12" rx="1" opacity="0.35" /></svg>
+        <svg aria-hidden="true" width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2C11.3 2 13.9 3.1 15.8 4.9L17 3.6C14.8 1.4 11.8 0 8.5 0S2.2 1.4 0 3.6L1.2 4.9C3.1 3.1 5.7 2 8.5 2Z" /><path d="M8.5 6C9.9 6 11.2 6.6 12.2 7.5L13.4 6.2C12 4.9 10.3 4 8.5 4S5 4.9 3.6 6.2L4.8 7.5C5.8 6.6 7.1 6 8.5 6Z" /><circle cx="8.5" cy="10" r="1.8" /></svg>
+        <svg aria-hidden="true" width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" stroke="currentColor" opacity="0.4" /><rect x="2" y="2" width="17" height="9" rx="2" fill="currentColor" /><path d="M24.5 4.5V8.5C25.5 8.2 26 7.4 26 6.5S25.5 4.8 24.5 4.5Z" fill="currentColor" /></svg>
       </div>
     </div>
   );
@@ -58,16 +58,16 @@ function BackBtn({ onClick, light = false }: { onClick: () => void; light?: bool
       className={`w-11 h-11 -ml-2 flex items-center justify-center rounded-full ${light ? 'bg-white/25 text-white' : 'text-ink'}`}
       style={light ? { backdropFilter: 'blur(8px)' } : undefined}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5-7 7 7 7" /></svg>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5-7 7 7 7" /></svg>
     </button>
   );
 }
 
 const TAB_ICONS: Record<string, ReactNode> = {
-  appraisals: <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2.5" /><path d="M9 3.6h6a1 1 0 0 1 1 1V6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1Z" /><path d="M9 11.5h6M9 15h4" /></svg>,
-  inspection: <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1-1.6A1 1 0 0 1 9.6 4h4.8a1 1 0 0 1 .8.4l1 1.6h1.3A2.5 2.5 0 0 1 20 8.5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" /><circle cx="12" cy="12.4" r="3.1" /></svg>,
-  comps: <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M5 20v-7M12 20V5M19 20v-9" /></svg>,
-  valuation: <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.6h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1Z" /><path d="M13.5 3.6V8h4.4" /><path d="M9 13h6M9 16.5h6" /></svg>,
+  appraisals: <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2.5" /><path d="M9 3.6h6a1 1 0 0 1 1 1V6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1Z" /><path d="M9 11.5h6M9 15h4" /></svg>,
+  inspection: <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1-1.6A1 1 0 0 1 9.6 4h4.8a1 1 0 0 1 .8.4l1 1.6h1.3A2.5 2.5 0 0 1 20 8.5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" /><circle cx="12" cy="12.4" r="3.1" /></svg>,
+  comps: <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round"><path d="M5 20v-7M12 20V5M19 20v-9" /></svg>,
+  valuation: <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3.6h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1Z" /><path d="M13.5 3.6V8h4.4" /><path d="M9 13h6M9 16.5h6" /></svg>,
 };
 
 function TabBar({ active, onGo }: { active: Screen; onGo: (s: Screen) => void }) {
@@ -104,9 +104,9 @@ function CtaBar({ children }: { children: ReactNode }) {
   );
 }
 
-const CHECK = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>;
-const STAR = <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" /></svg>;
-const ARROW = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
+const CHECK = <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>;
+const STAR = <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" /></svg>;
+const ARROW = <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
 
 const netAdjFmt = (pts: number) => (pts === 0 ? '—' : `${pts > 0 ? '+' : '−'}${Math.abs(pts).toFixed(1)}%`);
 const netAdjColor = (pts: number) => (pts > 0 ? '#1E7A55' : pts < 0 ? '#B23A2E' : '#9AA09A');
@@ -236,10 +236,11 @@ export default function FieldApp() {
 
         {/* search */}
         <div className="mx-[22px] mt-4 flex items-center gap-2.5 bg-surface border border-border-std rounded-[14px] px-3.5 min-h-[44px]">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9AA09A" strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9AA09A" strokeWidth="1.9" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            aria-label="Search address or scheme"
             placeholder="Search address or scheme"
             className="flex-1 !border-0 !bg-transparent !p-0 text-[14px] !shadow-none"
             style={{ boxShadow: 'none' }}
@@ -250,7 +251,7 @@ export default function FieldApp() {
         {indicated > 0 && deal && (
           <div className="mx-[22px] mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[#D6E6DD] rounded-[14px] p-3">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13Z" /></svg>
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13Z" /></svg>
             </div>
             <div className="text-[12.5px] leading-[1.45]" style={{ color: '#1E5C45' }}>
               Comparable evidence supports <b className="font-semibold fig">{fM(indicated)}</b> for {deal.name}.
@@ -298,7 +299,7 @@ export default function FieldApp() {
               <button
                 key={d.id}
                 onClick={() => { setDealId(d.id); setScreen('detail'); }}
-                className="bg-surface border border-border-std rounded-[18px] p-3 flex gap-3 text-left w-full"
+                className="bg-surface border border-border-std rounded-[18px] p-3 flex gap-3 text-left w-full cursor-pointer hover:bg-sunken transition-colors"
               >
                 <div className="flex-none w-[74px] h-[74px] rounded-[13px]" style={{ background: THUMBS[i % THUMBS.length] }} />
                 <div className="flex-1 min-w-0">
@@ -465,14 +466,14 @@ export default function FieldApp() {
             CAPTURING · {rooms[current]?.name.toUpperCase()}
           </div>
           <div className="absolute bottom-0 left-0 right-0 h-[54px] flex items-center justify-center gap-[26px]" style={{ background: 'rgba(12,18,14,0.42)', backdropFilter: 'blur(10px)' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="14" height="14" rx="2" /><path d="m17 9 4-2v10l-4-2" /></svg>
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="14" height="14" rx="2" /><path d="m17 9 4-2v10l-4-2" /></svg>
             <button
               onClick={snap}
               aria-label="Take photo"
               className="w-11 h-11 rounded-full bg-surface"
               style={{ border: '3px solid rgba(255,255,255,0.55)', boxShadow: '0 0 0 2px rgba(12,18,14,0.42)' }}
             />
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" /></svg>
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" /></svg>
           </div>
         </div>
 
@@ -515,12 +516,13 @@ export default function FieldApp() {
                 <div key={i} className="flex-1 aspect-square rounded-[11px]" style={{ background: THUMBS[i % THUMBS.length] }} />
               ))}
               <button onClick={snap} aria-label="Add photo" className="flex-1 aspect-square rounded-[11px] flex items-center justify-center" style={{ border: '1.5px dashed #D2D1CA', maxWidth: 78 }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
               <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">{rooms[current].photos} photos</span>
             </div>
             <input
               className="mt-3 w-full text-[12.5px]"
+              aria-label={`Notes for ${rooms[current].name}`}
               placeholder="Notes — condition, defects, finishes…"
               value={rooms[current].notes}
               onChange={(e) => setRoom(current, { notes: e.target.value })}
@@ -534,7 +536,7 @@ export default function FieldApp() {
             <button
               key={r.name}
               onClick={() => setCurrent(i)}
-              className="flex items-center gap-[11px] bg-surface rounded-[13px] px-[15px] py-[13px] min-h-[48px] text-left"
+              className="flex items-center gap-[11px] bg-surface rounded-[13px] px-[15px] py-[13px] min-h-[48px] text-left cursor-pointer hover:bg-sunken transition-colors"
               style={{ border: i === current ? '1.5px solid #14503B' : '1px solid #ECEBE5' }}
             >
               {r.condition > 0 ? (
@@ -752,7 +754,7 @@ export default function FieldApp() {
         {comps.length > 0 && summary && (
           <div className="mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[#D6E6DD] rounded-[14px] p-[13px]">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
             </div>
             <div className="text-[12.5px] leading-[1.45]" style={{ color: '#1E5C45' }}>
               {comps.length} comp{comps.length === 1 ? '' : 's'}, avg gross adjustment {summary.avgGrossAdjustment.toFixed(1)}pts — supports a{' '}
@@ -772,9 +774,9 @@ export default function FieldApp() {
               <div key={label} className="flex items-center gap-2">
                 <span className="w-[18px] h-[18px] rounded-[6px] flex items-center justify-center" style={{ background: ok ? '#E4F1EA' : '#F6ECD9' }}>
                   {ok ? (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1E7A55" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
+                    <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1E7A55" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
                   ) : (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9A6212" strokeWidth="2.4" strokeLinecap="round"><path d="M12 8v5M12 16h.01" /></svg>
+                    <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9A6212" strokeWidth="2.4" strokeLinecap="round"><path d="M12 8v5M12 16h.01" /></svg>
                   )}
                 </span>
                 <span className={`text-[12px] ${ok ? 'text-ink' : 'text-ink-2b'}`}>{label}</span>
@@ -794,7 +796,7 @@ export default function FieldApp() {
             <Spinner />
           ) : (
             <>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17V5a2 2 0 0 1 2-2h10M8 21h10a2 2 0 0 0 2-2V9M16 3l4 4-4 4M20 7H9" /></svg>
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17V5a2 2 0 0 1 2-2h10M8 21h10a2 2 0 0 0 2-2V9M16 3l4 4-4 4M20 7H9" /></svg>
               Send to workbench
             </>
           )}
@@ -808,7 +810,7 @@ export default function FieldApp() {
       <StatusBar />
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
         <div className="w-16 h-16 rounded-full bg-tint-success-2 flex items-center justify-center text-status-green">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
+          <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
         </div>
         <div className="mt-5 text-[21px] font-bold tracking-[-0.5px]">Sent to workbench</div>
         <div className="mt-1.5 text-[13px] text-ink-2 leading-[1.5]">

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 import type { StatusKey } from '@apex/ui-tokens';
 
 const STAGES: Array<{ key: string; label: string; accent: string }> = [
@@ -63,13 +63,23 @@ export default function Board() {
         crumb="Pipeline board"
         right={
           <>
-            <input placeholder="Search deals…" value={q} onChange={(e) => setQ(e.target.value)} className="w-44 h-9" />
+            <input placeholder="Search deals…" aria-label="Search deals" value={q} onChange={(e) => setQ(e.target.value)} className="w-44 h-9" />
             <Button onClick={() => setNewOpen(true)}>New deal from documents</Button>
           </>
         }
       />
       <main className="max-w-[1640px] mx-auto px-6 pb-12">
         {/* portfolio roll-up (computed server-side) */}
+        {isLoading ? (
+          <div className="mt-5 flex gap-3 flex-wrap" role="status" aria-label="Loading">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                <Skeleton height={10} width="55%" />
+                <Skeleton height={21} width="40%" className="mt-2" />
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="mt-5 flex gap-3 flex-wrap">
           <div className="flex-1 min-w-[150px] rounded-card p-4 text-white shadow-rest" style={{ background: 'linear-gradient(135deg,#1B6048,#14503B)' }}>
             <div className="font-mono uppercase text-[10px] tracking-[1.2px] text-accent-muted-3 font-semibold">Pipeline GDV</div>
@@ -80,6 +90,7 @@ export default function Board() {
           <StatCard label="Equity required" value={R ? fM(R.equityRequired) : '—'} />
           <StatCard label="Active deals" value={R ? String(R.activeCount) : '—'} />
         </div>
+        )}
 
         {/* asset-type filters */}
         <div className="mt-4 flex gap-2">
@@ -109,7 +120,24 @@ export default function Board() {
 
         {/* lifecycle board */}
         {isLoading ? (
-          <div className="mt-10 flex justify-center"><Spinner /></div>
+          <div className="mt-5 flex gap-3.5 overflow-x-auto pb-4 items-start" role="status" aria-label="Loading">
+            {Array.from({ length: 4 }, (_, col) => (
+              <div key={col} className="w-[264px] shrink-0">
+                <div className="flex items-center gap-2 px-1 pb-2.5">
+                  <Skeleton height={12} width="45%" />
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {Array.from({ length: 3 - (col % 2) }, (_, i) => (
+                    <div key={i} className="bg-surface border border-border-strong rounded-card shadow-rest p-3.5">
+                      <Skeleton height={13} width="70%" />
+                      <Skeleton height={10} width="50%" className="mt-2" />
+                      <Skeleton height={12} width="100%" className="mt-3" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="mt-5 flex gap-3.5 overflow-x-auto pb-4 items-start">
             {STAGES.map((st) => {
@@ -135,10 +163,10 @@ export default function Board() {
                           style={{ borderTop: `3px solid ${st.accent}` }}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="text-[13px] font-semibold leading-tight">{d.name}</div>
+                            <div className="text-[13px] font-semibold leading-tight min-w-0 flex-1">{d.name}</div>
                             <StatusChip status={chip.key} label={chip.label} />
                           </div>
-                          <div className="mt-0.5 text-[11px] text-ink-3">{d.address}</div>
+                          <div className="mt-0.5 text-[11px] text-ink-3 truncate" title={d.address}>{d.address}</div>
                           <div className="mt-2"><AssetTag type={d.assetType} /></div>
                           <div className="mt-2.5 grid grid-cols-3 gap-1.5">
                             {(
@@ -156,19 +184,20 @@ export default function Board() {
                           </div>
                           <div className="mt-2.5 pt-2 border-t border-border-faint flex items-center gap-1.5">
                             <Dot color={rocColor(d.roc)} size={6} />
-                            <span className="text-[11px] text-ink-2">{d.nextMilestone ?? '—'}</span>
+                            <span className="text-[11px] text-ink-2 min-w-0 flex-1 truncate">{d.nextMilestone ?? '—'}</span>
                             <span className="ml-auto">{d.owner && <Avatar initials={d.owner.initials} size={22} />}</span>
                           </div>
                           {st.key !== 'COMPLETED' && (
                             <button
-                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-700 text-center"
+                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-700 text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+                              disabled={setStage.isPending}
                               onClick={(e) => {
                                 e.preventDefault();
                                 const next = STAGES[Math.min(STAGES.findIndex((s) => s.key === st.key) + 1, STAGES.length - 1)].key;
                                 setStage.mutate({ id: d.id, stage: next as never });
                               }}
                             >
-                              Advance stage →
+                              {setStage.isPending && setStage.variables?.id === d.id ? <Spinner /> : <>Advance stage →</>}
                             </button>
                           )}
                         </Link>
@@ -185,20 +214,20 @@ export default function Board() {
       {/* New deal drawer */}
       <Drawer open={newOpen} onClose={() => setNewOpen(false)} title="New deal">
         <div className="flex flex-col gap-3">
-          <label className="label-mono text-ink-3">Deal name</label>
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Foundry Lane" />
-          <label className="label-mono text-ink-3">Address</label>
-          <input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Street, town" />
-          <label className="label-mono text-ink-3">Asset type</label>
-          <select value={draft.assetType} onChange={(e) => setDraft({ ...draft, assetType: e.target.value })}>
+          <label className="label-mono text-ink-3" htmlFor="new-deal-name">Deal name</label>
+          <input id="new-deal-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Foundry Lane" />
+          <label className="label-mono text-ink-3" htmlFor="new-deal-address">Address</label>
+          <input id="new-deal-address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Street, town" />
+          <label className="label-mono text-ink-3" htmlFor="new-deal-asset-type">Asset type</label>
+          <select id="new-deal-asset-type" value={draft.assetType} onChange={(e) => setDraft({ ...draft, assetType: e.target.value })}>
             {FILTERS.slice(1).map(([k, label]) => (
               <option key={k} value={k}>{label}</option>
             ))}
           </select>
-          <label className="label-mono text-ink-3">Indicative GDV (£)</label>
-          <input type="number" value={draft.gdv || ''} onChange={(e) => setDraft({ ...draft, gdv: parseFloat(e.target.value) || 0 })} />
-          <label className="label-mono text-ink-3">Probability %</label>
-          <input type="number" value={draft.probability} onChange={(e) => setDraft({ ...draft, probability: parseInt(e.target.value) || 0 })} />
+          <label className="label-mono text-ink-3" htmlFor="new-deal-gdv">Indicative GDV (£)</label>
+          <input id="new-deal-gdv" type="number" value={draft.gdv || ''} onChange={(e) => setDraft({ ...draft, gdv: parseFloat(e.target.value) || 0 })} />
+          <label className="label-mono text-ink-3" htmlFor="new-deal-probability">Probability %</label>
+          <input id="new-deal-probability" type="number" value={draft.probability} onChange={(e) => setDraft({ ...draft, probability: parseInt(e.target.value) || 0 })} />
           <div className="mt-2 flex gap-2">
             <Button
               disabled={!draft.name || !draft.address || createDeal.isPending}

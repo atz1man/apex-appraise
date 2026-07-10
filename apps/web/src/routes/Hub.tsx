@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { Avatar, Icon, Spinner, TopBar, SPARKLE } from '../components/ui';
+import { Avatar, Icon, Skeleton, TopBar, SPARKLE } from '../components/ui';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -75,7 +75,14 @@ export default function Hub() {
             sourcing to completion.
           </h1>
           {isLoading || !R ? (
-            <div className="mt-6"><Spinner /></div>
+            <div className="mt-7 flex flex-wrap gap-8" role="status" aria-label="Loading">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="opacity-25">
+                  <Skeleton height={10} width={90} />
+                  <Skeleton height={24} width={72} className="mt-2" />
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="mt-7 flex flex-wrap gap-8">
               {(
@@ -120,24 +127,32 @@ export default function Hub() {
           <div className="eyebrow">Deal tools</div>
           <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">Everything on {flagship?.name ?? 'your pipeline'}</h2>
           <div className="mt-4 grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(255px, 1fr))' }}>
+            {isLoading &&
+              Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="bg-surface border border-border-strong rounded-panel shadow-rest p-5" role="status" aria-label="Loading">
+                  <Skeleton height={36} width={36} />
+                  <Skeleton height={14} width="60%" className="mt-3" />
+                  <Skeleton height={11} width="85%" className="mt-2" />
+                </div>
+              ))}
             {dealTools.map(([icon, title, desc, to]) => (
               <Link
                 key={title}
                 to={to}
                 className="group bg-surface border border-border-strong rounded-panel shadow-rest p-5 transition-all hover:-translate-y-1 hover:shadow-float"
               >
-                <span className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-tint-success text-brand-700">
+                <span className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-tint-success text-brand-700" aria-hidden="true">
                   <Icon d={ICONS[icon]} size={18} strokeWidth={1.9} />
                 </span>
-                <div className="mt-3 text-[14.5px] font-semibold tracking-[-0.2px]">{title}</div>
+                <div className="mt-3 text-[14.5px] font-semibold tracking-[-0.2px] truncate">{title}</div>
                 <div className="mt-1 text-[12px] text-ink-2 leading-snug">{desc}</div>
               </Link>
             ))}
           </div>
         </section>
 
-        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-500 hover:text-brand-700">
-          <Icon d={ICONS.integrations} size={15} />
+        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-500 hover:text-brand-700 transition-colors">
+          <span aria-hidden="true" className="inline-flex"><Icon d={ICONS.integrations} size={15} /></span>
           Connected data sources — Land Registry, EPC, AVM →
         </Link>
       </main>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, Spinner, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 
@@ -107,7 +107,30 @@ export default function Comparables() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Comparable evidence" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <DealNav dealId={dealId} active="comparables" />
+        <main className="max-w-[1640px] mx-auto px-6 pb-14">
+          <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+            {/* adjustment-grid skeleton */}
+            <div className="flex flex-col gap-4">
+              <Panel>
+                <Skeleton height={18} width={280} />
+                <div className="mt-4">
+                  <SkeletonRows rows={7} height={18} />
+                </div>
+              </Panel>
+              <Panel>
+                <Skeleton height={200} className="rounded-[10px]" />
+              </Panel>
+            </div>
+            {/* right-rail skeleton */}
+            <aside className="flex flex-col gap-4">
+              <Skeleton height={150} className="rounded-card" />
+              <Panel>
+                <SkeletonRows rows={4} height={14} />
+              </Panel>
+            </aside>
+          </div>
+        </main>
       </div>
     );
   }
@@ -151,7 +174,7 @@ export default function Comparables() {
               }
             >
               {comps.length === 0 ? (
-                <EmptyState cta={<Button onClick={addComp}>Add your first comp</Button>}>
+                <EmptyState cta={<Button onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
                   No comparable evidence on this deal yet.
                 </EmptyState>
               ) : (
@@ -173,23 +196,27 @@ export default function Comparables() {
                       const netFmt = `${r.netAdjustment > 0 ? '+' : r.netAdjustment < 0 ? '−' : ''}${Math.abs(r.netAdjustment)}%`;
                       return (
                         <div key={c.id} className="flex items-center border-b border-border-faint py-2.5">
-                          <div className="px-2.5" style={{ flex: 2 }}>
-                            <div className="flex items-center gap-2">
+                          <div className="px-2.5 min-w-0" style={{ flex: 2 }}>
+                            <div className="flex items-center gap-2 min-w-0">
                               <Dot color={PIN} size={9} />
-                              <span className="text-[13px] font-semibold">{c.address}</span>
+                              <span className="text-[13px] font-semibold truncate">{c.address}</span>
                             </div>
-                            <div className="mt-0.5 pl-[17px] text-[10.5px] text-ink-3">{c.meta}</div>
+                            <div className="mt-0.5 pl-[17px] text-[10.5px] text-ink-3 truncate">{c.meta}</div>
                           </div>
                           <div className="fig px-1.5 text-right text-[13px] font-semibold" style={{ flex: 1.1 }}>£{c.basePsf}</div>
-                          {ADJ_COLS.map(([k]) => (
+                          {ADJ_COLS.map(([k, label]) => (
                             <div key={k} className="px-1 flex justify-center" style={{ flex: 1 }}>
                               <input
                                 type="number"
+                                aria-label={`${c.address} ${label} adjustment %`}
                                 className="fig w-[52px] h-[30px] p-0 text-center rounded-[7px] border-border-strong text-[11.5px] font-medium"
                                 style={{ color: adjColor(c[k]) }}
                                 value={c[k]}
                                 onChange={(e) => setAdj(c.id, k, parseFloat(e.target.value) || 0)}
                                 onBlur={() => persist(c)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
                               />
                             </div>
                           ))}

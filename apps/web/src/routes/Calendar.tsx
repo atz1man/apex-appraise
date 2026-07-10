@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Spinner, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, Spinner, StatCard, TopBar } from '../components/ui';
 
 // ---- Team (matches the seeded org users / design handoff) ----
 const PEOPLE: Array<{ initials: string; name: string; short: string }> = [
@@ -137,7 +137,51 @@ export default function Calendar() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Calendar & tasks" />
-        <div className="mt-16 flex justify-center"><Spinner /></div>
+        <main className="max-w-[1640px] mx-auto px-6 pb-14" role="status" aria-label="Loading">
+          <div className="mt-6">
+            <Skeleton height={11} width={120} />
+            <Skeleton height={27} width={260} className="mt-2" />
+            <Skeleton height={13} width={380} className="mt-2.5" />
+          </div>
+          <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 400px' }}>
+            {/* month grid skeleton */}
+            <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+              <div className="flex items-center gap-3">
+                <Skeleton height={20} width={160} />
+                <Skeleton height={30} width={100} />
+              </div>
+              <div className="mt-4 grid grid-cols-7 gap-1.5">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <Skeleton key={`w${i}`} height={10} />
+                ))}
+                {Array.from({ length: 35 }, (_, i) => (
+                  <Skeleton key={i} height={96} />
+                ))}
+              </div>
+            </div>
+            {/* rail skeleton */}
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
+                    <Skeleton height={10} width="60%" />
+                    <Skeleton height={21} width="35%" className="mt-2" />
+                  </div>
+                ))}
+              </div>
+              <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-4">
+                <Skeleton height={34} />
+                <div className="mt-2.5 flex gap-2">
+                  <Skeleton height={34} className="flex-1" />
+                  <Skeleton height={34} className="flex-1" />
+                </div>
+              </div>
+              <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+                <SkeletonRows rows={6} />
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -161,7 +205,8 @@ export default function Calendar() {
                       key={p.initials}
                       title={p.name}
                       onClick={() => setFilter(p.initials)}
-                      className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[9px] border transition-colors"
+                      aria-pressed={on}
+                      className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[9px] border transition-colors cursor-pointer"
                       style={{
                         background: on ? neutral.tintSuccess : neutral.surface,
                         borderColor: on ? '#D6E6DD' : neutral.borderStrong,
@@ -189,16 +234,16 @@ export default function Calendar() {
               <div className="flex items-center gap-3">
                 <h2 className="text-[20px] font-bold tracking-[-0.5px]">{monthLabel}</h2>
                 <div className="flex gap-1">
-                  <button onClick={prev} aria-label="Previous month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                  <button onClick={prev} aria-label="Previous month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
                   </button>
-                  <button onClick={next} aria-label="Next month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                  <button onClick={next} aria-label="Next month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
                   </button>
                 </div>
                 <button
                   onClick={() => setView({ y: today.getFullYear(), m: today.getMonth() })}
-                  className="px-3 py-1.5 rounded-[8px] border border-border-strong text-[12px] font-semibold hover:bg-sunken"
+                  className="px-3 py-1.5 rounded-[8px] border border-border-strong text-[12px] font-semibold hover:bg-sunken cursor-pointer transition-colors"
                   style={{ color: brand[700] }}
                 >
                   Today
@@ -224,8 +269,8 @@ export default function Calendar() {
                     tabIndex={c.inMonth ? 0 : undefined}
                     title={c.inMonth ? 'Add a task on this day' : undefined}
                     onClick={() => c.k && pickDay(c.k)}
-                    onKeyDown={(e) => e.key === 'Enter' && c.k && pickDay(c.k)}
-                    className={`min-h-[96px] rounded-[10px] p-[7px] flex flex-col gap-1 border ${c.inMonth ? 'cursor-pointer' : ''}`}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && c.k && (e.preventDefault(), pickDay(c.k))}
+                    className={`min-h-[96px] rounded-[10px] p-[7px] flex flex-col gap-1 border transition-colors ${c.inMonth ? 'cursor-pointer hover:border-border-strong' : ''}`}
                     style={{
                       borderColor: c.isToday ? brand[700] : c.inMonth ? '#EEEDE7' : 'transparent',
                       background: c.inMonth ? (c.isToday ? '#F3F8F5' : neutral.surface) : neutral.sunken,
@@ -254,11 +299,11 @@ export default function Calendar() {
                             e.stopPropagation();
                             toggleTask.mutate(t.id);
                           }}
-                          className="flex items-center gap-[5px] px-1.5 py-[3px] rounded-[6px] text-left"
+                          className="flex items-center gap-[5px] px-1.5 py-[3px] rounded-[6px] text-left cursor-pointer transition-colors disabled:opacity-60"
                           style={{ background: bg }}
                         >
                           <Dot color={dot} size={5} />
-                          <span className="text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis" style={{ color, textDecoration: t.done ? 'line-through' : 'none' }}>
+                          <span className="min-w-0 text-[10px] font-medium whitespace-nowrap overflow-hidden text-ellipsis" style={{ color, textDecoration: t.done ? 'line-through' : 'none' }}>
                             {t.title}
                           </span>
                         </button>
@@ -286,33 +331,36 @@ export default function Calendar() {
                 ref={titleRef}
                 type="text"
                 placeholder="Add a task…"
+                aria-label="Task title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
                 className="w-full"
               />
               <div className="mt-2.5 flex items-center gap-2">
-                <select className="flex-1 min-w-0 h-[34px] py-0 text-[12px]" value={dealSel} onChange={(e) => setDealId(e.target.value)}>
+                <select className="flex-1 min-w-0 h-[34px] py-0 text-[12px]" aria-label="Deal" value={dealSel} onChange={(e) => setDealId(e.target.value)}>
                   {deals.length === 0 && <option value="">No deals yet</option>}
                   {deals.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
-                <select className="flex-1 min-w-0 h-[34px] py-0 text-[12px]" value={aspect} onChange={(e) => setAspect(e.target.value)}>
+                <select className="flex-1 min-w-0 h-[34px] py-0 text-[12px]" aria-label="Aspect" value={aspect} onChange={(e) => setAspect(e.target.value)}>
                   {ASPECTS.map((a) => (
                     <option key={a} value={a}>{a}</option>
                   ))}
                 </select>
               </div>
               <div className="mt-2.5 flex items-center gap-2">
-                <input type="date" className="h-[34px] py-0 fig text-[12px] shrink-0" value={due} onChange={(e) => setDue(e.target.value)} />
+                <input type="date" aria-label="Due date" className="h-[34px] py-0 fig text-[12px] shrink-0" value={due} onChange={(e) => setDue(e.target.value)} />
                 <div className="flex gap-1">
                   {PEOPLE.map((p) => (
                     <button
                       key={p.initials}
                       title={p.name}
+                      aria-label={`Assign to ${p.name}`}
+                      aria-pressed={assignee === p.initials}
                       onClick={() => setAssignee(p.initials)}
-                      className="rounded-full shrink-0"
+                      className="rounded-full shrink-0 cursor-pointer"
                       style={{ outline: assignee === p.initials ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}
                     >
                       <Avatar initials={p.initials} size={26} />
@@ -320,8 +368,14 @@ export default function Calendar() {
                   ))}
                 </div>
                 <Button className="ml-auto !h-[34px] !px-4" disabled={!title.trim() || !dealSel || createTask.isPending} onClick={submit}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
-                  Add
+                  {createTask.isPending ? (
+                    <Spinner />
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+                      Add
+                    </>
+                  )}
                 </Button>
               </div>
             </Panel>
@@ -339,15 +393,15 @@ export default function Calendar() {
                       const over = isOverdue(t);
                       const person = PEOPLE.find((p) => p.initials === t.assignee);
                       return (
-                        <div key={t.id} className="flex items-start gap-[11px] px-3.5 py-2.5 rounded-[11px] hover:bg-sunken">
+                        <div key={t.id} className="flex items-start gap-[11px] px-3.5 py-2.5 rounded-[11px] hover:bg-sunken transition-colors">
                           <button
                             aria-label={t.done ? 'Reopen task' : 'Complete task'}
                             disabled={toggleTask.isPending}
                             onClick={() => toggleTask.mutate(t.id)}
-                            className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center"
+                            className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
                             style={{ borderColor: t.done ? brand[700] : '#D2D1CA', background: t.done ? brand[700] : neutral.surface }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: t.done ? 1 : 0 }}><path d="m5 12 5 5 9-10" /></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: t.done ? 1 : 0 }} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
                           </button>
                           <div className="flex-1 min-w-0">
                             <div className="text-[13.5px] font-medium" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>

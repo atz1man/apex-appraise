@@ -52,18 +52,22 @@ module.exports = {
         mono: ["'JetBrains Mono'", 'ui-monospace', 'monospace'],
       },
       borderRadius: {
-        chip: '8px',
-        input: '9px',
-        card: '16px',
-        panel: '18px',
+        chip: '9px',
+        input: '11px',
+        card: '18px',
+        panel: '22px',
         pill: '999px',
       },
       boxShadow: {
-        rest: '0 1px 2px rgba(20,30,25,0.04), 0 8px 24px -18px rgba(20,30,25,0.22)',
-        float: '0 12px 26px -12px rgba(20,30,25,0.32)',
-        drawer: '-20px 0 60px rgba(20,30,25,0.25)',
+        // Apple-soft layered elevation: hairline definition + wide ambient falloff
+        rest: '0 0 0 1px rgba(20,30,25,0.045), 0 1px 2px rgba(20,30,25,0.04), 0 12px 32px -16px rgba(20,30,25,0.14)',
+        float: '0 0 0 1px rgba(20,30,25,0.05), 0 18px 44px -18px rgba(20,30,25,0.28)',
+        drawer: '-24px 0 80px rgba(20,30,25,0.22)',
         'dark-card': '0 26px 60px -28px rgba(0,0,0,0.5)',
-        pill: '0 1px 2px rgba(0,0,0,0.06)',
+        pill: '0 1px 3px rgba(20,30,25,0.10), 0 1px 1px rgba(20,30,25,0.05)',
+      },
+      transitionTimingFunction: {
+        spring: 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
       keyframes: {
         slideIn: {
