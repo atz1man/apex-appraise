@@ -3,10 +3,12 @@
 # rewrites the datasource to postgres before generating the client (same pattern
 # as CI), so the two never drift apart by hand-editing.
 FROM node:22-alpine AS base
-RUN corepack enable
+# openssl is required for Prisma's engine detection at generate time AND at runtime;
+# without it Prisma defaults to the openssl-1.1.x engine, which cannot load on alpine ≥3.19
+RUN apk add --no-cache openssl && corepack enable
 WORKDIR /app
 
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/appraisal-engine/package.json packages/appraisal-engine/
 COPY packages/types/package.json packages/types/

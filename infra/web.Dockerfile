@@ -2,7 +2,7 @@
 FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY packages/appraisal-engine/package.json packages/appraisal-engine/
@@ -11,6 +11,8 @@ COPY packages/ui-tokens/package.json packages/ui-tokens/
 RUN pnpm install --frozen-lockfile=false
 COPY packages ./packages
 COPY apps ./apps
+# the web typecheck infers tRPC types through the API, which needs the Prisma client
+RUN cd apps/api && npx prisma generate
 RUN cd apps/web && pnpm build
 
 FROM nginx:alpine
