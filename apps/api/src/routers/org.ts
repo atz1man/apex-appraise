@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { JWT_SECRET } from '../context.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
+import { APP_URL, inviteEmail, sendMail, welcomeEmail } from '../email.js';
 import { internalProcedure, publicProcedure, router } from '../trpc.js';
 
 const initialsOf = (name: string) =>
@@ -70,6 +71,8 @@ export const orgRouter = router({
         await ctx.prisma.integrationConnection.create({ data: { orgId: org.id, provider, status: 'NOT_CONNECTED' } });
       }
       const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
+      const welcome = welcomeEmail(user.name, org.name, APP_URL());
+      void sendMail(email, welcome.subject, welcome.text);
       return {
         token,
         principal: {
@@ -136,7 +139,10 @@ export const orgRouter = router({
           initials: initialsOf(input.name),
         },
       });
-      return { tempPassword };
+      const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      const mail = inviteEmail(input.name, org?.name ?? 'your team', email, tempPassword, APP_URL());
+      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      return { tempPassword, emailed };
     }),
 
   setRole: adminProcedure

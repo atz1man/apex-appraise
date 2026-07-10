@@ -103,6 +103,12 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Env vars (apps/api)
 
-- `PORT` (default 4100), `JWT_SECRET` (required in production), `ANTHROPIC_API_KEY`
-  (optional — enables real LLM extraction for Auto-Appraisal), `DATABASE_URL`
-  (Postgres, via Docker).
+All optional vars degrade gracefully to a clearly-labelled demo mode when unset.
+
+- `PORT` (default 4100), `JWT_SECRET` (**required in production**), `DATABASE_URL` (Postgres, via Docker)
+- `ANTHROPIC_API_KEY` — live LLM extraction for Auto-Appraisal
+- `SMTP_URL` + `EMAIL_FROM` + `APP_URL` — invite/welcome email delivery (logged to console otherwise)
+- `STRIPE_SECRET_KEY` — live buyer card payments (PaymentIntents); demo mode settles instantly
+- `STRIPE_WEBHOOK_SECRET` — signature verification for `POST /webhooks/stripe`
+
+See `infra/DEPLOY.md` for the full production runbook (Docker VPS + Fly sketch).

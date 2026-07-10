@@ -346,6 +346,19 @@ model Cashflow {
   date       DateTime
 }
 
+// ---- Buyer payments (Stripe when configured; demo mode otherwise) ----
+model Payment {
+  id       String @id @default(cuid())
+  orgId    String
+  unitId   String
+  kind     String // "Reservation fee" | "Exchange deposit (10%)" | ...
+  amount   BigInt // pence
+  status   String @default("PENDING") // PENDING | PAID
+  stripeIntentId String?
+  paidAt   DateTime?
+  createdAt DateTime @default(now())
+}
+
 // ---- Benchmarking (anonymised aggregate) ----
 model BenchmarkPoint {
   id       String @id @default(cuid())

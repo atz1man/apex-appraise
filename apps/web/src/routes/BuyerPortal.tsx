@@ -36,6 +36,7 @@ export default function BuyerPortal() {
 
   // persisted e-sign — the server stamps signedAt (DocuSign in prod)
   const sign = trpc.buyer.sign.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
+  const pay = trpc.buyer.pay.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
 
   const signOut = () => {
     clearSession();
@@ -250,15 +251,30 @@ export default function BuyerPortal() {
                   <h3 className="text-[15px] font-semibold">Payments</h3>
                   <div className="mt-2 flex flex-col">
                     {data.payments.map((p) => (
-                      <div key={p.kind} className="flex items-center gap-3 py-2.5 border-b border-border-faint last:border-b-0">
+                      <div key={p.id} className="flex items-center gap-3 py-2.5 border-b border-border-faint last:border-b-0">
                         <div className="flex-1 min-w-0">
                           <div className="text-[12.5px] font-medium">{p.kind}</div>
                           <div className="text-[10.5px] text-ink-3">{p.paid ? (fdate(p.date) ?? 'Received') : 'Due at exchange'}</div>
                         </div>
                         <span className="fig text-[13px] font-semibold">{formatMoneyFull(p.amount)}</span>
-                        <StatusChip status={p.paid ? 'green' : 'amber'} label={p.paid ? 'PAID' : 'PENDING'} />
+                        {p.paid ? (
+                          <StatusChip status="green" label="PAID" />
+                        ) : (
+                          <button
+                            className="rounded-[9px] bg-brand-700 hover:bg-brand-600 text-white text-[11.5px] font-semibold px-3 py-1.5 disabled:opacity-50 transition-colors"
+                            disabled={pay.isPending}
+                            onClick={() => pay.mutate(p.id)}
+                          >
+                            {pay.isPending && pay.variables === p.id ? 'Processing…' : 'Pay now'}
+                          </button>
+                        )}
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-2.5 text-[10.5px] text-ink-3 leading-snug">
+                    {data.stripeMode === 'live'
+                      ? 'Card payments are processed securely by Stripe.'
+                      : 'Demo mode — payments settle instantly. Live card processing activates when Stripe keys are configured.'}
                   </div>
                 </section>
 
