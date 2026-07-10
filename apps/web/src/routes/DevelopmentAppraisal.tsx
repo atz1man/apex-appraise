@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   computeAppraisal,
   jvWaterfall,
+  monteCarlo,
   sensitivityGrid,
   formatPct,
   formatSigned,
@@ -141,6 +142,8 @@ export default function DevelopmentAppraisal() {
     [R, input.jv],
   );
   const sens = useMemo(() => sensitivityGrid(input, sensTab), [input, sensTab]);
+  // Monte Carlo risk — land held at the base residual, sales/build shocked (seeded → stable UI)
+  const risk = useMemo(() => monteCarlo(input, { iterations: 400, seed: 42 }), [input]);
 
   const isResidual = input.site.mode === 'residual';
   const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: '#1E7A55' } : R.poc >= 0.1 ? { v: 'Marginal', dot: '#F5C451', tone: '#9A6212' } : { v: 'Unviable', dot: '#F08A7C', tone: '#B23A2E' };
@@ -419,6 +422,25 @@ export default function DevelopmentAppraisal() {
                       <NumField label="Arrangement fee" suffix="%" value={input.finance.arrangementFeePct} onChange={(v) => set({ finance: { ...input.finance, arrangementFeePct: v } })} />
                       <NumField label="Build period" suffix="months" value={input.finance.periodMonths} onChange={(v) => set({ finance: { ...input.finance, periodMonths: v } })} />
                       <NumField label="Sales period" suffix="months" value={input.finance.salesMonths} onChange={(v) => set({ finance: { ...input.finance, salesMonths: v } })} />
+                      <label className="block">
+                        <span className="label-mono text-ink-3 block mb-1">Absorption (units/month — optional)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          className="w-full fig"
+                          placeholder="even spread"
+                          value={input.finance.absorptionUnitsPerMonth ?? ''}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            set({ finance: { ...input.finance, absorptionUnitsPerMonth: Number.isFinite(v) && v > 0 ? v : undefined } });
+                          }}
+                        />
+                        <span className="block mt-1 text-[10.5px] text-ink-3">
+                          {input.finance.absorptionUnitsPerMonth
+                            ? `Derived sales period: ${R.salesMonths} months (revenue lands as units sell)`
+                            : 'Blank = even spread over the sales period'}
+                        </span>
+                      </label>
                       <NumField label="Mezzanine to" suffix="% of cost" value={mezz.mezzTo} onChange={(v) => setMezz({ ...mezz, mezzTo: v })} />
                       <NumField label="Mezzanine rate" suffix="% pa" value={mezz.mezzRate} onChange={(v) => setMezz({ ...mezz, mezzRate: v })} />
                       <NumField label="Avg drawn factor" suffix="%" value={mezz.drawFactor} onChange={(v) => setMezz({ ...mezz, drawFactor: v })} />
@@ -648,6 +670,49 @@ export default function DevelopmentAppraisal() {
                 </tbody>
               </table>
               <div className="mt-1.5 text-[10.5px] text-ink-3">Columns: GDV. Rows: build cost. Base cell outlined.</div>
+            </Panel>
+
+            <Panel
+              title="Risk — Monte Carlo"
+              right={<span className="fig text-[10.5px] text-ink-3">{risk.iterations} runs · land held at {fM(risk.landFixed)}</span>}
+            >
+              {(() => {
+                const lo = Math.min(risk.profit.p10, 0);
+                const hi = Math.max(risk.profit.p90, 1);
+                const posOf = (v: number) => ((v - lo) / (hi - lo)) * 100;
+                return (
+                  <>
+                    <div className="relative h-[26px] rounded-[7px] bg-sunken-2 overflow-hidden">
+                      <div
+                        className="absolute top-0 bottom-0"
+                        style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: '#DFEFE7' }}
+                      />
+                      <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: '#14503B' }} />
+                      {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: '#B23A2E' }} />}
+                    </div>
+                    <div className="mt-1.5 flex justify-between text-[10.5px] fig text-ink-3">
+                      <span>P10 {fM(risk.profit.p10)}</span>
+                      <span className="font-semibold text-brand-700">P50 {fM(risk.profit.p50)}</span>
+                      <span>P90 {fM(risk.profit.p90)}</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2.5">
+                      <div className="rounded-[10px] bg-tint-success px-3 py-2.5">
+                        <div className="label-mono text-ink-3">Prob ≥ target profit</div>
+                        <div className="fig text-[16px] font-semibold text-brand-500">{Math.round(risk.probAtTarget * 100)}%</div>
+                      </div>
+                      <div className="rounded-[10px] px-3 py-2.5" style={{ background: risk.probLoss > 0.1 ? '#F9EAE7' : '#F0EFE9' }}>
+                        <div className="label-mono text-ink-3">Prob of loss</div>
+                        <div className="fig text-[16px] font-semibold" style={{ color: risk.probLoss > 0.1 ? '#B23A2E' : '#6E7269' }}>
+                          {Math.round(risk.probLoss * 100)}%
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10.5px] text-ink-3 leading-snug">
+                      Sales ±7.5% / build ±5% (1σ, normal). PoC band {formatPct(risk.poc.p10)}–{formatPct(risk.poc.p90)}.
+                    </div>
+                  </>
+                );
+              })()}
             </Panel>
 
             <Panel title={`Tasks — ${aspect}`} right={<span className="fig text-[11px] text-ink-3">{tasks?.filter((t) => !t.done).length ?? 0} open</span>}>

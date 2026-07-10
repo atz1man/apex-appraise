@@ -83,12 +83,16 @@ test('appraisal versions: save, list with figures, restore', async ({ page }) =>
   await page.getByText('Northgate Trade & Industrial Park').first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
   await expect(page.getByText('Unit schedule')).toBeVisible();
+  // engine-depth rail: Monte Carlo risk panel renders with percentiles
+  await expect(page.getByText('Risk — Monte Carlo')).toBeVisible();
+  await expect(page.getByText(/P50 /)).toBeVisible();
+  await expect(page.getByText('Prob ≥ target profit')).toBeVisible();
   // ensure a current version exists, then snapshot a labelled version
   await page.getByRole('button', { name: /Versions/ }).click();
   const label = `e2e-${Date.now()}`;
   await page.getByPlaceholder(/Label this version/).fill(label);
   await page.getByRole('button', { name: 'Save as version' }).click();
-  await expect(page.getByText(label)).toBeVisible();
+  await expect(page.getByText(label, { exact: true })).toBeVisible();
   await expect(page.getByText('CURRENT').first()).toBeVisible();
   // an older version exposes restore
   await expect(page.getByRole('button', { name: 'Restore as current' }).first()).toBeVisible();

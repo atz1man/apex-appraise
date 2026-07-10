@@ -45,6 +45,7 @@ export function appraisalRowToEngineInput(a: Appraisal): AppraisalInput {
       salesMonths: a.salesMonths,
       arrangementFeePct: a.arrangementFeePct,
       spendProfile: spendProfileMap[a.spendProfile] ?? 'scurve',
+      absorptionUnitsPerMonth: a.absorptionUnitsPerMonth ?? undefined,
     },
     site: { mode: a.siteMode === 'PROFIT' ? 'profit' : 'residual', landFixed: P(a.landFixed), acqPct: a.acqPct },
     disposal: { agentPct: a.agentPct, legalPct: a.legalPct },

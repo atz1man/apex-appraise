@@ -71,6 +71,7 @@ export const zAppraisalInput = z.object({
     salesMonths: z.number().min(1).max(24),
     arrangementFeePct: z.number().min(0).max(10),
     spendProfile: z.enum(['scurve', 'even', 'linear', 'front', 'back']).optional(),
+    absorptionUnitsPerMonth: z.number().positive().max(500).optional(),
   }),
   site: z.object({
     mode: z.enum(['residual', 'profit']),

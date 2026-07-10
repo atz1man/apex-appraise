@@ -49,6 +49,7 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     salesMonths: Math.round(input.finance.salesMonths),
     arrangementFeePct: input.finance.arrangementFeePct,
     spendProfile: spendProfileToDb[input.finance.spendProfile ?? 'scurve'],
+    absorptionUnitsPerMonth: input.finance.absorptionUnitsPerMonth ?? null,
     siteMode: input.site.mode === 'profit' ? 'PROFIT' : 'RESIDUAL',
     landFixed: toPence(input.site.landFixed),
     acqPct: input.site.acqPct,

@@ -8,6 +8,8 @@ import type {
   ComparablesSummary,
   JvInput,
   JvResult,
+  MonteCarloOptions,
+  MonteCarloResult,
   SensitivityCell,
   SensitivityMetric,
   SpendProfileKey,
@@ -87,6 +89,33 @@ export function cilCharge(giaSqFt: number, ratePerSqm: number): number {
   return ratePerSqm * (giaSqFt / SQFT_PER_SQM);
 }
 
+/**
+ * SDLT — residential slice bands (England & NI, from 1 April 2025). Centralised
+ * so rates can be updated against current HMRC bands in one place. The
+ * additional-dwelling surcharge (companies / second homes — the usual case for
+ * developers and landlords) adds a flat 5% on the whole price. MDR was
+ * abolished 1 June 2024 and is deliberately not modelled.
+ */
+export function sdltResidential(price: number, opts: { additionalDwelling?: boolean } = {}): number {
+  const bands: Array<[number, number]> = [
+    [125_000, 0],
+    [250_000, 0.02],
+    [925_000, 0.05],
+    [1_500_000, 0.1],
+    [Infinity, 0.12],
+  ];
+  let sdlt = 0;
+  let prev = 0;
+  for (const [upTo, rate] of bands) {
+    if (price <= prev) break;
+    const slice = Math.min(price, upTo) - prev;
+    sdlt += slice * rate;
+    prev = upTo;
+  }
+  if (opts.additionalDwelling) sdlt += price * 0.05;
+  return sdlt;
+}
+
 export interface ComputeOpts {
   salesMult?: number;
   buildMult?: number;
@@ -116,7 +145,24 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
 
   // ---- monthly drawdown with rolled-up interest ----
   const P = clamp(Math.round(F.periodMonths) || 12, 4, 22);
-  const sM = clamp(Math.round(F.salesMonths) || 1, 1, 8);
+  // sales period: absorption-derived (units actually selling) or the classic even spread
+  const totalUnitCount = input.units.reduce((a, u) => a + u.count, 0);
+  const absorption = F.absorptionUnitsPerMonth;
+  let sM: number;
+  let revShare: number[]; // fraction of net sales revenue arriving in each sales month
+  if (absorption && absorption > 0 && totalUnitCount > 0) {
+    sM = clamp(Math.ceil(totalUnitCount / absorption), 1, 24);
+    revShare = [];
+    let remaining = totalUnitCount;
+    for (let k = 0; k < sM; k++) {
+      const sold = Math.min(absorption, remaining);
+      remaining -= sold;
+      revShare.push(sold / totalUnitCount);
+    }
+  } else {
+    sM = clamp(Math.round(F.salesMonths) || 1, 1, 8);
+    revShare = new Array<number>(sM).fill(1 / sM);
+  }
   const constructionTotal = build + fees + cont + otherTotal;
   const totalMonths = P + sM;
   const incs = buildSpendProfile(P, F.spendProfile ?? 'scurve');
@@ -139,15 +185,14 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     if (bal > peak) peak = bal;
   }
   const saleNet = gdv - saleCosts;
-  const revPerMonth = saleNet / sM;
   const revSeries = new Array<number>(totalMonths + 1).fill(0);
   for (let m = P + 1; m <= totalMonths; m++) {
     const intr = bal * mRate;
     intSeries[m] = intr;
     totalInterest += intr;
     bal += intr;
-    revSeries[m] = revPerMonth;
-    const repay = Math.min(revPerMonth, bal);
+    revSeries[m] = saleNet * revShare[m - P - 1];
+    const repay = Math.min(revSeries[m], bal);
     bal -= repay;
     if (bal > peak) peak = bal;
   }
@@ -217,15 +262,15 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     const cfU = new Array<number>(totalMonths + 1).fill(0);
     cfU[0] = -landGross;
     for (let m = 1; m <= P; m++) cfU[m] = -constrSeries[m];
-    for (let m = P + 1; m <= totalMonths; m++) cfU[m] = revPerMonth;
+    for (let m = P + 1; m <= totalMonths; m++) cfU[m] = revSeries[m];
     const cfE = new Array<number>(totalMonths + 1).fill(0);
     cfE[0] = -landGross;
     for (let m = 1; m <= P; m++) cfE[m] = -constrSeries[m] * (1 - ltcF);
     let debtOut = drawn + totalInterest;
     for (let m = P + 1; m <= totalMonths; m++) {
-      const repay = Math.min(revPerMonth, debtOut);
+      const repay = Math.min(revSeries[m], debtOut);
       debtOut -= repay;
-      cfE[m] += revPerMonth - repay;
+      cfE[m] += revSeries[m] - repay;
     }
     out.cash = {
       rows,
@@ -372,6 +417,74 @@ export function autoAppraise(j: AutoAppraisalInput): AutoAppraisalResult {
     profitAtAsking,
     rocAtAsking,
     headroom,
+  };
+}
+
+/** Deterministic PRNG (mulberry32) — Monte Carlo runs are reproducible per seed. */
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const percentile = (sorted: number[], q: number) => {
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+};
+
+/**
+ * Monte Carlo risk on the appraisal: land is HELD at the base residual (or the
+ * fixed land price in profit mode) while sales values and build costs are
+ * sampled from normal distributions — the profit/PoC distribution shows what
+ * the developer is actually exposed to after committing to the site.
+ */
+export function monteCarlo(input: AppraisalInput, opts: MonteCarloOptions = {}): MonteCarloResult {
+  const iterations = Math.max(50, Math.min(opts.iterations ?? 500, 5000));
+  const salesSigma = opts.salesSigma ?? 0.075;
+  const buildSigma = opts.buildSigma ?? 0.05;
+  const rand = mulberry32(opts.seed ?? 42);
+  const normal = () => {
+    // Box–Muller
+    const u1 = Math.max(rand(), 1e-12);
+    const u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  const base = computeAppraisal(input);
+  const landFixed = input.site.mode === 'residual' ? Math.max(base.residualNet, 0) : input.site.landFixed;
+  const simInput: AppraisalInput = { ...input, site: { ...input.site, mode: 'profit', landFixed } };
+  const targetProfit = (base.gdv * input.targetProfitOnGdvPct) / 100;
+
+  const profits: number[] = [];
+  const pocs: number[] = [];
+  for (let i = 0; i < iterations; i++) {
+    const salesMult = Math.max(0.5, 1 + salesSigma * normal());
+    const buildMult = Math.max(0.5, 1 + buildSigma * normal());
+    const r = computeAppraisal(simInput, { salesMult, buildMult });
+    profits.push(r.profit);
+    pocs.push(r.poc);
+  }
+  profits.sort((a, b) => a - b);
+  pocs.sort((a, b) => a - b);
+  return {
+    iterations,
+    landFixed,
+    profit: {
+      p10: percentile(profits, 0.1),
+      p50: percentile(profits, 0.5),
+      p90: percentile(profits, 0.9),
+      mean: profits.reduce((a, b) => a + b, 0) / profits.length,
+    },
+    poc: { p10: percentile(pocs, 0.1), p50: percentile(pocs, 0.5), p90: percentile(pocs, 0.9) },
+    probAtTarget: profits.filter((p) => p >= targetProfit).length / profits.length,
+    probLoss: profits.filter((p) => p < 0).length / profits.length,
   };
 }
 

@@ -30,6 +30,12 @@ export interface FinanceInput {
   salesMonths: number;
   arrangementFeePct: number;
   spendProfile?: SpendProfileKey;
+  /**
+   * Sales absorption (units/month). When set, the sales period is derived from
+   * the unit count and revenue arrives as units actually sell, instead of the
+   * flat salesMonths spread. Omit for the classic even-spread model.
+   */
+  absorptionUnitsPerMonth?: number;
 }
 
 export type SiteMode = 'residual' | 'profit';
@@ -194,4 +200,23 @@ export interface ComparablesSummary {
   supportedPsf: number;
   avgGrossAdjustment: number;
   range: { lo: number; hi: number };
+}
+
+export interface MonteCarloOptions {
+  iterations?: number; // default 500
+  /** 1σ of the sales (GDV) multiplier, e.g. 0.075 = ±7.5% typical move */
+  salesSigma?: number;
+  /** 1σ of the build-cost multiplier */
+  buildSigma?: number;
+  seed?: number; // deterministic runs for tests/UI stability
+}
+
+export interface MonteCarloResult {
+  iterations: number;
+  landFixed: number; // the land price the simulation held constant
+  profit: { p10: number; p50: number; p90: number; mean: number };
+  poc: { p10: number; p50: number; p90: number };
+  /** probability profit meets the target (targetProfitOnGdvPct of base GDV) */
+  probAtTarget: number;
+  probLoss: number;
 }
