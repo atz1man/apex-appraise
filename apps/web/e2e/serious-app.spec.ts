@@ -18,10 +18,10 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
   await page.getByLabel(/^Password/i).fill('super-secret-9');
   await page.getByLabel(/Confirm password/i).fill('super-secret-9');
   await page.getByRole('button', { name: /Create|Start/ }).click();
-  // lands on the Hub of a brand-new org: empty pipeline, zero rollup
-  await expect(page.getByText('Deal tools')).toBeVisible();
-  await page.getByRole('link', { name: /Pipeline/ }).first().click();
-  await expect(page.getByText('Active deals')).toBeVisible();
+  // lands on the Hub of a brand-new org: onboarding CTA, empty pipeline, zero rollup
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+  await page.getByRole('link', { name: /New deal from documents/ }).click();
+  await expect(page.getByText('Your pipeline is empty')).toBeVisible();
   // no seeded deals leak across orgs
   await expect(page.getByText('Northgate Trade & Industrial Park')).toHaveCount(0);
 });

@@ -1,8 +1,20 @@
-import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
+import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
+
+/** Expired/invalid session anywhere → clean sign-out and back to login. */
+function handleAuthError(err: unknown): boolean {
+  const code = (err as { data?: { code?: string } })?.data?.code;
+  if (code === 'UNAUTHORIZED' && getToken()) {
+    clearSession();
+    toastGlobal('info', 'Your session expired — please sign in again.');
+    window.location.href = '/login';
+    return true;
+  }
+  return false;
+}
 import Login from './routes/Login';
 import Hub from './routes/Hub';
 import Board from './routes/Board';
@@ -44,9 +56,15 @@ export default function App() {
     () =>
       new QueryClient({
         defaultOptions: { queries: { retry: 1, staleTime: 5_000 } },
+        queryCache: new QueryCache({
+          onError: (err) => void handleAuthError(err),
+        }),
         // every failed mutation surfaces as a toast — no more silent failures
         mutationCache: new MutationCache({
-          onError: (err) => toastGlobal('error', err instanceof Error ? err.message : 'Something went wrong'),
+          onError: (err) => {
+            if (handleAuthError(err)) return;
+            toastGlobal('error', err instanceof Error ? err.message : 'Something went wrong');
+          },
         }),
       }),
   );

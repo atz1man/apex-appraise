@@ -6,7 +6,17 @@ import { JWT_SECRET, prisma } from './context.js';
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
 
 let browserPromise: Promise<Browser> | null = null;
-const getBrowser = () => (browserPromise ??= chromium.launch({ headless: true }));
+// CHROMIUM_PATH lets the Docker image use the system chromium (apk) instead of
+// Playwright's downloaded browser. Launch failures surface as a graceful 501.
+const getBrowser = () => {
+  browserPromise ??= chromium
+    .launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined })
+    .catch((e) => {
+      browserPromise = null;
+      throw e;
+    });
+  return browserPromise;
+};
 
 /**
  * Server-rendered PDF reports (Appraisal + Red Book). Renders the same React
@@ -33,7 +43,15 @@ export function registerReports(app: FastifyInstance) {
       const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
       if (!deal) return reply.code(404).send({ error: 'deal not found' });
 
-      const browser = await getBrowser();
+      let browser: Browser;
+      try {
+        browser = await getBrowser();
+      } catch (e) {
+        req.log.error(e, 'chromium unavailable for PDF rendering');
+        return reply.code(501).send({
+          error: 'PDF rendering unavailable on this server — use the in-app Print / Save PDF button instead.',
+        });
+      }
       const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
       try {
         await context.addInitScript(

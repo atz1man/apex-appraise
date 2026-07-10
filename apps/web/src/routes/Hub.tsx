@@ -96,6 +96,25 @@ export default function Hub() {
           )}
         </section>
 
+        {/* empty-workspace onboarding for freshly registered orgs */}
+        {data && data.deals.length === 0 && (
+          <section className="mt-9 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-10 text-center">
+            <div className="eyebrow">Get started</div>
+            <h2 className="mt-1.5 text-[22px] font-bold tracking-[-0.6px]">Add your first deal</h2>
+            <p className="mt-2 text-[13.5px] text-ink-2 max-w-[460px] mx-auto leading-relaxed">
+              Create a deal on the pipeline board, then run the Auto-Appraisal — paste your planning
+              text and cost-plan notes and get a full residual appraisal in seconds.
+            </p>
+            <Link
+              to="/board"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-[11px] bg-brand-700 hover:bg-brand-600 text-white text-[13px] font-semibold px-4 h-[40px] items-center transition-colors"
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              New deal from documents →
+            </Link>
+          </section>
+        )}
+
         {/* deal tools grid */}
         <section className="mt-9">
           <div className="eyebrow">Deal tools</div>

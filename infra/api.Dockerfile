@@ -4,8 +4,12 @@
 # as CI), so the two never drift apart by hand-editing.
 FROM node:22-alpine AS base
 # openssl is required for Prisma's engine detection at generate time AND at runtime;
-# without it Prisma defaults to the openssl-1.1.x engine, which cannot load on alpine ≥3.19
-RUN apk add --no-cache openssl && corepack enable
+# without it Prisma defaults to the openssl-1.1.x engine, which cannot load on alpine ≥3.19.
+# chromium + fonts power the server-rendered PDF reports (Playwright uses the system
+# browser via CHROMIUM_PATH — no Playwright browser download needed in the image).
+RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates ttf-freefont \
+ && corepack enable
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 
 COPY pnpm-workspace.yaml package.json tsconfig.base.json ./

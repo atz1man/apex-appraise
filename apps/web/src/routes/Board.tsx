@@ -98,6 +98,15 @@ export default function Board() {
           })}
         </div>
 
+        {/* first-deal onboarding for fresh workspaces */}
+        {data && data.deals.length === 0 && (
+          <div className="mt-6 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-8 text-center">
+            <div className="text-[15px] font-semibold">Your pipeline is empty</div>
+            <p className="mt-1.5 text-[12.5px] text-ink-2">Add your first deal — it takes under a minute, and the AI appraisal does the heavy lifting.</p>
+            <Button className="mt-4" onClick={() => setNewOpen(true)}>New deal from documents</Button>
+          </div>
+        )}
+
         {/* lifecycle board */}
         {isLoading ? (
           <div className="mt-10 flex justify-center"><Spinner /></div>
