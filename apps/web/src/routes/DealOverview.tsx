@@ -95,7 +95,7 @@ export default function DealOverview() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Deal overview" />
-        <main className="max-w-[1480px] mx-auto px-6 pb-14" role="status" aria-label="Loading">
+        <main className="max-w-[1480px] mx-auto px-4 sm:px-6 pb-14" role="status" aria-label="Loading">
           {/* header skeleton */}
           <div className="mt-6">
             <Skeleton height={11} width={110} />
@@ -116,7 +116,7 @@ export default function DealOverview() {
             ))}
           </div>
           {/* two-column body skeleton */}
-          <div className="mt-6 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+          <div className="mt-6 grid gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(215px, 1fr))' }}>
               {Array.from({ length: 6 }, (_, i) => (
                 <div key={i} className="bg-surface border border-border-strong rounded-panel shadow-rest p-4">
@@ -144,7 +144,7 @@ export default function DealOverview() {
     return (
       <div className="min-h-screen">
         <TopBar crumb={<span><Link to="/board" className="hover:text-brand-700">Pipeline</Link> / Deal overview</span>} />
-        <main className="max-w-[720px] mx-auto px-6 py-16">
+        <main className="max-w-[720px] mx-auto px-4 sm:px-6 py-16">
           <EmptyState cta={<Link to="/board"><Button variant="secondary">Back to pipeline</Button></Link>}>
             This deal could not be loaded — it may have been removed or you may not have access.
           </EmptyState>
@@ -202,12 +202,12 @@ export default function DealOverview() {
       />
 
       <DealNav dealId={dealId} active="overview" />
-      <main className="max-w-[1480px] mx-auto px-6 pb-14">
+      <main className="max-w-[1480px] mx-auto px-4 sm:px-6 pb-14">
         {/* ===== Header block ===== */}
         <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">Deal overview</div>
-            <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.8px] leading-tight">{deal.name}</h1>
+            <h1 className="mt-1.5 text-[22px] sm:text-[27px] font-bold tracking-[-0.8px] leading-tight">{deal.name}</h1>
             <div className="mt-2 flex items-center gap-3 text-[13px] text-ink-2 flex-wrap">
               <span>{deal.address}</span>
               <AssetTag type={deal.assetType} />
@@ -236,7 +236,7 @@ export default function DealOverview() {
 
         {/* ===== Lifecycle strip ===== */}
         <Panel className="mt-5 !py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="flex items-start flex-1 min-w-0 overflow-x-auto py-1">
               {STAGES.map((s, i) => {
                 const done = i < stageIdx;
@@ -335,7 +335,7 @@ export default function DealOverview() {
         )}
 
         {/* ===== Two-column body ===== */}
-        <div className="mt-6 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+        <div className="mt-6 grid gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
           {/* LEFT — workfile */}
           <section>
             <div className="eyebrow">Workfile</div>

@@ -225,6 +225,115 @@ export async function fetchEpc(postcode: string): Promise<{ status: 'ok' | 'not-
   }
 }
 
+export interface FloodWarning {
+  severity: string;
+  severityLevel: number;
+  description: string;
+  message: string;
+  source: string;
+}
+
+/** Live Environment Agency flood warnings within ~10km of the site (no key). */
+export async function fetchFloodWarnings(lat: number, lng: number): Promise<FloodWarning[]> {
+  const d = await getJson<{ items: any[] }>(
+    `https://environment.data.gov.uk/flood-monitoring/id/floods?lat=${lat}&long=${lng}&dist=10`,
+  );
+  return (d.items ?? []).slice(0, 6).map((i) => ({
+    severity: String(i.severity ?? ''),
+    severityLevel: Number(i.severityLevel) || 4,
+    description: String(i.description ?? ''),
+    message: String(i.message ?? '').slice(0, 240),
+    source: 'Environment Agency flood-monitoring (OGL)',
+  }));
+}
+
+export interface Amenity {
+  kind: 'station' | 'school' | 'supermarket' | 'pharmacy';
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+/** Walkable amenities within 800m via OpenStreetMap Overpass (needs a UA header). */
+export async function fetchAmenities(lat: number, lng: number): Promise<Amenity[]> {
+  const q = `[out:json][timeout:15];(node(around:800,${lat},${lng})["railway"="station"];node(around:800,${lat},${lng})["amenity"="school"];node(around:800,${lat},${lng})["shop"="supermarket"];node(around:800,${lat},${lng})["amenity"="pharmacy"];);out 30;`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'ApexAppraise/1.0 (site pack)' },
+      body: new URLSearchParams({ data: q }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = (await res.json()) as { elements: any[] };
+    return (d.elements ?? [])
+      .map((e): Amenity | null => {
+        const t = e.tags ?? {};
+        const kind = t.railway === 'station' ? 'station' : t.amenity === 'school' ? 'school' : t.shop === 'supermarket' ? 'supermarket' : t.amenity === 'pharmacy' ? 'pharmacy' : null;
+        if (!kind || !e.lat || !e.lon) return null;
+        return { kind, name: String(t.name ?? 'Unnamed'), lat: e.lat, lng: e.lon };
+      })
+      .filter((a): a is Amenity => a !== null)
+      .slice(0, 20);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface HpiPoint {
+  month: string; // yyyy-mm
+  averagePrice: number;
+  annualChangePct: number | null;
+}
+
+const HPI_REGION_SLUGS: Record<string, string> = {
+  'South West': 'south-west',
+  'South East': 'south-east',
+  London: 'london',
+  Midlands: 'west-midlands',
+  'East Midlands': 'east-midlands',
+  'West Midlands': 'west-midlands',
+  'North West': 'north-west',
+  'North East': 'north-east',
+  'Yorkshire and The Humber': 'yorkshire-and-the-humber',
+  'East of England': 'east-of-england',
+  Wales: 'wales',
+  Scotland: 'scotland',
+};
+
+/**
+ * UK House Price Index (HM Land Registry, OGL, no key) — REAL market levels and
+ * annual growth for the region, latest N months. Data publishes ~6 weeks behind.
+ */
+export async function fetchHpi(region: string, months = 12): Promise<{ region: string; series: HpiPoint[] }> {
+  const slug = HPI_REGION_SLUGS[region] ?? 'south-west';
+  const now = new Date();
+  now.setMonth(now.getMonth() - 2); // publication lag
+  const wanted: string[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    wanted.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const results = await Promise.allSettled(
+    wanted.map((m) =>
+      getJson<{ result: { primaryTopic?: any } & any }>(`https://landregistry.data.gov.uk/data/ukhpi/region/${slug}/month/${m}.json`).then((d) => {
+        const r = d.result?.primaryTopic ?? d.result ?? {};
+        return {
+          month: m,
+          averagePrice: Number(r.averagePrice) || 0,
+          annualChangePct: r.percentageAnnualChange != null ? Number(r.percentageAnnualChange) : null,
+        } as HpiPoint;
+      }),
+    ),
+  );
+  const series = results
+    .filter((r): r is PromiseFulfilledResult<HpiPoint> => r.status === 'fulfilled' && r.value.averagePrice > 0)
+    .map((r) => r.value);
+  return { region, series };
+}
+
 /** Try to pair a sold price with an EPC floor area (house-number match) → £/ft². */
 export function matchPsf(sold: SoldPrice, epc: EpcRecord[]): number | null {
   const num = sold.address.match(/\b(\d+[A-Za-z]?)\b/)?.[1]?.toLowerCase();

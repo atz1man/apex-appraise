@@ -113,6 +113,7 @@ export default function Benchmarking() {
   const metricsQ = trpc.benchmarks.metrics.useQuery({ region, useClass });
   const trendQ = trpc.benchmarks.trend.useQuery({ region, useClass });
   const contribQ = trpc.benchmarks.contributions.useQuery();
+  const hpiQ = trpc.benchmarks.hpi.useQuery({ region }, { staleTime: 10 * 60_000, retry: 0 });
   const dealsQ = trpc.deals.list.useQuery({});
   const [contribDealId, setContribDealId] = useState('');
   const contribute = trpc.benchmarks.contribute.useMutation({
@@ -252,7 +253,7 @@ export default function Benchmarking() {
               <MetricCard label="Profit on cost" m={M.poc} isPct />
             </div>
 
-            <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+            <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
               <div className="flex flex-col gap-4">
                 {/* build cost trend */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
@@ -397,7 +398,54 @@ export default function Benchmarking() {
               </div>
 
               {/* side rail */}
-              <div className="flex flex-col gap-4 sticky top-[78px]">
+              <div className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
+                <section className="bg-surface rounded-card shadow-rest p-[18px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold">Market index — UK HPI</span>
+                    <span className="label-mono rounded-[6px] bg-tint-success text-brand-700 px-1.5 py-[2px]">REAL DATA</span>
+                  </div>
+                  {hpiQ.isLoading ? (
+                    <div className="mt-3 flex justify-center py-4"><Spinner /></div>
+                  ) : hpiQ.data?.status === 'ok' && hpiQ.data.series.length > 0 ? (
+                    (() => {
+                      const series = hpiQ.data.series;
+                      const latest = series[series.length - 1];
+                      const min = Math.min(...series.map((x) => x.averagePrice));
+                      const max = Math.max(...series.map((x) => x.averagePrice));
+                      const span = Math.max(max - min, 1);
+                      return (
+                        <>
+                          <div className="mt-2.5 flex items-baseline gap-2.5 flex-wrap">
+                            <span className="fig text-[22px] font-semibold tracking-[-0.8px]">£{Math.round(latest.averagePrice).toLocaleString('en-GB')}</span>
+                            {latest.annualChangePct != null && (
+                              <span className="fig text-[12px] font-semibold" style={{ color: latest.annualChangePct >= 0 ? '#1E7A55' : '#B23A2E' }}>
+                                {latest.annualChangePct >= 0 ? '+' : '−'}{Math.abs(latest.annualChangePct).toFixed(1)}% yr
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10.5px] text-ink-3">Average price · {region} · {latest.month}</div>
+                          <div className="mt-3 flex items-end gap-[3px] h-[64px]">
+                            {series.map((pt) => (
+                              <div
+                                key={pt.month}
+                                className="flex-1 rounded-t-[3px]"
+                                title={`${pt.month}: £${Math.round(pt.averagePrice).toLocaleString('en-GB')}`}
+                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? '#14503B' : '#AECBBC' }}
+                              />
+                            ))}
+                          </div>
+                          <div className="mt-1 flex justify-between text-[9.5px] fig text-ink-3">
+                            <span>{series[0].month}</span>
+                            <span>{latest.month}</span>
+                          </div>
+                          <div className="mt-2 text-[10px] text-ink-3">Source: HM Land Registry UK House Price Index (OGL) — live, not simulated.</div>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <div className="mt-3 text-[11.5px] text-ink-3">UK HPI unreachable right now — try again shortly.</div>
+                  )}
+                </section>
                 <section
                   className="rounded-card p-[18px] text-white shadow-dark-card"
                   style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}

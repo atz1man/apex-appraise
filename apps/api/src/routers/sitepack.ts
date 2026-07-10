@@ -1,6 +1,16 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { bulkGeocode, fetchConstraints, fetchEpc, fetchSoldPrices, geocodePostcode, matchPsf } from '../opendata.js';
+import {
+  bulkGeocode,
+  fetchAmenities,
+  fetchConstraints,
+  fetchEpc,
+  fetchFloodWarnings,
+  fetchSoldPrices,
+  geocodePostcode,
+  matchPsf,
+} from '../opendata.js';
+import { companiesHouseConfigured, companyProfile, searchCompanies } from '../companieshouse.js';
 import { internalProcedure, router } from '../trpc.js';
 
 /**
@@ -30,10 +40,12 @@ export const sitePackRouter = router({
         return { status: 'bad-postcode' as const, dealName: deal.name, address: deal.address, postcode };
       }
 
-      const [soldRes, constraintsRes, epcRes] = await Promise.allSettled([
+      const [soldRes, constraintsRes, epcRes, floodRes, amenityRes] = await Promise.allSettled([
         fetchSoldPrices(geo.postcode),
         fetchConstraints(geo.latitude, geo.longitude),
         fetchEpc(geo.postcode),
+        fetchFloodWarnings(geo.latitude, geo.longitude),
+        fetchAmenities(geo.latitude, geo.longitude),
       ]);
 
       const epc = epcRes.status === 'fulfilled' ? epcRes.value : { status: 'error' as const, records: [], note: 'EPC fetch failed' };
@@ -59,9 +71,34 @@ export const sitePackRouter = router({
             ? { status: 'ok' as const, ...constraintsRes.value }
             : { status: 'error' as const, checked: [], hits: [] },
         epc,
+        floodWarnings:
+          floodRes.status === 'fulfilled'
+            ? { status: 'ok' as const, items: floodRes.value }
+            : { status: 'error' as const, items: [] },
+        amenities:
+          amenityRes.status === 'fulfilled'
+            ? { status: 'ok' as const, items: amenityRes.value }
+            : { status: 'error' as const, items: [] },
         fetchedAt: new Date().toISOString(),
       };
     }),
+
+  /** Counterparty due diligence — Companies House (free key: COMPANIES_HOUSE_KEY). */
+  companySearch: internalProcedure.input(z.object({ q: z.string().min(2).max(80) })).query(async ({ input }) => {
+    if (!companiesHouseConfigured()) {
+      return {
+        status: 'not-configured' as const,
+        note: 'Free API key required — register at developer.company-information.service.gov.uk, then set COMPANIES_HOUSE_KEY.',
+        results: [],
+      };
+    }
+    return { status: 'ok' as const, results: await searchCompanies(input.q) };
+  }),
+
+  company: internalProcedure.input(z.object({ companyNumber: z.string().min(4).max(10) })).query(async ({ input }) => {
+    if (!companiesHouseConfigured()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House key not configured' });
+    return companyProfile(input.companyNumber);
+  }),
 
   /** Turn selected sold-price records into real comparables on the deal. */
   applyComps: internalProcedure

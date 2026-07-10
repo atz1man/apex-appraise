@@ -68,13 +68,13 @@ export default function Board() {
       <TopBar
         crumb="Pipeline board"
         right={
-          <>
-            <input placeholder="Search deals…" aria-label="Search deals" value={q} onChange={(e) => setQ(e.target.value)} className="w-44 h-9" />
-            <Button onClick={() => setNewOpen(true)}>New deal from documents</Button>
-          </>
+          <div className="flex items-center gap-2.5 min-w-0 overflow-x-auto sm:overflow-visible">
+            <input placeholder="Search deals…" aria-label="Search deals" value={q} onChange={(e) => setQ(e.target.value)} className="w-28 sm:w-44 h-9 shrink-0" />
+            <Button className="shrink-0 whitespace-nowrap" onClick={() => setNewOpen(true)}>New deal from documents</Button>
+          </div>
         }
       />
-      <main className="max-w-[1640px] mx-auto px-6 pb-12">
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-12">
         {/* portfolio roll-up (computed server-side) */}
         {isLoading ? (
           <div className="mt-5 flex gap-3 flex-wrap" role="status" aria-label="Loading">
@@ -99,14 +99,14 @@ export default function Board() {
         )}
 
         {/* asset-type filters */}
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex gap-2 flex-wrap">
           {FILTERS.map(([k, label]) => {
             const on = filter === k;
             return (
               <button
                 key={k}
                 onClick={() => setFilter(k)}
-                className="rounded-pill border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+                className="inline-flex items-center rounded-pill border px-3.5 py-1.5 min-h-[40px] sm:min-h-0 text-[12.5px] font-semibold transition-colors"
                 style={on ? { background: '#14503B', color: '#fff', borderColor: '#14503B' } : { background: '#fff', color: '#5F665F', borderColor: '#E6E5DE' }}
               >
                 {label}

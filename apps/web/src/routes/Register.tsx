@@ -77,7 +77,7 @@ export default function Register() {
             Apex <span className="text-accent-300">Appraise</span>
           </span>
         </div>
-        <form className="bg-surface rounded-panel shadow-dark-card p-6" onSubmit={submit} noValidate>
+        <form className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6" onSubmit={submit} noValidate>
           <div className="eyebrow mb-1">Create workspace</div>
           <h1 className="text-[19px] font-bold tracking-[-0.4px] mb-4">Start your organisation</h1>
           {field('Organisation name', 'orgName', { autoFocus: true, autoComplete: 'organization' })}

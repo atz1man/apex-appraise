@@ -98,7 +98,7 @@ export default function Integrations() {
         }
       />
 
-      <main className="max-w-[1280px] mx-auto px-6 pb-14">
+      <main className="max-w-[1280px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-6 mb-5">
           <div className="text-[22px] font-bold tracking-[-0.6px]">Connect your data sources</div>
           <div className="mt-1 text-[13.5px] text-ink-3 max-w-[620px] leading-relaxed">
@@ -106,9 +106,9 @@ export default function Integrations() {
             straight into every deal.
           </div>
           {deals.length > 0 && (
-            <div className="mt-3 flex items-center gap-2.5">
+            <div className="mt-3 flex items-center gap-2.5 flex-wrap">
               <span className="label-mono text-ink-3">Sync target deal</span>
-              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8" aria-label="Sync target deal">
+              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8 min-w-0 max-w-full" aria-label="Sync target deal">
                 {deals.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -118,7 +118,7 @@ export default function Integrations() {
         </div>
 
         {isLoading ? (
-          <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))' }} aria-busy="true">
+          <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} height={196} className="rounded-card" />
             ))}
@@ -129,7 +129,7 @@ export default function Integrations() {
           GROUPS.map((g) => (
             <div key={g.label} className="mb-7">
               <div className="font-mono uppercase text-[11px] tracking-[0.6px] font-semibold text-ink-3 mb-3">{g.label}</div>
-              <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))' }}>
+              <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
                 {g.items.map((item) => {
                   const row = byProvider.get(item.provider);
                   const status = (row?.status ?? 'NOT_CONNECTED') as Status;
@@ -168,20 +168,20 @@ export default function Integrations() {
                           <div className="flex gap-1.5">
                             {SYNCABLE.has(item.provider) && effectiveDealId && (
                               <Button
-                                className="h-8 px-3.5 text-[11.5px]"
+                                className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]"
                                 disabled={sync.isPending && sync.variables?.provider === item.provider}
                                 onClick={() => sync.mutate({ provider: item.provider, dealId: effectiveDealId })}
                               >
                                 {sync.isPending && sync.variables?.provider === item.provider ? <Spinner /> : 'Sync to deal'}
                               </Button>
                             )}
-                            <Button variant="secondary" className="h-8 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
+                            <Button variant="secondary" className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
                               {pending ? <Spinner /> : 'Manage'}
                             </Button>
                           </div>
                         ) : status === 'ATTENTION' ? (
                           <button
-                            className="inline-flex items-center justify-center h-8 px-3.5 rounded-[9px] text-[11.5px] font-semibold text-white transition-all disabled:opacity-50"
+                            className="inline-flex items-center justify-center h-8 min-h-10 sm:min-h-0 px-3.5 rounded-[9px] text-[11.5px] font-semibold text-white transition-all disabled:opacity-50"
                             style={{ background: '#9A6212', border: '1px solid #9A6212' }}
                             disabled={pending}
                             onClick={() => connect.mutate(item.provider)}
@@ -189,7 +189,7 @@ export default function Integrations() {
                             {pending ? <Spinner /> : 'Reconnect'}
                           </button>
                         ) : (
-                          <Button className="h-8 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
+                          <Button className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
                             {pending ? <Spinner /> : 'Connect'}
                           </Button>
                         )}

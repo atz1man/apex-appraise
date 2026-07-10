@@ -7,7 +7,7 @@ const DEMO_MAILTO = 'mailto:hello@apexappraise.co.uk?subject=Apex%20Appraise%20%
 const ARROW = 'M5 12h14|M13 6l6 6-6 6';
 const CHECK = 'm5 12 5 5 9-10';
 
-const WRAP = 'max-w-[1100px] mx-auto px-7';
+const WRAP = 'max-w-[1100px] mx-auto px-5 sm:px-7';
 
 // ---------- data ----------
 
@@ -284,15 +284,15 @@ function HeroAppMock() {
             <div className="flex gap-3.5">
               <div className="flex-1 h-[84px] rounded-[12px] px-3.5 py-3" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
                 <div className="label-mono text-accent-muted-3">Residual land</div>
-                <div className="fig mt-1.5 text-[20px] font-semibold tracking-[-1px] text-white">£1.24m</div>
+                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px] text-white">£1.24m</div>
               </div>
               <div className="flex-1 h-[84px] rounded-[12px] bg-surface border border-border-strong px-3.5 py-3">
                 <div className="label-mono text-ink-3">GDV</div>
-                <div className="fig mt-1.5 text-[20px] font-semibold tracking-[-1px]">£8.69m</div>
+                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px]">£8.69m</div>
               </div>
               <div className="flex-1 h-[84px] rounded-[12px] bg-surface border border-border-strong px-3.5 py-3">
                 <div className="label-mono text-ink-3">Profit on cost</div>
-                <div className="fig mt-1.5 text-[20px] font-semibold tracking-[-1px] text-status-green">42%</div>
+                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px] text-status-green">42%</div>
               </div>
             </div>
             <div className="flex-1 rounded-[12px] bg-surface border border-border-strong flex items-end gap-2 px-[18px] pt-[18px]">
@@ -314,7 +314,7 @@ export default function Landing() {
     <div className="min-h-screen bg-canvas text-ink overflow-x-hidden">
       {/* NAV */}
       <div className="sticky top-0 z-50 border-b border-border-strong backdrop-blur-md" style={{ background: 'rgba(243,244,241,0.86)' }}>
-        <div className="max-w-[1200px] mx-auto h-16 px-7 flex items-center gap-3.5">
+        <div className="max-w-[1200px] mx-auto h-16 px-4 sm:px-7 flex items-center gap-3.5">
           <Link to="/welcome" className="flex items-center gap-2.5">
             <BrandMark size={30} />
             <span className="text-[16px] font-bold tracking-[-0.3px]">Apex Appraise</span>
@@ -344,7 +344,7 @@ export default function Landing() {
       <div className="relative text-white overflow-hidden" style={{ background: 'linear-gradient(165deg,#14503B 0%,#0F3528 55%,#0C2A20 100%)' }}>
         <div className="absolute -top-40 -right-32 w-[620px] h-[620px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />
         <div className="absolute -bottom-56 -left-40 w-[520px] h-[520px] rounded-full" style={{ background: 'rgba(255,255,255,0.035)' }} />
-        <div className="max-w-[1200px] mx-auto px-7 pt-20 pb-24 relative">
+        <div className="max-w-[1200px] mx-auto px-5 sm:px-7 pt-20 pb-24 relative">
           <div
             className="inline-flex items-center gap-[9px] px-3.5 py-[7px] rounded-pill"
             style={{ background: 'rgba(63,216,148,0.12)', border: '1px solid rgba(63,216,148,0.3)' }}
@@ -352,7 +352,7 @@ export default function Landing() {
             <span className="w-[7px] h-[7px] rounded-full bg-accent-300" />
             <span className="font-mono text-[12px] font-semibold tracking-[0.5px] text-accent-300">UK development &amp; valuation, end to end</span>
           </div>
-          <h1 className="mt-[26px] max-w-[880px] text-[46px] md:text-[68px] font-bold tracking-[-2px] md:tracking-[-3px] leading-[1.02]">
+          <h1 className="mt-[26px] max-w-[880px] text-[38px] sm:text-[46px] md:text-[68px] font-bold tracking-[-1.6px] sm:tracking-[-2px] md:tracking-[-3px] leading-[1.02]">
             From the front door to the signed report — one workfile.
           </h1>
           <p className="mt-6 max-w-[620px] text-[18px] md:text-[20px] leading-[1.5] text-accent-muted-3">
@@ -514,7 +514,7 @@ export default function Landing() {
 
       {/* QUOTE */}
       <div id="customers" className="bg-brand-800 text-white">
-        <div className="max-w-[900px] mx-auto px-7 py-[72px] text-center">
+        <div className="max-w-[900px] mx-auto px-5 sm:px-7 py-[72px] text-center">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="#3FD894" className="opacity-50 mx-auto" aria-hidden="true">
             <path d="M10 7L7 12h3v5H4v-7l3-3h3zm10 0l-3 5h3v5h-6v-7l3-3h3z" />
           </svg>
@@ -593,7 +593,7 @@ export default function Landing() {
       {/* CTA */}
       <div id="cta" className={`${WRAP} py-20`}>
         <div
-          className="relative overflow-hidden rounded-[24px] px-7 py-14 md:p-14 text-center"
+          className="relative overflow-hidden rounded-[24px] px-5 py-12 sm:px-7 sm:py-14 md:p-14 text-center"
           style={{ background: 'linear-gradient(155deg,#1B6048,#0F3528)' }}
         >
           <div className="absolute -top-20 -right-16 w-[300px] h-[300px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />

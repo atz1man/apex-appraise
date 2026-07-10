@@ -67,22 +67,22 @@ export default function Hub() {
           </>
         }
       />
-      <main className="max-w-[1480px] mx-auto px-6 pb-14">
+      <main className="max-w-[1480px] mx-auto px-4 sm:px-6 pb-14">
         {/* dark evergreen hero with live portfolio summary */}
         <section
-          className="mt-6 rounded-[22px] p-8 text-white shadow-dark-card"
+          className="mt-6 rounded-[22px] p-6 sm:p-8 text-white shadow-dark-card"
           style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
         >
           <div className="font-mono uppercase text-[11px] tracking-[2px] text-accent-muted-3 font-semibold">
             Brookfield (personal) · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </div>
-          <h1 className="mt-2 text-[34px] font-bold tracking-[-1.4px] leading-tight">
+          <h1 className="mt-2 text-[26px] sm:text-[34px] font-bold tracking-[-1.4px] leading-tight">
             One connected workfile,
             <br />
             sourcing to completion.
           </h1>
           {isLoading || !R ? (
-            <div className="mt-7 flex flex-wrap gap-8" role="status" aria-label="Loading">
+            <div className="mt-7 flex flex-wrap gap-6 sm:gap-8" role="status" aria-label="Loading">
               {Array.from({ length: 5 }, (_, i) => (
                 <div key={i} className="opacity-25">
                   <Skeleton height={10} width={90} />
@@ -91,7 +91,7 @@ export default function Hub() {
               ))}
             </div>
           ) : (
-            <div className="mt-7 flex flex-wrap gap-8">
+            <div className="mt-7 flex flex-wrap gap-6 sm:gap-8">
               {(
                 [
                   ['Pipeline GDV', fM(R.pipelineGdv)],
@@ -112,7 +112,7 @@ export default function Hub() {
 
         {/* empty-workspace onboarding for freshly registered orgs */}
         {data && data.deals.length === 0 && (
-          <section className="mt-9 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-10 text-center">
+          <section className="mt-9 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-6 sm:p-10 text-center">
             <div className="eyebrow">Get started</div>
             <h2 className="mt-1.5 text-[22px] font-bold tracking-[-0.6px]">Add your first deal</h2>
             <p className="mt-2 text-[13.5px] text-ink-2 max-w-[460px] mx-auto leading-relaxed">

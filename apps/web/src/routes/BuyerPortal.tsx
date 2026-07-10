@@ -74,34 +74,34 @@ export default function BuyerPortal() {
   return (
     <div className="min-h-screen">
       {/* buyer-facing top bar: development branding, no internal navigation */}
-      <header className="sticky top-0 z-40 h-14 bg-surface border-b border-border-strong flex items-center gap-3 px-5">
-        <div className="flex items-center gap-2.5">
+      <header className="sticky top-0 z-40 h-14 bg-surface border-b border-border-strong flex items-center gap-3 px-4 sm:px-5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <BrandMark />
-          <span className="text-[15.5px] font-bold tracking-[-0.3px]">{data?.development.name ?? 'Apex Appraise'}</span>
+          <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate">{data?.development.name ?? 'Apex Appraise'}</span>
         </div>
-        <span className="label-mono rounded-[7px] px-2.5 py-1 bg-tint-success text-brand-700 tracking-[0.4px]">Buyer portal</span>
-        <div className="ml-auto flex items-center gap-2.5">
+        <span className="label-mono rounded-[7px] px-2.5 py-1 bg-tint-success text-brand-700 tracking-[0.4px] whitespace-nowrap shrink-0">Buyer portal</span>
+        <div className="ml-auto flex items-center gap-2.5 min-w-0">
           {principal && (
             <>
-              <div className="text-right">
-                <div className="text-[13px] font-semibold leading-tight">{principal.name}</div>
-                {data && <div className="text-[11px] text-ink-3 leading-tight">{data.unit.name}</div>}
+              <div className="text-right min-w-0">
+                <div className="text-[13px] font-semibold leading-tight truncate">{principal.name}</div>
+                {data && <div className="text-[11px] text-ink-3 leading-tight truncate">{data.unit.name}</div>}
               </div>
               <Avatar initials={principal.initials} size={34} />
             </>
           )}
-          <button className="text-[12px] text-ink-3 hover:text-ink" onClick={signOut}>
+          <button className="text-[12px] text-ink-3 hover:text-ink shrink-0" onClick={signOut}>
             Sign out
           </button>
         </div>
       </header>
 
-      <main className="max-w-[960px] mx-auto px-6 pb-16">
+      <main className="max-w-[960px] mx-auto px-4 sm:px-6 pb-16">
         {isLoading ? (
           <div aria-busy="true">
             {/* hero placeholder */}
             <Skeleton height={196} className="mt-7 rounded-[20px]" />
-            <div className="mt-[18px] grid gap-[18px] items-start" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="mt-[18px] grid gap-[18px] items-start lg:grid-cols-2">
               {/* timeline panel placeholder */}
               <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
                 <Skeleton width={120} height={15} className="mb-4" />
@@ -135,7 +135,7 @@ export default function BuyerPortal() {
           <>
             {/* welcoming hero */}
             <section
-              className="mt-7 rounded-[20px] p-8 text-white shadow-dark-card relative overflow-hidden"
+              className="mt-7 rounded-[20px] p-5 sm:p-8 text-white shadow-dark-card relative overflow-hidden"
               style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}
             >
               <div
@@ -145,7 +145,7 @@ export default function BuyerPortal() {
               <div className="label-mono tracking-[0.8px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 Your purchase
               </div>
-              <h1 className="mt-2 text-[30px] font-bold tracking-[-1px] leading-tight">Your new home at {data.development.name}</h1>
+              <h1 className="mt-2 text-[24px] sm:text-[30px] font-bold tracking-[-1px] leading-tight">Your new home at {data.development.name}</h1>
               <div className="mt-1.5 text-[15px] text-accent-muted-4">
                 {data.unit.name} · {data.unit.spec} · {data.development.address}
               </div>
@@ -162,7 +162,7 @@ export default function BuyerPortal() {
               </div>
             </section>
 
-            <div className="mt-[18px] grid gap-[18px] items-start" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="mt-[18px] grid gap-[18px] items-start lg:grid-cols-2">
               {/* left: conveyancing timeline */}
               <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
                 <h3 className="text-[15px] font-semibold mb-4">Your progress</h3>
@@ -268,7 +268,7 @@ export default function BuyerPortal() {
                             {isSigned ? (
                               <StatusChip status="green" label="SIGNED" />
                             ) : (
-                              <Button variant="secondary" className="h-[32px] px-3 text-[12px]" disabled={sign.isPending} onClick={() => sign.mutate(d.id)}>
+                              <Button variant="secondary" className="h-[32px] min-h-10 sm:min-h-0 px-3 text-[12px]" disabled={sign.isPending} onClick={() => sign.mutate(d.id)}>
                                 {sign.isPending && sign.variables === d.id ? (
                                   <Spinner />
                                 ) : (
@@ -304,7 +304,7 @@ export default function BuyerPortal() {
                           <StatusChip status="green" label="PAID" />
                         ) : (
                           <button
-                            className="rounded-[9px] bg-brand-700 hover:bg-brand-600 text-white text-[11.5px] font-semibold px-3 py-1.5 disabled:opacity-50 transition-colors"
+                            className="rounded-[9px] bg-brand-700 hover:bg-brand-600 text-white text-[11.5px] font-semibold px-3 py-1.5 min-h-10 sm:min-h-0 disabled:opacity-50 transition-colors"
                             disabled={pay.isPending}
                             onClick={() => pay.mutate(p.id)}
                           >

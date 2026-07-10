@@ -137,15 +137,15 @@ export default function Calendar() {
     return (
       <div className="min-h-screen">
         <TopBar crumb="Calendar & tasks" />
-        <main className="max-w-[1640px] mx-auto px-6 pb-14" role="status" aria-label="Loading">
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14" role="status" aria-label="Loading">
           <div className="mt-6">
             <Skeleton height={11} width={120} />
             <Skeleton height={27} width={260} className="mt-2" />
             <Skeleton height={13} width={380} className="mt-2.5" />
           </div>
-          <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 400px' }}>
+          <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
             {/* month grid skeleton */}
-            <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+            <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-3 sm:p-5">
               <div className="flex items-center gap-3">
                 <Skeleton height={20} width={160} />
                 <Skeleton height={30} width={100} />
@@ -161,7 +161,7 @@ export default function Calendar() {
             </div>
             {/* rail skeleton */}
             <div className="flex flex-col gap-4">
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap lg:flex-nowrap">
                 {Array.from({ length: 3 }, (_, i) => (
                   <div key={i} className="flex-1 min-w-[130px] bg-surface border border-border-strong rounded-card shadow-rest px-4 py-3.5">
                     <Skeleton height={10} width="60%" />
@@ -189,7 +189,7 @@ export default function Calendar() {
   return (
     <div className="min-h-screen">
       <TopBar crumb="Calendar & tasks" />
-      <main className="max-w-[1640px] mx-auto px-6 pb-14">
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-6">
           <EyebrowTitle
             eyebrow="Team operations"
@@ -227,17 +227,17 @@ export default function Calendar() {
           />
         </div>
 
-        <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 400px' }}>
+        <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
           {/* ===== Month grid ===== */}
-          <Panel className="!p-5">
+          <Panel className="!p-3 sm:!p-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <h2 className="text-[20px] font-bold tracking-[-0.5px]">{monthLabel}</h2>
                 <div className="flex gap-1">
-                  <button onClick={prev} aria-label="Previous month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
+                  <button onClick={prev} aria-label="Previous month" className="w-10 h-10 sm:w-[30px] sm:h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
                   </button>
-                  <button onClick={next} aria-label="Next month" className="w-[30px] h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
+                  <button onClick={next} aria-label="Next month" className="w-10 h-10 sm:w-[30px] sm:h-[30px] rounded-[8px] border border-border-strong inline-flex items-center justify-center hover:bg-sunken cursor-pointer transition-colors">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
                   </button>
                 </div>
@@ -270,7 +270,7 @@ export default function Calendar() {
                     title={c.inMonth ? 'Add a task on this day' : undefined}
                     onClick={() => c.k && pickDay(c.k)}
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && c.k && (e.preventDefault(), pickDay(c.k))}
-                    className={`min-h-[96px] rounded-[10px] p-[7px] flex flex-col gap-1 border transition-colors ${c.inMonth ? 'cursor-pointer hover:border-border-strong' : ''}`}
+                    className={`min-h-[72px] sm:min-h-[96px] rounded-[10px] p-[4px] sm:p-[7px] flex flex-col gap-1 border transition-colors ${c.inMonth ? 'cursor-pointer hover:border-border-strong' : ''}`}
                     style={{
                       borderColor: c.isToday ? brand[700] : c.inMonth ? '#EEEDE7' : 'transparent',
                       background: c.inMonth ? (c.isToday ? '#F3F8F5' : neutral.surface) : neutral.sunken,
@@ -319,7 +319,7 @@ export default function Calendar() {
           {/* ===== Task panel ===== */}
           <aside className="flex flex-col gap-4">
             {/* stats */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap lg:flex-nowrap">
               <StatCard label="Open tasks" value={groups.stats.open} />
               <StatCard label="Overdue" value={groups.stats.overdue} tone={groups.stats.overdue > 0 ? statusTokens.red.text : undefined} />
               <StatCard label="Done" value={groups.stats.done} tone={statusTokens.green.text} />
@@ -350,7 +350,7 @@ export default function Calendar() {
                   ))}
                 </select>
               </div>
-              <div className="mt-2.5 flex items-center gap-2">
+              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
                 <input type="date" aria-label="Due date" className="h-[34px] py-0 fig text-[12px] shrink-0" value={due} onChange={(e) => setDue(e.target.value)} />
                 <div className="flex gap-1">
                   {PEOPLE.map((p) => (

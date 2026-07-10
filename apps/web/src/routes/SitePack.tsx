@@ -24,6 +24,13 @@ const fdate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+const AMENITY_META: Record<string, [string, string]> = {
+  station: ['Stations', '🚉'],
+  school: ['Schools', '🎓'],
+  supermarket: ['Supermarkets', '🛒'],
+  pharmacy: ['Pharmacies', '💊'],
+};
+
 export default function SitePack() {
   const { dealId = '' } = useParams();
   const toast = useToast();
@@ -31,6 +38,11 @@ export default function SitePack() {
   const [postcodeInput, setPostcodeInput] = useState('');
   const [postcodeOverride, setPostcodeOverride] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [companyQ, setCompanyQ] = useState('');
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [companyNo, setCompanyNo] = useState<string | null>(null);
+  const companySearch = trpc.sitePack.companySearch.useQuery({ q: companyQuery }, { enabled: companyQuery.length >= 2, retry: 0 });
+  const company = trpc.sitePack.company.useQuery({ companyNumber: companyNo ?? '' }, { enabled: !!companyNo, retry: 0 });
 
   const { data, isLoading, isFetching, refetch } = trpc.sitePack.get.useQuery(
     { dealId, postcode: postcodeOverride },
@@ -124,7 +136,7 @@ export default function SitePack() {
               ))}
             </div>
             {/* sold-price table + map placeholder skeletons */}
-            <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+            <div className="mt-5 grid gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
               <Panel>
                 <Skeleton height={18} width={260} />
                 <div className="mt-4">
@@ -166,7 +178,7 @@ export default function SitePack() {
               />
             </div>
 
-            <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+            <div className="mt-5 grid gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
               {/* sold prices */}
               <Panel
                 title="Sold prices — HM Land Registry"
@@ -328,6 +340,110 @@ export default function SitePack() {
                       </div>
                     </div>
                   )}
+                </Panel>
+
+                <Panel title="Live flood warnings" right={<StatusChip status={ok.floodWarnings.items.length ? 'red' : 'green'} label={ok.floodWarnings.items.length ? 'ACTIVE' : 'NONE'} />}>
+                  {ok.floodWarnings.status !== 'ok' ? (
+                    <div className="text-[11.5px] text-ink-3">Environment Agency feed unreachable right now.</div>
+                  ) : ok.floodWarnings.items.length === 0 ? (
+                    <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-500 font-medium">
+                      No live flood warnings within 10km of the site.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {ok.floodWarnings.items.map((w, i) => (
+                        <div key={i} className="rounded-[10px] px-3 py-2.5" style={{ background: w.severityLevel <= 2 ? '#F9EAE7' : '#F8F0DE' }}>
+                          <div className="text-[12px] font-semibold" style={{ color: w.severityLevel <= 2 ? '#B23A2E' : '#9A6212' }}>{w.severity}</div>
+                          <div className="text-[11px] text-ink-2">{w.description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 text-[10.5px] text-ink-3">Source: Environment Agency real-time flood monitoring (OGL).</div>
+                </Panel>
+
+                <Panel title="Walkable amenities · 800m">
+                  {ok.amenities.status !== 'ok' ? (
+                    <div className="text-[11.5px] text-ink-3">OpenStreetMap amenity lookup unreachable right now.</div>
+                  ) : ok.amenities.items.length === 0 ? (
+                    <div className="text-[11.5px] text-ink-3">No stations, schools, supermarkets or pharmacies mapped within 800m.</div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(AMENITY_META).map(([kind, [label, glyph]]) => {
+                          const n = ok.amenities.items.filter((a) => a.kind === kind).length;
+                          if (!n) return null;
+                          return (
+                            <span key={kind} className="inline-flex items-center gap-1.5 rounded-[9px] bg-sunken-2 px-2.5 py-1.5 text-[11.5px] font-medium">
+                              <span aria-hidden="true">{glyph}</span> {n} {label.toLowerCase()}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2.5 flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+                        {ok.amenities.items.slice(0, 8).map((a, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11.5px] text-ink-2 min-w-0">
+                            <span aria-hidden="true">{AMENITY_META[a.kind]?.[1]}</span>
+                            <span className="truncate">{a.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="mt-2 text-[10.5px] text-ink-3">Source: OpenStreetMap contributors (ODbL).</div>
+                </Panel>
+
+                <Panel title="Counterparty check" right={<StatusChip status={companySearch.data?.status === 'not-configured' ? 'neutral' : 'green'} label={companySearch.data?.status === 'not-configured' ? 'KEY NEEDED' : 'COMPANIES HOUSE'} />}>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 min-w-0"
+                      placeholder="Search a company, e.g. the vendor"
+                      aria-label="Company search"
+                      value={companyQ}
+                      onChange={(e) => setCompanyQ(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { setCompanyNo(null); setCompanyQuery(companyQ.trim()); } }}
+                    />
+                    <Button variant="secondary" className="h-9 px-3 text-[12px]" disabled={companyQ.trim().length < 2} onClick={() => { setCompanyNo(null); setCompanyQuery(companyQ.trim()); }}>
+                      Search
+                    </Button>
+                  </div>
+                  {companySearch.data?.status === 'not-configured' && (
+                    <div className="mt-2.5 text-[11.5px] text-ink-2 leading-relaxed">{companySearch.data.note}</div>
+                  )}
+                  {companySearch.isFetching && <div className="mt-3"><Spinner /></div>}
+                  {companySearch.data?.status === 'ok' && !companyNo && (
+                    <div className="mt-2.5 flex flex-col gap-1">
+                      {companySearch.data.results.length === 0 && <div className="text-[11.5px] text-ink-3">No companies matched.</div>}
+                      {companySearch.data.results.map((c) => (
+                        <button key={c.companyNumber} className="text-left rounded-[9px] px-2.5 py-2 hover:bg-sunken transition-colors" onClick={() => setCompanyNo(c.companyNumber)}>
+                          <div className="text-[12px] font-semibold truncate">{c.name}</div>
+                          <div className="fig text-[10px] text-ink-3">{c.companyNumber} · {c.status} · {c.address}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {companyNo && company.data && (
+                    <div className="mt-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-semibold truncate">{company.data.summary.name}</span>
+                        <StatusChip status={company.data.summary.status === 'active' ? 'green' : 'red'} label={company.data.summary.status.toUpperCase()} />
+                      </div>
+                      <div className="fig mt-1 text-[10.5px] text-ink-3">{company.data.summary.companyNumber} · inc. {company.data.summary.incorporated} · {company.data.summary.address}</div>
+                      {company.data.accountsOverdue && <div className="mt-2 rounded-[8px] bg-status-red-bg px-2.5 py-1.5 text-[11px] font-semibold text-status-red">Accounts overdue</div>}
+                      <div className="mt-2.5 label-mono text-ink-3">Officers</div>
+                      {company.data.officers.map((o, i) => (
+                        <div key={i} className="text-[11.5px] text-ink-2 py-0.5">{o.name} · {o.role}</div>
+                      ))}
+                      <div className="mt-2.5 label-mono text-ink-3">Charges · {company.data.charges.outstanding} outstanding of {company.data.charges.total}</div>
+                      {company.data.charges.items.slice(0, 3).map((c, i) => (
+                        <div key={i} className="text-[11.5px] text-ink-2 py-0.5 min-w-0">
+                          <span className={c.status === 'outstanding' ? 'text-status-red font-medium' : ''}>{c.status}</span> · {c.personsEntitled.join(', ') || c.description}
+                        </div>
+                      ))}
+                      <button className="mt-2 text-[11.5px] font-semibold text-brand-500 hover:text-brand-700" onClick={() => setCompanyNo(null)}>← Back to results</button>
+                    </div>
+                  )}
+                  <div className="mt-2 text-[10.5px] text-ink-3">Source: Companies House public data.</div>
                 </Panel>
 
                 <div className="text-[11px] text-ink-3 leading-relaxed px-1">

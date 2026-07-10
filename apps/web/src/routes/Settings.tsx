@@ -451,7 +451,7 @@ export default function Settings() {
         crumb="Workspace settings"
         right={principal && <StatusChip status={roleTone(principal.role)} label={principal.role} />}
       />
-      <main className="max-w-[980px] mx-auto px-6 py-8 flex flex-col gap-5">
+      <main className="max-w-[980px] mx-auto px-4 sm:px-6 py-8 flex flex-col gap-5">
         <OrganisationPanel isAdmin={isAdmin} />
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />

@@ -33,7 +33,7 @@ export default function Login() {
           </span>
         </div>
         <form
-          className="bg-surface rounded-panel shadow-dark-card p-6"
+          className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6"
           onSubmit={(e) => {
             e.preventDefault();
             setError('');

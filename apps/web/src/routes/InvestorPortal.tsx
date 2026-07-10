@@ -68,7 +68,7 @@ export default function InvestorPortal() {
               <>
                 <span className="text-[12px] text-ink-3">Viewing as</span>
                 <select
-                  className="h-[34px] font-semibold text-[12.5px]"
+                  className="h-[34px] font-semibold text-[12.5px] min-w-0 max-w-full"
                   aria-label="Viewing as investor"
                   value={effectiveId ?? ''}
                   onChange={(e) => setSelectedId(e.target.value)}
@@ -88,7 +88,7 @@ export default function InvestorPortal() {
           </>
         }
       />
-      <main className="max-w-[1320px] mx-auto px-6 pb-14">
+      <main className="max-w-[1320px] mx-auto px-4 sm:px-6 pb-14">
         {isLoading ? (
           <div aria-busy="true">
             <div className="mt-6">
@@ -96,12 +96,12 @@ export default function InvestorPortal() {
               <Skeleton width={340} height={26} className="mt-3" />
             </div>
             {/* position card placeholders */}
-            <div className="mt-[18px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+            <div className="mt-[18px] grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
               {[0, 1, 2, 3, 4].map((i) => (
                 <Skeleton key={i} height={92} className="rounded-card" />
               ))}
             </div>
-            <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
               {/* holdings row placeholders */}
               <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
                 <Skeleton width={140} height={16} className="mb-4" />
@@ -144,7 +144,7 @@ export default function InvestorPortal() {
 
             {/* position cards */}
             {pos && (
-              <div className="mt-[18px] grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+              <div className="mt-[18px] grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
                 <div
                   className="rounded-card px-[18px] py-4 text-white shadow-dark-card"
                   style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}
@@ -174,7 +174,7 @@ export default function InvestorPortal() {
               </div>
             )}
 
-            <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
               <div className="flex flex-col gap-4">
                 {/* holdings */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
@@ -254,7 +254,7 @@ export default function InvestorPortal() {
               </div>
 
               {/* side rail */}
-              <div className="flex flex-col gap-4 sticky top-[78px]">
+              <div className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
                 {/* open capital call */}
                 {inv.openCapitalCall && (
                   <section className="rounded-card px-[18px] py-4" style={{ background: '#FBF3E6', border: '1px solid #EBDCBC' }}>

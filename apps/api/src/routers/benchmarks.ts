@@ -74,6 +74,20 @@ export const benchmarksRouter = router({
       });
     }),
 
+  /**
+   * REAL market index — UK House Price Index (HM Land Registry, OGL): regional
+   * average price + annual growth, latest 12 published months. This is genuine
+   * market data, distinct from the org-contributed appraisal benchmarks.
+   */
+  hpi: internalProcedure.input(z.object({ region: z.string() })).query(async ({ input }) => {
+    const { fetchHpi } = await import('../opendata.js');
+    try {
+      return { status: 'ok' as const, ...(await fetchHpi(input.region)) };
+    } catch {
+      return { status: 'error' as const, region: input.region, series: [] };
+    }
+  }),
+
   /** Contribution count for the "data moat" footer. */
   contributions: internalProcedure.query(async ({ ctx }) => {
     const total = await ctx.prisma.benchmarkPoint.count({ where: { isOwn: false } });
