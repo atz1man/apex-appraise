@@ -92,43 +92,49 @@ export const zAppraisalInput = z.object({
 export type AppraisalInputDto = z.infer<typeof zAppraisalInput>;
 
 // ---- LLM extraction contract (API.md) — the model extracts INPUTS ONLY ----
+// The model returns null for anything the documents don't state (never invents
+// figures); deterministic code fills UK-standard appraisal defaults here.
+const numOr = (dflt: number) => z.number().nullish().transform((v) => v ?? dflt);
+const strOr = (dflt: string) => z.string().nullish().transform((v) => v ?? dflt);
+
 export const zExtraction = z.object({
-  scheme: z.string(),
-  address: z.string(),
-  assetType: z.enum(['industrial', 'residential', 'commercial', 'mixed']),
+  scheme: strOr('Development scheme'),
+  address: strOr(''),
+  assetType: z.enum(['industrial', 'residential', 'commercial', 'mixed']).nullish().transform((v) => v ?? 'mixed'),
   units: z.array(
     z.object({
+      // the core extraction — the model must state these, no defaults
       label: z.string(),
       count: z.number(),
       area: z.number(),
       value: z.number(), // £/ft²
-      conf: z.enum(['high', 'med', 'low']),
-      source: z.string(),
+      conf: z.enum(['high', 'med', 'low']).nullish().transform((v) => v ?? 'med'),
+      source: strOr('Extracted from notes'),
     }),
   ),
-  efficiency: z.number(),
-  profFee: z.number(),
-  contingency: z.number(),
+  efficiency: numOr(90),
+  profFee: numOr(11),
+  contingency: numOr(5),
   finance: z.object({
-    ltc: z.number(),
-    rate: z.number(),
-    period: z.number(),
-    sales: z.number(),
-    arrFee: z.number(),
+    ltc: numOr(60),
+    rate: numOr(7.5),
+    period: numOr(18),
+    sales: numOr(3),
+    arrFee: numOr(1.5),
   }),
-  targetProfit: z.number(),
-  asking: z.number(),
-  cilPerSqm: z.number(),
-  s106: z.number(),
-  agent: z.number(),
-  legal: z.number(),
-  acq: z.number(),
-  planningStatus: z.string(),
-  planningRisk: z.number().min(0).max(100),
-  planningRiskLabel: z.string(),
-  planningNotes: z.string(),
-  recommendation: z.string(),
-  confidence: z.string(),
+  targetProfit: numOr(20),
+  asking: numOr(0),
+  cilPerSqm: numOr(0),
+  s106: numOr(0),
+  agent: numOr(1.5),
+  legal: numOr(0.5),
+  acq: numOr(1.8),
+  planningStatus: strOr('Not stated in documents'),
+  planningRisk: z.number().min(0).max(100).nullish().transform((v) => v ?? 30),
+  planningRiskLabel: strOr('Medium'),
+  planningNotes: strOr(''),
+  recommendation: strOr(''),
+  confidence: strOr('Estimate'),
 });
 export type Extraction = z.infer<typeof zExtraction>;
 

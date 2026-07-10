@@ -178,11 +178,11 @@ async function extractFromNotes(notes: string): Promise<Extraction> {
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 2000,
+        max_tokens: 6000,
         messages: [
           {
             role: 'user',
-            content: `Extract development-appraisal INPUTS from these scheme notes. Return ONLY strict JSON matching this shape (no prose):\n${JSON.stringify(SAMPLE_EXTRACTION, null, 2)}\n\nRules: extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in £. conf per unit is your extraction confidence; source cites where in the notes it came from.\n\nNOTES:\n${notes}`,
+            content: `Extract development-appraisal INPUTS from these scheme notes. Return ONLY strict JSON matching this shape (no prose):\n${JSON.stringify(SAMPLE_EXTRACTION, null, 2)}\n\nRules: extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in £. Every unit MUST have numeric count, area and value — use the midpoint of any stated range and mark conf accordingly (high = stated exactly, med = midpoint/inferred from the notes, low = weak evidence); source cites where in the notes it came from. For fields OTHER than units: if not stated in the notes return null (standard defaults are applied downstream) — never invent planning facts. planningRisk 0-100 is your read of consent risk; recommendation is 2-3 sentences.\n\nNOTES:\n${notes}`,
           },
         ],
       }),
@@ -191,7 +191,13 @@ async function extractFromNotes(notes: string): Promise<Extraction> {
       const body = (await res.json()) as { content: Array<{ type: string; text?: string }> };
       const text = body.content.find((c) => c.type === 'text')?.text ?? '';
       const jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-      const parsed = zExtraction.safeParse(JSON.parse(jsonStr));
+      let raw: unknown;
+      try {
+        raw = JSON.parse(jsonStr);
+      } catch {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction returned malformed JSON — try again or use manual entry (no fabricated figures).' });
+      }
+      const parsed = zExtraction.safeParse(raw);
       if (parsed.success) return parsed.data;
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction returned an unusable shape — try manual entry (no fabricated figures).' });
     }

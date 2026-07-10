@@ -25,10 +25,12 @@ test.describe('internal screens', () => {
   test.beforeEach(async ({ page }) => loginInternal(page));
 
   test('auto-appraisal generates an indicative result', async ({ page }) => {
+    test.setTimeout(120_000); // live LLM extraction can take ~15-40s
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/auto`);
     await page.getByRole('button', { name: /Generate appraisal/ }).click();
-    await expect(page.getByText('Extracted accommodation')).toBeVisible({ timeout: 15_000 });
+    // live LLM extraction when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
+    await expect(page.getByText('Extracted accommodation')).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText(/Proceed|Caution|Decline/).first()).toBeVisible();
   });
 
