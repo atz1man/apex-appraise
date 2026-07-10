@@ -72,8 +72,18 @@ function PageHead({ title, scheme }: { title: string; scheme: string }) {
   );
 }
 
-function PageFoot({ no, refCode }: { no: number; refCode: string }) {
-  return <div className="mt-auto pt-6 text-right text-[10px] text-ink-3">Page {no} · {refCode}</div>;
+function PageFoot({ no, total, refCode }: { no: number; total: number; refCode: string }) {
+  return (
+    <div className="mt-auto pt-6">
+      <div className="flex items-center justify-between pt-2.5 text-[9.5px] text-ink-3" style={{ borderTop: '1px solid #ECEBE5' }}>
+        <span>
+          <span className="font-semibold" style={{ color: brand[700] }}>Apex</span> Appraise · development appraisal
+        </span>
+        <span className="fig">{refCode} · {fmtLong(new Date())}</span>
+        <span className="fig font-medium">Page {no} of {total}</span>
+      </div>
+    </div>
+  );
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
@@ -282,6 +292,7 @@ export default function AppraisalReport() {
   // Page numbering: 1 cover · 2 summary · 3 accommodation · 4 appraisal · 5 sensitivity · 6.. cashflow · assumptions · monitoring.
   const assumptionsPageNo = 5 + cashChunks.length + 1;
   const monitoringPageNo = assumptionsPageNo + 1;
+  const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
 
   const unitRows = input.units.map((u) => ({
     label: u.label,
@@ -395,7 +406,7 @@ export default function AppraisalReport() {
             <KvRow k="Total development cost" v={formatMoneyFull(R.totalCost)} />
             <KvRow k="Equity requirement" v={formatMoneyFull(R.equity)} />
           </div>
-          <PageFoot no={2} refCode={refCode} />
+          <PageFoot no={2} total={pageTotal} refCode={refCode} />
         </A4Page>
 
         {/* ===== PAGE 3 — ACCOMMODATION SCHEDULE ===== */}
@@ -439,7 +450,7 @@ export default function AppraisalReport() {
             at the stated NIA:GIA efficiency of {input.efficiency}%. Capital values are applied per square foot of NIA; construction costs
             are applied per square foot of GIA.
           </p>
-          <PageFoot no={3} refCode={refCode} />
+          <PageFoot no={3} total={pageTotal} refCode={refCode} />
         </A4Page>
 
         {/* ===== PAGE 4 — RESIDUAL APPRAISAL ===== */}
@@ -501,7 +512,7 @@ export default function AppraisalReport() {
               ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of GDV after acquisition costs of ${input.site.acqPct}%.`
               : `Developer profit is the amount remaining after all costs including the fixed land price plus ${input.site.acqPct}% acquisition costs.`}
           </p>
-          <PageFoot no={4} refCode={refCode} />
+          <PageFoot no={4} total={pageTotal} refCode={refCode} />
         </A4Page>
 
         {/* ===== PAGE 5 — SENSITIVITY ===== */}
@@ -542,7 +553,7 @@ export default function AppraisalReport() {
             price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
             A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in GDV moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
           </p>
-          <PageFoot no={5} refCode={refCode} />
+          <PageFoot no={5} total={pageTotal} refCode={refCode} />
         </A4Page>
 
         {/* ===== PAGES 6.. — CASHFLOW PROFILE ===== */}
@@ -591,7 +602,7 @@ export default function AppraisalReport() {
                 </div>
               ))}
             </div>
-            <PageFoot no={6 + pi} refCode={refCode} />
+            <PageFoot no={6 + pi} total={pageTotal} refCode={refCode} />
           </A4Page>
         ))}
 
@@ -619,7 +630,7 @@ export default function AppraisalReport() {
               <div className="text-[11px] text-ink-3">{today}</div>
             </div>
           </div>
-          <PageFoot no={assumptionsPageNo} refCode={refCode} />
+          <PageFoot no={assumptionsPageNo} total={pageTotal} refCode={refCode} />
         </A4Page>
 
         {/* ===== PAGE — CONSTRUCTION MONITORING (only when photos exist) ===== */}
@@ -652,7 +663,7 @@ export default function AppraisalReport() {
                 </div>
               ))}
             </div>
-            <PageFoot no={monitoringPageNo} refCode={refCode} />
+            <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} />
           </A4Page>
         )}
       </div>
