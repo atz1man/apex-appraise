@@ -193,8 +193,14 @@ async function extractFromNotes(notes: string): Promise<Extraction> {
       const jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
       const parsed = zExtraction.safeParse(JSON.parse(jsonStr));
       if (parsed.success) return parsed.data;
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction returned an unusable shape — try manual entry (no fabricated figures).' });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Extraction failed — try manual entry (no fabricated figures).' });
+    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `AI extraction unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Use manual entry, or fix the API key/credits.`,
+    });
   }
   // demo fallback: deterministic sample keyed off the notes where possible
   const s106Match = notes.match(/S106[^£]*£([\d,]+)/i);
