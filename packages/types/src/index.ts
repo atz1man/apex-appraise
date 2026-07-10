@@ -115,13 +115,16 @@ export const zExtraction = z.object({
   efficiency: numOr(90),
   profFee: numOr(11),
   contingency: numOr(5),
-  finance: z.object({
-    ltc: numOr(60),
-    rate: numOr(7.5),
-    period: numOr(18),
-    sales: numOr(3),
-    arrFee: numOr(1.5),
-  }),
+  finance: z
+    .object({
+      ltc: numOr(60),
+      rate: numOr(7.5),
+      period: numOr(18),
+      sales: numOr(3),
+      arrFee: numOr(1.5),
+    })
+    .nullish()
+    .transform((v) => v ?? { ltc: 60, rate: 7.5, period: 18, sales: 3, arrFee: 1.5 }),
   targetProfit: numOr(20),
   asking: numOr(0),
   cilPerSqm: numOr(0),

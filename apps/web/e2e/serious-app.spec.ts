@@ -73,6 +73,8 @@ test('site pack renders with live-data controls and provenance', async ({ page }
   // provenance + sources are always declared, whatever the upstream returned
   await expect(page.getByText(/HM Land Registry/).first()).toBeVisible();
   await expect(page.getByText(/planning\.data\.gov\.uk/).first()).toBeVisible();
+  // real Leaflet/OSM map renders once the live data lands (subject pin at minimum)
+  await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 30_000 });
 });
 
 test('global nav present for internal, absent for portals', async ({ page }) => {

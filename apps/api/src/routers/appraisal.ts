@@ -165,10 +165,63 @@ const SAMPLE_EXTRACTION: Extraction = {
   confidence: 'High confidence',
 };
 
+const nullable = (t: string) => ({ type: [t, 'null'] });
+
+/** JSON Schema for the forced tool call — mirrors zExtraction (nulls = "not stated"). */
+const EXTRACTION_TOOL = {
+  name: 'record_extraction',
+  description: 'Record the development-appraisal inputs extracted from the documents. Use null for any value the documents do not state — never invent figures.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      scheme: nullable('string'),
+      address: nullable('string'),
+      assetType: { type: ['string', 'null'], enum: ['industrial', 'residential', 'commercial', 'mixed', null] },
+      units: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string' },
+            count: { type: 'number' },
+            area: { type: 'number', description: 'sqft per unit — midpoint of any range' },
+            value: { type: 'number', description: '£ per sqft — midpoint of any range' },
+            conf: { type: ['string', 'null'], enum: ['high', 'med', 'low', null], description: 'high = stated exactly; med = midpoint/inferred; low = weak evidence' },
+            source: nullable('string'),
+          },
+          required: ['label', 'count', 'area', 'value'],
+        },
+      },
+      efficiency: nullable('number'),
+      profFee: nullable('number'),
+      contingency: nullable('number'),
+      finance: {
+        type: 'object',
+        properties: { ltc: nullable('number'), rate: nullable('number'), period: nullable('number'), sales: nullable('number'), arrFee: nullable('number') },
+      },
+      targetProfit: nullable('number'),
+      asking: nullable('number'),
+      cilPerSqm: nullable('number'),
+      s106: nullable('number'),
+      agent: nullable('number'),
+      legal: nullable('number'),
+      acq: nullable('number'),
+      planningStatus: nullable('string'),
+      planningRisk: { type: ['number', 'null'], minimum: 0, maximum: 100 },
+      planningRiskLabel: nullable('string'),
+      planningNotes: nullable('string'),
+      recommendation: { type: ['string', 'null'], description: '2-3 sentence written view of the extraction/planning position (no computed money)' },
+      confidence: nullable('string'),
+    },
+    required: ['units'],
+  },
+} as const;
+
 /**
- * Server-side LLM extraction — inputs only, never money. Falls back to a
- * deterministic parse of the notes when no ANTHROPIC_API_KEY is configured
- * (demo mode, mirroring the prototype's mock()).
+ * Server-side LLM extraction — inputs only, never money. The model is FORCED
+ * through a tool call so its output is schema-valid JSON by construction.
+ * Falls back to a deterministic parse of the notes when no ANTHROPIC_API_KEY
+ * is configured (demo mode, mirroring the prototype's mock()).
  */
 async function extractFromNotes(notes: string): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -179,27 +232,22 @@ async function extractFromNotes(notes: string): Promise<Extraction> {
       body: JSON.stringify({
         model: 'claude-sonnet-5',
         max_tokens: 6000,
+        tools: [EXTRACTION_TOOL],
+        tool_choice: { type: 'tool', name: 'record_extraction' },
         messages: [
           {
             role: 'user',
-            content: `Extract development-appraisal INPUTS from these scheme notes. Return ONLY strict JSON matching this shape (no prose):\n${JSON.stringify(SAMPLE_EXTRACTION, null, 2)}\n\nRules: extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in £. Every unit MUST have numeric count, area and value — use the midpoint of any stated range and mark conf accordingly (high = stated exactly, med = midpoint/inferred from the notes, low = weak evidence); source cites where in the notes it came from. For fields OTHER than units: if not stated in the notes return null (standard defaults are applied downstream) — never invent planning facts. planningRisk 0-100 is your read of consent risk; recommendation is 2-3 sentences.\n\nNOTES:\n${notes}`,
+            content: `Extract the development-appraisal INPUTS from these scheme notes via record_extraction. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated). Anything the notes do not state: null.\n\nNOTES:\n${notes}`,
           },
         ],
       }),
     });
     if (res.ok) {
-      const body = (await res.json()) as { content: Array<{ type: string; text?: string }> };
-      const text = body.content.find((c) => c.type === 'text')?.text ?? '';
-      const jsonStr = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-      let raw: unknown;
-      try {
-        raw = JSON.parse(jsonStr);
-      } catch {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction returned malformed JSON — try again or use manual entry (no fabricated figures).' });
-      }
-      const parsed = zExtraction.safeParse(raw);
-      if (parsed.success) return parsed.data;
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction returned an unusable shape — try manual entry (no fabricated figures).' });
+      const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+      const toolUse = body.content.find((c) => c.type === 'tool_use');
+      const parsed = zExtraction.safeParse(toolUse?.input);
+      if (parsed.success && parsed.data.units.length > 0) return parsed.data;
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction found no usable unit schedule in the notes — add unit counts/areas/values or use manual entry.' });
     }
     // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
     const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;

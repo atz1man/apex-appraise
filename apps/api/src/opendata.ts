@@ -60,6 +60,34 @@ export interface SoldPrice {
   newBuild: boolean;
   estateType: string;
   source: string;
+  lat?: number | null;
+  lng?: number | null;
+}
+
+/** Bulk postcode → coordinates (postcodes.io, max 100 per call). */
+export async function bulkGeocode(postcodes: string[]): Promise<Map<string, { lat: number; lng: number }>> {
+  const unique = [...new Set(postcodes.filter(Boolean))].slice(0, 100);
+  const out = new Map<string, { lat: number; lng: number }>();
+  if (!unique.length) return out;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const res = await fetch('https://api.postcodes.io/postcodes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ postcodes: unique }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return out;
+    const d = (await res.json()) as { result: Array<{ query: string; result: { latitude: number; longitude: number } | null }> };
+    for (const r of d.result ?? []) {
+      if (r.result) out.set(r.query.toUpperCase(), { lat: r.result.latitude, lng: r.result.longitude });
+    }
+  } catch {
+    /* map stays partial — pins degrade gracefully */
+  }
+  return out;
 }
 
 const label = (v: unknown): string => {

@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { fetchConstraints, fetchEpc, fetchSoldPrices, geocodePostcode, matchPsf } from '../opendata.js';
+import { bulkGeocode, fetchConstraints, fetchEpc, fetchSoldPrices, geocodePostcode, matchPsf } from '../opendata.js';
 import { internalProcedure, router } from '../trpc.js';
 
 /**
@@ -38,6 +38,7 @@ export const sitePackRouter = router({
 
       const epc = epcRes.status === 'fulfilled' ? epcRes.value : { status: 'error' as const, records: [], note: 'EPC fetch failed' };
       const sold = soldRes.status === 'fulfilled' ? soldRes.value : null;
+      const coords = sold ? await bulkGeocode(sold.map((s) => s.postcode)) : new Map<string, { lat: number; lng: number }>();
 
       return {
         status: 'ok' as const,
@@ -47,7 +48,10 @@ export const sitePackRouter = router({
         soldPrices: sold
           ? {
               status: 'ok' as const,
-              items: sold.map((s) => ({ ...s, psf: matchPsf(s, epc.records) })),
+              items: sold.map((s) => {
+                const c = coords.get(s.postcode.toUpperCase());
+                return { ...s, psf: matchPsf(s, epc.records), lat: c?.lat ?? null, lng: c?.lng ?? null };
+              }),
             }
           : { status: 'error' as const, items: [] },
         constraints:
@@ -72,6 +76,8 @@ export const sitePackRouter = router({
               price: z.number(),
               propertyType: z.string(),
               psf: z.number().nullable(),
+              lat: z.number().nullable().optional(),
+              lng: z.number().nullable().optional(),
             }),
           )
           .min(1)
@@ -94,6 +100,8 @@ export const sitePackRouter = router({
             meta: `Sold ${dateLabel} · £${Math.round(c.price).toLocaleString('en-GB')} · ${c.propertyType} · HM Land Registry PPD`,
             // £/ft² when an EPC floor-area match exists; otherwise parked at 0 for the analyst to set
             basePsf: c.psf ?? 0,
+            lat: c.lat ?? null,
+            lng: c.lng ?? null,
           },
         });
         created++;

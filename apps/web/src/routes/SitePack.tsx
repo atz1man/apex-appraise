@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, EmptyState, Panel, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { SiteMap, type MapPin } from '../components/SiteMap';
 
 const CONSTRAINT_LABELS: Record<string, string> = {
   'conservation-area': 'Conservation area',
@@ -149,7 +150,7 @@ export default function SitePack() {
                         dealId,
                         comps: soldItems
                           .filter((s) => selected.has(keyOf(s)))
-                          .map((s) => ({ address: s.address, date: s.date, price: s.price, propertyType: s.propertyType, psf: s.psf })),
+                          .map((s) => ({ address: s.address, date: s.date, price: s.price, propertyType: s.propertyType, psf: s.psf, lat: s.lat, lng: s.lng })),
                       })
                     }
                   >
@@ -210,8 +211,31 @@ export default function SitePack() {
                 </div>
               </Panel>
 
-              {/* right rail: constraints + EPC */}
+              {/* right rail: map + constraints + EPC */}
               <div className="flex flex-col gap-4">
+                <Panel title="Location of evidence">
+                  <SiteMap
+                    height={260}
+                    pins={[
+                      { lat: ok.geo.latitude, lng: ok.geo.longitude, label: ok.dealName, sub: `${ok.address} · subject site`, kind: 'subject' as const },
+                      ...soldItems
+                        .filter((s): s is typeof s & { lat: number; lng: number } => s.lat != null && s.lng != null)
+                        .slice(0, 30)
+                        .map((s): MapPin => ({
+                          lat: s.lat,
+                          lng: s.lng,
+                          label: s.address,
+                          sub: `£${Math.round(s.price).toLocaleString('en-GB')} · ${fdate(s.date)}`,
+                          kind: 'comp' as const,
+                        })),
+                    ]}
+                  />
+                  <div className="mt-2 flex gap-4 text-[11px] text-ink-2">
+                    <span className="inline-flex items-center gap-1.5"><Dot color="#14503B" /> Subject site</span>
+                    <span className="inline-flex items-center gap-1.5"><Dot color="#1E9E6A" /> Sold within ~1km</span>
+                  </div>
+                </Panel>
+
                 <Panel title="Planning constraints">
                   {ok.constraints.status !== 'ok' ? (
                     <EmptyState>planning.data.gov.uk is unreachable right now.</EmptyState>
