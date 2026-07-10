@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
+import { ToastProvider, toastGlobal } from './components/Toast';
 import Login from './routes/Login';
 import Hub from './routes/Hub';
 import Board from './routes/Board';
@@ -21,6 +22,10 @@ import Workbench from './routes/Workbench';
 import AppraisalReport from './routes/AppraisalReport';
 import RedBookReport from './routes/RedBookReport';
 import Landing from './routes/Landing';
+import DealOverview from './routes/DealOverview';
+import Calendar from './routes/Calendar';
+import Settings from './routes/Settings';
+import Register from './routes/Register';
 
 function Protected({ children, portal }: { children: JSX.Element; portal?: 'buyer' | 'investor' }) {
   const location = useLocation();
@@ -35,16 +40,30 @@ function Protected({ children, portal }: { children: JSX.Element; portal?: 'buye
 }
 
 export default function App() {
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 5_000 } } }));
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { retry: 1, staleTime: 5_000 } },
+        // every failed mutation surfaces as a toast — no more silent failures
+        mutationCache: new MutationCache({
+          onError: (err) => toastGlobal('error', err instanceof Error ? err.message : 'Something went wrong'),
+        }),
+      }),
+  );
   const trpcClient = useMemo(() => makeTrpcClient(), []);
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
+        <ToastProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/" element={<Protected><Hub /></Protected>} />
           <Route path="/board" element={<Protected><Board /></Protected>} />
+          <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
+          <Route path="/settings" element={<Protected><Settings /></Protected>} />
+          <Route path="/deal/:dealId" element={<Protected><DealOverview /></Protected>} />
           <Route path="/deal/:dealId/appraisal" element={<Protected><DevelopmentAppraisal /></Protected>} />
           <Route path="/deal/:dealId/auto" element={<Protected><AutoAppraisal /></Protected>} />
           <Route path="/deal/:dealId/comparables" element={<Protected><Comparables /></Protected>} />
@@ -62,6 +81,7 @@ export default function App() {
           <Route path="/portal/buyer" element={<Protected portal="buyer"><BuyerPortal /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ToastProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { formatMoneyFull, n0 } from '../lib/format';
 import { Button, Dot, EmptyState, Panel, Spinner, StatCard, Td, Th, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 type Weights = { salesComparison: number; cost: number; income: number };
 type ApproachKey = 'sales' | 'cost' | 'income';
@@ -155,6 +156,7 @@ export default function Workbench() {
         </div>
       )}
 
+      <DealNav dealId={dealId} active="workbench" />
       <main className="max-w-[1500px] mx-auto px-6 pb-14">
         <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
           <div>

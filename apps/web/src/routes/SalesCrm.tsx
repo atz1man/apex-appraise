@@ -4,6 +4,7 @@ import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
 import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 const MINUS = '−';
 
@@ -384,6 +385,7 @@ export default function SalesCrm() {
         }
       />
 
+      <DealNav dealId={dealId} active="sales" />
       <main className="max-w-[1640px] mx-auto px-6 pb-14">
         {loading ? (
           <div className="mt-16 flex justify-center"><Spinner /></div>

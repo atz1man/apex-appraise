@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
+import { getPrincipal } from '../lib/trpc';
 
 // ---------- Brand ----------
 
@@ -29,16 +30,43 @@ export function BrandLockup() {
   );
 }
 
-/** 56px sticky top bar: brand lockup → breadcrumb → right-side status/actions. */
+const GLOBAL_NAV: Array<[string, string]> = [
+  ['/board', 'Pipeline'],
+  ['/calendar', 'Calendar'],
+  ['/benchmarking', 'Benchmarking'],
+  ['/integrations', 'Integrations'],
+  ['/settings', 'Settings'],
+];
+
+/** 56px sticky top bar: brand lockup → breadcrumb → global nav (internal) → status/actions. */
 export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode }) {
+  const internal = getPrincipal()?.principalType === 'internal';
   return (
     <header className="sticky top-0 z-40 h-14 bg-surface border-b border-border-strong flex items-center gap-3 px-5">
       <BrandLockup />
       {crumb && (
         <>
           <span className="text-[#C9CDC8]">/</span>
-          <span className="text-[13.5px] font-medium text-ink-2">{crumb}</span>
+          <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px]">{crumb}</span>
         </>
+      )}
+      {internal && (
+        <nav className="ml-5 hidden lg:flex items-center gap-1" aria-label="Global">
+          {GLOBAL_NAV.map(([to, label]) => (
+            <NavLink
+              key={to}
+              to={to}
+              className="px-2.5 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors"
+              style={({ isActive }) => ({
+                color: isActive ? '#14503B' : '#6E7269',
+                background: isActive ? '#ECF3EF' : 'transparent',
+                fontWeight: isActive ? 600 : 500,
+              })}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
       )}
       <div className="ml-auto flex items-center gap-2.5">{right}</div>
     </header>

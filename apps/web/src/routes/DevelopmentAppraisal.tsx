@@ -11,6 +11,7 @@ import {
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Avatar, Button, Dot, Panel, SegmentedToggle, Spinner, StatCard, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
   ['general', 'General'],
@@ -209,6 +210,7 @@ export default function DevelopmentAppraisal() {
         }
       />
 
+      <DealNav dealId={dealId} active="appraisal" />
       <main className="max-w-[1640px] mx-auto px-6 pb-14">
         {/* metrics rail */}
         <div className="mt-5 flex gap-3 flex-wrap">

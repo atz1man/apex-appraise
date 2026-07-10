@@ -345,11 +345,3 @@ export const integrationsRouter = router({
     }),
 });
 
-export const orgRouter = router({
-  members: internalProcedure.query(({ ctx }) =>
-    ctx.prisma.user.findMany({
-      where: { orgId: ctx.principal.orgId, principalType: 'internal' },
-      select: { id: true, name: true, initials: true, role: true },
-    }),
-  ),
-});

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Spinner, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 const GREEN = '#1E7A55';
 const RED = '#B23A2E';
@@ -121,6 +122,7 @@ export default function Comparables() {
         }
       />
 
+      <DealNav dealId={dealId} active="comparables" />
       <main className="max-w-[1640px] mx-auto px-6 pb-14">
         <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
           {/* LEFT: adjustment grid + map */}

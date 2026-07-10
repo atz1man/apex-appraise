@@ -50,6 +50,12 @@ export default function Login() {
           <Button type="submit" className="w-full justify-center" disabled={login.isPending}>
             {login.isPending ? <Spinner /> : 'Sign in'}
           </Button>
+          <div className="mt-3 text-center text-[12px] text-ink-2">
+            New here?{' '}
+            <a href="/register" className="font-semibold text-brand-500 hover:text-brand-700">
+              Create your organisation →
+            </a>
+          </div>
           <div className="mt-5 border-t border-border-faint pt-4">
             <div className="label-mono text-ink-3 mb-2">Demo accounts · password “demo”</div>
             <div className="flex flex-col gap-1.5">

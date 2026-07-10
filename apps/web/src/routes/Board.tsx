@@ -121,7 +121,7 @@ export default function Board() {
                       return (
                         <Link
                           key={d.id}
-                          to={`/deal/${d.id}/appraisal`}
+                          to={`/deal/${d.id}`}
                           className="block bg-surface border border-border-strong rounded-card shadow-rest p-3.5 transition-all hover:-translate-y-0.5 hover:shadow-float"
                           style={{ borderTop: `3px solid ${st.accent}` }}
                         >

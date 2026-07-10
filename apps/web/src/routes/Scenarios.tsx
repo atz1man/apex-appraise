@@ -4,6 +4,7 @@ import { autoAppraise } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, Dot, EmptyState, Spinner, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 /**
  * Fixed appraisal assumptions behind the scenario compare — identical to the
@@ -190,6 +191,7 @@ export default function Scenarios() {
         }
       />
 
+      <DealNav dealId={dealId} active="scenarios" />
       <main className="max-w-[1500px] mx-auto px-6 pb-14">
         <div className="mt-6 flex items-end justify-between">
           <div>

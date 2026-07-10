@@ -4,6 +4,7 @@ import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 /** Contractor avatar gradients — per the design handoff prototype. */
 const GRADS = [
@@ -190,6 +191,7 @@ export default function CostMonitoring() {
         }
       />
 
+      <DealNav dealId={dealId} active="costs" />
       <main className="max-w-[1640px] mx-auto px-6 pb-14">
         {/* KPI strip */}
         <div className="mt-5 flex gap-3 flex-wrap">

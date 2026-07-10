@@ -5,6 +5,7 @@ import type { Extraction } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
 import { Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 // ---------- types ----------
 
@@ -418,6 +419,7 @@ export default function AutoAppraisal() {
         }
       />
 
+      <DealNav dealId={dealId} active="auto" />
       <main className="max-w-[1500px] mx-auto p-6 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.25fr)' }}>
         {/* ===== LEFT: INTAKE ===== */}
         <Panel className="sticky top-20">

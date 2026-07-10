@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Spinner, StatusChip, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
 const FOLDER_ICON = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
@@ -155,6 +156,7 @@ export default function DataRoom() {
           </Button>
         }
       />
+      <DealNav dealId={dealId} active="dataroom" />
 
       <div className="max-w-[1640px] mx-auto grid" style={{ gridTemplateColumns: '230px minmax(0,1fr) 300px', minHeight: 'calc(100vh - 56px)' }}>
         {/* folders */}

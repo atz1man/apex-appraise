@@ -19,8 +19,13 @@ test('internal team golden path', async ({ page }) => {
   await expect(page.getByText('Sourcing')).toBeVisible();
   await expect(page.getByText('Northgate Trade & Industrial Park').first()).toBeVisible();
 
-  // Development appraisal — engine figures
+  // Deal overview — the deal home with lifecycle stepper and workfile grid
   await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await expect(page.getByText('Workfile')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Advance stage/ })).toBeVisible();
+
+  // Development appraisal via the deal nav — engine figures
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
   await expect(page.getByText('Unit schedule')).toBeVisible();
   await expect(page.getByText('Return on cost')).toBeVisible();
   await expect(page.getByText(/Viable · RoC/)).toBeVisible();
