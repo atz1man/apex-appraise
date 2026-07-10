@@ -63,6 +63,18 @@ test('settings: org panel, members, invite (admin)', async ({ page }) => {
   await expect(page.getByText(/won.t be shown again/i)).toBeVisible();
 });
 
+test('site pack renders with live-data controls and provenance', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/board');
+  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Site pack' }).click();
+  await expect(page.getByRole('heading', { name: 'Site pack' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pull live data/ })).toBeVisible();
+  // provenance + sources are always declared, whatever the upstream returned
+  await expect(page.getByText(/HM Land Registry/).first()).toBeVisible();
+  await expect(page.getByText(/planning\.data\.gov\.uk/).first()).toBeVisible();
+});
+
 test('global nav present for internal, absent for portals', async ({ page }) => {
   await loginInternal(page);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();

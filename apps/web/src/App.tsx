@@ -38,6 +38,7 @@ import DealOverview from './routes/DealOverview';
 import Calendar from './routes/Calendar';
 import Settings from './routes/Settings';
 import Register from './routes/Register';
+import SitePack from './routes/SitePack';
 
 function Protected({ children, portal }: { children: JSX.Element; portal?: 'buyer' | 'investor' }) {
   const location = useLocation();
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/deal/:dealId" element={<Protected><DealOverview /></Protected>} />
+          <Route path="/deal/:dealId/sitepack" element={<Protected><SitePack /></Protected>} />
           <Route path="/deal/:dealId/appraisal" element={<Protected><DevelopmentAppraisal /></Protected>} />
           <Route path="/deal/:dealId/auto" element={<Protected><AutoAppraisal /></Protected>} />
           <Route path="/deal/:dealId/comparables" element={<Protected><Comparables /></Protected>} />

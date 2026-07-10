@@ -33,29 +33,29 @@ async function main() {
   const owners: Record<string, string> = { AO: ao.id, DW: dw.id, MV: mv.id, PA: pa.id };
 
   // ---- 11 pipeline deals (Projects Board prototype) ----
-  const dealRows: Array<[string, string, string, string, number, number, number, number, number, string, string]> = [
-    // name, addr, type, stage, gdv£, profit£, roc, equity£, prob, milestone, owner
-    ['Northgate Trade & Industrial Park', 'Holdenhurst Road, Bournemouth', 'INDUSTRIAL', 'CONSTRUCTION', 7.24e6, 1.45e6, 0.25, 2.4e6, 100, 'PC Aug 2026', 'AO'],
-    ['Harbour Reach', 'West Quay Road, Poole', 'RESIDENTIAL', 'CONSTRUCTION', 15.2e6, 2.9e6, 0.22, 4.7e6, 100, 'PC Nov 2026', 'DW'],
-    ['Elm Grove Apartments', 'Charminster, Bournemouth', 'RESIDENTIAL', 'ACQUISITION', 9.8e6, 1.7e6, 0.2, 3.1e6, 90, 'Completion Jul 8', 'AO'],
-    ['Morgan Furniture Factory', 'Holes Bay, Poole', 'MIXED_USE', 'OFFER', 12.6e6, 2.3e6, 0.19, 3.9e6, 60, 'Offer Jul 2', 'DW'],
-    ['Stour Valley Logistics', 'Wimborne, Dorset', 'INDUSTRIAL', 'OFFER', 18.5e6, 3.6e6, 0.23, 5.6e6, 55, 'Bid Jul 18', 'AO'],
-    ['Clovelly Road', 'Southbourne, Bournemouth', 'RESIDENTIAL', 'APPRAISAL', 4.1e6, 0.82e6, 0.21, 1.3e6, 50, 'DD by Jul 11', 'DW'],
-    ['Westover Yard', 'Lansdowne, Bournemouth', 'INDUSTRIAL', 'APPRAISAL', 2.1e6, 0.34e6, 0.16, 0.7e6, 40, 'Review Jul 9', 'AO'],
-    ['Kingsway Retail Units', 'Christchurch, Dorset', 'COMMERCIAL', 'SOURCING', 3.4e6, 0.6e6, 0.18, 1.1e6, 30, 'Site visit Jul 5', 'DW'],
-    ['Southbourne Grove', 'Southbourne, Bournemouth', 'RESIDENTIAL', 'SOURCING', 3.9e6, 0.7e6, 0.19, 1.2e6, 25, 'Agent call', 'AO'],
-    ['Old Brewery Quarter', 'Ringwood, Hampshire', 'MIXED_USE', 'SALES_LETTING', 6.7e6, 1.1e6, 0.18, 2.1e6, 100, '62% sold', 'DW'],
-    ['Parkstone Mews', 'Ashley Cross, Poole', 'RESIDENTIAL', 'COMPLETED', 5.3e6, 0.95e6, 0.19, 1.6e6, 100, 'Closed Apr 2026', 'AO'],
+  const dealRows: Array<[string, string, string, string, string, number, number, number, number, number, string, string]> = [
+    // name, addr, postcode, type, stage, gdv£, profit£, roc, equity£, prob, milestone, owner
+    ['Northgate Trade & Industrial Park', 'Holdenhurst Road, Bournemouth', 'BH8 8EW', 'INDUSTRIAL', 'CONSTRUCTION', 7.24e6, 1.45e6, 0.25, 2.4e6, 100, 'PC Aug 2026', 'AO'],
+    ['Harbour Reach', 'West Quay Road, Poole', 'BH15 1JF', 'RESIDENTIAL', 'CONSTRUCTION', 15.2e6, 2.9e6, 0.22, 4.7e6, 100, 'PC Nov 2026', 'DW'],
+    ['Elm Grove Apartments', 'Charminster, Bournemouth', 'BH8 8UE', 'RESIDENTIAL', 'ACQUISITION', 9.8e6, 1.7e6, 0.2, 3.1e6, 90, 'Completion Jul 8', 'AO'],
+    ['Morgan Furniture Factory', 'Holes Bay, Poole', 'BH15 2AA', 'MIXED_USE', 'OFFER', 12.6e6, 2.3e6, 0.19, 3.9e6, 60, 'Offer Jul 2', 'DW'],
+    ['Stour Valley Logistics', 'Wimborne, Dorset', 'BH21 1QU', 'INDUSTRIAL', 'OFFER', 18.5e6, 3.6e6, 0.23, 5.6e6, 55, 'Bid Jul 18', 'AO'],
+    ['Clovelly Road', 'Southbourne, Bournemouth', 'BH6 5EY', 'RESIDENTIAL', 'APPRAISAL', 4.1e6, 0.82e6, 0.21, 1.3e6, 50, 'DD by Jul 11', 'DW'],
+    ['Westover Yard', 'Lansdowne, Bournemouth', 'BH1 3JP', 'INDUSTRIAL', 'APPRAISAL', 2.1e6, 0.34e6, 0.16, 0.7e6, 40, 'Review Jul 9', 'AO'],
+    ['Kingsway Retail Units', 'Christchurch, Dorset', 'BH23 1QA', 'COMMERCIAL', 'SOURCING', 3.4e6, 0.6e6, 0.18, 1.1e6, 30, 'Site visit Jul 5', 'DW'],
+    ['Southbourne Grove', 'Southbourne, Bournemouth', 'BH6 3QY', 'RESIDENTIAL', 'SOURCING', 3.9e6, 0.7e6, 0.19, 1.2e6, 25, 'Agent call', 'AO'],
+    ['Old Brewery Quarter', 'Ringwood, Hampshire', 'BH24 1AJ', 'MIXED_USE', 'SALES_LETTING', 6.7e6, 1.1e6, 0.18, 2.1e6, 100, '62% sold', 'DW'],
+    ['Parkstone Mews', 'Ashley Cross, Poole', 'BH14 0JY', 'RESIDENTIAL', 'COMPLETED', 5.3e6, 0.95e6, 0.19, 1.6e6, 100, 'Closed Apr 2026', 'AO'],
   ];
   const stageStatus: Record<string, string> = {
     SOURCING: 'ESTIMATE', APPRAISAL: 'ESTIMATE', OFFER: 'ESTIMATE',
     ACQUISITION: 'COMMITTED', CONSTRUCTION: 'ACTUAL', SALES_LETTING: 'ACTUAL', COMPLETED: 'ACTUAL',
   };
   const deals: Record<string, string> = {};
-  for (const [name, address, assetType, stage, gdv, profit, roc, equity, prob, milestone, owner] of dealRows) {
+  for (const [name, address, postcode, assetType, stage, gdv, profit, roc, equity, prob, milestone, owner] of dealRows) {
     const d = await prisma.deal.create({
       data: {
-        orgId: org.id, name, address, assetType, stage,
+        orgId: org.id, name, address, postcode, assetType, stage,
         figureStatus: stageStatus[stage], probability: prob,
         gdv: p(gdv), forecastProfit: p(profit), roc, equityRequired: p(equity),
         viability: roc >= 0.2 ? 'PROCEED' : roc >= 0.15 ? 'CAUTION' : 'DECLINE',

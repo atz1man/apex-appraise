@@ -3,6 +3,7 @@ import { trpc } from '../lib/trpc';
 
 export type DealTool =
   | 'overview'
+  | 'sitepack'
   | 'appraisal'
   | 'auto'
   | 'comparables'
@@ -16,6 +17,7 @@ export type DealTool =
 
 const TOOLS: Array<[DealTool, string, string]> = [
   ['overview', 'Overview', ''],
+  ['sitepack', 'Site pack', '/sitepack'],
   ['appraisal', 'Appraisal', '/appraisal'],
   ['auto', 'Auto-Appraisal', '/auto'],
   ['comparables', 'Comparables', '/comparables'],

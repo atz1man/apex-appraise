@@ -300,14 +300,40 @@ export const integrationsRouter = router({
 
       let created = '';
       if (input.provider === 'HM Land Registry') {
-        const rows = [
-          { address: 'Unit 4, Roundways Trade Park', meta: 'PPD Feb 2026 · freehold · 21,300 ft²', basePsf: 221, adjSize: 2, adjCondition: 1, adjDate: 4, adjLocation: -2 },
-          { address: '19 Cobham Gate Industrial', meta: 'PPD Dec 2025 · freehold · 19,750 ft²', basePsf: 214, adjSize: 3, adjCondition: -2, adjDate: 6, adjLocation: 0 },
-        ];
-        for (const r of rows) {
-          await ctx.prisma.comparable.create({ data: { ...r, orgId: ctx.principal.orgId, dealId: deal.id } });
+        // REAL sold-price data from the open PPD API when the deal has a postcode
+        let live = 0;
+        if (deal.postcode) {
+          try {
+            const { fetchSoldPrices } = await import('../opendata.js');
+            const sold = (await fetchSoldPrices(deal.postcode)).slice(0, 3);
+            for (const s of sold) {
+              await ctx.prisma.comparable.create({
+                data: {
+                  orgId: ctx.principal.orgId,
+                  dealId: deal.id,
+                  address: s.address,
+                  meta: `Sold ${s.date} · £${Math.round(s.price).toLocaleString('en-GB')} · ${s.propertyType} · HM Land Registry PPD`,
+                  basePsf: 0, // analyst sets £/ft² (or use the Site pack's EPC match)
+                },
+              });
+              live++;
+            }
+          } catch {
+            live = 0;
+          }
         }
-        created = `${rows.length} sold-price-paid comparables`;
+        if (live > 0) {
+          created = `${live} real sold-price comparables (HM Land Registry PPD, ${deal.postcode})`;
+        } else {
+          const rows = [
+            { address: 'Unit 4, Roundways Trade Park', meta: 'PPD Feb 2026 · freehold · 21,300 ft² · demo', basePsf: 221, adjSize: 2, adjCondition: 1, adjDate: 4, adjLocation: -2 },
+            { address: '19 Cobham Gate Industrial', meta: 'PPD Dec 2025 · freehold · 19,750 ft² · demo', basePsf: 214, adjSize: 3, adjCondition: -2, adjDate: 6, adjLocation: 0 },
+          ];
+          for (const r of rows) {
+            await ctx.prisma.comparable.create({ data: { ...r, orgId: ctx.principal.orgId, dealId: deal.id } });
+          }
+          created = `${rows.length} demo comparables (no postcode on deal / PPD unreachable)`;
+        }
       } else if (input.provider === 'EPC Register') {
         await ctx.prisma.document.create({
           data: {

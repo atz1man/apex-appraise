@@ -6,7 +6,7 @@ import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 
 const dealOut = (d: {
-  id: string; name: string; address: string; assetType: string; stage: string;
+  id: string; name: string; address: string; postcode?: string | null; assetType: string; stage: string;
   figureStatus: string; probability: number; gdv: bigint; forecastProfit: bigint;
   roc: number; equityRequired: bigint; viability: string; nextMilestone: string | null;
   owner?: { initials: string; name: string } | null;
@@ -14,6 +14,7 @@ const dealOut = (d: {
   id: d.id,
   name: d.name,
   address: d.address,
+  postcode: d.postcode ?? null,
   assetType: d.assetType,
   stage: d.stage,
   figureStatus: d.figureStatus,
@@ -128,6 +129,7 @@ export const dealsRouter = router({
         patch: z.object({
           name: z.string().optional(),
           address: z.string().optional(),
+          postcode: z.string().max(9).optional(),
           probability: z.number().int().min(0).max(100).optional(),
           nextMilestone: z.string().optional(),
           viability: z.enum(['PROCEED', 'CAUTION', 'DECLINE']).optional(),
