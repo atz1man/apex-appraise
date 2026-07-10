@@ -108,8 +108,8 @@ export default function Comparables() {
       <div className="min-h-screen">
         <TopBar crumb="Comparable evidence" />
         <DealNav dealId={dealId} active="comparables" />
-        <main className="max-w-[1640px] mx-auto px-6 pb-14">
-          <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+          <div className="mt-5 grid grid-cols-1 gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
             {/* adjustment-grid skeleton */}
             <div className="flex flex-col gap-4">
               <Panel>
@@ -154,8 +154,8 @@ export default function Comparables() {
       />
 
       <DealNav dealId={dealId} active="comparables" />
-      <main className="max-w-[1640px] mx-auto px-6 pb-14">
-        <div className="mt-5 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        <div className="mt-5 grid grid-cols-1 gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
           {/* LEFT: adjustment grid + map */}
           <div className="flex flex-col gap-4">
             <Panel
@@ -269,7 +269,7 @@ export default function Comparables() {
           </div>
 
           {/* RIGHT: subject + evidence quality + apply */}
-          <aside className="flex flex-col gap-4 sticky top-[78px]">
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
             <div className="rounded-card p-5 text-white shadow-rest" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
               <div className="fig text-[10px] font-medium uppercase tracking-[0.7px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Subject</div>
               <div className="mt-1.5 text-[17px] font-semibold">{deal?.name ?? '—'}</div>

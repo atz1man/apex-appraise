@@ -431,16 +431,16 @@ export default function AutoAppraisal() {
           </span>
         }
         right={
-          <span className="inline-flex items-center gap-1.5 rounded-[9px] bg-tint-success px-2.5 py-1.5 text-[11.5px] font-semibold text-brand-700">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-[9px] bg-tint-success px-2.5 py-1.5 text-[11.5px] font-semibold text-brand-700">
             <Sparkle size={14} color="#14503B" /> AI Development Director
           </span>
         }
       />
 
       <DealNav dealId={dealId} active="auto" />
-      <main className="max-w-[1500px] mx-auto p-6 grid gap-5 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.25fr)' }}>
+      <main className="max-w-[1500px] mx-auto p-4 sm:p-6 grid grid-cols-1 gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_minmax(0,1.25fr)]">
         {/* ===== LEFT: INTAKE ===== */}
-        <Panel className="sticky top-20">
+        <Panel className="lg:sticky lg:top-20">
           <div className="text-[19px] font-bold tracking-[-0.4px]">Drop the deal in. Get an appraisal out.</div>
           <div className="mt-1.5 text-[13.5px] text-ink-2 leading-relaxed">
             Add drawings, cost plans and planning documents — the AI extracts areas and assumptions and runs a full development appraisal. Or enter the
@@ -530,7 +530,7 @@ export default function AutoAppraisal() {
                 onChange={(e) => setNotes(e.target.value)}
               />
 
-              <div className="mt-3.5 flex items-center gap-3">
+              <div className="mt-3.5 flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Run build at £" value={buildRate} onChange={setBuildRate} />
                 <button
                   onClick={onGenerate}
@@ -546,7 +546,7 @@ export default function AutoAppraisal() {
             </>
           ) : (
             <div className="mt-4 flex flex-col gap-3.5">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <TextBox label="Scheme" value={manual.scheme} onChange={(v) => setMan({ scheme: v })} />
                 <TextBox label="Asset type" value={manual.assetType} onChange={(v) => setMan({ assetType: v })} />
               </div>
@@ -616,7 +616,7 @@ export default function AutoAppraisal() {
               </div>
 
               <MicroLabel>Costs</MicroLabel>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <NumBox label="Prof fees %" value={manual.profFee} onChange={(v) => setMan({ profFee: v })} />
                 <NumBox label="Contingency %" value={manual.contingency} onChange={(v) => setMan({ contingency: v })} />
                 <NumBox label="Efficiency %" value={manual.efficiency} onChange={(v) => setMan({ efficiency: v })} />
@@ -627,7 +627,7 @@ export default function AutoAppraisal() {
               </div>
 
               <MicroLabel>Revenue &amp; land</MicroLabel>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <NumBox label="Target profit %" value={manual.targetProfit} onChange={(v) => setMan({ targetProfit: v })} />
                 <NumBox label="Asking land £" value={manual.asking} onChange={(v) => setMan({ asking: v })} />
                 <NumBox label="Acquisition %" value={manual.acq} onChange={(v) => setMan({ acq: v })} />
@@ -638,7 +638,7 @@ export default function AutoAppraisal() {
               </div>
 
               <MicroLabel>Finance</MicroLabel>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <NumBox label="LTC %" value={manual.finance.ltc} onChange={(v) => setFin({ ltc: v })} />
                 <NumBox label="Rate % pa" value={manual.finance.rate} onChange={(v) => setFin({ rate: v })} />
                 <NumBox label="Period mo" value={manual.finance.period} onChange={(v) => setFin({ period: v })} />
@@ -648,7 +648,7 @@ export default function AutoAppraisal() {
                 <NumBox label="Arrangement %" value={manual.finance.arrFee} onChange={(v) => setFin({ arrFee: v })} />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Build £" value={buildRate} onChange={setBuildRate} />
                 <button
                   onClick={onRunManual}
@@ -767,7 +767,7 @@ export default function AutoAppraisal() {
 
               {/* auto-generated appraisal */}
               <Panel title="Auto-generated appraisal">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
                   {appraisalRows.map(([label, value, muted]) => (
                     <div key={label} className="flex justify-between gap-3">
                       <span className="text-[12.5px] text-ink-2">{label}</span>

@@ -13,3 +13,25 @@ test('field app runs full-bleed on a phone viewport', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+
+test('core screens have no horizontal scroll at phone width', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const noScroll = () =>
+    // poll: loading skeletons may transiently overflow while chunks stream in
+    expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), { timeout: 10_000 })
+      .toBeLessThanOrEqual(0);
+  await noScroll(); // hub
+  await page.goto('/board');
+  await expect(page.getByText('Northgate Trade & Industrial Park').first()).toBeVisible();
+  await noScroll();
+  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await expect(page.getByText('Workfile', { exact: true })).toBeVisible();
+  await noScroll(); // deal overview — rail stacked below content
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
+  await expect(page.getByText('Unit schedule')).toBeVisible();
+  await noScroll(); // appraisal — form grids collapsed
+});

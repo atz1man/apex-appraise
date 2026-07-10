@@ -158,9 +158,9 @@ export default function DataRoom() {
       />
       <DealNav dealId={dealId} active="dataroom" />
 
-      <div className="max-w-[1640px] mx-auto grid" style={{ gridTemplateColumns: '230px minmax(0,1fr) 300px', minHeight: 'calc(100vh - 56px)' }}>
+      <div className="max-w-[1640px] mx-auto grid grid-cols-1 lg:[grid-template-columns:230px_minmax(0,1fr)_300px]" style={{ minHeight: 'calc(100vh - 56px)' }}>
         {/* folders */}
-        <div className="bg-surface border-r border-border-strong px-3.5 py-5">
+        <div className="bg-surface border-b lg:border-b-0 lg:border-r border-border-strong px-3.5 py-5">
           <div className="label-mono text-ink-3 px-2 pb-2.5">Folders</div>
           {FOLDERS.map((f) => {
             const on = folder === f.key;
@@ -192,7 +192,7 @@ export default function DataRoom() {
         </div>
 
         {/* file list */}
-        <div className="px-6 py-5">
+        <div className="px-4 sm:px-6 py-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="text-[19px] font-bold tracking-[-0.4px]">{currentLabel}</div>
@@ -248,7 +248,7 @@ export default function DataRoom() {
               </div>
             </div>
             {formOpen && (
-              <div className="mt-4 pt-4 border-t border-border-std flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+              <div className="mt-4 pt-4 border-t border-border-std flex gap-2 items-center flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <input
                   autoFocus
                   className="flex-1"
@@ -334,7 +334,7 @@ export default function DataRoom() {
         </div>
 
         {/* access + activity */}
-        <div className="bg-surface border-l border-border-strong" style={{ padding: '22px 18px' }}>
+        <div className="bg-surface border-t lg:border-t-0 lg:border-l border-border-strong" style={{ padding: '22px 18px' }}>
           <div className="text-[13px] font-semibold">Access</div>
           <div className="mt-3 flex flex-col gap-2.5">
             {ACCESS.map((a) => (

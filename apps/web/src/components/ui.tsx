@@ -76,7 +76,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
           ))}
         </nav>
       )}
-      <div className="ml-auto flex items-center gap-2.5">{right}</div>
+      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">{right}</div>
     </header>
   );
 }

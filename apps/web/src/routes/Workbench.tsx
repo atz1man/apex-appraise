@@ -107,7 +107,7 @@ export default function Workbench() {
       <div className="min-h-screen">
         <TopBar crumb="Valuation workbench" />
         <DealNav dealId={dealId} active="workbench" />
-        <main className="max-w-[1500px] mx-auto px-6 pb-14">
+        <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
           <div className="mt-6">
             <Skeleton height={12} width={140} />
             <Skeleton height={26} width={300} className="mt-2.5" />
@@ -121,10 +121,10 @@ export default function Workbench() {
               </div>
             ))}
           </div>
-          <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_340px]">
             <div className="min-w-0 flex flex-col gap-4">
               {/* approach cards skeleton */}
-              <div className="grid grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {Array.from({ length: 3 }, (_, i) => (
                   <div key={i} className="bg-surface border border-border-strong rounded-card shadow-rest p-4">
                     <Skeleton height={12} width="55%" />
@@ -163,7 +163,7 @@ export default function Workbench() {
         right={
           <>
             {isSynced && (
-              <span className="inline-flex items-center gap-1.5 rounded-pill bg-tint-success-2 px-3 py-1.5 text-[11.5px] font-semibold text-status-green">
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success-2 px-3 py-1.5 text-[11.5px] font-semibold text-status-green">
                 <Dot color="#1E7A55" /> Synced from field
               </span>
             )}
@@ -176,7 +176,7 @@ export default function Workbench() {
 
       {/* field-sync banner */}
       {isSynced && !dismissed && (
-        <div className="flex items-center gap-3 px-6 py-2.5 bg-tint-success border-b border-[#D6E6DD]">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 bg-tint-success border-b border-[#D6E6DD]">
           <span className="flex-none w-[30px] h-[30px] rounded-[9px] bg-brand-700 flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
@@ -198,11 +198,11 @@ export default function Workbench() {
       )}
 
       <DealNav dealId={dealId} active="workbench" />
-      <main className="max-w-[1500px] mx-auto px-6 pb-14">
+      <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">Valuation modeling</div>
-            <h1 className="mt-1.5 text-[26px] font-bold tracking-[-0.7px] leading-tight">Valuation reconciliation</h1>
+            <h1 className="mt-1.5 text-[22px] sm:text-[26px] font-bold tracking-[-0.7px] leading-tight">Valuation reconciliation</h1>
             <div className="mt-1 text-[13.5px] text-ink-2">{deal.address}</div>
           </div>
           <Link to={`/deal/${dealId}/redbook`} className="text-[12.5px] font-medium text-ink-2 hover:text-brand-700">
@@ -237,10 +237,10 @@ export default function Workbench() {
           />
         </div>
 
-        <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_340px]">
           {/* LEFT — approaches + comps grid */}
           <div className="min-w-0 flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {APPROACHES.map((a) => (
                 <div key={a.key} className="bg-surface border border-border-strong rounded-card shadow-rest p-4">
                   <div className="flex items-center gap-2">

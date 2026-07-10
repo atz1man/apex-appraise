@@ -175,7 +175,7 @@ export default function CostMonitoring() {
       <div className="min-h-screen">
         <TopBar crumb="Cost monitoring" />
         <DealNav dealId={dealId} active="costs" />
-        <main className="max-w-[1640px] mx-auto px-6 pb-14">
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
           {/* KPI strip skeleton */}
           <div className="mt-5 flex gap-3 flex-wrap">
             {Array.from({ length: 6 }, (_, i) => (
@@ -186,7 +186,7 @@ export default function CostMonitoring() {
             ))}
           </div>
           {/* package table + side rail skeleton */}
-          <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+          <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
             <Panel>
               <SkeletonRows rows={7} height={18} />
             </Panel>
@@ -222,7 +222,7 @@ export default function CostMonitoring() {
       />
 
       <DealNav dealId={dealId} active="costs" />
-      <main className="max-w-[1640px] mx-auto px-6 pb-14">
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         {/* KPI strip */}
         <div className="mt-5 flex gap-3 flex-wrap">
           <StatCard label="Appraised cost" value={packages.length ? fM(rollup!.appraised) : '—'} sub={cost?.hasAppraisal ? 'from current appraisal' : 'no appraisal saved'} />
@@ -242,7 +242,7 @@ export default function CostMonitoring() {
           <StatCard label="Open actions" value={String(openTasks)} tone={openTasks > 0 ? undefined : statusTokens.green.text} />
         </div>
 
-        <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+        <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
           {/* Cost report */}
           <Panel title="Cost report — packages & contractors" right={<span className="text-[11.5px] text-ink-3">Forecast vs appraised budget</span>}>
             {packages.length === 0 ? (
@@ -411,9 +411,9 @@ export default function CostMonitoring() {
             <h2 className="text-[17px] font-bold tracking-[-0.4px]">Contractors & actions</h2>
             <span className="text-[12px] text-ink-3">Contract value, retention, certificates & weekly timesheets per contractor.</span>
           </div>
-          <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
-            <div className="grid grid-cols-2 gap-4">
-              {(contractors ?? []).length === 0 && <div className="col-span-2"><EmptyState>No contractors in your organisation yet.</EmptyState></div>}
+          <div className="grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(contractors ?? []).length === 0 && <div className="col-span-full"><EmptyState>No contractors in your organisation yet.</EmptyState></div>}
               {(contractors ?? []).map((c) => {
                 const chip = contractorChip(c.status);
                 const pkgCount = packages.filter((p) => p.contractorId === c.id).length;
@@ -616,7 +616,7 @@ export default function CostMonitoring() {
                 <span className="h-px flex-1 bg-border-strong" />
                 <span className="fig text-[10.5px] text-ink-3">{g.items.length} {g.items.length === 1 ? 'photo' : 'photos'}</span>
               </div>
-              <div className="grid grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5">
                 {g.items.map((ph, i) => (
                   <button key={ph.id} className="bg-surface border border-border-strong rounded-card overflow-hidden text-left shadow-rest transition-all hover:-translate-y-0.5 hover:shadow-float" onClick={() => setLightbox(ph)}>
                     {ph.url ? (
@@ -647,7 +647,7 @@ export default function CostMonitoring() {
       {/* ===== Lightbox ===== */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-10"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-10"
           style={{ background: 'rgba(12,18,14,0.72)', backdropFilter: 'blur(4px)' }}
           onClick={() => setLightbox(null)}
         >

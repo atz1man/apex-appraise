@@ -159,14 +159,14 @@ export default function Scenarios() {
       <div className="min-h-screen">
         <TopBar crumb="Scenario comparison" />
         <DealNav dealId={dealId} active="scenarios" />
-        <main className="max-w-[1500px] mx-auto px-6 pb-14">
+        <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
           <div className="mt-6">
             <Skeleton height={22} width={280} />
             <Skeleton height={13} width={440} className="mt-2" />
           </div>
           {/* comparison-grid skeleton: label column + three option columns */}
           <div className="mt-4 bg-surface border border-border-strong rounded-panel shadow-rest p-5">
-            <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: '200px repeat(3, minmax(0,1fr))' }}>
+            <div className="grid grid-cols-1 gap-4 mb-6 lg:[grid-template-columns:200px_repeat(3,minmax(0,1fr))]">
               <div />
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} height={18} width="70%" />
@@ -208,7 +208,7 @@ export default function Scenarios() {
       />
 
       <DealNav dealId={dealId} active="scenarios" />
-      <main className="max-w-[1500px] mx-auto px-6 pb-14">
+      <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-6 flex items-end justify-between">
           <div>
             <div className="text-[20px] font-bold tracking-[-0.5px]">Compare scheme options</div>

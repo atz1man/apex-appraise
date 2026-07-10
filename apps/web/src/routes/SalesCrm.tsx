@@ -378,7 +378,7 @@ export default function SalesCrm() {
           <>
             <SegmentedToggle options={[['sales', 'Sales'], ['lettings', 'Lettings']]} value={mode} onChange={switchMode} />
             {headline && (
-              <span className="inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
                 <Dot color={brand[500]} /> {headline}
               </span>
             )}
@@ -387,7 +387,7 @@ export default function SalesCrm() {
       />
 
       <DealNav dealId={dealId} active="sales" />
-      <main className="max-w-[1640px] mx-auto px-6 pb-14">
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         {loading ? (
           <>
             {/* KPI strip skeleton */}
@@ -400,7 +400,7 @@ export default function SalesCrm() {
               ))}
             </div>
             {/* unit rows + side rail skeleton */}
-            <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
               <Panel>
                 <SkeletonRows rows={8} height={18} />
               </Panel>
@@ -437,7 +437,7 @@ export default function SalesCrm() {
               )}
             </div>
 
-            <div className="mt-5 grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
+            <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
               {/* tracker */}
               <Panel
                 title={labels.tableTitle}
@@ -546,7 +546,7 @@ export default function SalesCrm() {
                       {levels.map((l) => (
                         <div key={l} className="flex items-stretch gap-2">
                           <div className="w-[52px] shrink-0 flex items-center label-mono text-ink-3">{levelLabel(l)}</div>
-                          <div className="flex-1 flex gap-2">
+                          <div className="flex-1 flex gap-2 flex-wrap">
                             {rows
                               .filter((r) => r.level === l)
                               .map((r) => {
@@ -555,7 +555,7 @@ export default function SalesCrm() {
                                 return (
                                   <button
                                     key={r.id}
-                                    className="flex-1 min-w-0 rounded-[10px] border px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-float"
+                                    className="flex-1 min-w-[130px] lg:min-w-0 rounded-[10px] border px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-float"
                                     style={{ background: t.bg, borderColor: t.text }}
                                     onClick={() => openRow(r.id)}
                                   >
@@ -666,7 +666,7 @@ export default function SalesCrm() {
       >
         {editing && draft ? (
           <div className="flex flex-col gap-3.5">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Unit name"><input className="w-full" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={isRent ? 'e.g. Apt 9' : 'e.g. Plot 11'} /></Field>
               <Field label="Spec"><input className="w-full" value={draft.spec} onChange={(e) => setDraft({ ...draft, spec: e.target.value })} placeholder="2-bed apt · 78 m²" /></Field>
               <Field label={labels.party}><input className="w-full" value={draft.party} onChange={(e) => setDraft({ ...draft, party: e.target.value })} /></Field>

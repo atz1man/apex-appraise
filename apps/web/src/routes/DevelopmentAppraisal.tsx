@@ -220,7 +220,7 @@ export default function DevelopmentAppraisal() {
       <div className="min-h-screen">
         <TopBar crumb="Development appraisal" />
         <DealNav dealId={dealId} active="appraisal" />
-        <main className="max-w-[1640px] mx-auto px-6 pb-14">
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
           {/* metrics-rail skeleton */}
           <div className="mt-5 flex gap-3 flex-wrap">
             {Array.from({ length: 7 }, (_, i) => (
@@ -231,9 +231,9 @@ export default function DevelopmentAppraisal() {
             ))}
           </div>
           {/* tab panel + right rail skeleton */}
-          <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 330px' }}>
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
             <div>
-              <div className="flex gap-4 border-b border-border-strong pb-2.5">
+              <div className="flex gap-4 border-b border-border-strong pb-2.5 overflow-hidden">
                 {Array.from({ length: 6 }, (_, i) => (
                   <Skeleton key={i} height={13} width={64} />
                 ))}
@@ -266,7 +266,7 @@ export default function DevelopmentAppraisal() {
         }
         right={
           <>
-            <span className="inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold" style={{ color: viab.tone }}>
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold" style={{ color: viab.tone }}>
               <Dot color={viab.dot} /> {viab.v} · RoC {formatPct(R.poc)}
             </span>
             <Button variant="secondary" onClick={() => setVersionsOpen(true)}>
@@ -274,6 +274,7 @@ export default function DevelopmentAppraisal() {
             </Button>
             <Button
               variant="secondary"
+              className="hidden sm:inline-flex"
               onClick={() =>
                 exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', input, R, jv, monthLabel })
               }
@@ -288,7 +289,7 @@ export default function DevelopmentAppraisal() {
       />
 
       <DealNav dealId={dealId} active="appraisal" />
-      <main className="max-w-[1640px] mx-auto px-6 pb-14">
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         {/* metrics rail */}
         <div className="mt-5 flex gap-3 flex-wrap">
           <StatCard label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr)} tone="#14503B" />
@@ -300,7 +301,7 @@ export default function DevelopmentAppraisal() {
           <StatCard label="GDV" value={fM(R.gdv)} />
         </div>
 
-        <div className="mt-5 grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 330px' }}>
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
           <div>
             {/* tabs */}
             <nav className="flex gap-1 border-b border-border-strong overflow-x-auto">
@@ -385,7 +386,7 @@ export default function DevelopmentAppraisal() {
                     </div>
                   </Panel>
                   <Panel title="Efficiency & disposal">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="NIA / GIA efficiency" suffix="%" value={input.efficiency} onChange={(v) => set({ efficiency: v })} />
                       <NumField label="Sales agent" suffix="%" value={input.disposal.agentPct} onChange={(v) => set({ disposal: { ...input.disposal, agentPct: v } })} />
                       <NumField label="Sales legal" suffix="%" value={input.disposal.legalPct} onChange={(v) => set({ disposal: { ...input.disposal, legalPct: v } })} />
@@ -399,7 +400,7 @@ export default function DevelopmentAppraisal() {
                 <Panel
                   title="Trade-level build rates"
                   right={
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 flex-wrap justify-end">
                       {Object.keys(PRESETS).map((k) => (
                         <Button key={k} variant="secondary" onClick={() => set({ trades: input.trades.map((t, i) => ({ ...t, rate: PRESETS[k][i] ?? t.rate })) })}>
                           {k[0].toUpperCase() + k.slice(1)}
@@ -421,7 +422,7 @@ export default function DevelopmentAppraisal() {
                       <span className="fig w-20 text-right text-[12px] text-ink-2">{fM(t.rate * R.gia)}</span>
                     </div>
                   ))}
-                  <div className="mt-3 border-t border-border-std pt-3 grid grid-cols-2 gap-3">
+                  <div className="mt-3 border-t border-border-std pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <NumField label="Professional fees" suffix="%" value={input.profFeePct} onChange={(v) => set({ profFeePct: v })} />
                     <NumField label="Contingency" suffix="%" value={input.contingencyPct} onChange={(v) => set({ contingencyPct: v })} />
                   </div>
@@ -459,7 +460,7 @@ export default function DevelopmentAppraisal() {
               {tab === 'finance' && (
                 <>
                   <Panel title="Debt terms">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="Loan to cost" suffix="%" value={input.finance.ltcPct} onChange={(v) => set({ finance: { ...input.finance, ltcPct: v } })} />
                       <NumField label="Interest rate" suffix="% pa" value={input.finance.ratePct} onChange={(v) => set({ finance: { ...input.finance, ratePct: v } })} />
                       <NumField label="Arrangement fee" suffix="%" value={input.finance.arrangementFeePct} onChange={(v) => set({ finance: { ...input.finance, arrangementFeePct: v } })} />
@@ -525,7 +526,7 @@ export default function DevelopmentAppraisal() {
                     value={input.site.mode}
                     onChange={(m) => set({ site: { ...input.site, mode: m } })}
                   />
-                  <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {!isResidual && <NumField label="Fixed land price" suffix="£" value={input.site.landFixed} onChange={(v) => set({ site: { ...input.site, landFixed: v } })} />}
                     <NumField label="Acquisition costs" suffix="% — SDLT, legal, agent" value={input.site.acqPct} onChange={(v) => set({ site: { ...input.site, acqPct: v } })} />
                     {isResidual && <NumField label="Target profit on GDV" suffix="%" value={input.targetProfitOnGdvPct} onChange={(v) => set({ targetProfitOnGdvPct: v })} />}
@@ -543,7 +544,7 @@ export default function DevelopmentAppraisal() {
                 <Panel
                   title="Monthly cashflow"
                   right={
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap justify-end">
                       <SegmentedToggle
                         options={[['scurve', 'S-curve'], ['even', 'Even'], ['front', 'Front'], ['back', 'Back']]}
                         value={(input.finance.spendProfile ?? 'scurve') as never}
@@ -606,7 +607,7 @@ export default function DevelopmentAppraisal() {
               {tab === 'returns' && (
                 <>
                   <Panel title="JV structure">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="GP co-invest" suffix="% of equity" value={input.jv!.gpCoinvestPct} onChange={(v) => set({ jv: { ...input.jv!, gpCoinvestPct: v } })} />
                       <NumField label="Preferred return" suffix="% pa compounded" value={input.jv!.prefPct} onChange={(v) => set({ jv: { ...input.jv!, prefPct: v } })} />
                       <NumField label="Promote" suffix="% of residual" value={input.jv!.promotePct} onChange={(v) => set({ jv: { ...input.jv!, promotePct: v } })} />
