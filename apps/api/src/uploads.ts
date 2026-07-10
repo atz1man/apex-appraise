@@ -11,6 +11,15 @@ import { JWT_SECRET, prisma } from './context.js';
 
 const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 
+/** Resolve a stored document's `/uploads/files/<key>` URL to its on-disk path. */
+export function uploadPathFor(url: string): string | null {
+  const prefix = '/uploads/files/';
+  if (!url.startsWith(prefix)) return null;
+  const key = url.slice(prefix.length);
+  if (key.includes('/') || key.includes('..')) return null; // no traversal
+  return path.join(UPLOAD_DIR, key);
+}
+
 async function principalFrom(req: FastifyRequest) {
   const auth = req.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return null;

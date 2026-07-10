@@ -293,15 +293,59 @@ const EXTRACTION_TOOL = {
   },
 } as const;
 
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
+  | { type: 'image'; source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg'; data: string } };
+
+/** Load data-room documents as Anthropic content blocks (PDFs + images, capped). */
+async function documentBlocks(
+  prisma: any,
+  orgId: string,
+  documentIds: string[],
+): Promise<{ blocks: ContentBlock[]; used: Array<{ id: string; name: string; dealId: string }> }> {
+  const { uploadPathFor } = await import('../uploads.js');
+  const { readFile } = await import('node:fs/promises');
+  const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId } });
+  const blocks: ContentBlock[] = [];
+  const used: Array<{ id: string; name: string; dealId: string }> = [];
+  let totalBytes = 0;
+  for (const doc of docs.slice(0, 4)) {
+    const filePath = doc.url ? uploadPathFor(doc.url) : null;
+    if (!filePath) continue;
+    const ext = doc.ext.toLowerCase();
+    const mediaType =
+      ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
+    if (!mediaType) continue;
+    let data: Buffer;
+    try {
+      data = await readFile(filePath);
+    } catch {
+      continue; // file missing on disk — skip, don't fail the whole extraction
+    }
+    if (totalBytes + data.length > 20 * 1024 * 1024) break; // 20MB request budget
+    totalBytes += data.length;
+    if (mediaType === 'application/pdf') {
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: data.toString('base64') } });
+    } else {
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: data.toString('base64') } });
+    }
+    used.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
+  }
+  return { blocks, used };
+}
+
 /**
- * Server-side LLM extraction — inputs only, never money. The model is FORCED
- * through a tool call so its output is schema-valid JSON by construction.
- * Falls back to a deterministic parse of the notes when no ANTHROPIC_API_KEY
- * is configured (demo mode, mirroring the prototype's mock()).
+ * Server-side LLM extraction — inputs only, never money. Reads the actual
+ * uploaded documents (PDF drawings, cost plans, planning decisions) alongside
+ * any typed notes. The model is FORCED through a tool call so its output is
+ * schema-valid JSON by construction. Falls back to a deterministic parse of
+ * the notes when no ANTHROPIC_API_KEY is configured (demo mode).
  */
-async function extractFromNotes(notes: string): Promise<Extraction> {
+async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], docNames: string[] = []): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key) {
+    const instruction = `Extract the development-appraisal INPUTS via record_extraction from the attached documents${docNames.length ? ` (${docNames.join('; ')})` : ''}${notes.trim() ? ' and the notes below' : ''}. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated; source cites the document/page or note it came from). Anything the documents do not state: null.${notes.trim() ? `\n\nNOTES:\n${notes}` : ''}`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -313,7 +357,7 @@ async function extractFromNotes(notes: string): Promise<Extraction> {
         messages: [
           {
             role: 'user',
-            content: `Extract the development-appraisal INPUTS from these scheme notes via record_extraction. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated). Anything the notes do not state: null.\n\nNOTES:\n${notes}`,
+            content: [...docBlocks, { type: 'text', text: instruction }],
           },
         ],
       }),
@@ -381,10 +425,41 @@ function indicative(extraction: Extraction, buildPerSqft: number) {
 
 export const autoAppraisalRouter = router({
   extract: internalProcedure
-    .input(z.object({ notes: z.string().min(10), buildPerSqft: z.number().positive().default(105) }))
-    .mutation(async ({ input }) => {
-      const extraction = await extractFromNotes(input.notes);
-      return { extraction, indicative: indicative(extraction, input.buildPerSqft) };
+    .input(
+      z
+        .object({
+          notes: z.string().default(''),
+          documentIds: z.array(z.string()).max(4).default([]),
+          buildPerSqft: z.number().positive().default(105),
+        })
+        .refine((v) => v.notes.trim().length >= 10 || v.documentIds.length > 0, {
+          message: 'Provide scheme notes or select documents to read',
+        }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      let blocks: Awaited<ReturnType<typeof documentBlocks>> = { blocks: [], used: [] };
+      if (input.documentIds.length > 0) {
+        if (!process.env.ANTHROPIC_API_KEY) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reading documents needs the AI configured (ANTHROPIC_API_KEY) — paste the text as notes instead.' });
+        }
+        blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, input.documentIds);
+        if (blocks.blocks.length === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'None of the selected documents are readable PDFs/images with a stored file.' });
+        }
+      }
+      const extraction = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
+      // successful read hardens the data-room status + audit trail
+      for (const doc of blocks.used) {
+        await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: 'EXTRACTED' } });
+        await ctx.prisma.activityEvent.create({
+          data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: 'AI Development Director', action: 'extracted scheme from', target: doc.name },
+        });
+      }
+      return {
+        extraction,
+        indicative: indicative(extraction, input.buildPerSqft),
+        documentsRead: blocks.used.map((d) => d.name),
+      };
     }),
 
   compute: internalProcedure.input(zAutoInputs).query(({ input }) => indicative(input.extraction, input.buildPerSqft)),
