@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { formatMoneyFull, n0 } from '../lib/format';
-import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, StatCard, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 type Weights = { salesComparison: number; cost: number; income: number };
@@ -167,8 +167,8 @@ export default function Workbench() {
                 <Dot color="#1E7A55" /> Synced from field
               </span>
             )}
-            <Button onClick={onSave} disabled={save.isPending || !dirty}>
-              {save.isPending ? <Spinner /> : dirty ? 'Save valuation' : 'Saved'}
+            <Button onClick={onSave} loading={save.isPending} disabled={!dirty}>
+              {dirty ? 'Save valuation' : 'Saved'}
             </Button>
           </>
         }
@@ -205,9 +205,9 @@ export default function Workbench() {
             <h1 className="mt-1.5 text-[22px] sm:text-[26px] font-bold tracking-[-0.7px] leading-tight">Valuation reconciliation</h1>
             <div className="mt-1 text-[13.5px] text-ink-2">{deal.address}</div>
           </div>
-          <Link to={`/deal/${dealId}/redbook`} className="text-[12.5px] font-medium text-ink-2 hover:text-brand-700">
+          <Button to={`/deal/${dealId}/redbook`} variant="secondary">
             Generate Red Book report →
-          </Link>
+          </Button>
         </div>
 
         {/* KPI row */}
@@ -293,9 +293,9 @@ export default function Workbench() {
               {comps.length === 0 ? (
                 <EmptyState
                   cta={
-                    <Link to={`/deal/${dealId}/comparables`} className="text-[12px] font-semibold text-brand-700 hover:underline">
+                    <Button to={`/deal/${dealId}/comparables`} variant="secondary" size="sm">
                       Add comparables →
-                    </Link>
+                    </Button>
                   }
                 >
                   No comparable evidence on this deal yet.
@@ -462,9 +462,9 @@ export default function Workbench() {
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
                   }
                   cta={
-                    <Link to="/field" className="text-[12px] font-semibold text-brand-700 hover:underline">
+                    <Button to="/field" variant="secondary" size="sm">
                       Open the field app →
-                    </Link>
+                    </Button>
                   }
                 >
                   No field inspection yet — capture the subject on site and it will sync here.

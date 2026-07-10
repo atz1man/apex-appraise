@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { Avatar, Icon, Skeleton, TopBar, SPARKLE } from '../components/ui';
+import { Avatar, Button, Icon, Skeleton, TopBar, SPARKLE } from '../components/ui';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -119,21 +119,12 @@ export default function Hub() {
               Create a deal on the pipeline board, then run the Auto-Appraisal — paste your planning
               text and cost-plan notes and get a full residual appraisal in seconds.
             </p>
-            <Link
-              to="/board"
-              className="mt-5 inline-flex items-center gap-1.5 rounded-[11px] bg-brand-700 hover:bg-brand-600 text-white text-[13px] font-semibold px-4 h-[40px] items-center transition-colors"
-              style={{ display: 'inline-flex', alignItems: 'center' }}
-            >
-              New deal from documents →
-            </Link>
-            <button
-              className="mt-5 ml-2.5 inline-flex items-center gap-1.5 rounded-[12px] bg-surface text-ink-2 text-[13px] font-semibold px-4 h-[40px] disabled:opacity-50"
-              style={{ border: '1px solid rgba(20,30,25,0.12)' }}
-              disabled={loadSample.isPending}
-              onClick={() => loadSample.mutate()}
-            >
-              {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
-            </button>
+            <div className="mt-5 flex items-center justify-center gap-2.5 flex-wrap">
+              <Button to="/board">New deal from documents →</Button>
+              <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
+                {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
+              </Button>
+            </div>
           </section>
         )}
 

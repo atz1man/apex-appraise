@@ -7,6 +7,60 @@ const DEMO_MAILTO = 'mailto:hello@apexappraise.co.uk?subject=Apex%20Appraise%20%
 const ARROW = 'M5 12h14|M13 6l6 6-6 6';
 const CHECK = 'm5 12 5 5 9-10';
 
+/** Marketing CTA — white-on-dark or brand-gradient pill with a sliding arrow. */
+function Cta({
+  to,
+  href,
+  kind = 'light',
+  children,
+  arrow = true,
+  className = '',
+}: {
+  to?: string;
+  href?: string;
+  kind?: 'light' | 'brand' | 'outline-dark' | 'outline-light';
+  children: ReactNode;
+  arrow?: boolean;
+  className?: string;
+}) {
+  const chrome: Record<string, [string, React.CSSProperties]> = {
+    light: [
+      'bg-surface text-brand-800 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-12px_rgba(0,0,0,0.45)]',
+      { boxShadow: '0 8px 24px -10px rgba(0,0,0,0.35)' },
+    ],
+    brand: [
+      'text-white hover:[filter:brightness(1.08)] hover:-translate-y-0.5',
+      {
+        background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -10px rgba(20,80,59,0.55)',
+      },
+    ],
+    'outline-dark': ['text-white hover:bg-white/10', { border: '1px solid rgba(255,255,255,0.25)' }],
+    'outline-light': ['bg-surface text-ink hover:bg-sunken', { border: '1px solid rgba(20,30,25,0.14)' }],
+  };
+  const [cls, style] = chrome[kind];
+  const inner = (
+    <>
+      {children}
+      {arrow && (
+        <span className="transition-transform duration-200 group-hover:translate-x-[3px] motion-reduce:transition-none" aria-hidden="true">
+          <Icon d={ARROW} size={17} strokeWidth={2.2} />
+        </span>
+      )}
+    </>
+  );
+  const shared = `group inline-flex items-center justify-center gap-[9px] h-[50px] px-6 rounded-[13px] text-[15px] font-semibold transition-all duration-200 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 ${cls} ${className}`;
+  return href ? (
+    <a href={href} className={shared} style={style}>
+      {inner}
+    </a>
+  ) : (
+    <Link to={to ?? '/register'} className={shared} style={style}>
+      {inner}
+    </Link>
+  );
+}
+
 const WRAP = 'max-w-[1100px] mx-auto px-5 sm:px-7';
 
 // ---------- data ----------
@@ -330,12 +384,19 @@ export default function Landing() {
             <Link to="/login" className="text-[13.5px] font-semibold text-ink hover:text-brand-700">
               Sign in
             </Link>
-            <a
-              href={DEMO_MAILTO}
-              className="flex items-center h-[38px] px-[17px] rounded-[10px] bg-brand-700 hover:bg-brand-600 text-white text-[13px] font-semibold transition-all"
-            >
+            <a href={DEMO_MAILTO} className="hidden sm:inline-flex items-center text-[13.5px] font-semibold text-ink-2 hover:text-ink transition-colors">
               Book a demo
             </a>
+            <Link
+              to="/register"
+              className="inline-flex items-center h-[38px] px-[17px] rounded-[11px] text-white text-[13px] font-semibold transition-all duration-200 hover:[filter:brightness(1.08)] active:scale-[0.97] motion-reduce:transition-none"
+              style={{
+                background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 6px 16px -8px rgba(20,80,59,0.45)',
+              }}
+            >
+              Start free
+            </Link>
           </div>
         </div>
       </div>
@@ -360,24 +421,15 @@ export default function Landing() {
             investor reporting — with every figure traceable.
           </p>
           <div className="mt-[34px] flex items-center gap-3.5 flex-wrap">
-            <Link
-              to="/login"
-              className="flex items-center gap-[9px] h-[50px] px-6 rounded-[13px] bg-surface text-brand-800 text-[15px] font-semibold hover:-translate-y-0.5 transition-all"
-            >
-              Start a free appraisal
-              <Icon d={ARROW} size={17} strokeWidth={2.2} />
-            </Link>
-            <a
-              href={DEMO_MAILTO}
-              className="flex items-center gap-[9px] h-[50px] px-[22px] rounded-[13px] text-[15px] font-semibold text-white hover:bg-white/5 transition-all"
-              style={{ border: '1px solid rgba(255,255,255,0.22)' }}
-            >
+            <Cta to="/register">Start a free appraisal</Cta>
+            <Cta href={DEMO_MAILTO} kind="outline-dark" arrow={false}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
               Watch 2-min tour
-            </a>
+            </Cta>
           </div>
+          <div className="mt-4 font-mono text-[12px] text-accent-muted-1">Free 14-day trial · no card required · set up in 2 minutes</div>
           <div className="mt-10 flex items-center gap-[26px] flex-wrap">
             {TRUST_ROW.map((item, i) => (
               <span key={item} className="flex items-center gap-[26px]">
@@ -575,13 +627,20 @@ export default function Landing() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="/register"
-                className={`mt-7 inline-flex items-center justify-center h-[44px] rounded-[12px] text-[14px] font-semibold transition-colors ${featured ? 'text-white' : 'bg-surface text-ink-2 hover:bg-sunken'}`}
-                style={featured ? { background: 'linear-gradient(180deg,#1B6048,#14503B)' } : { border: '1px solid rgba(20,30,25,0.14)' }}
+              <Link
+                to="/register"
+                className={`mt-7 inline-flex items-center justify-center h-[44px] rounded-[12px] text-[14px] font-semibold transition-all duration-200 active:scale-[0.98] motion-reduce:transition-none ${featured ? 'text-white hover:[filter:brightness(1.08)]' : 'bg-surface text-ink-2 hover:bg-sunken'}`}
+                style={
+                  featured
+                    ? {
+                        background: 'linear-gradient(180deg,#1B6048,#14503B)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -12px rgba(20,80,59,0.55)',
+                      }
+                    : { border: '1px solid rgba(20,30,25,0.14)' }
+                }
               >
-                Start free
-              </a>
+                {featured ? 'Start free — most popular' : 'Start free'}
+              </Link>
             </div>
           ))}
         </div>
@@ -602,20 +661,10 @@ export default function Landing() {
             Start with a single appraisal — no card required. Bring your whole pipeline across when you&rsquo;re ready.
           </p>
           <div className="relative mt-[30px] flex items-center justify-center gap-3.5 flex-wrap">
-            <a
-              href={DEMO_MAILTO}
-              className="flex items-center gap-[9px] h-[50px] px-[26px] rounded-[13px] bg-surface text-brand-800 text-[15px] font-semibold hover:-translate-y-0.5 transition-all"
-            >
+            <Cta to="/register">Start free — no card required</Cta>
+            <Cta href={DEMO_MAILTO} kind="outline-dark" arrow={false}>
               Book a demo
-              <Icon d={ARROW} size={17} strokeWidth={2.2} />
-            </a>
-            <Link
-              to="/login"
-              className="flex items-center h-[50px] px-6 rounded-[13px] text-[15px] font-semibold text-white hover:bg-white/5 transition-all"
-              style={{ border: '1px solid rgba(255,255,255,0.25)' }}
-            >
-              Sign in
-            </Link>
+            </Cta>
           </div>
         </div>
       </div>

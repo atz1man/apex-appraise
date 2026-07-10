@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
-import { BrandMark, Button, Spinner } from '../components/ui';
+import { BrandMark, Button } from '../components/ui';
 
 const DEMOS: Array<[string, string, string]> = [
   ['Internal team', 'arthur@apexappraise.co.uk', 'Pipeline, appraisals, construction, sales'],
@@ -47,8 +47,8 @@ export default function Login() {
           <label className="label-mono text-ink-3 block mb-1">Password</label>
           <input className="w-full mb-4" type="password" aria-label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
-          <Button type="submit" className="w-full justify-center" disabled={login.isPending}>
-            {login.isPending ? <Spinner /> : 'Sign in'}
+          <Button type="submit" className="w-full" loading={login.isPending}>
+            Sign in
           </Button>
           <div className="mt-3 text-center text-[12px] text-ink-2">
             New here?{' '}

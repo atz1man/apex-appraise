@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
-import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 /** Contractor avatar gradients — per the design handoff prototype. */
@@ -504,7 +504,7 @@ export default function CostMonitoring() {
                             onChange={(e) => setHoursDraft((s) => ({ ...s, [c.id]: e.target.value }))}
                             onKeyDown={(e) => e.key === 'Enter' && submitWeek(c.id)}
                           />
-                          <Button variant="secondary" className="!h-[30px]" disabled={logWeek.isPending} onClick={() => submitWeek(c.id)}>
+                          <Button variant="secondary" size="sm" disabled={logWeek.isPending} onClick={() => submitWeek(c.id)}>
                             Log week
                           </Button>
                         </div>
@@ -557,7 +557,7 @@ export default function CostMonitoring() {
                   </button>
                 ))}
                 <Button
-                  className="!h-[32px] !px-2.5"
+                  size="sm"
                   disabled={!taskDraft.trim() || createTask.isPending}
                   onClick={() => {
                     if (!taskDraft.trim()) return;
@@ -601,10 +601,10 @@ export default function CostMonitoring() {
                 className="hidden"
                 onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
               />
-              <Button variant="secondary" className="!h-8" disabled={!photoCap.trim() || photoUploading} onClick={() => photoFileRef.current?.click()}>
-                {photoUploading ? <Spinner /> : '📷 Attach photo'}
+              <Button variant="secondary" size="sm" loading={photoUploading} disabled={!photoCap.trim()} onClick={() => photoFileRef.current?.click()}>
+                📷 Attach photo
               </Button>
-              <Button className="!h-8" disabled={!photoCap.trim() || addPhoto.isPending} onClick={submitPhoto}>+ Add entry</Button>
+              <Button size="sm" loading={addPhoto.isPending} disabled={!photoCap.trim()} onClick={submitPhoto}>+ Add entry</Button>
             </div>
           </div>
 

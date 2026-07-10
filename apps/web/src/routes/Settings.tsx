@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 type Role = (typeof ROLES)[number];
@@ -69,8 +69,8 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
             }}
           >
             <input className="flex-1" aria-label="Workspace name" value={draft} onChange={(e) => setName(e.target.value)} />
-            <Button type="submit" disabled={!dirty || update.isPending}>
-              {update.isPending ? <Spinner /> : 'Save'}
+            <Button type="submit" loading={update.isPending} disabled={!dirty}>
+              Save
             </Button>
           </form>
         ) : (
@@ -163,8 +163,8 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         </select>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" disabled={!valid || invite.isPending}>
-          {invite.isPending ? <Spinner /> : 'Send invite'}
+        <Button type="submit" loading={invite.isPending} disabled={!valid}>
+          Send invite
         </Button>
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
       </div>
@@ -284,8 +284,8 @@ function SecurityPanel() {
         <label className="label-mono text-ink-3 block mb-1">Confirm new password</label>
         <input className="w-full mb-3" type="password" aria-label="Confirm new password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
-        <Button type="submit" disabled={!current || !next || !confirm || change.isPending}>
-          {change.isPending ? <Spinner /> : 'Change password'}
+        <Button type="submit" loading={change.isPending} disabled={!current || !next || !confirm}>
+          Change password
         </Button>
       </form>
       <div className="mt-4 pt-4 border-t border-border-faint text-[12px] text-ink-2b leading-relaxed max-w-[460px]">
@@ -419,12 +419,13 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                   </ul>
                   {isAdmin && !current && (
                     <Button
-                      className="mt-3 w-full justify-center h-9"
+                      className="mt-3 w-full"
                       variant={p.key === 'GROWTH' ? 'primary' : 'secondary'}
+                      loading={checkout.isPending && checkout.variables?.plan === p.key}
                       disabled={checkout.isPending}
                       onClick={() => checkout.mutate({ plan: p.key })}
                     >
-                      {checkout.isPending && checkout.variables?.plan === p.key ? <Spinner /> : data.plan === 'TRIAL' ? 'Subscribe' : 'Switch plan'}
+                      {data.plan === 'TRIAL' ? 'Subscribe' : 'Switch plan'}
                     </Button>
                   )}
                 </div>

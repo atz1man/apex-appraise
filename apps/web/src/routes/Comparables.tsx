@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 
@@ -325,27 +325,26 @@ export default function Comparables() {
                       Applied — unit caps set to £{apply.data.supportedPsf}/ft²
                     </span>
                   </div>
-                  <Link
-                    to={`/deal/${dealId}/appraisal`}
-                    className="mt-3 flex items-center justify-center gap-2 h-[42px] rounded-[11px] bg-brand-700 text-white text-[13px] font-semibold hover:bg-brand-600 transition-colors"
-                  >
+                  <Button to={`/deal/${dealId}/appraisal`} size="lg" className="mt-3 w-full">
                     Open appraisal
                     <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
-                  </Link>
+                  </Button>
                 </div>
               ) : (
-                <button
-                  className="mt-3.5 w-full flex items-center justify-center gap-2 h-[42px] rounded-[11px] bg-brand-700 text-white text-[13px] font-semibold hover:bg-brand-600 transition-colors disabled:opacity-50"
-                  disabled={apply.isPending || comps.length === 0}
+                <Button
+                  size="lg"
+                  className="mt-3.5 w-full"
+                  loading={apply.isPending}
+                  disabled={comps.length === 0}
                   onClick={() => apply.mutate(dealId)}
                 >
-                  {apply.isPending ? <Spinner /> : (
+                  {!apply.isPending && (
                     <>
                       Apply &amp; open appraisal
                       <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
                     </>
                   )}
-                </button>
+                </Button>
               )}
               {apply.error && <div className="mt-2 text-[11.5px] text-status-red">{apply.error.message}</div>}
             </Panel>

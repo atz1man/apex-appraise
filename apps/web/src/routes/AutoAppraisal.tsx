@@ -4,7 +4,7 @@ import type { AutoAppraisalResult } from '@apex/appraisal-engine';
 import type { Extraction } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
-import { Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 // ---------- types ----------
@@ -532,13 +532,15 @@ export default function AutoAppraisal() {
 
               <div className="mt-3.5 flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Run build at £" value={buildRate} onChange={setBuildRate} />
-                <button
+                <Button
                   onClick={onGenerate}
-                  disabled={phase === 'loading' || (notes.trim().length < 10 && selectedDocs.size === 0)}
-                  className="flex-1 h-[42px] inline-flex items-center justify-center gap-2 rounded-[11px] bg-brand-700 hover:bg-brand-600 text-white text-[14px] font-semibold transition-colors disabled:opacity-50"
+                  size="lg"
+                  className="flex-1"
+                  loading={phase === 'loading'}
+                  disabled={notes.trim().length < 10 && selectedDocs.size === 0}
                 >
                   <Sparkle /> Generate appraisal
-                </button>
+                </Button>
               </div>
               <div className="mt-2.5 text-[11px] text-ink-3b">
                 Tip: the sample text describes a Bournemouth trade-counter scheme — edit it or paste your own.
@@ -604,15 +606,16 @@ export default function AutoAppraisal() {
                     </button>
                   </div>
                 ))}
-                <button
-                  className="inline-flex items-center gap-1.5 py-1 px-0.5 text-brand-700 text-[11.5px] font-semibold"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setMan({ units: [...manual.units, { label: 'New unit', count: 1, area: 1000, value: 200 }] })}
                 >
                   <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.4" strokeLinecap="round">
                     <path d="M12 6v12M6 12h12" />
                   </svg>
                   Add unit
-                </button>
+                </Button>
               </div>
 
               <MicroLabel>Costs</MicroLabel>
@@ -650,16 +653,12 @@ export default function AutoAppraisal() {
 
               <div className="flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Build £" value={buildRate} onChange={setBuildRate} />
-                <button
-                  onClick={onRunManual}
-                  disabled={phase === 'loading'}
-                  className="flex-1 h-[42px] inline-flex items-center justify-center gap-2 rounded-[11px] bg-brand-700 hover:bg-brand-600 text-white text-[14px] font-semibold transition-colors disabled:opacity-50"
-                >
+                <Button onClick={onRunManual} size="lg" className="flex-1" loading={phase === 'loading'}>
                   Run appraisal
                   <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -865,14 +864,8 @@ export default function AutoAppraisal() {
 
               {/* actions */}
               <div className="flex gap-3">
-                <button
-                  onClick={onOpenFull}
-                  disabled={save.isPending}
-                  className="flex-1 h-12 inline-flex items-center justify-center gap-2 rounded-[13px] bg-brand-700 hover:bg-brand-600 text-white text-[14px] font-semibold transition-colors disabled:opacity-50"
-                >
-                  {save.isPending ? (
-                    <Spinner />
-                  ) : (
+                <Button onClick={onOpenFull} size="lg" className="flex-1" loading={save.isPending}>
+                  {!save.isPending && (
                     <>
                       Open full appraisal
                       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -880,13 +873,10 @@ export default function AutoAppraisal() {
                       </svg>
                     </>
                   )}
-                </button>
-                <button
-                  onClick={onReset}
-                  className="flex-none h-12 px-5 inline-flex items-center justify-center rounded-[13px] bg-surface border border-border-strong text-ink-2 text-[13px] font-semibold hover:bg-sunken transition-colors"
-                >
+                </Button>
+                <Button variant="secondary" size="lg" className="flex-none" onClick={onReset}>
                   New deal
-                </button>
+                </Button>
               </div>
               <div className="text-[11px] text-ink-3b text-center">{run.sourceNote}</div>
             </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Skeleton, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Skeleton, TopBar } from '../components/ui';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -168,29 +168,25 @@ export default function Integrations() {
                           <div className="flex gap-1.5">
                             {SYNCABLE.has(item.provider) && effectiveDealId && (
                               <Button
-                                className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]"
-                                disabled={sync.isPending && sync.variables?.provider === item.provider}
+                                size="sm"
+                                className="min-h-10 sm:min-h-0"
+                                loading={sync.isPending && sync.variables?.provider === item.provider}
                                 onClick={() => sync.mutate({ provider: item.provider, dealId: effectiveDealId })}
                               >
-                                {sync.isPending && sync.variables?.provider === item.provider ? <Spinner /> : 'Sync to deal'}
+                                Sync to deal
                               </Button>
                             )}
-                            <Button variant="secondary" className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
-                              {pending ? <Spinner /> : 'Manage'}
+                            <Button variant="secondary" size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                              Manage
                             </Button>
                           </div>
                         ) : status === 'ATTENTION' ? (
-                          <button
-                            className="inline-flex items-center justify-center h-8 min-h-10 sm:min-h-0 px-3.5 rounded-[9px] text-[11.5px] font-semibold text-white transition-all disabled:opacity-50"
-                            style={{ background: '#9A6212', border: '1px solid #9A6212' }}
-                            disabled={pending}
-                            onClick={() => connect.mutate(item.provider)}
-                          >
-                            {pending ? <Spinner /> : 'Reconnect'}
-                          </button>
+                          <Button size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                            Reconnect
+                          </Button>
                         ) : (
-                          <Button className="h-8 min-h-10 sm:min-h-0 px-3.5 text-[11.5px]" disabled={pending} onClick={() => connect.mutate(item.provider)}>
-                            {pending ? <Spinner /> : 'Connect'}
+                          <Button size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                            Connect
                           </Button>
                         )}
                       </div>

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, Spinner, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 
 // ---- Team (matches the seeded org users / design handoff) ----
 const PEOPLE: Array<{ initials: string; name: string; short: string }> = [
@@ -241,13 +241,9 @@ export default function Calendar() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
                   </button>
                 </div>
-                <button
-                  onClick={() => setView({ y: today.getFullYear(), m: today.getMonth() })}
-                  className="px-3 py-1.5 rounded-[8px] border border-border-strong text-[12px] font-semibold hover:bg-sunken cursor-pointer transition-colors"
-                  style={{ color: brand[700] }}
-                >
+                <Button variant="secondary" size="sm" onClick={() => setView({ y: today.getFullYear(), m: today.getMonth() })}>
                   Today
-                </button>
+                </Button>
               </div>
               <div className="flex items-center gap-3.5 text-[11px] text-ink-3">
                 <span className="flex items-center gap-1.5"><Dot color={statusTokens.red.dot} size={8} /> Overdue</span>
@@ -367,15 +363,11 @@ export default function Calendar() {
                     </button>
                   ))}
                 </div>
-                <Button className="ml-auto !h-[34px] !px-4" disabled={!title.trim() || !dealSel || createTask.isPending} onClick={submit}>
-                  {createTask.isPending ? (
-                    <Spinner />
-                  ) : (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
-                      Add
-                    </>
+                <Button className="ml-auto !h-[34px] !px-4" loading={createTask.isPending} disabled={!title.trim() || !dealSel} onClick={submit}>
+                  {!createTask.isPending && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
                   )}
+                  Add
                 </Button>
               </div>
             </Panel>

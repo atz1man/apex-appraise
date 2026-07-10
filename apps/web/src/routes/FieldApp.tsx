@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
-import { Spinner, TopBar } from '../components/ui';
+import { Button, Spinner, TopBar } from '../components/ui';
 
 type Room = { name: string; condition: number; photos: number; notes: string };
 type Weights = { salesComparison: number; cost: number; income: number };
@@ -19,6 +19,9 @@ const THUMBS = [
   'linear-gradient(150deg,#c4cdd2,#9aa6ad)',
   'linear-gradient(150deg,#cdbfae,#a59079)',
 ];
+
+/** Unified native-feel press feedback for the phone UI's ad-hoc buttons (44px touch targets kept in markup). */
+const PRESS = 'transition-all duration-150 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100';
 
 const PIN_POS = [
   { top: 50, left: 96 },
@@ -59,7 +62,7 @@ function BackBtn({ onClick, light = false }: { onClick: () => void; light?: bool
     <button
       onClick={onClick}
       aria-label="Back"
-      className={`w-11 h-11 -ml-2 flex items-center justify-center rounded-full ${light ? 'bg-white/25 text-white' : 'text-ink'}`}
+      className={`w-11 h-11 -ml-2 flex items-center justify-center rounded-full ${PRESS} ${light ? 'bg-white/25 text-white' : 'text-ink'}`}
       style={light ? { backdropFilter: 'blur(8px)' } : undefined}
     >
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5-7 7 7 7" /></svg>
@@ -87,7 +90,7 @@ function TabBar({ active, onGo }: { active: Screen; onGo: (s: Screen) => void })
         {tabs.map(([key, label]) => {
           const on = active === key;
           return (
-            <button key={key} onClick={() => onGo(key)} className="flex-1 min-h-[44px] flex flex-col items-center gap-1" style={{ color: on ? '#14503B' : '#9AA09A' }}>
+            <button key={key} onClick={() => onGo(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: on ? '#14503B' : '#9AA09A' }}>
               {TAB_ICONS[key]}
               <span className="text-[10px]" style={{ fontWeight: on ? 600 : 500 }}>{label}</span>
             </button>
@@ -310,7 +313,7 @@ export default function FieldApp() {
               <button
                 key={d.id}
                 onClick={() => { setDealId(d.id); setScreen('detail'); }}
-                className="bg-surface border border-border-std rounded-[18px] p-3 flex gap-3 text-left w-full cursor-pointer hover:bg-sunken transition-colors"
+                className={`bg-surface border border-border-std rounded-[18px] p-3 flex gap-3 text-left w-full cursor-pointer hover:bg-sunken ${PRESS}`}
               >
                 <div className="flex-none w-[74px] h-[74px] rounded-[13px]" style={{ background: THUMBS[i % THUMBS.length] }} />
                 <div className="flex-1 min-w-0">
@@ -422,14 +425,14 @@ export default function FieldApp() {
         <div className="flex gap-2.5">
           <button
             onClick={() => setScreen('inspection')}
-            className="flex-1 flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold"
+            className={`flex-1 flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold ${PRESS}`}
           >
             {inspection?.status === 'submitted' ? 'Review inspection' : rated > 0 ? 'Continue inspection' : 'Start inspection'} {ARROW}
           </button>
           <button
             onClick={() => setScreen('comps')}
             aria-label="Comparable sales"
-            className="flex-none w-[52px] h-[52px] rounded-[15px] border border-border-strong bg-surface flex items-center justify-center text-brand-700"
+            className={`flex-none w-[52px] h-[52px] rounded-[15px] border border-border-strong bg-surface flex items-center justify-center text-brand-700 ${PRESS}`}
           >
             {TAB_ICONS.comps}
           </button>
@@ -450,7 +453,7 @@ export default function FieldApp() {
               <div className="text-[11.5px] text-ink-3">{deal.name}</div>
             </div>
           </div>
-          <button onClick={saveDraft} disabled={save.isPending} className="min-h-[44px] px-2 text-[13px] font-semibold text-brand-700 disabled:opacity-50">
+          <button onClick={saveDraft} disabled={save.isPending} className={`min-h-[44px] px-2 rounded-[10px] text-[13px] font-semibold text-brand-700 disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}>
             {save.isPending ? <Spinner /> : 'Save'}
           </button>
         </div>
@@ -481,7 +484,7 @@ export default function FieldApp() {
             <button
               onClick={snap}
               aria-label="Take photo"
-              className="w-11 h-11 rounded-full bg-surface"
+              className={`w-11 h-11 rounded-full bg-surface ${PRESS}`}
               style={{ border: '3px solid rgba(255,255,255,0.55)', boxShadow: '0 0 0 2px rgba(12,18,14,0.42)' }}
             />
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" /></svg>
@@ -509,7 +512,7 @@ export default function FieldApp() {
                       key={n}
                       onClick={() => setRoom(current, { condition: n })}
                       aria-label={`Condition ${n}`}
-                      className="w-11 h-11 flex items-center justify-center"
+                      className={`w-11 h-11 flex items-center justify-center rounded-full ${PRESS}`}
                     >
                       <span
                         className="w-[22px] h-[22px] rounded-full transition-all"
@@ -526,7 +529,7 @@ export default function FieldApp() {
               {Array.from({ length: Math.min(rooms[current].photos, 3) }).map((_, i) => (
                 <div key={i} className="flex-1 aspect-square rounded-[11px]" style={{ background: THUMBS[i % THUMBS.length] }} />
               ))}
-              <button onClick={snap} aria-label="Add photo" className="flex-1 aspect-square rounded-[11px] flex items-center justify-center" style={{ border: '1.5px dashed #D2D1CA', maxWidth: 78 }}>
+              <button onClick={snap} aria-label="Add photo" className={`flex-1 aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed #D2D1CA', maxWidth: 78 }}>
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
               <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">{rooms[current].photos} photos</span>
@@ -547,7 +550,7 @@ export default function FieldApp() {
             <button
               key={r.name}
               onClick={() => setCurrent(i)}
-              className="flex items-center gap-[11px] bg-surface rounded-[13px] px-[15px] py-[13px] min-h-[48px] text-left cursor-pointer hover:bg-sunken transition-colors"
+              className={`flex items-center gap-[11px] bg-surface rounded-[13px] px-[15px] py-[13px] min-h-[48px] text-left cursor-pointer hover:bg-sunken ${PRESS}`}
               style={{ border: i === current ? '1.5px solid #14503B' : '1px solid #ECEBE5' }}
             >
               {r.condition > 0 ? (
@@ -566,11 +569,11 @@ export default function FieldApp() {
 
       <CtaBar>
         {nextUnrated >= 0 ? (
-          <button onClick={() => setCurrent(nextUnrated)} className="w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold">
+          <button onClick={() => setCurrent(nextUnrated)} className={`w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold ${PRESS}`}>
             Next area: {rooms[nextUnrated].name} {ARROW}
           </button>
         ) : (
-          <button onClick={() => setScreen('valuation')} className="w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold">
+          <button onClick={() => setScreen('valuation')} className={`w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold ${PRESS}`}>
             Review valuation {ARROW}
           </button>
         )}
@@ -666,7 +669,7 @@ export default function FieldApp() {
                 ['valuation', 'Valuation'],
               ] as Array<[Screen, string]>
             ).map(([key, label]) => (
-              <button key={key} onClick={() => go(key)} className="flex-1 min-h-[44px] flex flex-col items-center gap-1" style={{ color: key === 'comps' ? '#14503B' : '#9AA09A' }}>
+              <button key={key} onClick={() => go(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: key === 'comps' ? '#14503B' : '#9AA09A' }}>
                 {TAB_ICONS[key]}
                 <span className="text-[10px]" style={{ fontWeight: key === 'comps' ? 600 : 500 }}>{label}</span>
               </button>
@@ -801,7 +804,7 @@ export default function FieldApp() {
         <button
           onClick={sendToWorkbench}
           disabled={save.isPending || !value}
-          className="w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold disabled:opacity-50"
+          className={`w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}
         >
           {save.isPending ? (
             <Spinner />
@@ -829,11 +832,11 @@ export default function FieldApp() {
         </div>
         <Link
           to={`/deal/${dealId}/workbench`}
-          className="mt-7 w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold"
+          className={`mt-7 w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold ${PRESS}`}
         >
           Open valuation workbench {ARROW}
         </Link>
-        <button onClick={() => setScreen('appraisals')} className="mt-2.5 w-full h-[48px] rounded-[15px] text-[14px] font-semibold text-ink-2">
+        <button onClick={() => setScreen('appraisals')} className={`mt-2.5 w-full h-[48px] rounded-[15px] text-[14px] font-semibold text-ink-2 hover:bg-sunken ${PRESS}`}>
           Back to appraisals
         </button>
       </div>
@@ -876,9 +879,9 @@ export default function FieldApp() {
         crumb="Field app"
         right={
           dealId ? (
-            <Link to={`/deal/${dealId}/workbench`} className="text-[12.5px] font-medium text-ink-2 hover:text-brand-700">
+            <Button to={`/deal/${dealId}/workbench`} variant="secondary" size="sm">
               Open valuation workbench →
-            </Link>
+            </Button>
           ) : undefined
         }
       />

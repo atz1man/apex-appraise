@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { status as statusTokens, brand } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
-import { EmptyState, Icon, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
+import { Button, EmptyState, Icon, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
 
 const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
 const USE_CLASSES: Array<[string, string]> = [
@@ -489,13 +488,13 @@ export default function Benchmarking() {
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </select>
-                    <button
-                      className="h-9 px-3 rounded-[9px] bg-brand-700 text-white text-[12px] font-semibold hover:bg-brand-600 disabled:opacity-50"
-                      disabled={!effectiveContribId || contribute.isPending}
+                    <Button
+                      loading={contribute.isPending}
+                      disabled={!effectiveContribId}
                       onClick={() => contribute.mutate(effectiveContribId)}
                     >
-                      {contribute.isPending ? '…' : 'Contribute'}
-                    </button>
+                      Contribute
+                    </Button>
                   </div>
                   {contribute.data && (
                     <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-700">
@@ -510,13 +509,10 @@ export default function Benchmarking() {
                   <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
                     Seed a new appraisal with the median build &amp; GDV rates for {scopeShort}.
                   </p>
-                  <Link
-                    to="/board"
-                    className="mt-3 flex items-center justify-center gap-2 h-[42px] rounded-[11px] bg-brand-700 text-white text-[13px] font-semibold hover:bg-brand-600 transition-all"
-                  >
+                  <Button to="/board" size="lg" className="mt-3 w-full">
                     Start from benchmark
                     <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
-                  </Link>
+                  </Button>
                 </section>
               </div>
             </div>

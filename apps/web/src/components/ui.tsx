@@ -165,48 +165,87 @@ export function Avatar({ initials, size = 26 }: { initials: string; size?: numbe
 
 // ---------- Controls ----------
 
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+const BTN_STYLES: Record<ButtonVariant, string> = {
+  primary: 'text-white hover:[filter:brightness(1.07)]',
+  secondary: 'bg-surface text-ink-2 hover:bg-sunken',
+  ghost: 'text-ink-2 hover:bg-sunken-2',
+  danger: 'bg-surface text-status-red hover:bg-status-red-bg',
+};
+const BTN_CHROME: Record<ButtonVariant, React.CSSProperties> = {
+  // subtle top-light gradient + inner highlight — tactile, Apple-style primary
+  primary: {
+    background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
+  },
+  secondary: { border: '1px solid rgba(20,30,25,0.12)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
+  ghost: {},
+  danger: { border: '1px solid rgba(178,58,46,0.4)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
+};
+const BTN_SIZES: Record<ButtonSize, string> = {
+  sm: 'px-3 h-[31px] text-[12px] rounded-[10px] gap-1',
+  md: 'px-4 h-[38px] text-[13px] rounded-[12px] gap-1.5',
+  lg: 'px-6 h-[46px] text-[14.5px] rounded-[14px] gap-2',
+};
+
+export function SpinnerRing({ size = 14, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Button({
   children,
   onClick,
   variant = 'primary',
+  size = 'md',
   type = 'button',
   disabled,
+  loading,
+  to,
   className = '',
 }: {
   children: ReactNode;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   type?: 'button' | 'submit';
   disabled?: boolean;
+  /** Shows a spinner and disables the control — wire to mutation.isPending. */
+  loading?: boolean;
+  /** Renders a react-router Link with identical chrome (client-side nav CTA). */
+  to?: string;
   className?: string;
 }) {
-  const styles: Record<string, string> = {
-    primary: 'text-white',
-    secondary: 'bg-surface text-ink-2 hover:bg-sunken',
-    ghost: 'text-ink-2 hover:bg-sunken-2',
-    danger: 'bg-surface text-status-red hover:bg-status-red-bg',
-  };
-  const chrome: Record<string, React.CSSProperties> = {
-    // subtle top-light gradient + inner highlight — tactile, Apple-style primary
-    primary: {
-      background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
-    },
-    secondary: { border: '1px solid rgba(20,30,25,0.12)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
-    ghost: {},
-    danger: { border: '1px solid rgba(178,58,46,0.4)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
-  };
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-[12px] px-4 h-[38px] text-[13px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${styles[variant]} ${className}`}
-      style={chrome[variant]}
-      onMouseEnter={variant === 'primary' ? (e) => (e.currentTarget.style.filter = 'brightness(1.07)') : undefined}
-      onMouseLeave={variant === 'primary' ? (e) => (e.currentTarget.style.filter = '') : undefined}
-    >
+  const cls = `inline-flex items-center justify-center font-semibold select-none transition-[transform,filter,background-color,box-shadow] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100 ${BTN_SIZES[size]} ${BTN_STYLES[variant]} ${className}`;
+  const inner = (
+    <>
+      {loading && <SpinnerRing size={size === 'lg' ? 16 : 13} />}
       {children}
+    </>
+  );
+  if (to && !disabled && !loading) {
+    return (
+      <Link to={to} className={cls} style={BTN_CHROME[variant]}>
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <button type={type} disabled={disabled || loading} onClick={onClick} className={cls} style={BTN_CHROME[variant]}>
+      {inner}
     </button>
   );
 }

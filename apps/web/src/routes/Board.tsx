@@ -122,8 +122,8 @@ export default function Board() {
             <p className="mt-1.5 text-[12.5px] text-ink-2">Add your first deal — it takes under a minute, and the AI appraisal does the heavy lifting.</p>
             <div className="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
               <Button onClick={() => setNewOpen(true)}>New deal from documents</Button>
-              <Button variant="secondary" disabled={loadSample.isPending} onClick={() => loadSample.mutate()}>
-                {loadSample.isPending ? <Spinner /> : 'Explore with a sample deal'}
+              <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
+                Explore with a sample deal
               </Button>
             </div>
           </div>
@@ -241,7 +241,8 @@ export default function Board() {
           <input id="new-deal-probability" type="number" value={draft.probability} onChange={(e) => setDraft({ ...draft, probability: parseInt(e.target.value) || 0 })} />
           <div className="mt-2 flex gap-2">
             <Button
-              disabled={!draft.name || !draft.address || createDeal.isPending}
+              loading={createDeal.isPending}
+              disabled={!draft.name || !draft.address}
               onClick={() =>
                 createDeal.mutate({
                   name: draft.name,
@@ -255,7 +256,7 @@ export default function Board() {
                 })
               }
             >
-              {createDeal.isPending ? <Spinner /> : 'Create & appraise from documents'}
+              Create & appraise from documents
             </Button>
             <Button variant="secondary" onClick={() => setNewOpen(false)}>Cancel</Button>
           </div>

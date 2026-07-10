@@ -82,9 +82,9 @@ export default function InvestorPortal() {
               </>
             )}
             {inv && <Avatar initials={inv.initials} size={34} />}
-            <button className="text-[12px] text-ink-3 hover:text-ink" onClick={signOut}>
+            <Button variant="ghost" size="sm" onClick={signOut}>
               Sign out
-            </button>
+            </Button>
           </>
         }
       />
@@ -283,7 +283,7 @@ export default function InvestorPortal() {
                     <div className="mt-1 text-[11px] text-right" style={{ color: statusTokens.amber.text }}>
                       due {fdate(inv.openCapitalCall.due)}
                     </div>
-                    <Button variant="secondary" className="mt-3 w-full justify-center">
+                    <Button variant="secondary" className="mt-3 w-full">
                       <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6" size={14} />
                       View drawdown notice
                     </Button>

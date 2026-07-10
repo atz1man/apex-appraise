@@ -195,12 +195,9 @@ export default function RedBookReport() {
               The valuation report derives its Market Value opinion from the deal's current appraisal and comparable evidence.
               Save an appraisal first, then return here.
             </p>
-            <Link
-              to={`/deal/${dealId}/appraisal`}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-[11px] px-4 h-[38px] text-[13px] font-semibold bg-brand-700 text-white hover:bg-brand-600"
-            >
+            <Button to={`/deal/${dealId}/appraisal`} className="mt-5">
               Open development appraisal
-            </Link>
+            </Button>
           </div>
         </div>
       </div>

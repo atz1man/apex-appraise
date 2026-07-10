@@ -262,8 +262,8 @@ export default function DataRoom() {
                     <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
                 </select>
-                <Button onClick={submitDoc} disabled={!draft.name.trim() || addDoc.isPending}>
-                  {addDoc.isPending ? <Spinner /> : 'Add document'}
+                <Button onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
+                  {!addDoc.isPending && 'Add document'}
                 </Button>
                 <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
               </div>

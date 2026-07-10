@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
-import { BrandMark, Button, Spinner } from '../components/ui';
+import { BrandMark, Button } from '../components/ui';
 
 const REASSURANCE = [
   'Your own private workspace',
@@ -86,8 +86,8 @@ export default function Register() {
           {field('Password', 'password', { type: 'password', helper: 'At least 8 characters.', autoComplete: 'new-password' })}
           {field('Confirm password', 'confirm', { type: 'password', autoComplete: 'new-password' })}
           {serverError && <div className="text-[12px] text-status-red mb-3">{serverError}</div>}
-          <Button type="submit" className="w-full justify-center" disabled={register.isPending}>
-            {register.isPending ? <Spinner /> : 'Create workspace'}
+          <Button type="submit" className="w-full" loading={register.isPending}>
+            Create workspace
           </Button>
           <div className="mt-3 text-center text-[12px] text-ink-2">
             Already have an account?{' '}

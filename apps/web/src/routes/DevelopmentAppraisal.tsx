@@ -13,7 +13,7 @@ import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Skeleton, SkeletonRows, Spinner, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
@@ -281,8 +281,8 @@ export default function DevelopmentAppraisal() {
             >
               Export .xlsx
             </Button>
-            <Button onClick={() => save.mutate({ dealId, input })} disabled={save.isPending || !dirty}>
-              {save.isPending ? <Spinner /> : dirty ? 'Save appraisal' : 'Saved'}
+            <Button onClick={() => save.mutate({ dealId, input })} loading={save.isPending} disabled={!dirty}>
+              {dirty ? 'Save appraisal' : 'Saved'}
             </Button>
           </>
         }
@@ -339,7 +339,7 @@ export default function DevelopmentAppraisal() {
                 <>
                   <Panel
                     title="Unit schedule"
-                    right={<Button variant="secondary" onClick={() => set({ units: [...input.units, { label: 'New unit type', count: 1, area: 1000, cap: 200 }] })}>+ Add unit</Button>}
+                    right={<Button variant="secondary" size="sm" onClick={() => set({ units: [...input.units, { label: 'New unit type', count: 1, area: 1000, cap: 200 }] })}>+ Add unit</Button>}
                   >
                     <div className="overflow-x-auto">
                     <table className="w-full min-w-[520px]">
@@ -402,7 +402,7 @@ export default function DevelopmentAppraisal() {
                   right={
                     <div className="flex gap-1.5 flex-wrap justify-end">
                       {Object.keys(PRESETS).map((k) => (
-                        <Button key={k} variant="secondary" onClick={() => set({ trades: input.trades.map((t, i) => ({ ...t, rate: PRESETS[k][i] ?? t.rate })) })}>
+                        <Button key={k} variant="secondary" size="sm" onClick={() => set({ trades: input.trades.map((t, i) => ({ ...t, rate: PRESETS[k][i] ?? t.rate })) })}>
                           {k[0].toUpperCase() + k.slice(1)}
                         </Button>
                       ))}
@@ -436,7 +436,7 @@ export default function DevelopmentAppraisal() {
               {tab === 'other' && (
                 <Panel
                   title="Other costs — S106, CIL, PM, surveys"
-                  right={<Button variant="secondary" onClick={() => set({ otherCosts: [...input.otherCosts, { label: 'New cost', amount: 0 }] })}>+ Add cost</Button>}
+                  right={<Button variant="secondary" size="sm" onClick={() => set({ otherCosts: [...input.otherCosts, { label: 'New cost', amount: 0 }] })}>+ Add cost</Button>}
                 >
                   {input.otherCosts.map((o, i) => (
                     <div key={i} className="flex items-center gap-3 py-1.5 border-t border-border-faint first:border-t-0">
@@ -818,10 +818,11 @@ export default function DevelopmentAppraisal() {
             }}
           />
           <Button
-            disabled={!versionLabel.trim() || saveVersion.isPending}
+            loading={saveVersion.isPending}
+            disabled={!versionLabel.trim()}
             onClick={() => saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() })}
           >
-            {saveVersion.isPending ? <Spinner /> : 'Save as version'}
+            Save as version
           </Button>
         </div>
         <div className="flex flex-col gap-2.5">
@@ -854,7 +855,7 @@ export default function DevelopmentAppraisal() {
                   <div className="mt-2.5">
                     <Button
                       variant="secondary"
-                      className="h-8 px-3 text-[11.5px]"
+                      size="sm"
                       disabled={restore.isPending}
                       onClick={() => restore.mutate({ dealId, versionId: v.id })}
                     >

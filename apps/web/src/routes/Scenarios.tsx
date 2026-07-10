@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { autoAppraise } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
-import { Button, Dot, EmptyState, Skeleton, SkeletonRows, Spinner, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 /**
@@ -347,18 +347,14 @@ export default function Scenarios() {
                   <Dot color={v.color} size={7} />
                   <span className="text-[11px] font-semibold" style={{ color: v.color }}>{v.label}</span>
                 </div>
-                <button
-                  className="w-full flex items-center justify-center gap-2 h-[38px] rounded-[10px] text-[12px] font-semibold transition-colors disabled:opacity-50"
-                  style={
-                    isBest
-                      ? { background: '#14503B', color: '#fff', border: '1px solid #14503B' }
-                      : { background: '#fff', color: '#14503B', border: '1px solid #E6E5DE' }
-                  }
-                  disabled={upsert.isPending}
+                <Button
+                  variant={isBest ? 'primary' : 'secondary'}
+                  className="w-full"
+                  loading={upsert.isPending}
                   onClick={() => useOption(s)}
                 >
-                  {upsert.isPending ? <Spinner /> : 'Use this option'}
-                </button>
+                  {!upsert.isPending && 'Use this option'}
+                </Button>
               </div>
             );
           })}

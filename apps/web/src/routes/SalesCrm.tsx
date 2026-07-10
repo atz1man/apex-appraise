@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
-import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const MINUS = '−';
@@ -691,8 +691,8 @@ export default function SalesCrm() {
               <Field label="Incentive"><input className="w-full" value={draft.incentive} onChange={(e) => setDraft({ ...draft, incentive: e.target.value })} /></Field>
             </div>
             <div className="flex gap-2.5 mt-1">
-              <Button className="flex-1 justify-center" disabled={saving || !draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
-                {saving ? <Spinner /> : 'Save'}
+              <Button className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
+                Save
               </Button>
               <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
             </div>
@@ -728,11 +728,11 @@ export default function SalesCrm() {
                   List {isRent ? 'rent' : 'price'} {money(sel.appraised)}. {isRent ? 'Take an application to start referencing.' : 'Take a reservation to start the chain.'}
                 </div>
                 <div className="mt-4 flex gap-2.5">
-                  <Button className="flex-1 justify-center" disabled={advancing} onClick={() => advanceSel(sel.id)}>
-                    {advancing ? <Spinner /> : labels.availCta}
+                  <Button className="flex-1" loading={advancing} onClick={() => advanceSel(sel.id)}>
+                    {labels.availCta}
                   </Button>
                   <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                  <Button variant="danger" disabled={deleting} onClick={removeSel}>Delete</Button>
+                  <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                 </div>
               </div>
             ) : (
@@ -806,11 +806,11 @@ export default function SalesCrm() {
                     })}
                   </div>
                   <div className="mt-1 flex gap-2.5">
-                    <Button className="flex-1 justify-center" disabled={advancing || sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
-                      {advancing ? <Spinner /> : sel.progress >= maxProg ? labels.doneCta : 'Advance milestone'}
+                    <Button className="flex-1" loading={advancing} disabled={sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
+                      {sel.progress >= maxProg ? labels.doneCta : 'Advance milestone'}
                     </Button>
                     <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                    <Button variant="danger" disabled={deleting} onClick={removeSel}>Delete</Button>
+                    <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                   </div>
                 </div>
               </>

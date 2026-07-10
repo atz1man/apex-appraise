@@ -114,8 +114,8 @@ export default function SitePack() {
                 onKeyDown={(e) => e.key === 'Enter' && runLookup()}
               />
             </label>
-            <Button onClick={runLookup} disabled={isFetching}>
-              {isFetching ? <Spinner /> : 'Pull live data'}
+            <Button onClick={runLookup} loading={isFetching}>
+              Pull live data
             </Button>
           </div>
         </div>
@@ -184,7 +184,8 @@ export default function SitePack() {
                 title="Sold prices — HM Land Registry"
                 right={
                   <Button
-                    disabled={selected.size === 0 || apply.isPending}
+                    loading={apply.isPending}
+                    disabled={selected.size === 0}
                     onClick={() =>
                       apply.mutate({
                         dealId,
@@ -194,7 +195,7 @@ export default function SitePack() {
                       })
                     }
                   >
-                    {apply.isPending ? <Spinner /> : `Add ${selected.size || ''} as comparables`}
+                    {`Add ${selected.size || ''} as comparables`}
                   </Button>
                 }
               >
@@ -403,7 +404,7 @@ export default function SitePack() {
                       onChange={(e) => setCompanyQ(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { setCompanyNo(null); setCompanyQuery(companyQ.trim()); } }}
                     />
-                    <Button variant="secondary" className="h-9 px-3 text-[12px]" disabled={companyQ.trim().length < 2} onClick={() => { setCompanyNo(null); setCompanyQuery(companyQ.trim()); }}>
+                    <Button variant="secondary" disabled={companyQ.trim().length < 2} onClick={() => { setCompanyNo(null); setCompanyQuery(companyQ.trim()); }}>
                       Search
                     </Button>
                   </div>

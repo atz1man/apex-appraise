@@ -201,12 +201,9 @@ export default function AppraisalReport() {
             <p className="mt-2.5 text-[13px] text-ink-2 leading-relaxed">
               This report is generated from the deal's current development appraisal. Build and save an appraisal first — the report will assemble itself from those figures.
             </p>
-            <Link
-              to={`/deal/${dealId}/appraisal`}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-[11px] px-4 h-[38px] text-[13px] font-semibold bg-brand-700 text-white hover:bg-brand-600"
-            >
+            <Button to={`/deal/${dealId}/appraisal`} className="mt-5">
               Open development appraisal
-            </Link>
+            </Button>
           </div>
         </div>
       </div>

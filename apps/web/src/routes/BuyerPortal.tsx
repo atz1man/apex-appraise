@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { status as statusTokens, brand, neutral, type StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { formatMoneyFull } from '@apex/appraisal-engine';
-import { Avatar, BrandMark, Button, Icon, Skeleton, SkeletonRows, Spinner, StatusChip } from '../components/ui';
+import { Avatar, BrandMark, Button, Icon, Skeleton, SkeletonRows, StatusChip } from '../components/ui';
 import { StripePaymentModal } from '../components/StripePaymentModal';
 
 const fdate = (d: Date | string | null | undefined) =>
@@ -90,9 +90,9 @@ export default function BuyerPortal() {
               <Avatar initials={principal.initials} size={34} />
             </>
           )}
-          <button className="text-[12px] text-ink-3 hover:text-ink shrink-0" onClick={signOut}>
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={signOut}>
             Sign out
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -268,15 +268,16 @@ export default function BuyerPortal() {
                             {isSigned ? (
                               <StatusChip status="green" label="SIGNED" />
                             ) : (
-                              <Button variant="secondary" className="h-[32px] min-h-10 sm:min-h-0 px-3 text-[12px]" disabled={sign.isPending} onClick={() => sign.mutate(d.id)}>
-                                {sign.isPending && sign.variables === d.id ? (
-                                  <Spinner />
-                                ) : (
-                                  <>
-                                    <Icon d="M12 20h9|M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={13} />
-                                    Review &amp; sign
-                                  </>
-                                )}
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="min-h-10 sm:min-h-0"
+                                loading={sign.isPending && sign.variables === d.id}
+                                disabled={sign.isPending}
+                                onClick={() => sign.mutate(d.id)}
+                              >
+                                <Icon d="M12 20h9|M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={13} />
+                                Review &amp; sign
                               </Button>
                             )}
                           </div>
@@ -303,13 +304,15 @@ export default function BuyerPortal() {
                         {p.paid ? (
                           <StatusChip status="green" label="PAID" />
                         ) : (
-                          <button
-                            className="rounded-[9px] bg-brand-700 hover:bg-brand-600 text-white text-[11.5px] font-semibold px-3 py-1.5 min-h-10 sm:min-h-0 disabled:opacity-50 transition-colors"
+                          <Button
+                            size="sm"
+                            className="min-h-10 sm:min-h-0"
+                            loading={pay.isPending && pay.variables === p.id}
                             disabled={pay.isPending}
                             onClick={() => pay.mutate(p.id)}
                           >
                             {pay.isPending && pay.variables === p.id ? 'Processing…' : 'Pay now'}
-                          </button>
+                          </Button>
                         )}
                       </div>
                     ))}
