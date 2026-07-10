@@ -29,7 +29,7 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
 test('calendar shows org tasks and creates a new one', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/calendar');
-  await expect(page.getByText('Calendar & tasks')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Calendar & tasks' })).toBeVisible();
   await expect(page.getByText('Resolve steel package +£150k overspend')).toBeVisible();
   const title = `E2E follow-up ${Date.now()}`;
   await page.getByPlaceholder(/Add a task/i).fill(title);
@@ -104,6 +104,18 @@ test('appraisal exports a real .xlsx workbook', async ({ page }) => {
   await page.getByRole('button', { name: 'Export .xlsx' }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/Appraisal\.xlsx$/);
+});
+
+test('billing panel shows plan tiers with Stripe checkout', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/settings');
+  await expect(page.getByText('Billing & plan')).toBeVisible();
+  await expect(page.getByText('Starter', { exact: true })).toBeVisible();
+  await expect(page.getByText('Growth', { exact: true })).toBeVisible();
+  await expect(page.getByText('Enterprise', { exact: true })).toBeVisible();
+  // configured sandbox shows test-mode chip and subscribe CTAs for admins
+  await expect(page.getByText('STRIPE TEST MODE')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Subscribe|Switch plan/ }).first()).toBeVisible();
 });
 
 test('global nav present for internal, absent for portals', async ({ page }) => {

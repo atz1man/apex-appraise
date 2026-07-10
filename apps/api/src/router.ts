@@ -8,6 +8,7 @@ import { orgRouter } from './routers/org.js';
 import { buyerRouter, investorsRouter } from './routers/portal.js';
 import { inspectionsRouter } from './routers/inspections.js';
 import { sitePackRouter } from './routers/sitepack.js';
+import { billingRouter } from './routers/billing.js';
 import { benchmarksRouter } from './routers/benchmarks.js';
 
 export const appRouter = router({
@@ -21,6 +22,7 @@ export const appRouter = router({
   sales: salesRouter,
   inspections: inspectionsRouter,
   sitePack: sitePackRouter,
+  billing: billingRouter,
   cost: costRouter,
   photos: photosRouter,
   tasks: tasksRouter,

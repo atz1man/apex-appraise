@@ -173,7 +173,7 @@ export const buyerRouter = router({
     }
 
     // demo mode — settle instantly and audit it
-    const paid = await ctx.prisma.payment.update({
+    const paidDemo = await ctx.prisma.payment.update({
       where: { id: payment.id },
       data: { status: 'PAID', paidAt: new Date() },
     });
@@ -188,7 +188,38 @@ export const buyerRouter = router({
         },
       });
     }
-    return { mode: 'demo' as const, paidAt: paid.paidAt };
+    return { mode: 'demo' as const, paidAt: paidDemo.paidAt };
+  }),
+
+  /**
+   * After the card is confirmed client-side, verify the PaymentIntent with
+   * Stripe server-side and settle the ledger — works without webhooks (the
+   * webhook route stays as belt-and-braces for production).
+   */
+  confirmPayment: buyerProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
+    const payment = await ctx.prisma.payment.findFirst({
+      where: { id: input, orgId: ctx.principal.orgId, unitId: ctx.principal.buyerUnitId },
+    });
+    if (!payment?.stripeIntentId) throw new TRPCError({ code: 'NOT_FOUND' });
+    if (payment.status === 'PAID') return { paid: true };
+    const { stripeFetch } = await import('../stripe.js');
+    const intent = await stripeFetch<{ status: string }>(`/payment_intents/${payment.stripeIntentId}`, undefined, 'GET');
+    if (intent.status !== 'succeeded') return { paid: false, stripeStatus: intent.status };
+    await ctx.prisma.payment.update({ where: { id: payment.id }, data: { status: 'PAID', paidAt: new Date() } });
+    const unit = await ctx.prisma.unit.findFirst({ where: { id: payment.unitId } });
+    if (unit) {
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: unit.dealId,
+          actor: 'Stripe',
+          action: 'card payment received',
+          target: `${payment.kind} · ${unit.name}`,
+        },
+      });
+    }
+    return { paid: true };
   }),
 
   /** Buyer signs a buyer-visible document on their own development (DocuSign in prod). */

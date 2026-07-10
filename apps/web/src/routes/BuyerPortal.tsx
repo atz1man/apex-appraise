@@ -4,6 +4,7 @@ import { status as statusTokens, brand, neutral, type StatusKey } from '@apex/ui
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { formatMoneyFull } from '@apex/appraisal-engine';
 import { Avatar, BrandMark, Button, Icon, Spinner, StatusChip } from '../components/ui';
+import { StripePaymentModal } from '../components/StripePaymentModal';
 
 const fdate = (d: Date | string | null | undefined) =>
   d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
@@ -36,7 +37,29 @@ export default function BuyerPortal() {
 
   // persisted e-sign — the server stamps signedAt (DocuSign in prod)
   const sign = trpc.buyer.sign.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
-  const pay = trpc.buyer.pay.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
+  const [cardModal, setCardModal] = useState<{ clientSecret: string; paymentId: string; amountLabel: string; kind: string } | null>(null);
+  const { data: billing } = trpc.billing.config.useQuery();
+  const pay = trpc.buyer.pay.useMutation({
+    onSuccess: (res, paymentId) => {
+      if (res.mode === 'live' && 'clientSecret' in res && res.clientSecret) {
+        const p = data?.payments.find((x) => x.id === paymentId);
+        setCardModal({
+          clientSecret: res.clientSecret,
+          paymentId,
+          amountLabel: p ? formatMoneyFull(p.amount) : '',
+          kind: p?.kind ?? 'Payment',
+        });
+      } else {
+        utils.buyer.myUnit.invalidate();
+      }
+    },
+  });
+  const confirmPayment = trpc.buyer.confirmPayment.useMutation({
+    onSuccess: () => {
+      setCardModal(null);
+      utils.buyer.myUnit.invalidate();
+    },
+  });
 
   const signOut = () => {
     clearSession();
@@ -334,6 +357,17 @@ export default function BuyerPortal() {
           </>
         ) : null}
       </main>
+
+      {cardModal && billing?.publishableKey && (
+        <StripePaymentModal
+          publishableKey={billing.publishableKey}
+          clientSecret={cardModal.clientSecret}
+          amountLabel={cardModal.amountLabel}
+          kind={cardModal.kind}
+          onClose={() => setCardModal(null)}
+          onSuccess={() => confirmPayment.mutate(cardModal.paymentId)}
+        />
+      )}
     </div>
   );
 }

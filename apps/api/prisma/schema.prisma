@@ -17,6 +17,9 @@ datasource db {
 model Organisation {
   id        String     @id @default(cuid())
   name      String
+  plan      String     @default("TRIAL") // TRIAL | STARTER | GROWTH | ENTERPRISE
+  stripeCustomerId String?
+  stripeSubscriptionId String?
   users     User[]
   deals     Deal[]
   contractors Contractor[]

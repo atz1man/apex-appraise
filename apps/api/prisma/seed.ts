@@ -15,7 +15,7 @@ const p = (pounds: number) => BigInt(Math.round(pounds * 100));
 async function main() {
   // wipe (idempotent seed)
   const tables = [
-    'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
+    'Payment', 'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
     'CostPackage', 'Contractor', 'SalesMilestone', 'Unit', 'Tenancy', 'Inspection',
     'Scenario', 'Comparable', 'Appraisal', 'BenchmarkPoint', 'IntegrationConnection',
     'Deal', 'User', 'Organisation',

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
@@ -327,6 +327,99 @@ function AboutPanel() {
 
 // ---------- Page ----------
 
+function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast();
+  const utils = trpc.useUtils();
+  const [params, setParams] = useSearchParams();
+  const { data } = trpc.billing.config.useQuery();
+  const sync = trpc.billing.sync.useMutation({
+    onSuccess: (res) => {
+      utils.billing.config.invalidate();
+      if (res.plan !== 'TRIAL') toast.success(`Subscription active — ${res.plan} plan`);
+    },
+  });
+  const checkout = trpc.billing.checkout.useMutation({
+    onSuccess: (res) => {
+      if (res.url) window.location.href = res.url;
+    },
+  });
+
+  // returning from Stripe Checkout — reconcile the subscription state
+  useEffect(() => {
+    const flag = params.get('billing');
+    if (!flag) return;
+    if (flag === 'success') sync.mutate();
+    if (flag === 'cancelled') toast.error('Checkout cancelled — no changes made');
+    params.delete('billing');
+    setParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!data) return null;
+  return (
+    <Panel
+      title="Billing & plan"
+      right={
+        <span className="flex items-center gap-2">
+          {data.mode === 'test' && data.configured && <StatusChip status="amber" label="STRIPE TEST MODE" />}
+          <StatusChip status={data.plan === 'TRIAL' ? 'neutral' : 'green'} label={data.plan} />
+        </span>
+      }
+    >
+      {!data.configured ? (
+        <div className="text-[12.5px] text-ink-2">
+          Stripe isn't configured on this server — set <code className="fig">STRIPE_SECRET_KEY</code> to enable subscriptions.
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            {data.plans.map((p) => {
+              const current = data.plan === p.key;
+              return (
+                <div
+                  key={p.key}
+                  className="rounded-card border p-4 flex flex-col"
+                  style={{ borderColor: current ? '#14503B' : '#E6E5DE', background: current ? '#FBFCFB' : '#fff' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[14px] font-semibold">{p.name}</span>
+                    {current && <StatusChip status="green" label="CURRENT" />}
+                  </div>
+                  <div className="fig mt-1.5 text-[20px] font-semibold tracking-[-0.5px]">
+                    £{(p.pricePencePerMonth / 100).toLocaleString('en-GB')}<span className="text-[11px] text-ink-3 font-medium">/mo</span>
+                  </div>
+                  <div className="mt-1 text-[11.5px] text-ink-2">{p.blurb}</div>
+                  <ul className="mt-2.5 flex flex-col gap-1 flex-1">
+                    {p.features.map((f) => (
+                      <li key={f} className="text-[11.5px] text-ink-2 flex gap-1.5">
+                        <span className="text-brand-500">✓</span> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {isAdmin && !current && (
+                    <Button
+                      className="mt-3 w-full justify-center h-9"
+                      variant={p.key === 'GROWTH' ? 'primary' : 'secondary'}
+                      disabled={checkout.isPending}
+                      onClick={() => checkout.mutate({ plan: p.key })}
+                    >
+                      {checkout.isPending && checkout.variables?.plan === p.key ? <Spinner /> : data.plan === 'TRIAL' ? 'Subscribe' : 'Switch plan'}
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 text-[10.5px] text-ink-3">
+            Card payments are processed by Stripe Checkout — no card details touch this server.
+            {data.mode === 'test' && ' Test mode: use card 4242 4242 4242 4242, any future expiry, any CVC.'}
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 export default function Settings() {
   const principal = getPrincipal();
   const isAdmin = principal?.role === 'ADMIN';
@@ -339,6 +432,7 @@ export default function Settings() {
       />
       <main className="max-w-[980px] mx-auto px-6 py-8 flex flex-col gap-5">
         <OrganisationPanel isAdmin={isAdmin} />
+        <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
         <SecurityPanel />
         <AboutPanel />
