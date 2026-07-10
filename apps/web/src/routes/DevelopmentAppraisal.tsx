@@ -10,7 +10,9 @@ import {
 } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
-import { Avatar, Button, Dot, Panel, SegmentedToggle, Spinner, StatCard, TopBar } from '../components/ui';
+import { exportAppraisalXlsx } from '../lib/exportXlsx';
+import { useToast } from '../components/Toast';
+import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Spinner, StatCard, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
@@ -89,8 +91,31 @@ export default function DevelopmentAppraisal() {
     },
   });
 
+  const toast = useToast();
   const [tab, setTab] = useState('revenue');
   const [sensTab, setSensTab] = useState<'roc' | 'profit' | 'residual'>('roc');
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionLabel, setVersionLabel] = useState('');
+  const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
+  const restore = trpc.appraisal.restore.useMutation({
+    onSuccess: () => {
+      toast.success('Version restored as the new current appraisal');
+      setLoaded(false); // re-hydrate the form from the restored version
+      utils.appraisal.getCurrent.invalidate(dealId);
+      utils.appraisal.versions.invalidate(dealId);
+      utils.deals.list.invalidate();
+    },
+  });
+  const saveVersion = trpc.appraisal.save.useMutation({
+    onSuccess: (_res, vars) => {
+      toast.success(`Saved version “${vars.label || 'new version'}”`);
+      setVersionLabel('');
+      setDirty(false);
+      utils.appraisal.getCurrent.invalidate(dealId);
+      utils.appraisal.versions.invalidate(dealId);
+      utils.deals.list.invalidate();
+    },
+  });
   const [input, setInput] = useState<AppraisalInput>(DEFAULT_INPUT);
   const [mezz, setMezz] = useState({ mezzTo: 72, mezzRate: 12, drawFactor: 55 });
   const [loaded, setLoaded] = useState(false);
@@ -203,6 +228,17 @@ export default function DevelopmentAppraisal() {
             <span className="inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold" style={{ color: viab.tone }}>
               <Dot color={viab.dot} /> {viab.v} · RoC {formatPct(R.poc)}
             </span>
+            <Button variant="secondary" onClick={() => setVersionsOpen(true)}>
+              Versions{versions && versions.length > 1 ? ` · ${versions.length}` : ''}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', input, R, jv, monthLabel })
+              }
+            >
+              Export .xlsx
+            </Button>
             <Button onClick={() => save.mutate({ dealId, input })} disabled={save.isPending || !dirty}>
               {save.isPending ? <Spinner /> : dirty ? 'Save appraisal' : 'Saved'}
             </Button>
@@ -653,6 +689,73 @@ export default function DevelopmentAppraisal() {
           </aside>
         </div>
       </main>
+
+      {/* version history — every figure stays traceable */}
+      <Drawer open={versionsOpen} onClose={() => setVersionsOpen(false)} title="Appraisal versions" width={520}>
+        <div className="flex gap-2 mb-4">
+          <input
+            className="flex-1"
+            placeholder="Label this version — e.g. “Post-tender build rates”"
+            value={versionLabel}
+            onChange={(e) => setVersionLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && versionLabel.trim()) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
+            }}
+          />
+          <Button
+            disabled={!versionLabel.trim() || saveVersion.isPending}
+            onClick={() => saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() })}
+          >
+            {saveVersion.isPending ? <Spinner /> : 'Save as version'}
+          </Button>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          {(versions ?? []).map((v) => {
+            const cur = versions?.find((x) => x.isCurrent)?.headline;
+            const d = v.headline && cur && !v.isCurrent ? v.headline.residualNet - cur.residualNet : null;
+            return (
+              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: '#14503B', background: '#FBFCFB' } : undefined}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-semibold">{v.label}</span>
+                  {v.isCurrent && <span className="label-mono rounded-[6px] bg-tint-success text-brand-700 px-1.5 py-[2px]">CURRENT</span>}
+                  <span className="label-mono text-ink-3">{v.source}</span>
+                  <span className="fig ml-auto text-[10.5px] text-ink-3">
+                    {new Date(v.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}
+                    {new Date(v.updatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                {v.headline && (
+                  <div className="mt-2 flex gap-5 flex-wrap">
+                    <Kv k="GDV" v={fM(v.headline.gdv)} />
+                    <Kv k="Residual" v={fM(v.headline.residualNet)} />
+                    <Kv k="Profit" v={fM(v.headline.profit)} />
+                    <Kv k="RoC" v={formatPct(v.headline.poc)} tone={v.headline.poc >= 0.17 ? '#1E7A55' : v.headline.poc >= 0.1 ? '#9A6212' : '#B23A2E'} />
+                    {d != null && Math.round(d) !== 0 && (
+                      <Kv k="Residual vs current" v={`${d > 0 ? '+' : '−'}${fM(Math.abs(d))}`} tone={d > 0 ? '#1E7A55' : '#B23A2E'} />
+                    )}
+                  </div>
+                )}
+                {!v.isCurrent && (
+                  <div className="mt-2.5">
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-[11.5px]"
+                      disabled={restore.isPending}
+                      onClick={() => restore.mutate({ dealId, versionId: v.id })}
+                    >
+                      Restore as current
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {(versions ?? []).length === 0 && <div className="text-[12px] text-ink-3 py-4 text-center">No saved versions yet — save the appraisal first.</div>}
+        </div>
+        <div className="mt-4 text-[10.5px] text-ink-3 leading-relaxed">
+          Restoring never rewrites history — the old version's inputs become a new current version, and the audit trail records who restored what.
+        </div>
+      </Drawer>
     </div>
   );
 }

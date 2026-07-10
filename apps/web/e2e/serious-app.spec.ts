@@ -77,6 +77,35 @@ test('site pack renders with live-data controls and provenance', async ({ page }
   await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 30_000 });
 });
 
+test('appraisal versions: save, list with figures, restore', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/board');
+  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
+  await expect(page.getByText('Unit schedule')).toBeVisible();
+  // ensure a current version exists, then snapshot a labelled version
+  await page.getByRole('button', { name: /Versions/ }).click();
+  const label = `e2e-${Date.now()}`;
+  await page.getByPlaceholder(/Label this version/).fill(label);
+  await page.getByRole('button', { name: 'Save as version' }).click();
+  await expect(page.getByText(label)).toBeVisible();
+  await expect(page.getByText('CURRENT').first()).toBeVisible();
+  // an older version exposes restore
+  await expect(page.getByRole('button', { name: 'Restore as current' }).first()).toBeVisible();
+});
+
+test('appraisal exports a real .xlsx workbook', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/board');
+  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
+  await expect(page.getByText('Unit schedule')).toBeVisible();
+  const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Export .xlsx' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/Appraisal\.xlsx$/);
+});
+
 test('global nav present for internal, absent for portals', async ({ page }) => {
   await loginInternal(page);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();

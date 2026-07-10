@@ -87,7 +87,17 @@ export const appraisalRouter = router({
   compute: internalProcedure.input(zAppraisalInput).query(({ input }) => fullResult(input)),
 
   save: internalProcedure
-    .input(z.object({ dealId: z.string(), input: zAppraisalInput, source: z.string().default('manual') }))
+    .input(
+      z.object({
+        dealId: z.string(),
+        input: zAppraisalInput,
+        source: z.string().default('manual'),
+        // versioning: asNewVersion snapshots the current row into history and
+        // creates a fresh current version under the given label
+        asNewVersion: z.boolean().default(false),
+        label: z.string().max(60).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { result, jv } = fullResult(input.input);
@@ -99,11 +109,25 @@ export const appraisalRouter = router({
         source: input.source,
         resultCache: JSON.stringify({ result, jv }),
       };
-      const row = existing
-        ? await ctx.prisma.appraisal.update({ where: { id: existing.id }, data })
-        : await ctx.prisma.appraisal.create({
-            data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true },
-          });
+      let row;
+      if (existing && input.asNewVersion) {
+        await ctx.prisma.appraisal.update({ where: { id: existing.id }, data: { isCurrent: false } });
+        row = await ctx.prisma.appraisal.create({
+          data: {
+            ...data,
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            isCurrent: true,
+            label: input.label?.trim() || `v${(await ctx.prisma.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
+          },
+        });
+      } else if (existing) {
+        row = await ctx.prisma.appraisal.update({ where: { id: existing.id }, data });
+      } else {
+        row = await ctx.prisma.appraisal.create({
+          data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
+        });
+      }
       // reflect hardened headline figures onto the deal card (derived, engine-owned)
       await ctx.prisma.deal.update({
         where: { id: input.dealId },
@@ -121,12 +145,64 @@ export const appraisalRouter = router({
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
           actor: ctx.principal.name,
-          action: 'saved appraisal',
+          action: input.asNewVersion ? `saved appraisal version “${row.label}”` : 'saved appraisal',
           target: `GDV £${Math.round(result.gdv).toLocaleString('en-GB')} · profit £${Math.round(result.profit).toLocaleString('en-GB')}`,
         },
       });
       return { id: row.id, result, jv };
     }),
+
+  /** Version history with headline figures for comparison (newest first). */
+  versions: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    await assertDeal(ctx, input);
+    const rows = await ctx.prisma.appraisal.findMany({
+      where: { dealId: input, orgId: ctx.principal.orgId },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, label: true, source: true, isCurrent: true, createdAt: true, updatedAt: true, resultCache: true },
+    });
+    return rows.map((r) => {
+      let headline: { gdv: number; residualNet: number; profit: number; poc: number } | null = null;
+      try {
+        const cached = r.resultCache ? (JSON.parse(r.resultCache) as { result: { gdv: number; residualNet: number; profit: number; poc: number } }) : null;
+        if (cached?.result) {
+          headline = { gdv: cached.result.gdv, residualNet: cached.result.residualNet, profit: cached.result.profit, poc: cached.result.poc };
+        }
+      } catch {
+        headline = null;
+      }
+      return { id: r.id, label: r.label, source: r.source, isCurrent: r.isCurrent, createdAt: r.createdAt, updatedAt: r.updatedAt, headline };
+    });
+  }),
+
+  /**
+   * Restore an old version: its inputs become a NEW current version, so history
+   * is never rewritten — every figure stays traceable.
+   */
+  restore: internalProcedure.input(z.object({ dealId: z.string(), versionId: z.string() })).mutation(async ({ ctx, input }) => {
+    await assertDeal(ctx, input.dealId);
+    const version = await ctx.prisma.appraisal.findFirst({
+      where: { id: input.versionId, dealId: input.dealId, orgId: ctx.principal.orgId },
+    });
+    if (!version) throw new TRPCError({ code: 'NOT_FOUND' });
+    await ctx.prisma.appraisal.updateMany({
+      where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
+      data: { isCurrent: false },
+    });
+    const { id: _id, createdAt: _c, updatedAt: _u, ...copy } = version;
+    const restored = await ctx.prisma.appraisal.create({
+      data: { ...copy, isCurrent: true, label: `${version.label} (restored)` },
+    });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input.dealId,
+        actor: ctx.principal.name,
+        action: 'restored appraisal version',
+        target: version.label,
+      },
+    });
+    return { id: restored.id };
+  }),
 
   sensitivity: internalProcedure
     .input(z.object({ input: zAppraisalInput, metric: z.enum(['roc', 'profit', 'residual']) }))
