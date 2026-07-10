@@ -24,6 +24,10 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
   await expect(page.getByText('Your pipeline is empty')).toBeVisible();
   // no seeded deals leak across orgs
   await expect(page.getByText('Northgate Trade & Industrial Park')).toHaveCount(0);
+  // one-click sample deal fills the workfile and lands on the deal overview
+  await page.getByRole('button', { name: 'Explore with a sample deal' }).click();
+  await expect(page.getByText('Sample — Kingfisher Wharf').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Workfile', { exact: true })).toBeVisible();
 });
 
 test('calendar shows org tasks and creates a new one', async ({ page }) => {

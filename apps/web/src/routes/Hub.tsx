@@ -20,7 +20,14 @@ const ICONS: Record<string, string> = {
 export default function Hub() {
   const navigate = useNavigate();
   const principal = getPrincipal();
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.deals.list.useQuery({});
+  const loadSample = trpc.org.loadSampleDeal.useMutation({
+    onSuccess: (res) => {
+      utils.deals.list.invalidate();
+      navigate(`/deal/${res.dealId}`);
+    },
+  });
   const flagship = data?.deals.find((d) => d.name.startsWith('Northgate')) ?? data?.deals[0];
   const dealTools: Array<[string, string, string, string]> = flagship
     ? [
@@ -119,6 +126,14 @@ export default function Hub() {
             >
               New deal from documents →
             </Link>
+            <button
+              className="mt-5 ml-2.5 inline-flex items-center gap-1.5 rounded-[12px] bg-surface text-ink-2 text-[13px] font-semibold px-4 h-[40px] disabled:opacity-50"
+              style={{ border: '1px solid rgba(20,30,25,0.12)' }}
+              disabled={loadSample.isPending}
+              onClick={() => loadSample.mutate()}
+            >
+              {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
+            </button>
           </section>
         )}
 

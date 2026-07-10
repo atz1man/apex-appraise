@@ -46,6 +46,12 @@ export default function Board() {
       navigate(`/deal/${d.id}/auto`);
     },
   });
+  const loadSample = trpc.org.loadSampleDeal.useMutation({
+    onSuccess: (res) => {
+      utils.deals.list.invalidate();
+      navigate(`/deal/${res.dealId}`);
+    },
+  });
   const [draft, setDraft] = useState({ name: '', address: '', assetType: 'RESIDENTIAL', gdv: 0, probability: 40 });
 
   const filtered = useMemo(() => {
@@ -114,7 +120,12 @@ export default function Board() {
           <div className="mt-6 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-8 text-center">
             <div className="text-[15px] font-semibold">Your pipeline is empty</div>
             <p className="mt-1.5 text-[12.5px] text-ink-2">Add your first deal — it takes under a minute, and the AI appraisal does the heavy lifting.</p>
-            <Button className="mt-4" onClick={() => setNewOpen(true)}>New deal from documents</Button>
+            <div className="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
+              <Button onClick={() => setNewOpen(true)}>New deal from documents</Button>
+              <Button variant="secondary" disabled={loadSample.isPending} onClick={() => loadSample.mutate()}>
+                {loadSample.isPending ? <Spinner /> : 'Explore with a sample deal'}
+              </Button>
+            </div>
           </div>
         )}
 

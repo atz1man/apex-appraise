@@ -13,7 +13,7 @@ const WRAP = 'max-w-[1100px] mx-auto px-7';
 
 const NAV_LINKS: Array<[string, string]> = [
   ['Platform', '#platform'],
-  ['Pricing', '#cta'],
+  ['Pricing', '#pricing'],
   ['Resources', '#features'],
   ['Company', '#footer'],
 ];
@@ -537,6 +537,59 @@ export default function Landing() {
         </div>
       </div>
 
+      {/* Pricing */}
+      <div id="pricing" className={`${WRAP} py-20`}>
+        <div className="text-center">
+          <div className="eyebrow">Pricing</div>
+          <h2 className="mt-2 text-[34px] md:text-[42px] font-bold tracking-[-1.6px]">Simple plans, serious tooling.</h2>
+          <p className="mt-3 text-[15px] text-ink-2 max-w-[520px] mx-auto">
+            Every plan includes the full appraisal engine, live UK data and print-ready reporting. No card required to start.
+          </p>
+        </div>
+        <div className="mt-10 grid gap-5 md:grid-cols-3 items-stretch">
+          {(
+            [
+              ['Starter', 49, 'For a single developer running a handful of deals', ['3 active deals', '2 team members', 'Appraisal engine + reports', 'Site pack (live UK data)'], false],
+              ['Growth', 149, 'For teams running a live pipeline', ['Unlimited deals', '10 team members', 'AI Development Director', 'Buyer + investor portals', 'Benchmarking'], true],
+              ['Enterprise', 399, 'Multi-entity groups and funds', ['Everything in Growth', 'Unlimited members', 'Priority support', 'Data exports + API access'], false],
+            ] as Array<[string, number, string, string[], boolean]>
+          ).map(([name, price, blurb, features, featured]) => (
+            <div
+              key={name}
+              className="rounded-[22px] bg-surface p-7 flex flex-col shadow-rest"
+              style={featured ? { border: '2px solid #14503B', boxShadow: '0 24px 60px -24px rgba(20,80,59,0.35)' } : undefined}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold">{name}</span>
+                {featured && <span className="label-mono rounded-[7px] bg-tint-success text-brand-700 px-2 py-[3px]">Most popular</span>}
+              </div>
+              <div className="fig mt-3 text-[38px] font-semibold tracking-[-1.5px]">
+                £{price}
+                <span className="text-[13px] text-ink-3 font-medium tracking-normal">/month</span>
+              </div>
+              <div className="mt-1.5 text-[13px] text-ink-2">{blurb}</div>
+              <ul className="mt-5 flex flex-col gap-2.5 flex-1">
+                {features.map((f) => (
+                  <li key={f} className="flex gap-2 text-[13px] text-ink-2">
+                    <span className="text-brand-500 font-bold" aria-hidden="true">✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="/register"
+                className={`mt-7 inline-flex items-center justify-center h-[44px] rounded-[12px] text-[14px] font-semibold transition-colors ${featured ? 'text-white' : 'bg-surface text-ink-2 hover:bg-sunken'}`}
+                style={featured ? { background: 'linear-gradient(180deg,#1B6048,#14503B)' } : { border: '1px solid rgba(20,30,25,0.14)' }}
+              >
+                Start free
+              </a>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 text-center text-[12px] text-ink-3">
+          14-day trial on every plan · cancel any time · prices exclude VAT
+        </div>
+      </div>
+
       {/* CTA */}
       <div id="cta" className={`${WRAP} py-20`}>
         <div
@@ -582,7 +635,7 @@ export default function Landing() {
             </div>
             {(
               [
-                ['Product', [['Platform', '#platform'], ['Features', '#features'], ['Pricing', '#cta']]],
+                ['Product', [['Platform', '#platform'], ['Features', '#features'], ['Pricing', '#pricing']]],
                 ['Company', [['Customers', '#customers'], ['Security', '#footer'], ['Contact', DEMO_MAILTO]]],
                 ['Legal', [['Privacy', '#footer'], ['Terms', '#footer']]],
               ] as Array<[string, Array<[string, string]>]>
