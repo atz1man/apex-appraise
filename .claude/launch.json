@@ -7,6 +7,12 @@
       "runtimeArgs": ["--filter", "@apex/web", "dev"],
       "port": 5273,
       "autoPort": true
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@apex/api", "dev"],
+      "port": 4100
     }
   ]
 }
