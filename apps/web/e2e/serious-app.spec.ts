@@ -118,7 +118,8 @@ test('billing panel shows plan tiers with Stripe checkout', async ({ page }) => 
   await loginInternal(page);
   await page.goto('/settings');
   await expect(page.getByText('Billing & plan')).toBeVisible();
-  await expect(page.getByText('Starter', { exact: true })).toBeVisible();
+  // plan tiers come from live Stripe sandbox price lookups — allow for network latency
+  await expect(page.getByText('Starter', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Growth', { exact: true })).toBeVisible();
   await expect(page.getByText('Enterprise', { exact: true })).toBeVisible();
   // configured sandbox shows test-mode chip and subscribe CTAs for admins
@@ -135,4 +136,39 @@ test('global nav present for internal, absent for portals', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText(/Good (morning|afternoon|evening), Lena/)).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Global' })).toHaveCount(0);
+});
+
+test('data & privacy: export, audit trail, and full workspace deletion', async ({ page }) => {
+  // Throwaway org so the deletion path is exercised for real without touching the seed
+  const stamp = Date.now();
+  const orgName = `E2E Erasure Co ${stamp}`;
+  await page.goto('/register');
+  await page.getByLabel(/Organisation name/i).fill(orgName);
+  await page.getByLabel(/Your name/i).fill('Erin Eraser');
+  await page.getByLabel(/^Email/i).fill(`erase-${stamp}@test.co.uk`);
+  await page.getByLabel(/^Password/i).fill('super-secret-9');
+  await page.getByLabel(/Confirm password/i).fill('super-secret-9');
+  await page.getByRole('button', { name: /Create|Start/ }).click();
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+
+  await page.goto('/settings');
+  await expect(page.getByText('Data & privacy')).toBeVisible();
+
+  // GDPR export downloads a JSON file
+  const downloadP = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download export' }).click();
+  const download = await downloadP;
+  expect(download.suggestedFilename()).toMatch(/apex-appraise-export-.*\.json/);
+
+  // Audit trail records the export
+  await page.getByRole('button', { name: 'View audit trail' }).click();
+  await expect(page.getByText('exported workspace data')).toBeVisible();
+
+  // Danger zone: wrong name keeps the button disabled; exact name deletes and signs out
+  await page.getByRole('button', { name: 'Delete workspace…' }).click();
+  await page.getByLabel(/to confirm/i).fill('wrong name');
+  await expect(page.getByRole('button', { name: 'Permanently delete' })).toBeDisabled();
+  await page.getByLabel(/to confirm/i).fill(orgName);
+  await page.getByRole('button', { name: 'Permanently delete' }).click();
+  await expect(page).toHaveURL(/welcome/, { timeout: 15_000 });
 });

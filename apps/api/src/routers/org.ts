@@ -331,4 +331,119 @@ export const orgRouter = router({
         select: { id: true, role: true },
       });
     }),
+
+  /**
+   * Workspace audit trail — every recorded action across the org's deals,
+   * newest first. Admin-only; feeds the Settings audit-log panel.
+   */
+  auditLog: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).default({}))
+    .query(async ({ ctx, input }) => {
+      const events = await ctx.prisma.activityEvent.findMany({
+        where: { orgId: ctx.principal.orgId },
+        orderBy: { at: 'desc' },
+        take: input.limit,
+      });
+      const dealIds = [...new Set(events.map((e) => e.dealId))];
+      const deals = await ctx.prisma.deal.findMany({ where: { id: { in: dealIds } }, select: { id: true, name: true } });
+      const nameOf = new Map(deals.map((d) => [d.id, d.name]));
+      return events.map((e) => ({ ...e, dealName: nameOf.get(e.dealId) ?? null }));
+    }),
+
+  /**
+   * GDPR data portability: one JSON file with everything the workspace owns.
+   * Secrets (password hashes, integration credentials) are excluded; BigInt
+   * pence values become plain numbers so the file is portable JSON.
+   */
+  exportData: adminProcedure.query(async ({ ctx }) => {
+    const orgId = ctx.principal.orgId;
+    const p = ctx.prisma;
+    const [org, users, deals, appraisals, comparables, scenarios, inspections, units, milestones, tenancies, contractors, packages, photos, documents, tasks, activity, investors, holdings, cashflows, payments, benchmarks, integrations] =
+      await Promise.all([
+        p.organisation.findUnique({ where: { id: orgId } }),
+        p.user.findMany({ where: { orgId }, select: { id: true, name: true, email: true, initials: true, role: true, principalType: true, createdAt: true } }),
+        p.deal.findMany({ where: { orgId } }),
+        p.appraisal.findMany({ where: { orgId } }),
+        p.comparable.findMany({ where: { orgId } }),
+        p.scenario.findMany({ where: { orgId } }),
+        p.inspection.findMany({ where: { orgId } }),
+        p.unit.findMany({ where: { orgId } }),
+        p.salesMilestone.findMany({ where: { unit: { orgId } } }),
+        p.tenancy.findMany({ where: { orgId } }),
+        p.contractor.findMany({ where: { orgId } }),
+        p.costPackage.findMany({ where: { orgId } }),
+        p.sitePhoto.findMany({ where: { orgId } }),
+        p.document.findMany({ where: { orgId } }),
+        p.task.findMany({ where: { orgId } }),
+        p.activityEvent.findMany({ where: { orgId } }),
+        p.investor.findMany({ where: { orgId } }),
+        p.holding.findMany({ where: { investor: { orgId } } }),
+        p.cashflow.findMany({ where: { investor: { orgId } } }),
+        p.payment.findMany({ where: { orgId } }),
+        p.benchmarkPoint.findMany({ where: { orgId, isOwn: true } }),
+        p.integrationConnection.findMany({ where: { orgId }, select: { id: true, provider: true, status: true, lastSync: true } }),
+      ]);
+    // Deep-convert BigInt (pence) → Number for a portable plain-JSON file
+    const jsonSafe = (v: unknown): unknown => {
+      if (typeof v === 'bigint') return Number(v);
+      if (Array.isArray(v)) return v.map(jsonSafe);
+      if (v && typeof v === 'object' && !(v instanceof Date)) {
+        return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, jsonSafe(x)]));
+      }
+      return v;
+    };
+    await p.activityEvent.create({
+      data: { orgId, dealId: deals[0]?.id ?? '', actor: ctx.principal.name, action: 'exported workspace data', target: `${deals.length} deals` },
+    });
+    return jsonSafe({
+      exportedAt: new Date().toISOString(),
+      exportedBy: ctx.principal.name,
+      organisation: org ? { id: org.id, name: org.name, plan: org.plan, createdAt: org.createdAt } : null,
+      users, deals, appraisals, comparables, scenarios, inspections, units,
+      salesMilestones: milestones, tenancies, contractors, costPackages: packages,
+      sitePhotos: photos, documents, tasks, activity, investors, holdings,
+      cashflows, payments, benchmarkPoints: benchmarks, integrations,
+    }) as Record<string, unknown>;
+  }),
+
+  /**
+   * GDPR right to erasure: permanently delete the workspace and everything in
+   * it. Admin-only, and the caller must type the organisation's exact name.
+   */
+  deleteWorkspace: adminProcedure
+    .input(z.object({ confirmName: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.principal.orgId;
+      const org = await ctx.prisma.organisation.findUnique({ where: { id: orgId } });
+      if (!org) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (input.confirmName.trim() !== org.name) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Type the workspace name exactly to confirm deletion' });
+      }
+      // Children first (no orgId of their own), then org-scoped rows, then the org
+      await ctx.prisma.$transaction([
+        ctx.prisma.salesMilestone.deleteMany({ where: { unit: { orgId } } }),
+        ctx.prisma.holding.deleteMany({ where: { investor: { orgId } } }),
+        ctx.prisma.cashflow.deleteMany({ where: { investor: { orgId } } }),
+        ctx.prisma.unit.deleteMany({ where: { orgId } }),
+        ctx.prisma.tenancy.deleteMany({ where: { orgId } }),
+        ctx.prisma.investor.deleteMany({ where: { orgId } }),
+        ctx.prisma.payment.deleteMany({ where: { orgId } }),
+        ctx.prisma.appraisal.deleteMany({ where: { orgId } }),
+        ctx.prisma.comparable.deleteMany({ where: { orgId } }),
+        ctx.prisma.scenario.deleteMany({ where: { orgId } }),
+        ctx.prisma.inspection.deleteMany({ where: { orgId } }),
+        ctx.prisma.contractor.deleteMany({ where: { orgId } }),
+        ctx.prisma.costPackage.deleteMany({ where: { orgId } }),
+        ctx.prisma.sitePhoto.deleteMany({ where: { orgId } }),
+        ctx.prisma.document.deleteMany({ where: { orgId } }),
+        ctx.prisma.task.deleteMany({ where: { orgId } }),
+        ctx.prisma.activityEvent.deleteMany({ where: { orgId } }),
+        ctx.prisma.benchmarkPoint.deleteMany({ where: { orgId } }),
+        ctx.prisma.integrationConnection.deleteMany({ where: { orgId } }),
+        ctx.prisma.deal.deleteMany({ where: { orgId } }),
+        ctx.prisma.user.deleteMany({ where: { orgId } }),
+        ctx.prisma.organisation.delete({ where: { id: orgId } }),
+      ]);
+      return { deleted: true };
+    }),
 });

@@ -296,6 +296,145 @@ function SecurityPanel() {
   );
 }
 
+// ---------- Data & privacy (GDPR) ----------
+
+function DataPrivacyPanel() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const utils = trpc.useUtils();
+  const [showAudit, setShowAudit] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const [armed, setArmed] = useState(false);
+  const { data: org } = trpc.org.get.useQuery();
+  const auditQ = trpc.org.auditLog.useQuery({ limit: 200 }, { enabled: showAudit, staleTime: 30_000 });
+  const destroy = trpc.org.deleteWorkspace.useMutation({
+    onSuccess: () => {
+      clearSession();
+      navigate('/welcome');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const data = await utils.client.org.exportData.query();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `apex-appraise-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success('Workspace export downloaded');
+    } catch {
+      toast.error('Export failed — try again');
+    }
+    setExporting(false);
+  };
+
+  const fmtAt = (d: Date | string) =>
+    new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <Panel title="Data & privacy">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="max-w-[460px]">
+            <div className="text-[13.5px] font-semibold">Export workspace data</div>
+            <div className="mt-1 text-[12px] text-ink-2b leading-relaxed">
+              One JSON file with every deal, appraisal, comparable, document record, investor position and audit
+              event this workspace owns — GDPR-portable, no passwords or card data.
+            </div>
+          </div>
+          <Button variant="secondary" loading={exporting} onClick={exportAll}>
+            Download export
+          </Button>
+        </div>
+
+        <div className="pt-4 border-t border-border-faint">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="max-w-[460px]">
+              <div className="text-[13.5px] font-semibold">Audit trail</div>
+              <div className="mt-1 text-[12px] text-ink-2b leading-relaxed">
+                Who did what, across every deal — saves, versions, extractions, exports, sign-offs.
+              </div>
+            </div>
+            <Button variant="secondary" onClick={() => setShowAudit((v) => !v)}>
+              {showAudit ? 'Hide audit trail' : 'View audit trail'}
+            </Button>
+          </div>
+          {showAudit && (
+            <div className="mt-3 rounded-card border border-border-std bg-sunken max-h-[320px] overflow-y-auto">
+              {auditQ.isLoading ? (
+                <div className="p-4"><SkeletonRows rows={5} height={22} /></div>
+              ) : (auditQ.data ?? []).length === 0 ? (
+                <div className="p-4 text-[12.5px] text-ink-2">No activity recorded yet.</div>
+              ) : (
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {(auditQ.data ?? []).map((e) => (
+                      <tr key={e.id}>
+                        <td className="py-2 px-3 border-b border-border-faint fig text-[11px] text-ink-3 whitespace-nowrap align-top">{fmtAt(e.at)}</td>
+                        <td className="py-2 px-3 border-b border-border-faint text-[12px] align-top">
+                          <span className="font-semibold">{e.actor}</span>{' '}
+                          <span className="text-ink-2">{e.action}</span>{' '}
+                          <span className="text-ink">{e.target}</span>
+                          {e.dealName && <span className="text-ink-3"> · {e.dealName}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="pt-4 border-t border-border-faint">
+          <div className="text-[13.5px] font-semibold text-status-red">Danger zone</div>
+          <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[460px]">
+            Permanently delete this workspace — every deal, appraisal, document record, member and investor
+            position. This cannot be undone. Download an export first.
+          </div>
+          {!armed ? (
+            <Button variant="danger" className="mt-3" onClick={() => setArmed(true)}>
+              Delete workspace…
+            </Button>
+          ) : (
+            <form
+              className="mt-3 flex items-end gap-2 flex-wrap"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (confirmName.trim() === org?.name) destroy.mutate({ confirmName: confirmName.trim() });
+              }}
+            >
+              <div>
+                <label htmlFor="confirm-delete" className="label-mono text-ink-3 block mb-1">
+                  Type <span className="fig font-semibold">{org?.name}</span> to confirm
+                </label>
+                <input
+                  id="confirm-delete"
+                  className="w-[260px]"
+                  value={confirmName}
+                  onChange={(e) => setConfirmName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <Button type="submit" variant="danger" loading={destroy.isPending} disabled={confirmName.trim() !== org?.name}>
+                Permanently delete
+              </Button>
+              <Button variant="ghost" onClick={() => { setArmed(false); setConfirmName(''); }}>
+                Cancel
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 // ---------- About ----------
 
 function AboutPanel() {
@@ -457,6 +596,7 @@ export default function Settings() {
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
         <SecurityPanel />
+        {isAdmin && <DataPrivacyPanel />}
         <AboutPanel />
       </main>
     </div>
