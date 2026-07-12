@@ -7,3 +7,4 @@ dist/
 apps/api/prisma/dev.db*
 apps/web/dist/
 coverage/
+test-results/
