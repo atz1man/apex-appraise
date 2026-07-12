@@ -1,7 +1,79 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { computeAppraisal } from '@apex/appraisal-engine';
 import { brandMarkGradient } from '@apex/ui-tokens';
+import { fM } from '../lib/format';
 import { BrandMark, Icon } from '../components/ui';
+
+const reducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Fade-and-rise on first scroll into view (no-op with reduced motion). */
+function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(() => reducedMotion());
+  useEffect(() => {
+    if (shown || !ref.current) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [shown]);
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: shown ? 1 : 0,
+        transform: shown ? 'none' : 'translateY(22px)',
+        transition: `opacity 0.6s ease ${delay}ms, transform 0.6s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Counts up once scrolled into view; parses and reuses any prefix/suffix (£, %, +, bn…). */
+function CountUp({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [display, setDisplay] = useState(() => (reducedMotion() ? text : text.replace(/[\d.]+/, '0')));
+  useEffect(() => {
+    if (reducedMotion() || !ref.current) return;
+    const m = /([\d.]+)/.exec(text);
+    if (!m) {
+      setDisplay(text);
+      return;
+    }
+    const target = parseFloat(m[1]!);
+    const decimals = m[1]!.includes('.') ? m[1]!.split('.')[1]!.length : 0;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e?.isIntersecting) return;
+        io.disconnect();
+        const start = performance.now();
+        const tick = (now: number) => {
+          const p = Math.min((now - start) / 1100, 1);
+          const eased = 1 - Math.pow(1 - p, 3);
+          setDisplay(text.replace(/[\d.]+/, (target * eased).toFixed(decimals)));
+          if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      },
+      { threshold: 0.6 },
+    );
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [text]);
+  return <span ref={ref}>{display}</span>;
+}
 
 const DEMO_MAILTO = 'mailto:hello@apexappraise.co.uk?subject=Apex%20Appraise%20%E2%80%94%20book%20a%20demo';
 const ARROW = 'M5 12h14|M13 6l6 6-6 6';
@@ -133,6 +205,111 @@ const FEATURES: Array<{ icon: string; title: string; desc: string }> = [
   },
 ];
 
+// ---------- live engine hero widget ----------
+
+const HERO_AREA_FT2 = 850; // typical 2-bed new-build
+
+function heroCompute(homes: number, capPsf: number, buildPsf: number) {
+  return computeAppraisal({
+    units: [{ label: 'New homes', count: homes, area: HERO_AREA_FT2, cap: capPsf }],
+    efficiency: 90,
+    trades: [{ label: 'Build', rate: buildPsf }],
+    profFeePct: 10,
+    contingencyPct: 5,
+    otherCosts: [],
+    finance: { ltcPct: 65, ratePct: 9, periodMonths: 18, salesMonths: 6, arrangementFeePct: 1 },
+    site: { mode: 'residual', landFixed: 0, acqPct: 5.8 },
+    disposal: { agentPct: 1.5, legalPct: 0.5 },
+    targetProfitOnGdvPct: 17.5,
+  });
+}
+
+function EngineSlider({
+  label, value, min, max, step, unit, onChange,
+}: {
+  label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[1.2px] text-white/55">{label}</span>
+        <span className="fig text-[13px] font-semibold text-accent-300">{unit === '£/ft²' ? `£${value}/ft²` : `${value} ${unit}`}</span>
+      </div>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1.5 w-full accent-[#3FD894] cursor-pointer"
+      />
+    </div>
+  );
+}
+
+/** The actual product engine, live on the marketing page. No mock numbers. */
+function LiveEngineCard() {
+  const [homes, setHomes] = useState(12);
+  const [cap, setCap] = useState(450);
+  const [build, setBuild] = useState(210);
+  const r = heroCompute(homes, cap, build);
+  const viable = r.residualNet > 0;
+  return (
+    <div
+      className="rounded-[18px] p-5 text-white w-full lg:w-[340px]"
+      style={{
+        background: 'rgba(12,42,32,0.72)',
+        backdropFilter: 'blur(18px) saturate(1.4)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.4)',
+        border: '1px solid rgba(63,216,148,0.28)',
+        boxShadow: '0 30px 80px -20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="w-[7px] h-[7px] rounded-full bg-accent-300 animate-pulse" />
+        <span className="font-mono text-[10.5px] font-semibold tracking-[1.5px] uppercase text-accent-300">Try the engine — live</span>
+      </div>
+      <div className="mt-4 flex flex-col gap-3.5">
+        <EngineSlider label="Homes" value={homes} min={2} max={40} step={1} unit="units" onChange={setHomes} />
+        <EngineSlider label="Sale value" value={cap} min={250} max={800} step={10} unit="£/ft²" onChange={setCap} />
+        <EngineSlider label="Build cost" value={build} min={120} max={350} step={5} unit="£/ft²" onChange={setBuild} />
+      </div>
+      <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-3 gap-2">
+        <div>
+          <div className="font-mono text-[9.5px] uppercase tracking-[1px] text-white/50">GDV</div>
+          <div className="fig mt-0.5 text-[16px] font-semibold tracking-[-0.5px]" data-testid="live-gdv">{fM(r.gdv)}</div>
+        </div>
+        <div>
+          <div className="font-mono text-[9.5px] uppercase tracking-[1px] text-white/50">Residual land</div>
+          <div className="fig mt-0.5 text-[16px] font-semibold tracking-[-0.5px]" style={{ color: viable ? '#3FD894' : '#FF8A7A' }}>
+            {fM(Math.max(r.residualNet, 0))}
+          </div>
+        </div>
+        <div>
+          <div className="font-mono text-[9.5px] uppercase tracking-[1px] text-white/50">Profit on cost</div>
+          <div className="fig mt-0.5 text-[16px] font-semibold tracking-[-0.5px]">{(r.poc * 100).toFixed(1)}%</div>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] leading-snug text-white/55">
+        {viable
+          ? 'Computed by the same deterministic engine that runs the product — not a mock.'
+          : 'The engine says this scheme can’t pay for its land — change the mix.'}
+      </div>
+      <Link
+        to="/register"
+        className="group mt-4 inline-flex w-full items-center justify-center gap-2 h-[42px] rounded-[12px] bg-surface text-brand-800 text-[13.5px] font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] motion-reduce:transition-none"
+      >
+        Run a full appraisal
+        <span className="transition-transform duration-200 group-hover:translate-x-[3px]" aria-hidden="true">
+          <Icon d={ARROW} size={15} strokeWidth={2.2} />
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 // ---------- product tour ----------
 
 const TOUR: Array<{ img: string; title: string; caption: string }> = [
@@ -144,8 +321,8 @@ const TOUR: Array<{ img: string; title: string; caption: string }> = [
   { img: '/tour/report.png', title: 'Print-ready reports', caption: 'Investment pack and RICS Red Book report assembled from the same engine that runs the appraisal.' },
 ];
 
-function TourModal({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0);
+function TourModal({ onClose, initial = 0 }: { onClose: () => void; initial?: number }) {
+  const [step, setStep] = useState(initial);
   const s = TOUR[step]!;
 
   useEffect(() => {
@@ -236,6 +413,7 @@ function Split({
   checks,
   mock,
   flip,
+  onPeek,
 }: {
   eyebrow: string;
   title: string;
@@ -243,21 +421,43 @@ function Split({
   checks: string[];
   mock: ReactNode;
   flip?: boolean;
+  /** Opens the product tour at this feature's slide. */
+  onPeek?: () => void;
 }) {
   return (
-    <div className="grid gap-12 lg:gap-14 items-center lg:grid-cols-2">
-      <div className={flip ? 'lg:order-2' : ''}>
-        <div className="eyebrow">{eyebrow}</div>
-        <h2 className="mt-3.5 text-[32px] lg:text-[40px] font-bold tracking-[-1.4px] leading-[1.06]">{title}</h2>
-        <p className="mt-4 text-[16.5px] text-ink-2 leading-[1.55]">{body}</p>
-        <div className="mt-5 flex flex-col gap-3">
-          {checks.map((c) => (
-            <CheckRow key={c}>{c}</CheckRow>
-          ))}
+    <Reveal>
+      <div className="grid gap-12 lg:gap-14 items-center lg:grid-cols-2">
+        <div className={flip ? 'lg:order-2' : ''}>
+          <div className="eyebrow">{eyebrow}</div>
+          <h2 className="mt-3.5 text-[32px] lg:text-[40px] font-bold tracking-[-1.4px] leading-[1.06]">{title}</h2>
+          <p className="mt-4 text-[16.5px] text-ink-2 leading-[1.55]">{body}</p>
+          <div className="mt-5 flex flex-col gap-3">
+            {checks.map((c) => (
+              <CheckRow key={c}>{c}</CheckRow>
+            ))}
+          </div>
+        </div>
+        <div className={flip ? 'lg:order-1' : ''}>
+          {onPeek ? (
+            <button
+              type="button"
+              onClick={onPeek}
+              className="group relative block w-full text-left cursor-pointer transition-transform duration-300 hover:-translate-y-1 motion-reduce:transition-none"
+              aria-label={`See ${title} in the product`}
+            >
+              {mock}
+              <span className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center opacity-0 translate-y-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-y-0 motion-reduce:transition-none">
+                <span className="inline-flex items-center gap-1.5 rounded-pill bg-brand-800 text-white text-[12px] font-semibold px-3.5 py-2 shadow-float">
+                  See it in the product <Icon d={ARROW} size={13} strokeWidth={2.4} />
+                </span>
+              </span>
+            </button>
+          ) : (
+            mock
+          )}
         </div>
       </div>
-      <div className={flip ? 'lg:order-1' : ''}>{mock}</div>
-    </div>
+    </Reveal>
   );
 }
 
@@ -391,63 +591,96 @@ function PortalMock() {
 // ---------- hero product mock ----------
 
 function HeroAppMock() {
-  const deals: Array<[string, string, string]> = [
-    ['Northgate Works', '£8.69m GDV', 'Appraisal'],
-    ['Harbour Yard', '£4.2m GDV', 'On site'],
-    ['Stour Mills', '£12.4m GDV', 'Offer'],
-  ];
-  const bars = [40, 62, 50, 78, 58, 88];
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const onMove = (e: React.MouseEvent) => {
+    if (reducedMotion() || !frameRef.current) return;
+    const rect = frameRef.current.getBoundingClientRect();
+    setTilt({
+      x: ((e.clientY - rect.top) / rect.height - 0.5) * -2.4,
+      y: ((e.clientX - rect.left) / rect.width - 0.5) * 3.2,
+    });
+  };
   return (
-    <div className={`${WRAP} relative`} aria-hidden="true">
-      <div
-        className="rounded-t-[18px] border border-b-0 border-white/10 bg-brand-950 px-2.5 pt-2.5"
-        style={{ boxShadow: '0 -20px 60px -20px rgba(0,0,0,0.5)' }}
-      >
-        {/* mini top bar */}
-        <div className="flex items-center gap-[7px] px-2.5 pb-2">
-          <span className="w-[11px] h-[11px] rounded-full bg-status-red" />
-          <span className="w-[11px] h-[11px] rounded-full bg-status-amber" />
-          <span className="w-[11px] h-[11px] rounded-full bg-status-green" />
-          <span className="ml-2.5 font-mono text-[11px] font-medium text-accent-muted-1">app.apexappraise.co.uk/appraisals</span>
-        </div>
-        <div className="bg-canvas rounded-t-[10px] h-[300px] p-5 flex gap-4 overflow-hidden text-left text-ink">
-          {/* deal cards column */}
-          <div className="w-[210px] shrink-0 hidden md:flex flex-col gap-2.5">
-            <div className="h-[30px] rounded-[8px] bg-brand-700" />
-            <div className="label-mono text-ink-3">Pipeline · 3 live deals</div>
-            {deals.map(([name, fig, stage]) => (
-              <div key={name} className="rounded-[10px] bg-surface border border-border-strong px-3 py-2">
-                <div className="text-[11.5px] font-semibold">{name}</div>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="fig text-[10.5px] font-semibold text-brand-700">{fig}</span>
-                  <span className="label-mono text-ink-3">{stage}</span>
-                </div>
-              </div>
-            ))}
+    <div className={`${WRAP} relative`}>
+      <div className="lg:pr-[240px]" style={{ perspective: '1600px' }}>
+        <div
+          ref={frameRef}
+          onMouseMove={onMove}
+          onMouseLeave={() => setTilt({ x: 0, y: 0 })}
+          className="rounded-t-[18px] border border-b-0 border-white/10 bg-brand-950 px-2.5 pt-2.5"
+          style={{
+            boxShadow: '0 -20px 60px -20px rgba(0,0,0,0.5)',
+            transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+            transition: 'transform 0.25s ease-out',
+            transformStyle: 'preserve-3d',
+          }}
+          aria-hidden="true"
+        >
+          {/* mini top bar */}
+          <div className="flex items-center gap-[7px] px-2.5 pb-2">
+            <span className="w-[11px] h-[11px] rounded-full bg-status-red" />
+            <span className="w-[11px] h-[11px] rounded-full bg-status-amber" />
+            <span className="w-[11px] h-[11px] rounded-full bg-status-green" />
+            <span className="ml-2.5 font-mono text-[11px] font-medium text-accent-muted-1">app.apexappraise.co.uk</span>
           </div>
-          {/* KPI cards + chart */}
-          <div className="flex-1 min-w-0 flex flex-col gap-3.5">
-            <div className="flex gap-3.5">
-              <div className="flex-1 h-[84px] rounded-[12px] px-3.5 py-3" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
-                <div className="label-mono text-accent-muted-3">Residual land</div>
-                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px] text-white">£1.24m</div>
-              </div>
-              <div className="flex-1 h-[84px] rounded-[12px] bg-surface border border-border-strong px-3.5 py-3">
-                <div className="label-mono text-ink-3">GDV</div>
-                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px]">£8.69m</div>
-              </div>
-              <div className="flex-1 h-[84px] rounded-[12px] bg-surface border border-border-strong px-3.5 py-3">
-                <div className="label-mono text-ink-3">Profit on cost</div>
-                <div className="fig mt-1.5 text-[16px] sm:text-[20px] font-semibold tracking-[-1px] text-status-green">42%</div>
-              </div>
-            </div>
-            <div className="flex-1 rounded-[12px] bg-surface border border-border-strong flex items-end gap-2 px-[18px] pt-[18px]">
-              {bars.map((h, i) => (
-                <div key={i} className={`flex-1 rounded-t-[4px] ${i % 2 ? 'bg-brand-700' : 'bg-border-strong'}`} style={{ height: `${h}%` }} />
-              ))}
-            </div>
+          {/* the real product, not a sketch */}
+          <div className="rounded-t-[10px] overflow-hidden max-h-[380px]">
+            <img src="/tour/hub.png" alt="" className="block w-full" loading="lazy" />
           </div>
         </div>
+      </div>
+      {/* live engine card — overlaps the frame on desktop, stacks below on mobile */}
+      <div className="mt-5 lg:mt-0 lg:absolute lg:right-7 lg:bottom-8 flex justify-center lg:block">
+        <LiveEngineCard />
+      </div>
+    </div>
+  );
+}
+
+// ---------- sticky mobile CTA ----------
+
+/** Appears on phones once the hero scrolls away — the next step is always one thumb away. */
+function StickyMobileCta({ onTour }: { onTour: () => void }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 640);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <div
+      className="lg:hidden fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 transition-transform duration-300 motion-reduce:transition-none"
+      style={{
+        transform: show ? 'translateY(0)' : 'translateY(110%)',
+        background: 'linear-gradient(180deg, rgba(243,244,241,0) 0%, rgba(243,244,241,0.92) 30%)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+      }}
+      aria-hidden={!show}
+    >
+      <div className="flex gap-2.5 max-w-[440px] mx-auto">
+        <Link
+          to="/register"
+          tabIndex={show ? 0 : -1}
+          className="flex-1 inline-flex items-center justify-center h-[48px] rounded-[13px] text-white text-[14.5px] font-semibold active:scale-[0.98] transition-transform motion-reduce:transition-none"
+          style={{
+            background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -10px rgba(20,80,59,0.55)',
+          }}
+        >
+          Start free
+        </Link>
+        <button
+          type="button"
+          onClick={onTour}
+          tabIndex={show ? 0 : -1}
+          className="inline-flex items-center justify-center h-[48px] px-4 rounded-[13px] bg-surface text-ink text-[14px] font-semibold active:scale-[0.98] transition-transform motion-reduce:transition-none"
+          style={{ border: '1px solid rgba(20,30,25,0.14)', boxShadow: '0 6px 18px -8px rgba(20,30,25,0.25)' }}
+        >
+          60-sec tour
+        </button>
       </div>
     </div>
   );
@@ -456,10 +689,11 @@ function HeroAppMock() {
 // ---------- page ----------
 
 export default function Landing() {
-  const [tourOpen, setTourOpen] = useState(false);
+  const [tourAt, setTourAt] = useState<number | null>(null);
   return (
     <div className="min-h-screen bg-canvas text-ink overflow-x-hidden">
-      {tourOpen && <TourModal onClose={() => setTourOpen(false)} />}
+      {tourAt !== null && <TourModal initial={tourAt} onClose={() => setTourAt(null)} />}
+      <StickyMobileCta onTour={() => setTourAt(0)} />
       {/* NAV */}
       <div className="sticky top-0 z-50 border-b border-border-strong backdrop-blur-md" style={{ background: 'rgba(243,244,241,0.86)' }}>
         <div className="max-w-[1200px] mx-auto h-16 px-4 sm:px-7 flex items-center gap-3.5">
@@ -516,7 +750,7 @@ export default function Landing() {
           </p>
           <div className="mt-[34px] flex items-center gap-3.5 flex-wrap">
             <Cta to="/register">Start a free appraisal</Cta>
-            <Cta onClick={() => setTourOpen(true)} kind="outline-dark" arrow={false}>
+            <Cta onClick={() => setTourAt(0)} kind="outline-dark" arrow={false}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
@@ -552,14 +786,18 @@ export default function Landing() {
 
       {/* STAT BAND */}
       <div className={`${WRAP} pt-16 pb-4`}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-          {STATS.map(([value, label]) => (
-            <div key={value}>
-              <div className="fig text-[44px] font-semibold tracking-[-2px] text-brand-700">{value}</div>
-              <div className="mt-1.5 text-[14px] text-ink-2 leading-[1.4]">{label}</div>
-            </div>
-          ))}
-        </div>
+        <Reveal>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            {STATS.map(([value, label]) => (
+              <div key={value}>
+                <div className="fig text-[44px] font-semibold tracking-[-2px] text-brand-700">
+                  <CountUp text={value} />
+                </div>
+                <div className="mt-1.5 text-[14px] text-ink-2 leading-[1.4]">{label}</div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
       </div>
 
       {/* FEATURE SPLITS */}
@@ -574,6 +812,7 @@ export default function Landing() {
             'Planning-risk score & recommendation',
           ]}
           mock={<AppraisalMock />}
+          onPeek={() => setTourAt(2)}
         />
         <Split
           flip
@@ -586,6 +825,7 @@ export default function Landing() {
             'Red Book report assembled from the workfile',
           ]}
           mock={<WorkfileMock />}
+          onPeek={() => setTourAt(5)}
         />
         <Split
           eyebrow="Cost control"
@@ -597,6 +837,7 @@ export default function Landing() {
             'Forecast at completion, updated live',
           ]}
           mock={<CostMock />}
+          onPeek={() => setTourAt(4)}
         />
         <Split
           flip
@@ -609,6 +850,7 @@ export default function Landing() {
             'Net IRR and MOIC from the live waterfall',
           ]}
           mock={<PortalMock />}
+          onPeek={() => setTourAt(1)}
         />
       </div>
 

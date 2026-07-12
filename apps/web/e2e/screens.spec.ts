@@ -163,3 +163,19 @@ test('landing product tour opens, steps through slides and closes', async ({ pag
   await page.keyboard.press('Escape');
   await expect(tour).toHaveCount(0);
 });
+
+test('landing live engine card computes real figures as sliders move', async ({ page }) => {
+  await page.goto('/welcome');
+  await expect(page.getByText('Try the engine — live')).toBeVisible();
+  const gdvBefore = await page.getByTestId('live-gdv').innerText();
+  await page.getByLabel('Homes').fill('30');
+  const gdvAfter = await page.getByTestId('live-gdv').innerText();
+  expect(gdvAfter).not.toBe(gdvBefore);
+  // engine sanity: 30 homes × 850ft² × £450 = £11.475m GDV (fM shows 1dp above £10m)
+  expect(gdvAfter).toBe('£11.5m');
+  await expect(page.getByText('Profit on cost', { exact: true })).toBeVisible();
+  // feature mock peek opens the tour at the matching slide
+  await page.getByRole('button', { name: /See Documents in\. Investment-grade appraisal out\. in the product/ }).click();
+  const tour = page.getByRole('dialog', { name: 'Product tour' });
+  await expect(tour.getByText('Development appraisal')).toBeVisible();
+});
