@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /welcome
+Allow: /login
+Allow: /register
+Disallow: /deal/
+Disallow: /portal/
+Disallow: /settings
+Disallow: /reports/

@@ -134,3 +134,18 @@ test('buyer portal signs a document (persisted)', async ({ page }) => {
     await expect(page.getByText('SIGNED').first()).toBeVisible(); // persisted, not local state
   }
 });
+
+test('public surface: SEO meta, share image, robots and branded 404', async ({ page }) => {
+  await page.goto('/welcome');
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /development appraisals/i);
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', '/og.png');
+  const og = await page.request.get('/og.png');
+  expect(og.status()).toBe(200);
+  const robots = await page.request.get('/robots.txt');
+  expect(robots.status()).toBe(200);
+  expect(await robots.text()).toContain('Disallow: /deal/');
+  // branded 404 for signed-out visitors — no silent redirect
+  await page.goto('/this-page-does-not-exist');
+  await expect(page.getByText('404')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Apex Appraise home' })).toBeVisible();
+});

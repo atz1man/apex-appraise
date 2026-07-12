@@ -33,6 +33,7 @@ const Benchmarking = lazy(() => import('./routes/Benchmarking'));
 const Integrations = lazy(() => import('./routes/Integrations'));
 const InvestorPortal = lazy(() => import('./routes/InvestorPortal'));
 const BuyerPortal = lazy(() => import('./routes/BuyerPortal'));
+const NotFound = lazy(() => import('./routes/NotFound'));
 const FieldApp = lazy(() => import('./routes/FieldApp'));
 const Workbench = lazy(() => import('./routes/Workbench'));
 const AppraisalReport = lazy(() => import('./routes/AppraisalReport'));
@@ -118,7 +119,7 @@ export default function App() {
           <Route path="/integrations" element={<Protected><Integrations /></Protected>} />
           <Route path="/portal/investor" element={<Protected portal="investor"><InvestorPortal /></Protected>} />
           <Route path="/portal/buyer" element={<Protected portal="buyer"><BuyerPortal /></Protected>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
         </ToastProvider>
