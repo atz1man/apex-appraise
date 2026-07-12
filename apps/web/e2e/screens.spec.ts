@@ -149,3 +149,17 @@ test('public surface: SEO meta, share image, robots and branded 404', async ({ p
   await expect(page.getByText('404')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Apex Appraise home' })).toBeVisible();
 });
+
+test('landing product tour opens, steps through slides and closes', async ({ page }) => {
+  await page.goto('/welcome');
+  await page.getByRole('button', { name: /Watch the 60-second tour/ }).click();
+  const tour = page.getByRole('dialog', { name: 'Product tour' });
+  await expect(tour).toBeVisible();
+  await expect(tour.getByText('One home for the whole workfile')).toBeVisible();
+  await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(tour.getByText('Pipeline board')).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(tour.getByText('Development appraisal')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tour).toHaveCount(0);
+});

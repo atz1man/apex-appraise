@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { brandMarkGradient } from '@apex/ui-tokens';
 import { BrandMark, Icon } from '../components/ui';
@@ -11,6 +11,7 @@ const CHECK = 'm5 12 5 5 9-10';
 function Cta({
   to,
   href,
+  onClick,
   kind = 'light',
   children,
   arrow = true,
@@ -18,6 +19,7 @@ function Cta({
 }: {
   to?: string;
   href?: string;
+  onClick?: () => void;
   kind?: 'light' | 'brand' | 'outline-dark' | 'outline-light';
   children: ReactNode;
   arrow?: boolean;
@@ -50,6 +52,13 @@ function Cta({
     </>
   );
   const shared = `group inline-flex items-center justify-center gap-[9px] h-[50px] px-6 rounded-[13px] text-[15px] font-semibold transition-all duration-200 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 ${cls} ${className}`;
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={shared} style={style}>
+        {inner}
+      </button>
+    );
+  }
   return href ? (
     <a href={href} className={shared} style={style}>
       {inner}
@@ -123,6 +132,89 @@ const FEATURES: Array<{ icon: string; title: string; desc: string }> = [
     desc: 'Your build costs, values and margins against an anonymised market median — the data moat that compounds.',
   },
 ];
+
+// ---------- product tour ----------
+
+const TOUR: Array<{ img: string; title: string; caption: string }> = [
+  { img: '/tour/hub.png', title: 'One home for the whole workfile', caption: 'Live portfolio roll-up and every deal tool one click away — nothing re-keyed between them.' },
+  { img: '/tour/board.png', title: 'Pipeline board', caption: 'Every deal across the lifecycle with probability-weighted GDV and forecast profit.' },
+  { img: '/tour/appraisal.png', title: 'Development appraisal', caption: 'Residual land value, trade-level build costs, finance stack and live sensitivity — recomputed as you type.' },
+  { img: '/tour/sitepack.png', title: 'Live UK site pack', caption: 'Real sold prices, planning constraints, flood risk and walkable amenities from official data sources.' },
+  { img: '/tour/costs.png', title: 'Cost monitoring', caption: 'Budget vs actual by trade, contractor valuations and a dated site photo log behind every claim.' },
+  { img: '/tour/report.png', title: 'Print-ready reports', caption: 'Investment pack and RICS Red Book report assembled from the same engine that runs the appraisal.' },
+];
+
+function TourModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(0);
+  const s = TOUR[step]!;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setStep((v) => Math.min(v + 1, TOUR.length - 1));
+      if (e.key === 'ArrowLeft') setStep((v) => Math.max(v - 1, 0));
+    };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8" role="dialog" aria-modal="true" aria-label="Product tour">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-[1080px]">
+        <div className="rounded-[18px] overflow-hidden border border-white/10 bg-brand-950" style={{ boxShadow: '0 40px 120px -30px rgba(0,0,0,0.7)' }}>
+          {/* mini browser chrome */}
+          <div className="flex items-center gap-[7px] px-4 py-2.5">
+            <span className="w-[10px] h-[10px] rounded-full bg-status-red" />
+            <span className="w-[10px] h-[10px] rounded-full bg-status-amber" />
+            <span className="w-[10px] h-[10px] rounded-full bg-status-green" />
+            <span className="ml-2 font-mono text-[11px] text-accent-muted-1">app.apexappraise.co.uk</span>
+            <button className="ml-auto text-white/60 hover:text-white text-[13px] font-semibold px-2" onClick={onClose} aria-label="Close tour">
+              ✕
+            </button>
+          </div>
+          <img src={s.img} alt={s.title} className="block w-full" />
+          {/* preload the next slide */}
+          {step < TOUR.length - 1 && <img src={TOUR[step + 1]!.img} alt="" aria-hidden="true" className="hidden" />}
+        </div>
+        <div className="mt-4 flex items-center gap-4 text-white flex-wrap">
+          <button
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 grid place-items-center transition-colors"
+            onClick={() => setStep((v) => Math.max(v - 1, 0))}
+            disabled={step === 0}
+            aria-label="Previous"
+          >
+            ←
+          </button>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-[16px] font-bold tracking-[-0.3px]">{s.title}</div>
+            <div className="mt-0.5 text-[13px] text-white/70 leading-snug">{s.caption}</div>
+          </div>
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            {TOUR.map((_, i) => (
+              <button key={i} className={`w-2 h-2 rounded-full transition-colors ${i === step ? 'bg-accent-300' : 'bg-white/25 hover:bg-white/50'}`} onClick={() => setStep(i)} />
+            ))}
+          </div>
+          {step < TOUR.length - 1 ? (
+            <button
+              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center transition-colors"
+              onClick={() => setStep((v) => Math.min(v + 1, TOUR.length - 1))}
+              aria-label="Next"
+            >
+              →
+            </button>
+          ) : (
+            <Cta to="/register" className="!h-[42px] !px-5 !text-[14px]">Start free</Cta>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ---------- small pieces ----------
 
@@ -364,8 +456,10 @@ function HeroAppMock() {
 // ---------- page ----------
 
 export default function Landing() {
+  const [tourOpen, setTourOpen] = useState(false);
   return (
     <div className="min-h-screen bg-canvas text-ink overflow-x-hidden">
+      {tourOpen && <TourModal onClose={() => setTourOpen(false)} />}
       {/* NAV */}
       <div className="sticky top-0 z-50 border-b border-border-strong backdrop-blur-md" style={{ background: 'rgba(243,244,241,0.86)' }}>
         <div className="max-w-[1200px] mx-auto h-16 px-4 sm:px-7 flex items-center gap-3.5">
@@ -422,11 +516,11 @@ export default function Landing() {
           </p>
           <div className="mt-[34px] flex items-center gap-3.5 flex-wrap">
             <Cta to="/register">Start a free appraisal</Cta>
-            <Cta href={DEMO_MAILTO} kind="outline-dark" arrow={false}>
+            <Cta onClick={() => setTourOpen(true)} kind="outline-dark" arrow={false}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              Watch 2-min tour
+              Watch the 60-second tour
             </Cta>
           </div>
           <div className="mt-4 font-mono text-[12px] text-accent-muted-1">Free 14-day trial · no card required · set up in 2 minutes</div>
