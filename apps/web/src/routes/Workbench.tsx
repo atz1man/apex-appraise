@@ -176,13 +176,13 @@ export default function Workbench() {
 
       {/* field-sync banner */}
       {isSynced && !dismissed && (
-        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 bg-tint-success border-b border-[#D6E6DD]">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 bg-tint-success border-b border-[rgb(var(--border-green-soft,_214_230_221))]">
           <span className="flex-none w-[30px] h-[30px] rounded-[9px] bg-brand-700 flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[12.5px] font-semibold text-brand-700">Synced from field inspection · {inspectedOn}</div>
-            <div className="mt-px text-[11.5px]" style={{ color: '#1E5C45' }}>
+            <div className="mt-px text-[11.5px]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               {ratedRooms.length} of {rooms.length} areas rated · {photoTotal} photos — valuation pre-filled below.
             </div>
           </div>

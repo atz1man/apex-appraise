@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
 import { getPrincipal } from '../lib/trpc';
@@ -38,6 +38,31 @@ const GLOBAL_NAV: Array<[string, string]> = [
   ['/settings', 'Settings'],
 ];
 
+
+/** Light/dark toggle — persists to localStorage, defaults to system preference. */
+export function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  return (
+    <button
+      className="w-8 h-8 rounded-[9px] grid place-items-center text-ink-3 hover:text-ink hover:bg-sunken-2 shrink-0"
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={dark ? 'Light mode' : 'Dark mode'}
+      onClick={() => {
+        const next = !dark;
+        document.documentElement.classList.toggle('dark', next);
+        localStorage.setItem('apex_theme', next ? 'dark' : 'light');
+        setDark(next);
+      }}
+    >
+      {dark ? (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
+      ) : (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+      )}
+    </button>
+  );
+}
+
 /** 56px sticky top bar: brand lockup → breadcrumb → global nav (internal) → status/actions. */
 export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode }) {
   const internal = getPrincipal()?.principalType === 'internal';
@@ -45,10 +70,10 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
     <header
       className="sticky top-0 z-40 h-14 flex items-center gap-3 px-5"
       style={{
-        background: 'rgba(255,255,255,0.82)',
+        background: 'rgb(var(--surface, 255 255 255) / 0.82)',
         backdropFilter: 'blur(18px) saturate(1.6)',
         WebkitBackdropFilter: 'blur(18px) saturate(1.6)',
-        borderBottom: '1px solid rgba(20,30,25,0.07)',
+        borderBottom: '1px solid rgb(var(--ink, 22 32 27) / 0.07)',
       }}
     >
       <BrandLockup />
@@ -76,7 +101,10 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
           ))}
         </nav>
       )}
-      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">{right}</div>
+      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+        <ThemeToggle />
+        {right}
+      </div>
     </header>
   );
 }

@@ -363,7 +363,7 @@ export default function RedBookReport() {
             <div className="shrink-0 w-[26px] h-[26px] rounded-[8px] flex items-center justify-center" style={{ background: brand[700] }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
             </div>
-            <div className="text-[12.5px] leading-[1.55]" style={{ color: '#1E5C45' }}>
+            <div className="text-[12.5px] leading-[1.55]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               Opinion of value supported by {hasComps ? `${comps.length} recent comparable ${comps.length === 1 ? 'sale' : 'sales'}, with average net adjustment of ${formatPct(Math.abs(avgNetAdj) / 100)}` : 'the current development appraisal pending comparable evidence'}.
               Valuation confidence assessed as <b className="font-semibold">{confidence.label.toLowerCase()}</b> under the RICS confidence framework.
             </div>
@@ -509,7 +509,7 @@ export default function RedBookReport() {
               <div className="text-right" style={{ flex: 1.2, padding: '12px 14px' }}>Adjusted £/ft²</div>
             </div>
             {/* subject row */}
-            <div className="flex items-center border-b border-border-std fig text-[12px] font-medium" style={{ background: '#F3F8F5' }}>
+            <div className="flex items-center border-b border-border-std fig text-[12px] font-medium" style={{ background: 'rgb(var(--tint-green-soft, 243 248 245))' }}>
               <div className="font-ui text-[12px] font-semibold" style={{ flex: 2.1, padding: '13px 14px', color: brand[700] }}>Subject — {subject}</div>
               <div className="text-ink-3" style={{ flex: 2.2, padding: '13px 8px' }}>{n0(nia)} ft² NIA</div>
               <div className="text-right text-ink-3" style={{ flex: 1, padding: '13px 8px' }}>—</div>

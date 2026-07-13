@@ -23,7 +23,7 @@ const CATEGORIES = FOLDERS.slice(1);
 
 /** dc-prototype file-type colours: pdf red, sheets green, docs/CAD blue. */
 const EXT_STYLE: Record<string, { bg: string; color: string }> = {
-  pdf: { bg: '#F7E5E2', color: 'rgb(var(--status-red, 178 58 46))' },
+  pdf: { bg: 'rgb(var(--tint-red-soft, 247 229 226))', color: 'rgb(var(--status-red, 178 58 46))' },
   xlsx: { bg: 'rgb(var(--tint-success-2, 228 241 234))', color: 'rgb(var(--status-green, 30 122 85))' },
   xls: { bg: 'rgb(var(--tint-success-2, 228 241 234))', color: 'rgb(var(--status-green, 30 122 85))' },
   docx: { bg: 'rgb(var(--status-blue-bg, 229 234 246))', color: 'rgb(var(--status-blue, 45 91 168))' },

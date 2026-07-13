@@ -253,7 +253,7 @@ export default function AppraisalReport() {
   // Sensitivity colour bands — same thresholds as DevelopmentAppraisal.tsx.
   const cellStyle = (v: number, ratio: number) => {
     if (v <= 0) return { color: '#B23A2E', background: '#F9EAE7' };
-    if (ratio >= 1.12) return { color: '#14503B', background: '#DFEFE7' };
+    if (ratio >= 1.12) return { color: '#14503B', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
     if (ratio >= 1.02) return { color: '#1E7A55', background: '#ECF3EF' };
     if (ratio > 0.98) return { color: '#5F665F', background: '#F4F4F0' };
     if (ratio > 0.85) return { color: '#9A6212', background: '#F8F0DE' };

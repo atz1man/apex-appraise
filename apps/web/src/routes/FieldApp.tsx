@@ -215,8 +215,8 @@ export default function FieldApp() {
       : summary.avgGrossAdjustment < 8
         ? { label: 'High', color: 'rgb(var(--status-green, 30 122 85))', bg: 'rgb(var(--tint-success-2, 228 241 234))', dot: 'rgb(var(--status-green, 30 122 85))' }
         : summary.avgGrossAdjustment < 15
-          ? { label: 'Medium', color: 'rgb(var(--status-amber, 154 98 18))', bg: '#F6ECD9', dot: 'rgb(var(--status-amber-dot, 199 169 91))' }
-          : { label: 'Low', color: 'rgb(var(--status-red, 178 58 46))', bg: '#F7E5E2', dot: 'rgb(var(--status-red, 178 58 46))' };
+          ? { label: 'Medium', color: 'rgb(var(--status-amber, 154 98 18))', bg: 'rgb(var(--tint-amber-soft, 246 236 217))', dot: 'rgb(var(--status-amber-dot, 199 169 91))' }
+          : { label: 'Low', color: 'rgb(var(--status-red, 178 58 46))', bg: 'rgb(var(--tint-red-soft, 247 229 226))', dot: 'rgb(var(--status-red, 178 58 46))' };
 
   const filtered = deals.filter(
     (d) => !q || d.name.toLowerCase().includes(q.toLowerCase()) || d.address.toLowerCase().includes(q.toLowerCase()),
@@ -263,11 +263,11 @@ export default function FieldApp() {
 
         {/* insight banner */}
         {indicated > 0 && deal && (
-          <div className="mx-[22px] mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[#D6E6DD] rounded-[14px] p-3">
+          <div className="mx-[22px] mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[rgb(var(--border-green-soft,_214_230_221))] rounded-[14px] p-3">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
               <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13Z" /></svg>
             </div>
-            <div className="text-[12.5px] leading-[1.45]" style={{ color: '#1E5C45' }}>
+            <div className="text-[12.5px] leading-[1.45]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               Comparable evidence supports <b className="font-semibold fig">{fM(indicated)}</b> for {deal.name}.
             </div>
           </div>
@@ -304,7 +304,7 @@ export default function FieldApp() {
               insp?.status === 'submitted'
                 ? { t: 'SUBMITTED', c: 'rgb(var(--status-green, 30 122 85))', bg: 'rgb(var(--tint-success-2, 228 241 234))' }
                 : insp
-                  ? { t: 'IN PROGRESS', c: 'rgb(var(--status-amber, 154 98 18))', bg: '#F6ECD9' }
+                  ? { t: 'IN PROGRESS', c: 'rgb(var(--status-amber, 154 98 18))', bg: 'rgb(var(--tint-amber-soft, 246 236 217))' }
                   : { t: 'TO INSPECT', c: 'rgb(var(--ink-2b, 110 114 105))', bg: 'rgb(var(--sunken-2, 240 239 233))' };
             const p = insp?.progressPct ?? 0;
             const barColor = insp?.status === 'submitted' ? 'rgb(var(--status-green, 30 122 85))' : p > 0 ? '#14503B' : 'rgb(var(--border-std, 236 235 229))';
@@ -528,7 +528,7 @@ export default function FieldApp() {
               {Array.from({ length: Math.min(rooms[current].photos, 3) }).map((_, i) => (
                 <div key={i} className="flex-1 aspect-square rounded-[11px]" style={{ background: THUMBS[i % THUMBS.length] }} />
               ))}
-              <button onClick={snap} aria-label="Add photo" className={`flex-1 aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed #D2D1CA', maxWidth: 78 }}>
+              <button onClick={snap} aria-label="Add photo" className={`flex-1 aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', maxWidth: 78 }}>
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
               <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">{rooms[current].photos} photos</span>
@@ -558,7 +558,7 @@ export default function FieldApp() {
                 <span className="flex-none w-5 h-5 rounded-[6px]" style={{ border: '2px solid rgb(var(--dashed, 218 217 210))' }} />
               )}
               <span className={`flex-1 text-[13.5px] font-medium ${r.condition > 0 ? 'text-ink' : 'text-ink-2b'}`}>{r.name}</span>
-              <span className="fig text-[11px] font-medium" style={{ color: r.condition > 0 ? 'rgb(var(--status-green, 30 122 85))' : '#C0BFB8' }}>
+              <span className="fig text-[11px] font-medium" style={{ color: r.condition > 0 ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--ink-faint, 192 191 184))' }}>
                 {r.photos} ph · {r.condition > 0 ? `C${r.condition}` : 'C—'}
               </span>
             </button>
@@ -765,11 +765,11 @@ export default function FieldApp() {
 
         {/* insight */}
         {comps.length > 0 && summary && (
-          <div className="mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[#D6E6DD] rounded-[14px] p-[13px]">
+          <div className="mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[rgb(var(--border-green-soft,_214_230_221))] rounded-[14px] p-[13px]">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
               <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
             </div>
-            <div className="text-[12.5px] leading-[1.45]" style={{ color: '#1E5C45' }}>
+            <div className="text-[12.5px] leading-[1.45]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               {comps.length} comp{comps.length === 1 ? '' : 's'}, avg gross adjustment {summary.avgGrossAdjustment.toFixed(1)}pts — supports a{' '}
               <b className="font-semibold">{conf.label.toLowerCase()} confidence</b> rating.
             </div>
@@ -785,7 +785,7 @@ export default function FieldApp() {
           <div className="mt-3 grid grid-cols-2 gap-2.5">
             {readiness.map(([label, ok]) => (
               <div key={label} className="flex items-center gap-2">
-                <span className="w-[18px] h-[18px] rounded-[6px] flex items-center justify-center" style={{ background: ok ? 'rgb(var(--tint-success-2, 228 241 234))' : '#F6ECD9' }}>
+                <span className="w-[18px] h-[18px] rounded-[6px] flex items-center justify-center" style={{ background: ok ? 'rgb(var(--tint-success-2, 228 241 234))' : 'rgb(var(--tint-amber-soft, 246 236 217))' }}>
                   {ok ? (
                     <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgb(var(--status-green, 30 122 85))" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
                   ) : (

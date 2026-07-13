@@ -192,3 +192,21 @@ test('landing live engine card computes real figures as sliders move', async ({ 
   const tour = page.getByRole('dialog', { name: 'Product tour' });
   await expect(tour.getByText('Development appraisal')).toBeVisible();
 });
+
+test('theme toggle switches to dark mode and persists', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe('rgb(16, 20, 18)');
+  await page.reload();
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe('rgb(16, 20, 18)');
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe('rgb(243, 244, 241)');
+});

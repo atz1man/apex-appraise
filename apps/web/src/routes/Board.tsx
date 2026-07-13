@@ -7,7 +7,7 @@ import type { StatusKey } from '@apex/ui-tokens';
 
 const STAGES: Array<{ key: string; label: string; accent: string }> = [
   { key: 'SOURCING', label: 'Sourcing', accent: 'rgb(var(--ink-3, 154 160 154))' },
-  { key: 'APPRAISAL', label: 'Appraisal', accent: '#C08A2E' },
+  { key: 'APPRAISAL', label: 'Appraisal', accent: 'rgb(var(--stage-accent, 192 138 46))' },
   { key: 'OFFER', label: 'Offer / Bid', accent: 'rgb(var(--status-blue, 45 91 168))' },
   { key: 'ACQUISITION', label: 'Acquisition', accent: 'rgb(var(--status-green, 30 122 85))' },
   { key: 'CONSTRUCTION', label: 'Construction', accent: '#14503B' },

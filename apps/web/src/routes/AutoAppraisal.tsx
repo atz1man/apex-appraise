@@ -84,8 +84,8 @@ const LOADING_STAGES = [
 
 const VERDICT_STYLE: Record<Verdict, { dot: string; bg: string }> = {
   Proceed: { dot: '#7FE3B4', bg: 'rgba(127,227,180,0.2)' },
-  Caution: { dot: '#F5C451', bg: 'rgba(245,196,81,0.22)' },
-  Decline: { dot: '#F08A7C', bg: 'rgba(240,138,124,0.22)' },
+  Caution: { dot: 'rgb(var(--dot-warn, 245 196 81))', bg: 'rgba(245,196,81,0.22)' },
+  Decline: { dot: 'rgb(var(--dot-crit, 240 138 124))', bg: 'rgba(240,138,124,0.22)' },
 };
 
 const CONF_DOT: Record<'high' | 'med' | 'low', string> = {
@@ -470,7 +470,7 @@ export default function AutoAppraisal() {
                       aria-pressed={on}
                       onClick={() => setDocsOn((d) => (on ? d.filter((k) => k !== i) : [...d, i]))}
                       className="rounded-[12px] p-3.5 flex items-center gap-2.5 text-left transition-colors"
-                      style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed #D2D1CA', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
+                      style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
                     >
                       <span className="w-[30px] h-[30px] rounded-chip bg-tint-success inline-flex items-center justify-center shrink-0">{t.icon}</span>
                       <span>
@@ -499,7 +499,7 @@ export default function AutoAppraisal() {
                         >
                           <span
                             className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center shrink-0"
-                            style={{ background: on ? '#14503B' : '#fff', borderColor: on ? '#14503B' : '#D2D1CA' }}
+                            style={{ background: on ? '#14503B' : '#fff', borderColor: on ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
                           >
                             {on && (
                               <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
@@ -599,7 +599,7 @@ export default function AutoAppraisal() {
                     />
                     <button
                       aria-label={`Remove ${u.label}`}
-                      className="w-[22px] h-[22px] shrink-0 rounded-[6px] inline-flex items-center justify-center text-[#C0BFB8] hover:text-status-red hover:bg-status-red-bg"
+                      className="w-[22px] h-[22px] shrink-0 rounded-[6px] inline-flex items-center justify-center text-[rgb(var(--ink-faint,_192_191_184))] hover:text-status-red hover:bg-status-red-bg"
                       onClick={() => setMan({ units: manual.units.filter((_, j) => j !== i) })}
                     >
                       ×
@@ -799,14 +799,14 @@ export default function AutoAppraisal() {
               </Panel>
 
               {/* recommendation */}
-              <section className="rounded-card p-4 bg-tint-success" style={{ border: '1px solid #D6E6DD' }}>
+              <section className="rounded-card p-4 bg-tint-success" style={{ border: '1px solid rgb(var(--border-green-soft, 214 230 221))' }}>
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-[7px] bg-brand-700 inline-flex items-center justify-center shrink-0">
                     <Sparkle size={14} />
                   </span>
                   <span className="text-[14px] font-semibold text-brand-700">Investment recommendation</span>
                 </div>
-                <p className="mt-2.5 text-[13px] leading-relaxed" style={{ color: '#1E5C45' }}>{x.recommendation}</p>
+                <p className="mt-2.5 text-[13px] leading-relaxed" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>{x.recommendation}</p>
               </section>
 
               {/* ask the deal · what-if */}

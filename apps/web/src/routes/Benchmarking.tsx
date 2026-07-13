@@ -83,7 +83,7 @@ function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: Metric
         <div className="absolute left-0 right-0 top-[9px] h-1.5 rounded-[3px] bg-sunken-2" />
         <div
           className="absolute top-[9px] h-1.5 rounded-[3px]"
-          style={{ background: '#D6E6DD', left: `${pos(m.p25)}%`, width: `${Math.max(0, pos(m.p75) - pos(m.p25))}%` }}
+          style={{ background: 'rgb(var(--border-green-soft, 214 230 221))', left: `${pos(m.p25)}%`, width: `${Math.max(0, pos(m.p75) - pos(m.p25))}%` }}
         />
         <div className="absolute top-1 h-4 w-[2px] bg-ink-3 -translate-x-[1px]" style={{ left: `${pos(m.median)}%` }} />
         {m.yours != null && (
@@ -298,7 +298,7 @@ export default function Benchmarking() {
                             {trend.map((t) => (
                               <div key={t.period} className="flex-1 h-full relative flex items-end justify-center">
                                 {/* market median bar with value label */}
-                                <div className="relative w-[46%] rounded-t-[3px]" style={{ background: '#C9D6CE', height: `${hOf(t.marketMedian)}%` }}>
+                                <div className="relative w-[46%] rounded-t-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))', height: `${hOf(t.marketMedian)}%` }}>
                                   <span className="absolute -top-[13px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink-3 whitespace-nowrap">
                                     £{Math.round(t.marketMedian)}
                                   </span>
@@ -330,7 +330,7 @@ export default function Benchmarking() {
                       </div>
                       <div className="mt-3 flex gap-4 text-[10.5px] text-ink-3">
                         <span className="flex items-center gap-[5px]">
-                          <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: '#C9D6CE' }} />
+                          <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))' }} />
                           Market median
                         </span>
                         <span className="flex items-center gap-[5px]">

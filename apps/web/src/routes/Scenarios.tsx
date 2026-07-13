@@ -312,7 +312,7 @@ export default function Scenarios() {
                     <div
                       key={col}
                       className={`px-4 py-3 ${rowBorder} flex items-center justify-between`}
-                      style={{ ...cellBorder, background: isWin ? '#F3F8F5' : undefined }}
+                      style={{ ...cellBorder, background: isWin ? 'rgb(var(--tint-green-soft, 243 248 245))' : undefined }}
                     >
                       <span
                         className="fig"

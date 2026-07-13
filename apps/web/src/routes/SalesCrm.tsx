@@ -464,7 +464,7 @@ export default function SalesCrm() {
                           key={f.id}
                           onClick={() => setFilter(f.id)}
                           className="inline-flex items-center gap-1.5 rounded-[9px] border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors"
-                          style={on ? { background: neutral.tintSuccess, borderColor: '#D6E6DD', color: brand[700] } : { background: '#fff', borderColor: neutral.borderStrong, color: neutral.ink2b }}
+                          style={on ? { background: neutral.tintSuccess, borderColor: 'rgb(var(--border-green-soft, 214 230 221))', color: brand[700] } : { background: '#fff', borderColor: neutral.borderStrong, color: neutral.ink2b }}
                         >
                           <Dot color={f.id === 'all' ? brand[700] : statusTokens[f.key].dot} /> {f.label} · <span className="fig">{count}</span>
                         </button>

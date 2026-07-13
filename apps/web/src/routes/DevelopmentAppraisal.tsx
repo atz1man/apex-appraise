@@ -153,7 +153,7 @@ export default function DevelopmentAppraisal() {
   const risk = useMemo(() => monteCarlo(input, { iterations: 400, seed: 42 }), [input]);
 
   const isResidual = input.site.mode === 'residual';
-  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: 'rgb(var(--status-green, 30 122 85))' } : R.poc >= 0.1 ? { v: 'Marginal', dot: '#F5C451', tone: 'rgb(var(--status-amber, 154 98 18))' } : { v: 'Unviable', dot: '#F08A7C', tone: 'rgb(var(--status-red, 178 58 46))' };
+  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: 'rgb(var(--status-green, 30 122 85))' } : R.poc >= 0.1 ? { v: 'Marginal', dot: 'rgb(var(--dot-warn, 245 196 81))', tone: 'rgb(var(--status-amber, 154 98 18))' } : { v: 'Unviable', dot: 'rgb(var(--dot-crit, 240 138 124))', tone: 'rgb(var(--status-red, 178 58 46))' };
 
   const startY = input.startYear ?? 2026;
   const startM = input.startMonth ?? 0;
@@ -205,7 +205,7 @@ export default function DevelopmentAppraisal() {
   const colLabel = (d: number) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d * 100) + '%';
   const cellStyle = (v: number, ratio: number) => {
     if (v <= 0) return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
-    if (ratio >= 1.12) return { color: '#14503B', background: '#DFEFE7' };
+    if (ratio >= 1.12) return { color: '#14503B', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
     if (ratio >= 1.02) return { color: 'rgb(var(--status-green, 30 122 85))', background: 'rgb(var(--tint-success, 236 243 239))' };
     if (ratio > 0.98) return { color: 'rgb(var(--ink-2, 95 102 95))', background: '#F4F4F0' };
     if (ratio > 0.85) return { color: 'rgb(var(--status-amber, 154 98 18))', background: 'rgb(var(--status-amber-bg, 248 240 222))' };
@@ -726,7 +726,7 @@ export default function DevelopmentAppraisal() {
                     <div className="relative h-[26px] rounded-[7px] bg-sunken-2 overflow-hidden">
                       <div
                         className="absolute top-0 bottom-0"
-                        style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: '#DFEFE7' }}
+                        style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: 'rgb(var(--tint-green-deep, 223 239 231))' }}
                       />
                       <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: '#14503B' }} />
                       {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />}
@@ -768,7 +768,7 @@ export default function DevelopmentAppraisal() {
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                      style={{ background: t.done ? '#14503B' : '#fff', borderColor: t.done ? '#14503B' : '#D2D1CA' }}
+                      style={{ background: t.done ? '#14503B' : '#fff', borderColor: t.done ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
                     >
                       {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>

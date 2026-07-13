@@ -40,6 +40,22 @@
   --status-amber-dot: 199 169 91;
   --status-purple-dot: 155 121 192;
   --tag-commercial-bg: 246 236 217;
+  --tint-amber-soft: 246 236 217;
+  --tint-red-soft: 247 229 226;
+  --tint-green-soft: 243 248 245;
+  --tint-green-deep: 223 239 231;
+  --border-green-soft: 214 230 221;
+  --border-soft: 238 237 231;
+  --checkbox-border: 210 209 202;
+  --bar-muted: 201 214 206;
+  --ink-green-deep: 30 92 69;
+  --stage-accent: 192 138 46;
+  --dot-warn: 245 196 81;
+  --dot-crit: 240 138 124;
+  --ink-faint: 192 191 184;
+  --notice-bg: 251 243 230;
+  --notice-border: 235 220 188;
+  --notice-ink: 122 78 14;
 }
 
 
@@ -79,6 +95,22 @@
   --status-amber-dot: 199 169 91;
   --status-purple-dot: 155 121 192;
   --tag-commercial-bg: 246 236 217;
+  --tint-amber-soft: 246 236 217;
+  --tint-red-soft: 247 229 226;
+  --tint-green-soft: 243 248 245;
+  --tint-green-deep: 223 239 231;
+  --border-green-soft: 214 230 221;
+  --border-soft: 238 237 231;
+  --checkbox-border: 210 209 202;
+  --bar-muted: 201 214 206;
+  --ink-green-deep: 30 92 69;
+  --stage-accent: 192 138 46;
+  --dot-warn: 245 196 81;
+  --dot-crit: 240 138 124;
+  --ink-faint: 192 191 184;
+  --notice-bg: 251 243 230;
+  --notice-border: 235 220 188;
+  --notice-ink: 122 78 14;
 }
 
 /* Dark palette — evergreen-tinted charcoal. NOT yet user-reachable: the
@@ -119,6 +151,22 @@
   --status-amber-dot: 217 169 79;
   --status-purple-dot: 177 149 214;
   --tag-commercial-bg: 42 34 19;
+  --tint-amber-soft: 42 34 19;
+  --tint-red-soft: 44 23 20;
+  --tint-green-soft: 22 36 29;
+  --tint-green-deep: 24 41 31;
+  --border-green-soft: 38 54 45;
+  --border-soft: 34 40 36;
+  --checkbox-border: 47 54 49;
+  --bar-muted: 58 74 66;
+  --ink-green-deep: 127 178 152;
+  --stage-accent: 217 169 79;
+  --dot-warn: 245 196 81;
+  --dot-crit: 240 138 124;
+  --ink-faint: 87 94 88;
+  --notice-bg: 42 34 19;
+  --notice-border: 66 54 30;
+  --notice-ink: 217 169 79;
 }
 
 html,

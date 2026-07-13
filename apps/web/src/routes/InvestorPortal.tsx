@@ -257,7 +257,7 @@ export default function InvestorPortal() {
               <div className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
                 {/* open capital call */}
                 {inv.openCapitalCall && (
-                  <section className="rounded-card px-[18px] py-4" style={{ background: '#FBF3E6', border: '1px solid #EBDCBC' }}>
+                  <section className="rounded-card px-[18px] py-4" style={{ background: 'rgb(var(--notice-bg, 251 243 230))', border: '1px solid rgb(var(--notice-border, 235 220 188))' }}>
                     <div className="flex items-center gap-[9px]">
                       <span
                         className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center"
@@ -265,18 +265,18 @@ export default function InvestorPortal() {
                       >
                         <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color="#fff" />
                       </span>
-                      <span className="text-[13px] font-semibold" style={{ color: '#7A4E0E' }}>
+                      <span className="text-[13px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
                         Capital call open
                       </span>
                     </div>
-                    <p className="mt-2.5 text-[12.5px] leading-[1.5] m-0" style={{ color: '#7A4E0E' }}>
+                    <p className="mt-2.5 text-[12.5px] leading-[1.5] m-0" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
                       {inv.openCapitalCall.label} — {inv.openCapitalCall.deal}.
                     </p>
                     <div className="mt-3 flex items-baseline justify-between">
                       <span className="text-[11px]" style={{ color: statusTokens.amber.text }}>
                         Your share
                       </span>
-                      <span className="fig text-[18px] font-semibold" style={{ color: '#7A4E0E' }}>
+                      <span className="fig text-[18px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
                         {fM(inv.openCapitalCall.amount)}
                       </span>
                     </div>

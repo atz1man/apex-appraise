@@ -23,7 +23,7 @@ const ASPECTS = ['Site visit', 'Comparables', 'Cost plan', 'Planning', 'Finance'
 
 const STAGE_ACCENT: Record<string, string> = {
   SOURCING: 'rgb(var(--ink-3, 154 160 154))',
-  APPRAISAL: '#C08A2E',
+  APPRAISAL: 'rgb(var(--stage-accent, 192 138 46))',
   OFFER: 'rgb(var(--status-blue, 45 91 168))',
   ACQUISITION: 'rgb(var(--status-green, 30 122 85))',
   CONSTRUCTION: '#14503B',
@@ -214,7 +214,7 @@ export default function Calendar() {
                       className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[9px] border transition-colors cursor-pointer"
                       style={{
                         background: on ? neutral.tintSuccess : neutral.surface,
-                        borderColor: on ? '#D6E6DD' : neutral.borderStrong,
+                        borderColor: on ? 'rgb(var(--border-green-soft, 214 230 221))' : neutral.borderStrong,
                         color: on ? brand[700] : neutral.ink2b,
                       }}
                     >
@@ -273,8 +273,8 @@ export default function Calendar() {
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && c.k && (e.preventDefault(), pickDay(c.k))}
                     className={`min-h-[72px] sm:min-h-[96px] rounded-[10px] p-[4px] sm:p-[7px] flex flex-col gap-1 border transition-colors ${c.inMonth ? 'cursor-pointer hover:border-border-strong' : ''}`}
                     style={{
-                      borderColor: c.isToday ? brand[700] : c.inMonth ? '#EEEDE7' : 'transparent',
-                      background: c.inMonth ? (c.isToday ? '#F3F8F5' : neutral.surface) : neutral.sunken,
+                      borderColor: c.isToday ? brand[700] : c.inMonth ? 'rgb(var(--border-soft, 238 237 231))' : 'transparent',
+                      background: c.inMonth ? (c.isToday ? 'rgb(var(--tint-green-soft, 243 248 245))' : neutral.surface) : neutral.sunken,
                       boxShadow: c.isToday ? `0 0 0 1px ${brand[700]}` : undefined,
                     }}
                   >
@@ -396,7 +396,7 @@ export default function Calendar() {
                             disabled={toggleTask.isPending}
                             onClick={() => toggleTask.mutate(t.id)}
                             className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
-                            style={{ borderColor: t.done ? brand[700] : '#D2D1CA', background: t.done ? brand[700] : neutral.surface }}
+                            style={{ borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))', background: t.done ? brand[700] : neutral.surface }}
                           >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: t.done ? 1 : 0 }} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
                           </button>

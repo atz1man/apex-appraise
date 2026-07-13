@@ -231,7 +231,7 @@ export default function SitePack() {
                                     toggle(k);
                                   }}
                                   className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center"
-                                  style={{ background: selected.has(k) ? '#14503B' : '#fff', borderColor: selected.has(k) ? '#14503B' : '#D2D1CA' }}
+                                  style={{ background: selected.has(k) ? '#14503B' : '#fff', borderColor: selected.has(k) ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
                                 >
                                   {selected.has(k) && (
                                     <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
