@@ -35,3 +35,22 @@ test('core screens have no horizontal scroll at phone width', async ({ page }) =
   await expect(page.getByText('Unit schedule')).toBeVisible();
   await noScroll(); // appraisal — form grids collapsed
 });
+
+test('charts are phone-proportioned and sales page has no horizontal scroll', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByText('Deal tools').waitFor();
+  await page.goto('/board');
+  await page.getByText('Harbour Reach').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Sales', exact: true }).click();
+  await expect(page.getByTestId('sales-velocity')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), { timeout: 10_000 })
+    .toBeLessThanOrEqual(0);
+  // narrow-mode chart: phone viewBox (360-wide) so text renders legibly
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
+  await page.getByText('Unit schedule').waitFor();
+  await page.getByText('Cashflow', { exact: true }).first().click();
+  const vb = await page.getByTestId('cashflow-chart').locator('svg').getAttribute('viewBox');
+  expect(vb).toContain('0 0 360');
+});

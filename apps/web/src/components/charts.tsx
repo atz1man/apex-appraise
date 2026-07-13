@@ -1,6 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CashflowRow } from '@apex/appraisal-engine';
 import { fM, formatSigned } from '../lib/format';
+
+/** True below 640px — charts swap to a phone-proportioned viewBox so text stays legible. */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)').matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
 
 /* ================================================================
    Engine-fed SVG charts — no chart library, design-system colors only.
@@ -32,14 +44,16 @@ export function CashflowChart({
   monthLabel: (m: number) => string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const narrow = useNarrow();
 
-  const W = 720;
-  const FLOW_H = 120;
-  const CUM_H = 110;
+  const W = narrow ? 360 : 720;
+  const FLOW_H = narrow ? 96 : 120;
+  const CUM_H = narrow ? 88 : 110;
   const GAP_Y = 34;
   const PAD_L = 8;
   const PAD_R = 8;
   const H = FLOW_H + GAP_Y + CUM_H + 24;
+  const tickEvery = narrow ? 6 : 3;
 
   const n = rows.length;
   const slot = (W - PAD_L - PAD_R) / Math.max(n, 1);
@@ -106,7 +120,7 @@ export function CashflowChart({
         {/* peak-debt marker */}
         <circle cx={xOf(peakIdx)} cy={cumY(rows[peakIdx]!.cum)} r="4" fill={INK} stroke="#fff" strokeWidth="2" />
         <text
-          x={Math.min(xOf(peakIdx) + 8, W - 150)}
+          x={Math.min(xOf(peakIdx) + 8, W - (narrow ? 108 : 150))}
           y={Math.min(cumY(rows[peakIdx]!.cum) + 16, H - 26)}
           className="fig"
           fontSize="11"
@@ -119,9 +133,9 @@ export function CashflowChart({
         {hover != null && (
           <line x1={xOf(hover)} x2={xOf(hover)} y1={8} y2={cumTop + CUM_H} stroke={INK} strokeWidth="1" opacity="0.35" />
         )}
-        {/* x ticks every quarter */}
+        {/* x ticks — quarterly, or twice-yearly on phones */}
         {rows.map((r, i) =>
-          i % 3 === 0 ? (
+          i % tickEvery === 0 ? (
             <text key={r.m} x={xOf(i)} y={H - 8} fontSize="9.5" fill={MUTED} textAnchor="middle" className="fig">
               {monthLabel(r.m)}
             </text>
@@ -275,16 +289,18 @@ export function ProfitBridge({
   profit: number;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const narrow = useNarrow();
   const gdv = steps.length ? steps.reduce((a, [, v]) => a + v, profit) : profit;
 
-  const W = 720;
-  const H = 210;
+  const W = narrow ? 360 : 720;
+  const H = narrow ? 180 : 210;
   const PAD_T = 26;
   const PAD_B = 34;
   const plotH = H - PAD_T - PAD_B;
   const bars = [['GDV', gdv, 'start'] as const, ...steps.map(([l, v]) => [l, v, 'ded'] as const), ['Profit', profit, 'end'] as const];
   const slotW = W / bars.length;
-  const barW = Math.min(72, slotW * 0.62);
+  const barW = Math.min(narrow ? 34 : 72, slotW * 0.62);
+  const nameLen = narrow ? 7 : 13;
   const yOf = (v: number) => PAD_T + (1 - v / (gdv || 1)) * plotH;
 
   let running = gdv;
@@ -318,11 +334,11 @@ export function ProfitBridge({
               {/* connector from the previous bar's landing level */}
               {i > 0 && <line x1={x - slotW + barW + (slotW - barW) / 2} x2={x} y1={top} y2={top} stroke={MUTED} strokeWidth="1" strokeDasharray="2 3" />}
               <rect x={x} y={top} width={barW} height={h} rx="3" fill={fill} />
-              <text x={x + barW / 2} y={top - 6} fontSize="10.5" textAnchor="middle" className="fig" fontWeight="600" fill={INK} data-testid={kind === 'end' ? 'bridge-profit' : undefined}>
+              <text x={x + barW / 2} y={top - 6} fontSize={narrow ? 8.5 : 10.5} textAnchor="middle" className="fig" fontWeight="600" fill={INK} data-testid={kind === 'end' ? 'bridge-profit' : undefined}>
                 {kind === 'ded' ? `−${fM(value)}` : fM(value)}
               </text>
-              <text x={x + barW / 2} y={H - 18} fontSize="9.5" textAnchor="middle" fill={MUTED}>
-                {label.length > 13 ? `${label.slice(0, 12)}…` : label}
+              <text x={x + barW / 2} y={H - 18} fontSize={narrow ? 8 : 9.5} textAnchor="middle" fill={MUTED}>
+                {label.length > nameLen ? `${label.slice(0, nameLen - 1)}…` : label}
               </text>
             </g>
           );
