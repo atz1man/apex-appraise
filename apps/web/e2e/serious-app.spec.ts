@@ -172,3 +172,17 @@ test('data & privacy: export, audit trail, and full workspace deletion', async (
   await page.getByRole('button', { name: 'Permanently delete' }).click();
   await expect(page).toHaveURL(/welcome/, { timeout: 15_000 });
 });
+
+test('appraisal charts: cashflow J-curve and profit bridge render from the engine', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/board');
+  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
+  await expect(page.getByText('Unit schedule')).toBeVisible();
+  await page.getByText('Cashflow', { exact: true }).first().click();
+  await expect(page.getByTestId('cashflow-chart')).toBeVisible();
+  await expect(page.getByTestId('cashflow-chart').getByText(/Peak debt £/)).toBeVisible();
+  await page.getByText('Returns', { exact: true }).first().click();
+  await expect(page.getByTestId('profit-bridge')).toBeVisible();
+  await expect(page.getByTestId('bridge-profit')).toHaveText(/£/);
+});

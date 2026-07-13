@@ -14,6 +14,7 @@ import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
+import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
@@ -559,25 +560,8 @@ export default function DevelopmentAppraisal() {
                     </div>
                   }
                 >
-                  {/* cost/revenue bars */}
-                  <div className="flex items-end gap-[3px] h-28 border-b border-border-std pb-1">
-                    {cash.rows.map((r) => (
-                      <div key={r.m} className="flex-1 flex items-end gap-[2px] h-full" title={`${monthLabel(r.m)} · net ${formatSigned(r.net)}`}>
-                        <div className="flex-1 rounded-t-[2px]" style={{ height: `${(r.cost / maxBar) * 100}%`, background: '#C7A95B' }} />
-                        <div className="flex-1 rounded-t-[2px]" style={{ height: `${(r.rev / maxBar) * 100}%`, background: '#1E7A55' }} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-1 flex justify-between text-[10.5px] fig text-ink-3">
-                    <span>{monthLabel(1)}</span>
-                    <span>PC {monthLabel(R.period)}</span>
-                    <span>{monthLabel(cash.totalMonths)}</span>
-                  </div>
-                  <div className="mt-2 flex gap-5 text-[11px] text-ink-2">
-                    <span className="inline-flex items-center gap-1.5"><Dot color="#C7A95B" /> Cost out</span>
-                    <span className="inline-flex items-center gap-1.5"><Dot color="#1E7A55" /> Revenue</span>
-                    <span className="ml-auto">Peak debt <b className="fig">{fM(cash.peak)}</b></span>
-                  </div>
+                  {/* flows + cumulative J-curve, one shared month axis */}
+                  <CashflowChart rows={cash.rows} peak={cash.peak} pcMonth={R.period} monthLabel={monthLabel} />
                   <div className="mt-4 max-h-[340px] overflow-y-auto overflow-x-auto">
                     <table className="w-full min-w-[560px]">
                       <thead className="sticky top-0 bg-surface">
@@ -606,6 +590,19 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'returns' && (
                 <>
+                  <Panel title="Profit bridge — GDV to developer profit">
+                    <ProfitBridge
+                      steps={[
+                        ['Build', R.build],
+                        ['Fees & cont.', R.fees + R.cont],
+                        ['CIL · S106', R.otherTotal],
+                        ['Finance', R.finance],
+                        ['Sale costs', R.saleCosts],
+                        ['Land', R.landGross],
+                      ]}
+                      profit={R.profit}
+                    />
+                  </Panel>
                   <Panel title="JV structure">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="GP co-invest" suffix="% of equity" value={input.jv!.gpCoinvestPct} onChange={(v) => set({ jv: { ...input.jv!, gpCoinvestPct: v } })} />
