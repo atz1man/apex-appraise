@@ -5,6 +5,7 @@ import { accent, brand, neutral } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { BrandMark, Button, Spinner } from '../components/ui';
+import { CashflowChart, ProfitBridge } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -142,10 +143,11 @@ export default function AppraisalReport() {
     return (id: string | null) => (id ? (m.get(id) ?? GRAD_NONE) : GRAD_NONE);
   }, [photos]);
 
-  // Cashflow ledger split into print-safe chunks (≤21 rows per page).
+  // Cashflow section: first page is the visuals (J-curve + profit bridge),
+  // then the ledger in print-safe chunks (≤21 rows per page).
   const cashChunks = useMemo(() => {
     const rows = R?.cash?.rows ?? [];
-    const out: (typeof rows)[] = [];
+    const out: (typeof rows)[] = [[]];
     for (let i = 0; i < rows.length; i += 21) out.push(rows.slice(i, i + 21));
     return out;
   }, [R]);
@@ -215,7 +217,6 @@ export default function AppraisalReport() {
   const disposalPct = input.disposal.agentPct + input.disposal.legalPct;
   const jv = input.jv;
   const cash = R.cash!;
-  const maxBar = Math.max(...cash.rows.map((r) => Math.max(r.cost + r.intr, r.rev)), 1);
 
   const startY = input.startYear ?? 2026;
   const startM = input.startMonth ?? 0;
@@ -553,34 +554,40 @@ export default function AppraisalReport() {
           <PageFoot no={5} total={pageTotal} refCode={refCode} />
         </A4Page>
 
-        {/* ===== PAGES 6.. — CASHFLOW PROFILE ===== */}
+        {/* ===== PAGES 6.. — CASHFLOW & RETURNS PROFILE ===== */}
         {cashChunks.map((chunk, pi) => (
           <A4Page key={pi}>
-            <PageHead title={`5 · Cashflow profile${cashChunks.length > 1 ? ` (${pi + 1} of ${cashChunks.length})` : ''}`} scheme={scheme} />
+            <PageHead
+              title={pi === 0 ? '5 · Cashflow & returns profile' : `5 · Cashflow ledger (${pi} of ${cashChunks.length - 1})`}
+              scheme={scheme}
+            />
             {pi === 0 && (
               <>
-                <div className="flex items-end gap-[3px] border border-border-std rounded-[12px]" style={{ marginTop: 18, height: 150, padding: 14 }}>
-                  {cash.rows.map((r) => (
-                    <div key={r.m} className="flex-1 h-full flex items-end gap-[2px]">
-                      <div className="flex-1 rounded-t-[2px]" style={{ height: `${((r.cost + r.intr) / maxBar) * 100}%`, background: '#C7A95B' }} />
-                      <div className="flex-1 rounded-t-[2px]" style={{ height: `${(r.rev / maxBar) * 100}%`, background: brand[500] }} />
-                    </div>
-                  ))}
+                <div style={{ marginTop: 18 }}>
+                  <CashflowChart rows={cash.rows} peak={cash.peak} pcMonth={R.period} monthLabel={monthLabel} />
                 </div>
-                <div className="mt-2 flex justify-between fig text-[10px] font-medium text-ink-3">
-                  <span>{monthLabel(1)}</span>
-                  <span>PC · {monthLabel(R.period)}</span>
-                  <span>{monthLabel(cash.totalMonths)}</span>
+                <SectionTitle>Profit bridge — GDV to developer profit</SectionTitle>
+                <div style={{ marginTop: 8 }}>
+                  <ProfitBridge
+                    steps={[
+                      ['Build', R.build],
+                      ['Fees & cont.', R.fees + R.cont],
+                      ['CIL · S106', R.otherTotal],
+                      ['Finance', R.finance],
+                      ['Sale costs', R.saleCosts],
+                      ['Land', R.landGross],
+                    ]}
+                    profit={R.profit}
+                  />
                 </div>
-                <div className="mt-3 flex items-center gap-5 text-[11px] text-ink-2">
-                  <span className="inline-flex items-center gap-1.5"><span className="w-[7px] h-[7px] rounded-full inline-block" style={{ background: '#C7A95B' }} /> Cost out (incl. interest)</span>
-                  <span className="inline-flex items-center gap-1.5"><span className="w-[7px] h-[7px] rounded-full inline-block" style={{ background: brand[500] }} /> Revenue</span>
+                <div className="mt-2 flex items-center gap-5 text-[11px] text-ink-2">
                   <span className="ml-auto rounded-[9px] px-3 py-1.5 bg-tint-success text-[11.5px] font-semibold" style={{ color: brand[700] }}>
                     Peak debt <span className="fig">{formatMoneyFull(cash.peak)}</span> · month {cash.rows.reduce((best, r, i, arr) => (Math.abs(r.cum) > Math.abs(arr[best].cum) ? i : best), 0) + 1}
                   </span>
                 </div>
               </>
             )}
+            {chunk.length > 0 && (
             <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: pi === 0 ? 20 : 18 }}>
               <div className="flex bg-canvas fig text-[10px] font-semibold uppercase text-ink-2b" style={{ letterSpacing: '0.4px' }}>
                 <div style={{ flex: 1.2, padding: '10px 14px' }}>Month</div>
@@ -599,6 +606,7 @@ export default function AppraisalReport() {
                 </div>
               ))}
             </div>
+            )}
             <PageFoot no={6 + pi} total={pageTotal} refCode={refCode} />
           </A4Page>
         ))}
