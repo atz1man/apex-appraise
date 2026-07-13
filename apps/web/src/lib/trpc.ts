@@ -45,6 +45,8 @@ export function makeTrpcClient() {
       httpBatchLink({
         url: '/trpc',
         transformer: superjson,
+        // safety net: split batches before the URL hits server limits (HTTP 414)
+        maxURLLength: 2000,
         headers() {
           const token = getToken();
           return token ? { authorization: `Bearer ${token}` } : {};

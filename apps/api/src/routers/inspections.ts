@@ -39,6 +39,26 @@ export const inspectionsRouter = router({
     return row ? inspectionOut(row) : null;
   }),
 
+  /**
+   * Latest inspection per deal across the org — one round-trip for the field
+   * app's dashboard chips (the per-deal get() batch overflowed the URL limit).
+   */
+  statuses: internalProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.inspection.findMany({
+      where: { orgId: ctx.principal.orgId },
+      orderBy: { inspectedAt: 'desc' },
+      select: { dealId: true, status: true, rooms: true },
+    });
+    const out: Record<string, { status: string; progressPct: number }> = {};
+    for (const r of rows) {
+      if (r.dealId in out) continue;
+      const rooms = J<Array<{ condition: number }>>(r.rooms, []);
+      const progressPct = rooms.length ? Math.round((rooms.filter((x) => x.condition > 0).length / rooms.length) * 100) : 0;
+      out[r.dealId] = { status: r.status, progressPct };
+    }
+    return out;
+  }),
+
   /** Persist a field inspection — replaces the prototype's apex_field_handoff_v1. */
   save: internalProcedure
     .input(

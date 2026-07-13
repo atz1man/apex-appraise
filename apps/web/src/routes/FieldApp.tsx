@@ -140,8 +140,8 @@ export default function FieldApp() {
     if (!dealId && deals.length) setDealId(deals[0].id);
   }, [deals, dealId]);
 
-  // one lightweight status query per deal — powers the dashboard chips
-  const inspQueries = trpc.useQueries((t) => deals.map((d) => t.inspections.get(d.id)));
+  // one round-trip for every deal's inspection status — powers the dashboard chips
+  const { data: inspStatuses } = trpc.inspections.statuses.useQuery(undefined, { staleTime: 15_000 });
 
   const deal = deals.find((d) => d.id === dealId);
   const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
@@ -278,8 +278,8 @@ export default function FieldApp() {
           {(
             [
               ['Active files', deals.length, '#16201B'],
-              ['In progress', inspQueries.filter((iq) => iq.data && iq.data.status !== 'submitted').length, '#9A6212'],
-              ['Submitted', inspQueries.filter((iq) => iq.data?.status === 'submitted').length, '#1E7A55'],
+              ['In progress', Object.values(inspStatuses ?? {}).filter((s) => s.status !== 'submitted').length, '#9A6212'],
+              ['Submitted', Object.values(inspStatuses ?? {}).filter((s) => s.status === 'submitted').length, '#1E7A55'],
             ] as Array<[string, number, string]>
           ).map(([label, v, tone]) => (
             <div key={label} className="flex-1 bg-surface border border-border-std rounded-card px-3 py-[13px]">
@@ -299,15 +299,14 @@ export default function FieldApp() {
           )}
           {filtered.map((d) => {
             const i = deals.findIndex((x) => x.id === d.id);
-            const insp = inspQueries[i]?.data;
+            const insp = inspStatuses?.[d.id];
             const chip =
               insp?.status === 'submitted'
                 ? { t: 'SUBMITTED', c: '#1E7A55', bg: '#E4F1EA' }
                 : insp
                   ? { t: 'IN PROGRESS', c: '#9A6212', bg: '#F6ECD9' }
                   : { t: 'TO INSPECT', c: '#6E7269', bg: '#F0EFE9' };
-            const rms = insp?.rooms ?? [];
-            const p = rms.length ? (rms.filter((r) => r.condition > 0).length / rms.length) * 100 : 0;
+            const p = insp?.progressPct ?? 0;
             const barColor = insp?.status === 'submitted' ? '#1E7A55' : p > 0 ? '#14503B' : '#ECEBE5';
             return (
               <button
