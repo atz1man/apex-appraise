@@ -2,8 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Semantic palette as RGB triplets — the tailwind preset resolves its token
+   classes through these, so `.dark` on <html> re-themes every token class.
+   Light is the default and these values match the original hexes exactly. */
 :root {
   color-scheme: light;
+  --canvas: 243 244 241;
+  --frame: 231 229 223;
+  --frame-2: 234 233 227;
+  --surface: 255 255 255;
+  --sunken: 251 252 251;
+  --sunken-2: 240 239 233;
+  --tint-success: 236 243 239;
+  --tint-success-2: 228 241 234;
+  --border-strong: 230 229 222;
+  --border-std: 236 235 229;
+  --border-faint: 240 239 233;
+  --ink: 22 32 27;
+  --ink-2: 95 102 95;
+  --ink-2b: 110 114 105;
+  --ink-3: 154 160 154;
+  --ink-3b: 182 181 173;
+  --inactive: 138 144 138;
+  --status-amber: 154 98 18;
+  --status-amber-bg: 248 240 222;
+  --status-blue: 45 91 168;
+  --status-blue-bg: 229 234 246;
+  --status-red: 178 58 46;
+  --status-red-bg: 249 234 231;
+  --status-green: 30 122 85;
+  --status-green-bg: 228 241 234;
+  --status-purple: 107 78 138;
+  --status-purple-bg: 237 230 244;
+}
+
+/* Dark palette — evergreen-tinted charcoal. NOT yet user-reachable: the
+   toggle ships only once every screen passes dual-mode verification
+   (dark-mode session 3). Print/report routes will pin themselves light. */
+.dark {
+  color-scheme: dark;
+  --canvas: 16 20 18;
+  --frame: 22 27 24;
+  --frame-2: 24 29 26;
+  --surface: 23 28 25;
+  --sunken: 19 23 21;
+  --sunken-2: 29 35 32;
+  --tint-success: 22 36 29;
+  --tint-success-2: 24 41 31;
+  --border-strong: 38 45 40;
+  --border-std: 34 40 36;
+  --border-faint: 28 33 30;
+  --ink: 232 236 233;
+  --ink-2: 168 176 169;
+  --ink-2b: 152 160 153;
+  --ink-3: 110 118 112;
+  --ink-3b: 87 94 88;
+  --inactive: 122 130 123;
+  --status-amber: 217 169 79;
+  --status-amber-bg: 42 34 19;
+  --status-blue: 127 163 224;
+  --status-blue-bg: 22 32 46;
+  --status-red: 224 122 110;
+  --status-red-bg: 44 23 20;
+  --status-green: 76 192 138;
+  --status-green-bg: 20 37 28;
+  --status-purple: 177 149 214;
+  --status-purple-bg: 34 26 44;
 }
 
 html,
