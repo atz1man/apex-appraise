@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
+import { SalesVelocityChart } from '../components/charts';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
 import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
@@ -180,6 +181,18 @@ export default function SalesCrm() {
       msDates: [],
     }));
   }, [mode, unitsQ.data, tenQ.data]);
+
+  // Sales velocity: each secured unit becomes a dated event; target = whole scheme appraised
+  const velocityPoints = useMemo(
+    () =>
+      mode === 'sales'
+        ? rows
+            .filter((r) => r.status !== 'AVAILABLE' && r.date)
+            .map((r) => ({ t: new Date(r.date!).getTime(), value: r.agreed ?? r.appraised, label: r.name }))
+        : [],
+    [mode, rows],
+  );
+  const velocityTarget = useMemo(() => rows.reduce((a, r) => a + r.appraised, 0), [rows]);
 
   const defOf = (status: string): Def => defs.find((d) => d.id === status) ?? defs[0];
   const money = (n: number) => (isRent ? formatRent(n) : fM(n));
@@ -585,6 +598,12 @@ export default function SalesCrm() {
 
               {/* side rail */}
               <aside className="flex flex-col gap-4">
+                {!isRent && velocityPoints.length > 0 && (
+                  <Panel title="Sales velocity" right={<span className="fig text-[11px] text-ink-3">GDV secured</span>}>
+                    <SalesVelocityChart points={velocityPoints} target={velocityTarget} />
+                  </Panel>
+                )}
+
                 <Panel title="Marketing funnel" right={<span className="fig text-[11px] text-ink-3">to date</span>}>
                   {rows.length === 0 ? (
                     <EmptyState>Funnel appears once units are added.</EmptyState>

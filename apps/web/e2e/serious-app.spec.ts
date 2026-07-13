@@ -186,3 +186,13 @@ test('appraisal charts: cashflow J-curve and profit bridge render from the engin
   await expect(page.getByTestId('profit-bridge')).toBeVisible();
   await expect(page.getByTestId('bridge-profit')).toHaveText(/£/);
 });
+
+test('sales velocity chart shows cumulative GDV secured vs appraised', async ({ page }) => {
+  await loginInternal(page);
+  await page.goto('/board');
+  await page.getByText('Harbour Reach').first().click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Sales', exact: true }).click();
+  await expect(page.getByText('Unit sales tracker')).toBeVisible();
+  await expect(page.getByTestId('sales-velocity')).toBeVisible();
+  await expect(page.getByTestId('velocity-secured')).toHaveText(/£/);
+});

@@ -159,6 +159,111 @@ export function CashflowChart({
 }
 
 /**
+ * Sales velocity — cumulative GDV secured over time (step line + area)
+ * against the appraised total (dashed reference). Compact, for the rail.
+ */
+export function SalesVelocityChart({
+  points,
+  target,
+}: {
+  points: Array<{ t: number; value: number; label: string }>; // secured events, any order
+  target: number;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const sorted = useMemo(() => [...points].sort((a, b) => a.t - b.t), [points]);
+  const cum = useMemo(() => {
+    let run = 0;
+    return sorted.map((p) => ({ ...p, cum: (run += p.value) }));
+  }, [sorted]);
+
+  const W = 320;
+  const H = 150;
+  const PAD_T = 14;
+  const PAD_B = 22;
+  const plotH = H - PAD_T - PAD_B;
+  const t0 = cum[0]?.t ?? 0;
+  const t1 = Math.max(cum[cum.length - 1]?.t ?? 1, t0 + 1);
+  const yMax = Math.max(target, cum[cum.length - 1]?.cum ?? 0, 1);
+  const xOf = (t: number) => 10 + ((t - t0) / (t1 - t0)) * (W - 20);
+  const yOf = (v: number) => PAD_T + (1 - v / yMax) * plotH;
+
+  // step-after path
+  const path = cum
+    .map((p, i) => {
+      const x = xOf(p.t).toFixed(1);
+      const y = yOf(p.cum).toFixed(1);
+      if (i === 0) return `M${x},${yOf(0).toFixed(1)} L${x},${y}`;
+      return `L${x},${yOf(cum[i - 1]!.cum).toFixed(1)} L${x},${y}`;
+    })
+    .join(' ');
+  const lastX = cum.length ? xOf(cum[cum.length - 1]!.t) : 10;
+  const hovered = hover != null ? cum[hover] : null;
+
+  const dateGB = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  return (
+    <div data-testid="sales-velocity">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full select-none"
+        role="img"
+        aria-label="Cumulative GDV secured over time against the appraised total"
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(e) => {
+          if (!cum.length) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * W;
+          let best = 0;
+          cum.forEach((p, i) => {
+            if (Math.abs(xOf(p.t) - x) < Math.abs(xOf(cum[best]!.t) - x)) best = i;
+          });
+          setHover(best);
+        }}
+      >
+        {/* appraised-total reference */}
+        <line x1={10} x2={W - 10} y1={yOf(target)} y2={yOf(target)} stroke={MUTED} strokeWidth="1" strokeDasharray="3 4" />
+        <text x={W - 10} y={yOf(target) - 4} fontSize="9" fill={MUTED} textAnchor="end" className="fig">
+          Appraised {fM(target)}
+        </text>
+        {/* baseline */}
+        <line x1={10} x2={W - 10} y1={yOf(0)} y2={yOf(0)} stroke={GRID} strokeWidth="1" />
+        {/* secured area + step line */}
+        {cum.length > 0 && (
+          <>
+            <path d={`${path} L${lastX.toFixed(1)},${yOf(0).toFixed(1)} Z`} fill={REV} opacity="0.1" />
+            <path d={path} fill="none" stroke={REV} strokeWidth="2" strokeLinejoin="round" />
+            {cum.map((p, i) => (
+              <circle key={i} cx={xOf(p.t)} cy={yOf(p.cum)} r={hover === i ? 4 : 2.5} fill={REV} stroke="#fff" strokeWidth="1.5" />
+            ))}
+          </>
+        )}
+        {/* x range labels */}
+        {cum.length > 0 && (
+          <>
+            <text x={10} y={H - 6} fontSize="9" fill={MUTED} className="fig">
+              {dateGB(cum[0]!.t)}
+            </text>
+            <text x={W - 10} y={H - 6} fontSize="9" fill={MUTED} textAnchor="end" className="fig">
+              {dateGB(cum[cum.length - 1]!.t)}
+            </text>
+          </>
+        )}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[11px] text-ink-2 min-h-[16px]">
+        <span>
+          Secured <b className="fig text-ink" data-testid="velocity-secured">{fM(cum[cum.length - 1]?.cum ?? 0)}</b> of {fM(target)}
+        </span>
+        {hovered && (
+          <span className="fig text-ink-2b">
+            {hovered.label} · {dateGB(hovered.t)} · {fM(hovered.cum)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Profit bridge — waterfall from GDV down through every cost block to
  * developer profit. Deductions share one hue; the two result bars are green.
  */
