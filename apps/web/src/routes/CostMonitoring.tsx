@@ -266,7 +266,7 @@ export default function CostMonitoring() {
                   {packages.map((pk) => {
                     const variance = pk.forecast - pk.budget;
                     return (
-                      <tr key={pk.id}>
+                      <tr key={pk.id} className="hover:bg-sunken transition-colors">
                         <Td className="font-medium text-[13px] pr-2">{pk.name}</Td>
                         <Td>
                           <div className="flex items-center gap-2">

@@ -209,9 +209,9 @@ export default function Scenarios() {
 
       <DealNav dealId={dealId} active="scenarios" />
       <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
-        <div className="mt-6 flex items-end justify-between">
+        <div className="mt-8 flex items-end justify-between">
           <div>
-            <div className="text-[20px] font-bold tracking-[-0.5px]">Compare scheme options</div>
+            <div className="text-[32px] font-bold tracking-[-1.2px]">Compare scheme options</div>
             <div className="mt-0.5 text-[13px] text-ink-3">
               Adjust the levers on each option; metrics recompute live. Winning value in each row is highlighted.
             </div>

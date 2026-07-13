@@ -94,10 +94,10 @@ export default function SitePack() {
       <DealNav dealId={dealId} active="sitepack" />
 
       <main className="max-w-[1480px] mx-auto px-6 pb-14">
-        <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="mt-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">Public record</div>
-            <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.8px]">Site pack</h1>
+            <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">Site pack</h1>
             <div className="mt-1 text-[13.5px] text-ink-2 max-w-[560px]">
               Real sold prices, planning constraints and flood zones for this site — pulled live from
               HM Land Registry and planning.data.gov.uk, with provenance on every figure.

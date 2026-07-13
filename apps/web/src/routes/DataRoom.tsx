@@ -195,7 +195,7 @@ export default function DataRoom() {
         <div className="px-4 sm:px-6 py-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="text-[19px] font-bold tracking-[-0.4px]">{currentLabel}</div>
+              <div className="text-[32px] font-bold tracking-[-1.2px]">{currentLabel}</div>
               <div className="mt-0.5 text-[12.5px] text-ink-3">{docs.length} files · linked to Auto-Appraisal extraction</div>
             </div>
           </div>

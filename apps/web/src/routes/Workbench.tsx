@@ -199,10 +199,10 @@ export default function Workbench() {
 
       <DealNav dealId={dealId} active="workbench" />
       <main className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-14">
-        <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="mt-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">Valuation modeling</div>
-            <h1 className="mt-1.5 text-[22px] sm:text-[26px] font-bold tracking-[-0.7px] leading-tight">Valuation reconciliation</h1>
+            <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px] leading-tight">Valuation reconciliation</h1>
             <div className="mt-1 text-[13.5px] text-ink-2">{deal.address}</div>
           </div>
           <Button to={`/deal/${dealId}/redbook`} variant="secondary">

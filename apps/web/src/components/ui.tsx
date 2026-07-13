@@ -334,12 +334,18 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(12,18,14,0.35)', backdropFilter: 'blur(6px) saturate(1.2)' }} onClick={onClose}>
       <div
-        className="h-full bg-surface shadow-drawer animate-slideIn overflow-y-auto rounded-l-[22px]"
-        style={{ width, maxWidth: '94vw' }}
+        className="h-full shadow-drawer animate-slideIn overflow-y-auto rounded-l-[24px]"
+        style={{
+          width,
+          maxWidth: '94vw',
+          background: 'rgb(var(--surface, 255 255 255) / 0.94)',
+          backdropFilter: 'blur(24px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <div className="sticky top-0 z-10 bg-surface border-b border-border-std px-5 py-4 flex items-center justify-between">
+          <div className="sticky top-0 z-10 border-b border-border-std px-5 py-4 flex items-center justify-between" style={{ background: 'rgb(var(--surface, 255 255 255) / 0.85)', backdropFilter: 'blur(12px)' }}>
             {typeof title === 'string' ? <h3 className="text-[16.5px] font-semibold tracking-[-0.3px]">{title}</h3> : title}
             <button onClick={onClose} className="text-ink-3 hover:text-ink text-[18px] leading-none px-1">
               ×

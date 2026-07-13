@@ -145,8 +145,8 @@ export default function Integrations() {
       />
 
       <main className="max-w-[1280px] mx-auto px-4 sm:px-6 pb-14">
-        <div className="mt-6 mb-5">
-          <div className="text-[22px] font-bold tracking-[-0.6px]">Connect your data sources</div>
+        <div className="mt-8 mb-5">
+          <div className="text-[32px] font-bold tracking-[-1.2px]">Connect your data sources</div>
           <div className="mt-1 text-[13.5px] text-ink-3 max-w-[620px] leading-relaxed">
             Live data feeds make extraction trustworthy and appraisals defensible — comparable evidence, planning, EPCs and mapping flow
             straight into every deal.

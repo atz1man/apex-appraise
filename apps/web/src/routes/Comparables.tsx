@@ -195,7 +195,7 @@ export default function Comparables() {
                       const r = summary.comps[i];
                       const netFmt = `${r.netAdjustment > 0 ? '+' : r.netAdjustment < 0 ? '−' : ''}${Math.abs(r.netAdjustment)}%`;
                       return (
-                        <div key={c.id} className="flex items-center border-b border-border-faint py-2.5">
+                        <div key={c.id} className="flex items-center border-b border-border-faint py-2.5 hover:bg-sunken transition-colors">
                           <div className="px-2.5 min-w-0" style={{ flex: 2 }}>
                             <div className="flex items-center gap-2 min-w-0">
                               <Dot color={PIN} size={9} />

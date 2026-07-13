@@ -195,7 +195,7 @@ export default function Calendar() {
     <div className="min-h-screen">
       <TopBar crumb="Calendar & tasks" />
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
-        <div className="mt-6">
+        <div className="mt-8">
           <EyebrowTitle
             eyebrow="Team operations"
             title="Calendar & tasks"

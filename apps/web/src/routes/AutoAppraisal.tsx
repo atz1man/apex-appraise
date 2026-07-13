@@ -744,7 +744,7 @@ export default function AutoAppraisal() {
                   </thead>
                   <tbody>
                     {x.units.map((u, i) => (
-                      <tr key={i}>
+                      <tr key={i} className="hover:bg-sunken transition-colors">
                         <Td>
                           <span className="inline-flex items-center gap-2">
                             <span title={u.source}>

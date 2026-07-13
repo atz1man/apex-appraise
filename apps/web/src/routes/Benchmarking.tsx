@@ -226,10 +226,10 @@ export default function Benchmarking() {
         }
       />
       <main className="max-w-[1320px] mx-auto px-6 pb-14">
-        <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="mt-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">{scopeShort.toUpperCase()}</div>
-            <h1 className="mt-1.5 text-[22px] font-bold tracking-[-0.5px]">How your deals compare to the market</h1>
+            <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">How your deals compare to the market</h1>
           </div>
           <div className="flex items-center gap-[7px] px-[11px] py-1.5 rounded-[9px] bg-tint-success">
             <svg width="13" height="13" viewBox="0 0 24 24" fill={brand[700]}>
@@ -365,7 +365,7 @@ export default function Benchmarking() {
                         {dealRows.map((r) => {
                           const vs = r.poc != null && M.poc.median > 0 ? r.poc - M.poc.median : null;
                           return (
-                            <tr key={`${r.dealName}-${r.period}`}>
+                            <tr key={`${r.dealName}-${r.period}`} className="hover:bg-sunken transition-colors">
                               <Td className="font-semibold text-[13px]">{r.dealName}</Td>
                               <Td fig className="text-ink-3">
                                 {periodShort(r.period)}
