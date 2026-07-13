@@ -97,6 +97,25 @@ export const orgRouter = router({
     return { id: org.id, name: org.name, createdAt: org.createdAt, counts: { deals, users, investors } };
   }),
 
+  /** Activation checklist — real completion state for the Hub's getting-started card. */
+  onboarding: internalProcedure.query(async ({ ctx }) => {
+    const orgId = ctx.principal.orgId;
+    const [deals, appraisals, documents, comparables, members] = await Promise.all([
+      ctx.prisma.deal.count({ where: { orgId } }),
+      ctx.prisma.appraisal.count({ where: { orgId } }),
+      ctx.prisma.document.count({ where: { orgId } }),
+      ctx.prisma.comparable.count({ where: { orgId } }),
+      ctx.prisma.user.count({ where: { orgId, principalType: 'internal' } }),
+    ]);
+    return {
+      hasDeal: deals > 0,
+      hasAppraisal: appraisals > 0,
+      hasDocument: documents > 0,
+      hasComparable: comparables > 0,
+      hasTeammate: members > 1,
+    };
+  }),
+
   update: adminProcedure
     .input(z.object({ name: z.string().min(2).max(80) }))
     .mutation(({ ctx, input }) =>

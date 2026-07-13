@@ -20,6 +20,8 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
   await page.getByRole('button', { name: /Create|Start/ }).click();
   // lands on the Hub of a brand-new org: onboarding CTA, empty pipeline, zero rollup
   await expect(page.getByText('Add your first deal')).toBeVisible();
+  // activation checklist starts from zero on a fresh workspace
+  await expect(page.getByTestId('getting-started-progress')).toHaveText('0 of 5 done');
   await page.getByRole('link', { name: /New deal from documents/ }).click();
   await expect(page.getByText('Your pipeline is empty')).toBeVisible();
   // no seeded deals leak across orgs
@@ -28,6 +30,9 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
   await page.getByRole('button', { name: 'Explore with a sample deal' }).click();
   await expect(page.getByText('Sample — Kingfisher Wharf').first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('Workfile', { exact: true })).toBeVisible();
+  // the sample deal auto-completes four checklist steps (deal, appraisal, docs, comps)
+  await page.goto('/');
+  await expect(page.getByTestId('getting-started-progress')).toHaveText('4 of 5 done');
 });
 
 test('calendar shows org tasks and creates a new one', async ({ page }) => {
