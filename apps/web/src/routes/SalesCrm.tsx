@@ -476,8 +476,8 @@ export default function SalesCrm() {
                 }
               >
                 {rows.length === 0 ? (
-                  <EmptyState cta={<Button onClick={openCreate}>+ Add unit</Button>}>
-                    No {isRent ? 'tenancies' : 'units'} on this deal yet — add the first one to start tracking {isRent ? 'lettings' : 'sales'}.
+                  <EmptyState title={`No ${isRent ? 'tenancies' : 'units'} on this deal yet`} cta={<Button onClick={openCreate}>+ Add unit</Button>}>
+                    Add the first one to start tracking {isRent ? 'lettings' : 'sales'} progression, agreed prices and completions.
                   </EmptyState>
                 ) : view === 'table' ? (
                   shown.length === 0 ? (

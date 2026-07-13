@@ -79,7 +79,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
       <BrandLockup />
       {crumb && (
         <>
-          <span className="text-[#C9CDC8]">/</span>
+          <span className="text-ink-3b">/</span>
           <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px]">{crumb}</span>
         </>
       )}
@@ -312,12 +312,17 @@ export function ProgressBar({ pct, color = '#1E7A55', height = 6 }: { pct: numbe
   );
 }
 
-export function EmptyState({ icon, children, cta }: { icon?: ReactNode; children: ReactNode; cta?: ReactNode }) {
+export function EmptyState({ icon, title, children, cta }: { icon?: ReactNode; title?: ReactNode; children: ReactNode; cta?: ReactNode }) {
   return (
-    <div className="border border-dashed border-[#DAD9D2] rounded-[13px] py-8 px-4 flex flex-col items-center gap-2 text-center">
-      {icon && <div className="text-[#C9CDC8]">{icon}</div>}
-      <div className="text-[12.5px] text-ink-3b">{children}</div>
-      {cta}
+    <div className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center">
+      {icon && (
+        <div className="w-11 h-11 rounded-[14px] bg-sunken-2 flex items-center justify-center text-ink-3 mb-1.5">
+          {icon}
+        </div>
+      )}
+      {title && <div className="text-[14px] font-semibold text-ink-2 tracking-[-0.2px]">{title}</div>}
+      <div className="text-[12.5px] text-ink-3b leading-relaxed max-w-[360px]">{children}</div>
+      {cta && <div className="mt-2.5">{cta}</div>}
     </div>
   );
 }

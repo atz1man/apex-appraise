@@ -236,8 +236,8 @@ export default function Scenarios() {
               </div>
             ) : (
               <div key={col} className="px-4 py-3 border-b border-border-std" style={cellBorder}>
-                <EmptyState cta={<Button variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
-                  No option in this slot yet.
+                <EmptyState title="No option in this slot" cta={<Button variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
+                  Add a scheme variant to compare returns side by side.
                 </EmptyState>
               </div>
             ),

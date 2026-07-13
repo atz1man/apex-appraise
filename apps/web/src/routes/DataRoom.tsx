@@ -275,8 +275,8 @@ export default function DataRoom() {
               <SkeletonRows rows={6} height={20} />
             </div>
           ) : docs.length === 0 ? (
-            <EmptyState cta={<Button variant="secondary" onClick={openForm}>Upload a document</Button>}>
-              No documents in this folder yet.
+            <EmptyState title="This folder is empty" cta={<Button variant="secondary" onClick={openForm}>Upload a document</Button>}>
+              Upload contracts, reports and drawings — every document becomes part of the deal workfile.
             </EmptyState>
           ) : (
             <div className="bg-surface border border-border-strong rounded-card overflow-hidden shadow-rest">

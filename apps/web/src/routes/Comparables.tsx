@@ -174,8 +174,8 @@ export default function Comparables() {
               }
             >
               {comps.length === 0 ? (
-                <EmptyState cta={<Button onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
-                  No comparable evidence on this deal yet.
+                <EmptyState title="No comparable evidence yet" cta={<Button onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
+                  Add sold comparables to derive a supported £/ft² for the valuation.
                 </EmptyState>
               ) : (
                 <div className="overflow-x-auto">
