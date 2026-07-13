@@ -6,13 +6,13 @@ import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, S
 import type { StatusKey } from '@apex/ui-tokens';
 
 const STAGES: Array<{ key: string; label: string; accent: string }> = [
-  { key: 'SOURCING', label: 'Sourcing', accent: '#9AA09A' },
+  { key: 'SOURCING', label: 'Sourcing', accent: 'rgb(var(--ink-3, 154 160 154))' },
   { key: 'APPRAISAL', label: 'Appraisal', accent: '#C08A2E' },
-  { key: 'OFFER', label: 'Offer / Bid', accent: '#2D5BA8' },
-  { key: 'ACQUISITION', label: 'Acquisition', accent: '#1E7A55' },
+  { key: 'OFFER', label: 'Offer / Bid', accent: 'rgb(var(--status-blue, 45 91 168))' },
+  { key: 'ACQUISITION', label: 'Acquisition', accent: 'rgb(var(--status-green, 30 122 85))' },
   { key: 'CONSTRUCTION', label: 'Construction', accent: '#14503B' },
   { key: 'SALES_LETTING', label: 'Sales / Letting', accent: '#1E9E6A' },
-  { key: 'COMPLETED', label: 'Completed', accent: '#6E7269' },
+  { key: 'COMPLETED', label: 'Completed', accent: 'rgb(var(--ink-2b, 110 114 105))' },
 ];
 
 const statusChip: Record<string, { key: StatusKey; label: string }> = {
@@ -29,7 +29,12 @@ const FILTERS: Array<[string, string]> = [
   ['MIXED_USE', 'Mixed-use'],
 ];
 
-const rocColor = (r: number) => (r >= 0.2 ? '#1E7A55' : r >= 0.15 ? '#9A6212' : '#B23A2E');
+const rocColor = (r: number) =>
+  r >= 0.2
+    ? 'rgb(var(--status-green, 30 122 85))'
+    : r >= 0.15
+      ? 'rgb(var(--status-amber, 154 98 18))'
+      : 'rgb(var(--status-red, 178 58 46))';
 
 export default function Board() {
   const navigate = useNavigate();
@@ -92,7 +97,7 @@ export default function Board() {
             <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px] text-accent-300">{R ? fM(R.pipelineGdv) : '—'}</div>
           </div>
           <StatCard label="Wtd. GDV" value={R ? fM(R.weightedGdv) : '—'} />
-          <StatCard label="Forecast profit" value={R ? fM(R.forecastProfit) : '—'} tone="#1E7A55" />
+          <StatCard label="Forecast profit" value={R ? fM(R.forecastProfit) : '—'} tone="rgb(var(--status-green, 30 122 85))" />
           <StatCard label="Equity required" value={R ? fM(R.equityRequired) : '—'} />
           <StatCard label="Active deals" value={R ? String(R.activeCount) : '—'} />
         </div>
@@ -107,7 +112,7 @@ export default function Board() {
                 key={k}
                 onClick={() => setFilter(k)}
                 className="inline-flex items-center rounded-pill border px-3.5 py-1.5 min-h-[40px] sm:min-h-0 text-[12.5px] font-semibold transition-colors"
-                style={on ? { background: '#14503B', color: '#fff', borderColor: '#14503B' } : { background: '#fff', color: '#5F665F', borderColor: '#E6E5DE' }}
+                style={on ? { background: '#14503B', color: '#fff', borderColor: '#14503B' } : { background: '#fff', color: 'rgb(var(--ink-2, 95 102 95))', borderColor: 'rgb(var(--border-strong, 230 229 222))' }}
               >
                 {label}
               </button>
@@ -117,7 +122,7 @@ export default function Board() {
 
         {/* first-deal onboarding for fresh workspaces */}
         {data && data.deals.length === 0 && (
-          <div className="mt-6 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-8 text-center">
+          <div className="mt-6 border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-panel bg-surface p-8 text-center">
             <div className="text-[15px] font-semibold">Your pipeline is empty</div>
             <p className="mt-1.5 text-[12.5px] text-ink-2">Add your first deal — it takes under a minute, and the AI appraisal does the heavy lifting.</p>
             <div className="mt-4 flex items-center justify-center gap-2.5 flex-wrap">

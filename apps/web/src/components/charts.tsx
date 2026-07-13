@@ -20,12 +20,12 @@ function useNarrow(): boolean {
    profit #1E9E6A; the cumulative J-curve is a single ink line.
    ================================================================ */
 
-const REV = '#1E7A55';
-const COST = '#9A6212';
+const REV = 'rgb(var(--status-green, 30 122 85))';
+const COST = 'rgb(var(--status-amber, 154 98 18))';
 const PROFIT = '#1E9E6A';
-const INK = '#16201B';
-const GRID = '#ECEBE5';
-const MUTED = '#9AA09A';
+const INK = 'rgb(var(--ink, 22 32 27))';
+const GRID = 'rgb(var(--border-std, 236 235 229))';
+const MUTED = 'rgb(var(--ink-3, 154 160 154))';
 
 /**
  * Monthly cashflow — two aligned panels on one month axis:
@@ -118,7 +118,7 @@ export function CashflowChart({
         <path d={`${cumPath} L${xOf(n - 1)},${zeroY} L${xOf(0)},${zeroY} Z`} fill={INK} opacity="0.06" />
         <path d={cumPath} fill="none" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
         {/* peak-debt marker */}
-        <circle cx={xOf(peakIdx)} cy={cumY(rows[peakIdx]!.cum)} r="4" fill={INK} stroke="#fff" strokeWidth="2" />
+        <circle cx={xOf(peakIdx)} cy={cumY(rows[peakIdx]!.cum)} r="4" fill={INK} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="2" />
         <text
           x={Math.min(xOf(peakIdx) + 8, W - (narrow ? 108 : 150))}
           y={Math.min(cumY(rows[peakIdx]!.cum) + 16, H - 26)}
@@ -247,7 +247,7 @@ export function SalesVelocityChart({
             <path d={`${path} L${lastX.toFixed(1)},${yOf(0).toFixed(1)} Z`} fill={REV} opacity="0.1" />
             <path d={path} fill="none" stroke={REV} strokeWidth="2" strokeLinejoin="round" />
             {cum.map((p, i) => (
-              <circle key={i} cx={xOf(p.t)} cy={yOf(p.cum)} r={hover === i ? 4 : 2.5} fill={REV} stroke="#fff" strokeWidth="1.5" />
+              <circle key={i} cx={xOf(p.t)} cy={yOf(p.cum)} r={hover === i ? 4 : 2.5} fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
             ))}
           </>
         )}
@@ -316,13 +316,13 @@ export function CompsLadder({
           return (
             <g key={c.address}>
               <title>{`${c.address} · base £${Math.round(c.basePsf)} → adjusted £${Math.round(c.adjustedPsf)}/ft²`}</title>
-              <text x={0} y={y + 3} fontSize={narrow ? 9 : 10.5} fill="#5F665F">
+              <text x={0} y={y + 3} fontSize={narrow ? 9 : 10.5} fill="rgb(var(--ink-2, 95 102 95))">
                 {c.address.length > nameLen ? `${c.address.slice(0, nameLen - 1)}…` : c.address}
               </text>
               <line x1={LABEL_W} x2={W - 56} y1={y} y2={y} stroke={GRID} strokeWidth="1" />
               <line x1={xb} x2={xa} y1={y} y2={y} stroke={MUTED} strokeWidth="1.5" />
-              <circle cx={xb} cy={y} r="4" fill="#fff" stroke={MUTED} strokeWidth="1.5" />
-              <circle cx={xa} cy={y} r="4.5" fill={REV} stroke="#fff" strokeWidth="1.5" />
+              <circle cx={xb} cy={y} r="4" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
+              <circle cx={xa} cy={y} r="4.5" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
               <text x={W - 50} y={y + 3} fontSize={narrow ? 9 : 10.5} className="fig" fontWeight="600" fill={INK}>
                 £{Math.round(c.adjustedPsf)}
               </text>
@@ -331,9 +331,9 @@ export function CompsLadder({
         })}
         {/* legend */}
         <g transform={`translate(${LABEL_W}, ${H - 6})`}>
-          <circle cx="4" cy="-3" r="3.5" fill="#fff" stroke={MUTED} strokeWidth="1.5" />
+          <circle cx="4" cy="-3" r="3.5" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
           <text x="12" y="0" fontSize="9.5" fill={MUTED}>Base</text>
-          <circle cx="52" cy="-3" r="4" fill={REV} stroke="#fff" strokeWidth="1.5" />
+          <circle cx="52" cy="-3" r="4" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
           <text x="60" y="0" fontSize="9.5" fill={MUTED}>Adjusted</text>
         </g>
       </svg>
@@ -370,7 +370,7 @@ export function CostVarianceStrip({
           <div key={p.name} title={`${p.name} · budget ${fM(p.budget)} · forecast ${fM(p.forecast)}`}>
             <div className="flex justify-between text-[11px]">
               <span className="text-ink-2 truncate pr-2">{p.name}</span>
-              <span className="fig font-semibold shrink-0" style={{ color: over ? '#B23A2E' : '#1E7A55' }}>
+              <span className="fig font-semibold shrink-0" style={{ color: over ? 'rgb(var(--status-red, 178 58 46))' : '#1E7A55' }}>
                 {delta === 0 ? 'on plan' : formatSigned(delta)}
               </span>
             </div>
@@ -379,7 +379,7 @@ export function CostVarianceStrip({
               <div className="absolute top-0 bottom-0 w-[2px] bg-surface z-10" style={{ left: `${budgetPct}%` }} />
               <div className="absolute top-0 bottom-0 left-0 rounded-l-[4px]" style={{ width: `${withinPct}%`, background: REV }} />
               {over && (
-                <div className="absolute top-0 bottom-0" style={{ left: `${budgetPct}%`, width: `${overPct}%`, background: '#B23A2E' }} />
+                <div className="absolute top-0 bottom-0" style={{ left: `${budgetPct}%`, width: `${overPct}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />
               )}
             </div>
           </div>

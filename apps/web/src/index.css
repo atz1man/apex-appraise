@@ -34,6 +34,51 @@
   --status-green-bg: 228 241 234;
   --status-purple: 107 78 138;
   --status-purple-bg: 237 230 244;
+  --border-faint-2: 244 244 240;
+  --crumb: 201 205 200;
+  --dashed: 218 217 210;
+  --status-amber-dot: 199 169 91;
+  --status-purple-dot: 155 121 192;
+  --tag-commercial-bg: 246 236 217;
+}
+
+
+/* Pin a subtree to light regardless of theme — print/report surfaces. */
+.light {
+  color-scheme: light;
+  --canvas: 243 244 241;
+  --frame: 231 229 223;
+  --frame-2: 234 233 227;
+  --surface: 255 255 255;
+  --sunken: 251 252 251;
+  --sunken-2: 240 239 233;
+  --tint-success: 236 243 239;
+  --tint-success-2: 228 241 234;
+  --border-strong: 230 229 222;
+  --border-std: 236 235 229;
+  --border-faint: 240 239 233;
+  --ink: 22 32 27;
+  --ink-2: 95 102 95;
+  --ink-2b: 110 114 105;
+  --ink-3: 154 160 154;
+  --ink-3b: 182 181 173;
+  --inactive: 138 144 138;
+  --status-amber: 154 98 18;
+  --status-amber-bg: 248 240 222;
+  --status-blue: 45 91 168;
+  --status-blue-bg: 229 234 246;
+  --status-red: 178 58 46;
+  --status-red-bg: 249 234 231;
+  --status-green: 30 122 85;
+  --status-green-bg: 228 241 234;
+  --status-purple: 107 78 138;
+  --status-purple-bg: 237 230 244;
+  --border-faint-2: 244 244 240;
+  --crumb: 201 205 200;
+  --dashed: 218 217 210;
+  --status-amber-dot: 199 169 91;
+  --status-purple-dot: 155 121 192;
+  --tag-commercial-bg: 246 236 217;
 }
 
 /* Dark palette — evergreen-tinted charcoal. NOT yet user-reachable: the
@@ -68,6 +113,12 @@
   --status-green-bg: 20 37 28;
   --status-purple: 177 149 214;
   --status-purple-bg: 34 26 44;
+  --border-faint-2: 26 31 28;
+  --crumb: 74 81 76;
+  --dashed: 47 54 49;
+  --status-amber-dot: 217 169 79;
+  --status-purple-dot: 177 149 214;
+  --tag-commercial-bg: 42 34 19;
 }
 
 html,

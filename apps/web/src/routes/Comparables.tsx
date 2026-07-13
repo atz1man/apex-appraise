@@ -6,10 +6,10 @@ import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRo
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 
-const GREEN = '#1E7A55';
-const RED = '#B23A2E';
-const AMBER = '#9A6212';
-const NEUTRAL = '#8A908A';
+const GREEN = 'rgb(var(--status-green, 30 122 85))';
+const RED = 'rgb(var(--status-red, 178 58 46))';
+const AMBER = 'rgb(var(--status-amber, 154 98 18))';
+const NEUTRAL = 'rgb(var(--inactive, 138 144 138))';
 const PIN = '#1E9E6A';
 
 const adjColor = (v: number) => (v > 0 ? GREEN : v < 0 ? RED : NEUTRAL);
@@ -70,10 +70,10 @@ export default function Comparables() {
   const avgGross = summary.avgGrossAdjustment;
   const conf =
     avgGross <= 8
-      ? { label: 'High', color: GREEN, bg: '#E4F1EA' }
+      ? { label: 'High', color: GREEN, bg: 'rgb(var(--tint-success-2, 228 241 234))' }
       : avgGross <= 15
-        ? { label: 'Medium', color: AMBER, bg: '#F8F0DE' }
-        : { label: 'Low', color: RED, bg: '#F9EAE7' };
+        ? { label: 'Medium', color: AMBER, bg: 'rgb(var(--status-amber-bg, 248 240 222))' }
+        : { label: 'Low', color: RED, bg: 'rgb(var(--status-red-bg, 249 234 231))' };
 
   const setAdj = (id: string, key: AdjKey, v: number) =>
     setEdits((e) => ({ ...e, [id]: { ...e[id], [key]: v } }));

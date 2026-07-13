@@ -45,9 +45,33 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
 ];
 
 const STATUS_STYLE: Record<Status, { label: string; dot: string; bg: string; color: string; border: string; iconBg: string; iconColor: string }> = {
-  CONNECTED: { label: 'Connected', dot: '#1E7A55', bg: '#E4F1EA', color: '#1E7A55', border: '#BFE0CD', iconBg: '#ECF3EF', iconColor: '#14503B' },
-  ATTENTION: { label: 'Attention', dot: '#C7A95B', bg: '#F8F0DE', color: '#9A6212', border: '#F8F0DE', iconBg: '#F8F0DE', iconColor: '#9A6212' },
-  NOT_CONNECTED: { label: 'Not connected', dot: '#9AA09A', bg: '#F0EFE9', color: '#8A908A', border: '#E6E5DE', iconBg: '#F3F4F1', iconColor: '#6E7269' },
+  CONNECTED: {
+    label: 'Connected',
+    dot: 'rgb(var(--status-green, 30 122 85))',
+    bg: 'rgb(var(--tint-success-2, 228 241 234))',
+    color: 'rgb(var(--status-green, 30 122 85))',
+    border: '#BFE0CD',
+    iconBg: 'rgb(var(--tint-success, 236 243 239))',
+    iconColor: '#14503B',
+  },
+  ATTENTION: {
+    label: 'Attention',
+    dot: 'rgb(var(--status-amber-dot, 199 169 91))',
+    bg: 'rgb(var(--status-amber-bg, 248 240 222))',
+    color: 'rgb(var(--status-amber, 154 98 18))',
+    border: 'rgb(var(--status-amber-bg, 248 240 222))',
+    iconBg: 'rgb(var(--status-amber-bg, 248 240 222))',
+    iconColor: 'rgb(var(--status-amber, 154 98 18))',
+  },
+  NOT_CONNECTED: {
+    label: 'Not connected',
+    dot: 'rgb(var(--ink-3, 154 160 154))',
+    bg: 'rgb(var(--sunken-2, 240 239 233))',
+    color: 'rgb(var(--inactive, 138 144 138))',
+    border: 'rgb(var(--border-strong, 230 229 222))',
+    iconBg: 'rgb(var(--canvas, 243 244 241))',
+    iconColor: 'rgb(var(--ink-2b, 110 114 105))',
+  },
 };
 
 /** relative sync time: 2h ago / 3d ago */
@@ -114,7 +138,7 @@ export default function Integrations() {
         right={
           total > 0 && (
             <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
-              <Dot color="#1E7A55" /> {connected} of {total} connected
+              <Dot color="rgb(var(--status-green, 30 122 85))" /> {connected} of {total} connected
             </span>
           )
         }

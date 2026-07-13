@@ -11,11 +11,11 @@ type ApproachKey = 'sales' | 'cost' | 'income';
 const APPROACHES: Array<{ key: ApproachKey; wKey: keyof Weights; label: string; dot: string; sub: string }> = [
   { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: '#14503B', sub: 'Supported £/ft² × subject area' },
   { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + depreciated build cost' },
-  { key: 'income', wKey: 'income', label: 'Income approach', dot: '#9AA09A', sub: 'Net rent capitalised at market yield' },
+  { key: 'income', wKey: 'income', label: 'Income approach', dot: 'rgb(var(--ink-3, 154 160 154))', sub: 'Net rent capitalised at market yield' },
 ];
 
 const adjFmt = (pts: number) => (pts === 0 ? '—' : `${pts > 0 ? '+' : '−'}${Math.abs(pts).toFixed(1)}%`);
-const adjColor = (pts: number) => (pts > 0 ? '#1E7A55' : pts < 0 ? '#B23A2E' : '#9AA09A');
+const adjColor = (pts: number) => (pts > 0 ? 'rgb(var(--status-green, 30 122 85))' : pts < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink-3, 154 160 154))');
 
 export default function Workbench() {
   const { dealId = '' } = useParams();
@@ -88,12 +88,12 @@ export default function Workbench() {
   const avgGross = summary?.avgGrossAdjustment ?? 0;
   const conf =
     comps.length === 0
-      ? { label: 'No evidence', color: '#6E7269', bg: '#F0EFE9', dot: '#9AA09A' }
+      ? { label: 'No evidence', color: 'rgb(var(--ink-2b, 110 114 105))', bg: 'rgb(var(--sunken-2, 240 239 233))', dot: 'rgb(var(--ink-3, 154 160 154))' }
       : avgGross < 8
-        ? { label: 'High', color: '#1E7A55', bg: '#E4F1EA', dot: '#1E7A55' }
+        ? { label: 'High', color: 'rgb(var(--status-green, 30 122 85))', bg: 'rgb(var(--tint-success-2, 228 241 234))', dot: 'rgb(var(--status-green, 30 122 85))' }
         : avgGross < 15
-          ? { label: 'Medium', color: '#9A6212', bg: '#F8F0DE', dot: '#C7A95B' }
-          : { label: 'Low', color: '#B23A2E', bg: '#F9EAE7', dot: '#B23A2E' };
+          ? { label: 'Medium', color: 'rgb(var(--status-amber, 154 98 18))', bg: 'rgb(var(--status-amber-bg, 248 240 222))', dot: 'rgb(var(--status-amber-dot, 199 169 91))' }
+          : { label: 'Low', color: 'rgb(var(--status-red, 178 58 46))', bg: 'rgb(var(--status-red-bg, 249 234 231))', dot: 'rgb(var(--status-red, 178 58 46))' };
 
   const compWeightSum = summary?.comps.reduce((a, c) => a + c.weight, 0) || 1;
   const rangeLow = summary && nia > 0 ? Math.round(summary.range.lo * nia) : null;
@@ -164,7 +164,7 @@ export default function Workbench() {
           <>
             {isSynced && (
               <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success-2 px-3 py-1.5 text-[11.5px] font-semibold text-status-green">
-                <Dot color="#1E7A55" /> Synced from field
+                <Dot color="rgb(var(--status-green, 30 122 85))" /> Synced from field
               </span>
             )}
             <Button onClick={onSave} loading={save.isPending} disabled={!dirty}>
@@ -425,7 +425,7 @@ export default function Workbench() {
                 inspection ? (
                   <span
                     className="label-mono px-2 py-[3px] rounded-[7px]"
-                    style={isSynced ? { color: '#1E7A55', background: '#E4F1EA' } : { color: '#9A6212', background: '#F8F0DE' }}
+                    style={isSynced ? { color: 'rgb(var(--status-green, 30 122 85))', background: 'rgb(var(--tint-success-2, 228 241 234))' } : { color: 'rgb(var(--status-amber, 154 98 18))', background: 'rgb(var(--status-amber-bg, 248 240 222))' }}
                   >
                     {isSynced ? 'SUBMITTED' : 'DRAFT'}
                   </span>
@@ -440,7 +440,7 @@ export default function Workbench() {
                       <span className="flex-1 text-[12.5px] font-medium">{r.name}</span>
                       <span className="flex gap-[3px]">
                         {[1, 2, 3, 4, 5].map((n) => (
-                          <span key={n} className="w-[7px] h-[7px] rounded-full" style={{ background: r.condition >= n ? '#14503B' : '#ECEBE5' }} />
+                          <span key={n} className="w-[7px] h-[7px] rounded-full" style={{ background: r.condition >= n ? '#14503B' : 'rgb(var(--border-std, 236 235 229))' }} />
                         ))}
                       </span>
                       <span className="fig w-14 text-right text-[11px] text-ink-2">

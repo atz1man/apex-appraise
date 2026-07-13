@@ -27,10 +27,10 @@ const ASSUMPTIONS = {
   acqPct: 6.8,
 } as const;
 
-const ACCENTS = ['#14503B', '#2D5BA8', '#9A6212'];
-const GREEN = '#1E7A55';
-const AMBER = '#9A6212';
-const RED = '#B23A2E';
+const ACCENTS = ['#14503B', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
+const GREEN = 'rgb(var(--status-green, 30 122 85))';
+const AMBER = 'rgb(var(--status-amber, 154 98 18))';
+const RED = 'rgb(var(--status-red, 178 58 46))';
 
 type LeverKey = 'blendedPsf' | 'buildPsf' | 'gia' | 'targetProfitPct';
 
@@ -87,7 +87,7 @@ const OUTPUT_ROWS: Array<{ label: string; key: keyof Metrics; fmt: (v: number) =
   { label: 'Profit on cost', key: 'poc', fmt: (v) => `${Math.round(v * 100)}%`, big: true },
 ];
 
-const cellBorder = { borderLeft: '1px solid #F0EFE9' } as const;
+const cellBorder = { borderLeft: '1px solid rgb(var(--border-faint, 240 239 233))' } as const;
 
 export default function Scenarios() {
   const { dealId = '' } = useParams();
@@ -149,10 +149,10 @@ export default function Scenarios() {
 
   const verdictOf = (poc: number) =>
     poc >= 0.2
-      ? { label: 'Strong', color: GREEN, bg: '#E4F1EA' }
+      ? { label: 'Strong', color: GREEN, bg: 'rgb(var(--tint-success-2, 228 241 234))' }
       : poc >= 0.13
-        ? { label: 'Viable', color: AMBER, bg: '#F8F0DE' }
-        : { label: 'Marginal', color: RED, bg: '#F9EAE7' };
+        ? { label: 'Viable', color: AMBER, bg: 'rgb(var(--status-amber-bg, 248 240 222))' }
+        : { label: 'Marginal', color: RED, bg: 'rgb(var(--status-red-bg, 249 234 231))' };
 
   if (isLoading) {
     return (
@@ -187,7 +187,7 @@ export default function Scenarios() {
   return (
     <div className="min-h-screen">
       <style>{`
-        input[type=range].scn{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:#E6E5DE;outline:none;padding:0;border:none;width:100%;box-shadow:none}
+        input[type=range].scn{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:rgb(var(--border-strong, 230 229 222));outline:none;padding:0;border:none;width:100%;box-shadow:none}
         input[type=range].scn::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
         input[type=range].scn::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
       `}</style>
@@ -319,7 +319,7 @@ export default function Scenarios() {
                         style={{
                           fontWeight: row.big ? 700 : 600,
                           fontSize: row.big ? 14 : 13.5,
-                          color: isWin ? '#14503B' : '#16201B',
+                          color: isWin ? '#14503B' : 'rgb(var(--ink, 22 32 27))',
                         }}
                       >
                         {row.fmt(vals[slot.i])}

@@ -86,7 +86,7 @@ export default function SitePack() {
         right={
           ok && (
             <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
-              <Dot color="#1E7A55" /> Live public data · {ok.geo.postcode}
+              <Dot color="rgb(var(--status-green, 30 122 85))" /> Live public data · {ok.geo.postcode}
             </span>
           )
         }
@@ -174,7 +174,7 @@ export default function SitePack() {
               <StatCard
                 label="Constraints hit"
                 value={String(ok.constraints.hits.length)}
-                tone={ok.constraints.hits.length ? '#9A6212' : '#1E7A55'}
+                tone={ok.constraints.hits.length ? 'rgb(var(--status-amber, 154 98 18))' : 'rgb(var(--status-green, 30 122 85))'}
               />
             </div>
 
@@ -295,7 +295,7 @@ export default function SitePack() {
                     <div className="flex flex-col gap-2">
                       {ok.constraints.hits.map((h, i) => (
                         <div key={i} className="flex items-start gap-2.5 rounded-[10px] bg-status-amber-bg px-3 py-2.5">
-                          <Dot color="#C7A95B" size={7} />
+                          <Dot color="rgb(var(--status-amber-dot, 199 169 91))" size={7} />
                           <div>
                             <div className="text-[12.5px] font-semibold text-status-amber">
                               {CONSTRAINT_LABELS[h.dataset] ?? h.dataset}
@@ -353,8 +353,8 @@ export default function SitePack() {
                   ) : (
                     <div className="flex flex-col gap-2">
                       {ok.floodWarnings.items.map((w, i) => (
-                        <div key={i} className="rounded-[10px] px-3 py-2.5" style={{ background: w.severityLevel <= 2 ? '#F9EAE7' : '#F8F0DE' }}>
-                          <div className="text-[12px] font-semibold" style={{ color: w.severityLevel <= 2 ? '#B23A2E' : '#9A6212' }}>{w.severity}</div>
+                        <div key={i} className="rounded-[10px] px-3 py-2.5" style={{ background: w.severityLevel <= 2 ? 'rgb(var(--status-red-bg, 249 234 231))' : 'rgb(var(--status-amber-bg, 248 240 222))' }}>
+                          <div className="text-[12px] font-semibold" style={{ color: w.severityLevel <= 2 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--status-amber, 154 98 18))' }}>{w.severity}</div>
                           <div className="text-[11px] text-ink-2">{w.description}</div>
                         </div>
                       ))}

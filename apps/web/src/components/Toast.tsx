@@ -27,9 +27,9 @@ let globalPush: ToastApi['push'] | null = null;
 export const toastGlobal = (kind: ToastKind, message: string) => globalPush?.(kind, message);
 
 const KIND_STYLE: Record<ToastKind, { border: string; dot: string }> = {
-  success: { border: '#BFE0CD', dot: '#1E7A55' },
-  error: { border: '#F9EAE7', dot: '#B23A2E' },
-  info: { border: '#E5EAF6', dot: '#2D5BA8' },
+  success: { border: '#BFE0CD', dot: 'rgb(var(--status-green, 30 122 85))' },
+  error: { border: 'rgb(var(--status-red-bg, 249 234 231))', dot: 'rgb(var(--status-red, 178 58 46))' },
+  info: { border: 'rgb(var(--status-blue-bg, 229 234 246))', dot: 'rgb(var(--status-blue, 45 91 168))' },
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {

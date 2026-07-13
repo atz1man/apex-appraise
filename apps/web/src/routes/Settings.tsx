@@ -539,7 +539,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                 <div
                   key={p.key}
                   className="rounded-card border p-4 flex flex-col"
-                  style={{ borderColor: current ? '#14503B' : '#E6E5DE', background: current ? '#FBFCFB' : '#fff' }}
+                  style={{ borderColor: current ? '#14503B' : 'rgb(var(--border-strong, 230 229 222))', background: current ? 'rgb(var(--sunken, 251 252 251))' : '#fff' }}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-semibold">{p.name}</span>

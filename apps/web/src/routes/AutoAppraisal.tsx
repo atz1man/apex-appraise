@@ -89,9 +89,9 @@ const VERDICT_STYLE: Record<Verdict, { dot: string; bg: string }> = {
 };
 
 const CONF_DOT: Record<'high' | 'med' | 'low', string> = {
-  high: '#1E7A55',
-  med: '#9A6212',
-  low: '#B23A2E',
+  high: 'rgb(var(--status-green, 30 122 85))',
+  med: 'rgb(var(--status-amber, 154 98 18))',
+  low: 'rgb(var(--status-red, 178 58 46))',
 };
 
 // ---------- small local pieces ----------
@@ -403,7 +403,7 @@ export default function AutoAppraisal() {
   const ind = run?.indicative;
   const x = run?.extraction;
   const risk = x ? Math.max(0, Math.min(100, x.planningRisk)) : 0;
-  const riskColor = risk <= 33 ? '#1E7A55' : risk <= 66 ? '#9A6212' : '#B23A2E';
+  const riskColor = risk <= 33 ? 'rgb(var(--status-green, 30 122 85))' : risk <= 66 ? 'rgb(var(--status-amber, 154 98 18))' : 'rgb(var(--status-red, 178 58 46))';
   const riskLabel = x?.planningRiskLabel || (risk <= 33 ? 'Low' : risk <= 66 ? 'Medium' : 'High');
   const verdictStyle = ind ? VERDICT_STYLE[ind.verdict] : VERDICT_STYLE.Caution;
 
@@ -470,7 +470,7 @@ export default function AutoAppraisal() {
                       aria-pressed={on}
                       onClick={() => setDocsOn((d) => (on ? d.filter((k) => k !== i) : [...d, i]))}
                       className="rounded-[12px] p-3.5 flex items-center gap-2.5 text-left transition-colors"
-                      style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed #D2D1CA', background: on ? '#ECF3EF' : 'transparent' }}
+                      style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed #D2D1CA', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
                     >
                       <span className="w-[30px] h-[30px] rounded-chip bg-tint-success inline-flex items-center justify-center shrink-0">{t.icon}</span>
                       <span>
@@ -495,7 +495,7 @@ export default function AutoAppraisal() {
                           aria-pressed={on}
                           onClick={() => toggleDoc(d.id)}
                           className="flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left transition-colors"
-                          style={{ background: on ? '#ECF3EF' : 'transparent' }}
+                          style={{ background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
                         >
                           <span
                             className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center shrink-0"
@@ -669,7 +669,7 @@ export default function AutoAppraisal() {
         <div className="min-w-0">
           {phase === 'idle' && (
             <Panel>
-              <EmptyState icon={<Sparkle size={30} color="#C9CDC8" />}>
+              <EmptyState icon={<Sparkle size={30} color="rgb(var(--crumb, 201 205 200))" />}>
                 <div className="text-[16px] font-bold text-ink">Your appraisal will appear here</div>
                 <div className="mt-1 max-w-[380px] text-[13px] text-ink-3 leading-relaxed">
                   GIA, GDV, build, finance, VAT, SDLT, CIL, profit, planning risk and an investment recommendation — generated from your documents.
@@ -681,7 +681,7 @@ export default function AutoAppraisal() {
           {phase === 'loading' && (
             <Panel>
               <div className="flex items-center gap-3.5 py-2">
-                <div aria-hidden="true" className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid #ECEBE5', borderTopColor: '#14503B' }} />
+                <div aria-hidden="true" className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid rgb(var(--border-std, 236 235 229))', borderTopColor: '#14503B' }} />
                 <div className="text-[16px] font-semibold">AI Development Director analysing…</div>
               </div>
               <div className="mt-4 mb-2 flex flex-col gap-3">
@@ -689,7 +689,7 @@ export default function AutoAppraisal() {
                   <div
                     key={s}
                     className="flex items-center gap-2.5 text-[13px] font-medium"
-                    style={{ color: i === stage ? '#16201B' : '#5F665F' }}
+                    style={{ color: i === stage ? 'rgb(var(--ink, 22 32 27))' : 'rgb(var(--ink-2, 95 102 95))' }}
                   >
                     <span className="w-2 h-2 rounded-full bg-brand-700 animate-pulseDot shrink-0" style={{ animationDelay: `${i * 0.2}s` }} />
                     {s}
@@ -770,7 +770,7 @@ export default function AutoAppraisal() {
                   {appraisalRows.map(([label, value, muted]) => (
                     <div key={label} className="flex justify-between gap-3">
                       <span className="text-[12.5px] text-ink-2">{label}</span>
-                      <span className="fig text-[12.5px] font-medium" style={muted ? { color: '#6E7269' } : undefined}>{value}</span>
+                      <span className="fig text-[12.5px] font-medium" style={muted ? { color: 'rgb(var(--ink-2b, 110 114 105))' } : undefined}>{value}</span>
                     </div>
                   ))}
                 </div>
@@ -779,9 +779,9 @@ export default function AutoAppraisal() {
                   <Well
                     label="Land headroom"
                     value={ind.headroom != null ? formatDelta(ind.headroom) : '—'}
-                    tone={ind.headroom != null && ind.headroom < 0 ? '#B23A2E' : '#1E7A55'}
+                    tone={ind.headroom != null && ind.headroom < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--status-green, 30 122 85))'}
                   />
-                  <Well label="Profit at asking" value={fM(ind.profitAtAsking ?? ind.targetProfit)} tone="#1E7A55" />
+                  <Well label="Profit at asking" value={fM(ind.profitAtAsking ?? ind.targetProfit)} tone="rgb(var(--status-green, 30 122 85))" />
                 </div>
               </Panel>
 
@@ -828,7 +828,7 @@ export default function AutoAppraisal() {
                       <div key={i} className="flex" style={{ justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                         <div
                           className="max-w-[82%] px-3 py-2 rounded-[12px] text-[12.5px] leading-snug"
-                          style={m.role === 'user' ? { background: '#14503B', color: '#fff' } : { background: '#F3F4F1', color: '#16201B' }}
+                          style={m.role === 'user' ? { background: '#14503B', color: '#fff' } : { background: 'rgb(var(--canvas, 243 244 241))', color: 'rgb(var(--ink, 22 32 27))' }}
                         >
                           {m.text}
                         </div>

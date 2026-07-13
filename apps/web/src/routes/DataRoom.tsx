@@ -23,14 +23,14 @@ const CATEGORIES = FOLDERS.slice(1);
 
 /** dc-prototype file-type colours: pdf red, sheets green, docs/CAD blue. */
 const EXT_STYLE: Record<string, { bg: string; color: string }> = {
-  pdf: { bg: '#F7E5E2', color: '#B23A2E' },
-  xlsx: { bg: '#E4F1EA', color: '#1E7A55' },
-  xls: { bg: '#E4F1EA', color: '#1E7A55' },
-  docx: { bg: '#E5EAF6', color: '#2D5BA8' },
-  doc: { bg: '#E5EAF6', color: '#2D5BA8' },
-  dwg: { bg: '#E5EAF6', color: '#2D5BA8' },
+  pdf: { bg: '#F7E5E2', color: 'rgb(var(--status-red, 178 58 46))' },
+  xlsx: { bg: 'rgb(var(--tint-success-2, 228 241 234))', color: 'rgb(var(--status-green, 30 122 85))' },
+  xls: { bg: 'rgb(var(--tint-success-2, 228 241 234))', color: 'rgb(var(--status-green, 30 122 85))' },
+  docx: { bg: 'rgb(var(--status-blue-bg, 229 234 246))', color: 'rgb(var(--status-blue, 45 91 168))' },
+  doc: { bg: 'rgb(var(--status-blue-bg, 229 234 246))', color: 'rgb(var(--status-blue, 45 91 168))' },
+  dwg: { bg: 'rgb(var(--status-blue-bg, 229 234 246))', color: 'rgb(var(--status-blue, 45 91 168))' },
 };
-const EXT_FALLBACK = { bg: '#F0EFE9', color: '#6E7269' };
+const EXT_FALLBACK = { bg: 'rgb(var(--sunken-2, 240 239 233))', color: 'rgb(var(--ink-2b, 110 114 105))' };
 
 const STATUS_CHIP: Record<string, StatusKey> = { EXTRACTED: 'green', LINKED: 'blue', STORED: 'neutral' };
 const NEXT_STATUS: Record<string, 'EXTRACTED' | 'LINKED' | 'STORED'> = {
@@ -51,7 +51,7 @@ const ACCESS = [
   { initials: 'BF', name: 'Brookfield', role: 'Investor', perm: 'View', dot: 'linear-gradient(135deg,#9B79C0,#5E3F86)' },
 ];
 
-const ACTIVITY_DOTS = ['#14503B', '#3C7FB5', '#9B79C0', '#1E7A55'];
+const ACTIVITY_DOTS = ['#14503B', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
 function fmtBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -171,7 +171,7 @@ export default function DataRoom() {
                 className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[9px] mb-0.5 text-left transition-colors ${on ? 'bg-tint-success' : 'hover:bg-sunken'}`}
               >
                 <span className="inline-flex shrink-0" aria-hidden="true">
-                  <Icon d={FOLDER_ICON} size={16} color={on ? '#14503B' : '#9AA09A'} strokeWidth={1.9} />
+                  <Icon d={FOLDER_ICON} size={16} color={on ? '#14503B' : 'rgb(var(--ink-3, 154 160 154))'} strokeWidth={1.9} />
                 </span>
                 <span className={`flex-1 min-w-0 truncate text-[12.5px] ${on ? 'font-semibold text-brand-700' : 'font-medium text-ink-2'}`}>{f.label}</span>
                 {data ? (
@@ -210,7 +210,7 @@ export default function DataRoom() {
           />
           <div
             tabIndex={0}
-            className="border-[1.5px] border-dashed border-[#DAD9D2] rounded-[14px] p-5 mb-4 bg-sunken cursor-pointer"
+            className="border-[1.5px] border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[14px] p-5 mb-4 bg-sunken cursor-pointer"
             onClick={() => !formOpen && !uploading && fileInputRef.current?.click()}
             onKeyDown={(e) => {
               if ((e.key === 'Enter' || e.key === ' ') && !formOpen && !uploading && e.target === e.currentTarget) {

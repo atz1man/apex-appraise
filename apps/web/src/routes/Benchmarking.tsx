@@ -417,7 +417,7 @@ export default function Benchmarking() {
                           <div className="mt-2.5 flex items-baseline gap-2.5 flex-wrap">
                             <span className="fig text-[22px] font-semibold tracking-[-0.8px]">£{Math.round(latest.averagePrice).toLocaleString('en-GB')}</span>
                             {latest.annualChangePct != null && (
-                              <span className="fig text-[12px] font-semibold" style={{ color: latest.annualChangePct >= 0 ? '#1E7A55' : '#B23A2E' }}>
+                              <span className="fig text-[12px] font-semibold" style={{ color: latest.annualChangePct >= 0 ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--status-red, 178 58 46))' }}>
                                 {latest.annualChangePct >= 0 ? '+' : '−'}{Math.abs(latest.annualChangePct).toFixed(1)}% yr
                               </span>
                             )}

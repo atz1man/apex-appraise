@@ -22,46 +22,52 @@ export const accent = {
   muted4: '#BFE0CD',
 } as const;
 
+// Semantic values resolve through the CSS variables declared in the web app's
+// index.css (:root = light, .dark = dark, .light = pinned). The rgb(var())
+// strings are valid anywhere CSS colours are accepted — inline styles, SVG
+// fills, gradients. Fallback triplets keep the light values without the vars.
+const v = (name: string, triplet: string) => `rgb(var(--${name}, ${triplet}))`;
+
 export const neutral = {
-  canvas: '#F3F4F1',
-  frame: '#E7E5DF',
-  frame2: '#EAE9E3',
-  surface: '#FFFFFF',
-  sunken: '#FBFCFB',
-  sunken2: '#F0EFE9',
-  tintSuccess: '#ECF3EF',
-  tintSuccess2: '#E4F1EA',
-  borderStrong: '#E6E5DE',
-  border: '#ECEBE5',
-  borderFaint: '#F0EFE9',
-  borderFaint2: '#F4F4F0',
-  ink: '#16201B',
-  ink2: '#5F665F',
-  ink2b: '#6E7269',
-  ink3: '#9AA09A',
-  ink3b: '#B6B5AD',
-  crumb: '#C9CDC8',
-  inactive: '#8A908A',
-  dashed: '#DAD9D2',
+  canvas: v('canvas', '243 244 241'),
+  frame: v('frame', '231 229 223'),
+  frame2: v('frame-2', '234 233 227'),
+  surface: v('surface', '255 255 255'),
+  sunken: v('sunken', '251 252 251'),
+  sunken2: v('sunken-2', '240 239 233'),
+  tintSuccess: v('tint-success', '236 243 239'),
+  tintSuccess2: v('tint-success-2', '228 241 234'),
+  borderStrong: v('border-strong', '230 229 222'),
+  border: v('border-std', '236 235 229'),
+  borderFaint: v('border-faint', '240 239 233'),
+  borderFaint2: v('border-faint-2', '244 244 240'),
+  ink: v('ink', '22 32 27'),
+  ink2: v('ink-2', '95 102 95'),
+  ink2b: v('ink-2b', '110 114 105'),
+  ink3: v('ink-3', '154 160 154'),
+  ink3b: v('ink-3b', '182 181 173'),
+  crumb: v('crumb', '201 205 200'),
+  inactive: v('inactive', '138 144 138'),
+  dashed: v('dashed', '218 217 210'),
 } as const;
 
 export type StatusKey = 'neutral' | 'amber' | 'blue' | 'green' | 'red' | 'purple';
 
 /** One status system everywhere — chips, dots, bars, deltas. */
 export const status: Record<StatusKey, { text: string; bg: string; dot: string }> = {
-  neutral: { text: '#6E7269', bg: '#F0EFE9', dot: '#9AA09A' },
-  amber: { text: '#9A6212', bg: '#F8F0DE', dot: '#C7A95B' },
-  blue: { text: '#2D5BA8', bg: '#E5EAF6', dot: '#2D5BA8' },
-  green: { text: '#1E7A55', bg: '#E4F1EA', dot: '#1E7A55' },
-  red: { text: '#B23A2E', bg: '#F9EAE7', dot: '#B23A2E' },
-  purple: { text: '#6B4E8A', bg: '#EDE6F4', dot: '#9B79C0' },
+  neutral: { text: v('ink-2b', '110 114 105'), bg: v('sunken-2', '240 239 233'), dot: v('ink-3', '154 160 154') },
+  amber: { text: v('status-amber', '154 98 18'), bg: v('status-amber-bg', '248 240 222'), dot: v('status-amber-dot', '199 169 91') },
+  blue: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246'), dot: v('status-blue', '45 91 168') },
+  green: { text: v('status-green', '30 122 85'), bg: v('status-green-bg', '228 241 234'), dot: v('status-green', '30 122 85') },
+  red: { text: v('status-red', '178 58 46'), bg: v('status-red-bg', '249 234 231'), dot: v('status-red', '178 58 46') },
+  purple: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244'), dot: v('status-purple-dot', '155 121 192') },
 };
 
 export const assetTypeTag: Record<string, { text: string; bg: string }> = {
-  INDUSTRIAL: { text: '#14503B', bg: '#E4F1EA' },
-  RESIDENTIAL: { text: '#2D5BA8', bg: '#E5EAF6' },
-  COMMERCIAL: { text: '#9A6212', bg: '#F6ECD9' },
-  MIXED_USE: { text: '#6B4E8A', bg: '#EDE6F4' },
+  INDUSTRIAL: { text: '#14503B', bg: v('status-green-bg', '228 241 234') },
+  RESIDENTIAL: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246') },
+  COMMERCIAL: { text: v('status-amber', '154 98 18'), bg: v('tag-commercial-bg', '246 236 217') },
+  MIXED_USE: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },
 };
 
 export const avatarGradients: Record<string, string> = {

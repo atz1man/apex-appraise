@@ -172,7 +172,7 @@ export default function Hub() {
 
         {/* empty-workspace onboarding for freshly registered orgs */}
         {data && data.deals.length === 0 && (
-          <section className="mt-9 border border-dashed border-[#DAD9D2] rounded-panel bg-surface p-6 sm:p-10 text-center">
+          <section className="mt-9 border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-panel bg-surface p-6 sm:p-10 text-center">
             <div className="eyebrow">Get started</div>
             <h2 className="mt-1.5 text-[22px] font-bold tracking-[-0.6px]">Add your first deal</h2>
             <p className="mt-2 text-[13.5px] text-ink-2 max-w-[460px] mx-auto leading-relaxed">

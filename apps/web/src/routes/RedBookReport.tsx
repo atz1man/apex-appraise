@@ -175,7 +175,7 @@ export default function RedBookReport() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-frame">
+      <div className="light min-h-screen bg-frame">
         <style>{PRINT_CSS}</style>
         {toolbar}
         <div className="mt-16 flex justify-center"><Spinner /></div>
@@ -185,7 +185,7 @@ export default function RedBookReport() {
 
   if (!appr || !R || !input) {
     return (
-      <div className="min-h-screen bg-frame">
+      <div className="light min-h-screen bg-frame">
         <style>{PRINT_CSS}</style>
         {toolbar}
         <div className="mt-20 flex justify-center px-6">
@@ -248,7 +248,7 @@ export default function RedBookReport() {
   ];
 
   return (
-    <div className="min-h-screen bg-frame">
+    <div className="light min-h-screen bg-frame">
       <style>{PRINT_CSS}</style>
       {toolbar}
 

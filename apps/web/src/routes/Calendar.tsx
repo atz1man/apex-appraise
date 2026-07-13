@@ -12,18 +12,23 @@ const PEOPLE: Array<{ initials: string; name: string; short: string }> = [
   { initials: 'PA', name: 'Priya A.', short: 'Priya' },
 ];
 /** Flat per-person accent for calendar pill dots — per the design handoff prototype. */
-const FLAT: Record<string, string> = { AO: '#1E7A55', DW: '#2D5BA8', MV: '#9A6212', PA: '#6B4E8A' };
+const FLAT: Record<string, string> = {
+  AO: 'rgb(var(--status-green, 30 122 85))',
+  DW: 'rgb(var(--status-blue, 45 91 168))',
+  MV: 'rgb(var(--status-amber, 154 98 18))',
+  PA: 'rgb(var(--status-purple, 107 78 138))',
+};
 
 const ASPECTS = ['Site visit', 'Comparables', 'Cost plan', 'Planning', 'Finance', 'Site purchase', 'Cashflow', 'Returns', 'Cost monitoring', 'General'];
 
 const STAGE_ACCENT: Record<string, string> = {
-  SOURCING: '#9AA09A',
+  SOURCING: 'rgb(var(--ink-3, 154 160 154))',
   APPRAISAL: '#C08A2E',
-  OFFER: '#2D5BA8',
-  ACQUISITION: '#1E7A55',
+  OFFER: 'rgb(var(--status-blue, 45 91 168))',
+  ACQUISITION: 'rgb(var(--status-green, 30 122 85))',
   CONSTRUCTION: '#14503B',
   SALES_LETTING: '#1E9E6A',
-  COMPLETED: '#6E7269',
+  COMPLETED: 'rgb(var(--ink-2b, 110 114 105))',
 };
 
 // ---- Date helpers (all local-time; en-GB) ----

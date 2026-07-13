@@ -153,7 +153,7 @@ export default function DevelopmentAppraisal() {
   const risk = useMemo(() => monteCarlo(input, { iterations: 400, seed: 42 }), [input]);
 
   const isResidual = input.site.mode === 'residual';
-  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: '#1E7A55' } : R.poc >= 0.1 ? { v: 'Marginal', dot: '#F5C451', tone: '#9A6212' } : { v: 'Unviable', dot: '#F08A7C', tone: '#B23A2E' };
+  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: 'rgb(var(--status-green, 30 122 85))' } : R.poc >= 0.1 ? { v: 'Marginal', dot: '#F5C451', tone: 'rgb(var(--status-amber, 154 98 18))' } : { v: 'Unviable', dot: '#F08A7C', tone: 'rgb(var(--status-red, 178 58 46))' };
 
   const startY = input.startYear ?? 2026;
   const startM = input.startMonth ?? 0;
@@ -204,12 +204,12 @@ export default function DevelopmentAppraisal() {
   const steps = [-0.1, -0.05, 0, 0.05, 0.1];
   const colLabel = (d: number) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d * 100) + '%';
   const cellStyle = (v: number, ratio: number) => {
-    if (v <= 0) return { color: '#B23A2E', background: '#F9EAE7' };
+    if (v <= 0) return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
     if (ratio >= 1.12) return { color: '#14503B', background: '#DFEFE7' };
-    if (ratio >= 1.02) return { color: '#1E7A55', background: '#ECF3EF' };
-    if (ratio > 0.98) return { color: '#5F665F', background: '#F4F4F0' };
-    if (ratio > 0.85) return { color: '#9A6212', background: '#F8F0DE' };
-    return { color: '#B23A2E', background: '#F9EAE7' };
+    if (ratio >= 1.02) return { color: 'rgb(var(--status-green, 30 122 85))', background: 'rgb(var(--tint-success, 236 243 239))' };
+    if (ratio > 0.98) return { color: 'rgb(var(--ink-2, 95 102 95))', background: '#F4F4F0' };
+    if (ratio > 0.85) return { color: 'rgb(var(--status-amber, 154 98 18))', background: 'rgb(var(--status-amber-bg, 248 240 222))' };
+    return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
   };
   const fmtMetric = (v: number) => (sensTab === 'roc' ? `${Math.round(v * 100)}%` : fM(v));
 
@@ -297,7 +297,7 @@ export default function DevelopmentAppraisal() {
           <StatCard label="Equity IRR" value={cash.eqIrr == null ? 'N/A' : formatPct(cash.eqIrr)} tone="#14503B" />
           <StatCard label="Return on cost" value={formatPct(R.poc)} tone={viab.tone} />
           <StatCard label="Return on GDV" value={formatPct(R.rogdv)} />
-          <StatCard label={isResidual ? 'Residual land' : 'Profit'} value={fM(isResidual ? R.residualNet : R.profit)} tone="#1E7A55" />
+          <StatCard label={isResidual ? 'Residual land' : 'Profit'} value={fM(isResidual ? R.residualNet : R.profit)} tone="rgb(var(--status-green, 30 122 85))" />
           <StatCard label="Peak debt" value={fM(R.facility)} />
           <StatCard label="GDV" value={fM(R.gdv)} />
         </div>
@@ -313,7 +313,7 @@ export default function DevelopmentAppraisal() {
                   className="px-3.5 py-2.5 text-[13.5px] whitespace-nowrap transition-colors"
                   style={{
                     borderBottom: `2px solid ${tab === k ? '#14503B' : 'transparent'}`,
-                    color: tab === k ? '#16201B' : '#8A908A',
+                    color: tab === k ? 'rgb(var(--ink, 22 32 27))' : 'rgb(var(--inactive, 138 144 138))',
                     fontWeight: tab === k ? 600 : 500,
                   }}
                 >
@@ -536,7 +536,7 @@ export default function DevelopmentAppraisal() {
                     <Kv k={isResidual ? 'Residual site value' : 'Land value (input)'} v={formatSigned(R.residualNet)} tone="#14503B" />
                     <Kv k="Land incl. acquisition" v={fM(R.landGross)} />
                     <Kv k="Land % of GDV" v={R.gdv > 0 ? formatPct(R.landGross / R.gdv) : '—'} />
-                    <Kv k="Developer profit" v={fM(R.profit)} tone="#1E7A55" />
+                    <Kv k="Developer profit" v={fM(R.profit)} tone="rgb(var(--status-green, 30 122 85))" />
                   </div>
                 </Panel>
               )}
@@ -573,13 +573,13 @@ export default function DevelopmentAppraisal() {
                       </thead>
                       <tbody>
                         {cash.rows.map((r) => (
-                          <tr key={r.m} style={{ background: r.m % 2 === 0 ? '#FBFCFB' : '#fff' }}>
+                          <tr key={r.m} style={{ background: r.m % 2 === 0 ? 'rgb(var(--sunken, 251 252 251))' : '#fff' }}>
                             <td className="py-1.5 text-[12px] fig">{monthLabel(r.m)}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.cost ? fM(r.cost) : '—'}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.intr ? fM(r.intr) : '—'}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.rev ? fM(r.rev) : '—'}</td>
-                            <td className="py-1.5 text-right fig text-[12px]" style={{ color: r.net < 0 ? '#B23A2E' : '#1E7A55' }}>{formatSigned(r.net)}</td>
-                            <td className="py-1.5 text-right fig text-[12px]" style={{ color: r.cum < 0 ? '#B23A2E' : '#16201B' }}>{formatSigned(r.cum)}</td>
+                            <td className="py-1.5 text-right fig text-[12px]" style={{ color: r.net < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--status-green, 30 122 85))' }}>{formatSigned(r.net)}</td>
+                            <td className="py-1.5 text-right fig text-[12px]" style={{ color: r.cum < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}>{formatSigned(r.cum)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -662,7 +662,7 @@ export default function DevelopmentAppraisal() {
               {breakdown.map(([label, val, final]) => (
                 <div key={label} className={`flex justify-between py-[7px] border-t ${final ? 'border-border-std' : 'border-[#F4F4F0]'} first:border-t-0`}>
                   <span className={final ? 'text-[13px] font-bold text-brand-700' : 'text-[12px] text-ink-2'}>{label}</span>
-                  <span className="fig" style={{ fontWeight: final ? 700 : 500, fontSize: final ? 14 : 12, color: final ? '#14503B' : val < 0 ? '#B23A2E' : '#16201B' }}>
+                  <span className="fig" style={{ fontWeight: final ? 700 : 500, fontSize: final ? 14 : 12, color: final ? '#14503B' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}>
                     {formatSigned(val)}
                   </span>
                 </div>
@@ -729,7 +729,7 @@ export default function DevelopmentAppraisal() {
                         style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: '#DFEFE7' }}
                       />
                       <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: '#14503B' }} />
-                      {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: '#B23A2E' }} />}
+                      {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />}
                     </div>
                     <div className="mt-1.5 flex justify-between text-[10.5px] fig text-ink-3">
                       <span>P10 {fM(risk.profit.p10)}</span>
@@ -741,9 +741,9 @@ export default function DevelopmentAppraisal() {
                         <div className="label-mono text-ink-3">Prob ≥ target profit</div>
                         <div className="fig text-[16px] font-semibold text-brand-500">{Math.round(risk.probAtTarget * 100)}%</div>
                       </div>
-                      <div className="rounded-[10px] px-3 py-2.5" style={{ background: risk.probLoss > 0.1 ? '#F9EAE7' : '#F0EFE9' }}>
+                      <div className="rounded-[10px] px-3 py-2.5" style={{ background: risk.probLoss > 0.1 ? 'rgb(var(--status-red-bg, 249 234 231))' : 'rgb(var(--sunken-2, 240 239 233))' }}>
                         <div className="label-mono text-ink-3">Prob of loss</div>
-                        <div className="fig text-[16px] font-semibold" style={{ color: risk.probLoss > 0.1 ? '#B23A2E' : '#6E7269' }}>
+                        <div className="fig text-[16px] font-semibold" style={{ color: risk.probLoss > 0.1 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink-2b, 110 114 105))' }}>
                           {Math.round(risk.probLoss * 100)}%
                         </div>
                       </div>
@@ -772,7 +772,7 @@ export default function DevelopmentAppraisal() {
                     >
                       {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
-                    <span className="flex-1 text-[12px]" style={{ color: t.done ? '#B6B5AD' : '#16201B', textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
+                    <span className="flex-1 text-[12px]" style={{ color: t.done ? 'rgb(var(--ink-3b, 182 181 173))' : 'rgb(var(--ink, 22 32 27))', textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <Avatar initials={t.assignee} size={20} />
                   </button>
                 ))}
@@ -827,7 +827,7 @@ export default function DevelopmentAppraisal() {
             const cur = versions?.find((x) => x.isCurrent)?.headline;
             const d = v.headline && cur && !v.isCurrent ? v.headline.residualNet - cur.residualNet : null;
             return (
-              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: '#14503B', background: '#FBFCFB' } : undefined}>
+              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: '#14503B', background: 'rgb(var(--sunken, 251 252 251))' } : undefined}>
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold">{v.label}</span>
                   {v.isCurrent && <span className="label-mono rounded-[6px] bg-tint-success text-brand-700 px-1.5 py-[2px]">CURRENT</span>}
@@ -842,9 +842,9 @@ export default function DevelopmentAppraisal() {
                     <Kv k="GDV" v={fM(v.headline.gdv)} />
                     <Kv k="Residual" v={fM(v.headline.residualNet)} />
                     <Kv k="Profit" v={fM(v.headline.profit)} />
-                    <Kv k="RoC" v={formatPct(v.headline.poc)} tone={v.headline.poc >= 0.17 ? '#1E7A55' : v.headline.poc >= 0.1 ? '#9A6212' : '#B23A2E'} />
+                    <Kv k="RoC" v={formatPct(v.headline.poc)} tone={v.headline.poc >= 0.17 ? 'rgb(var(--status-green, 30 122 85))' : v.headline.poc >= 0.1 ? 'rgb(var(--status-amber, 154 98 18))' : 'rgb(var(--status-red, 178 58 46))'} />
                     {d != null && Math.round(d) !== 0 && (
-                      <Kv k="Residual vs current" v={`${d > 0 ? '+' : '−'}${fM(Math.abs(d))}`} tone={d > 0 ? '#1E7A55' : '#B23A2E'} />
+                      <Kv k="Residual vs current" v={`${d > 0 ? '+' : '−'}${fM(Math.abs(d))}`} tone={d > 0 ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--status-red, 178 58 46))'} />
                     )}
                   </div>
                 )}

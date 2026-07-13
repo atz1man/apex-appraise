@@ -66,8 +66,8 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
               to={to}
               className="px-2.5 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors"
               style={({ isActive }) => ({
-                color: isActive ? '#14503B' : '#6E7269',
-                background: isActive ? '#ECF3EF' : 'transparent',
+                color: isActive ? '#14503B' : 'rgb(var(--ink-2b, 110 114 105))',
+                background: isActive ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent',
                 fontWeight: isActive ? 600 : 500,
               })}
             >
