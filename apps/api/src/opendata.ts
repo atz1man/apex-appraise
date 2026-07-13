@@ -192,39 +192,63 @@ export interface EpcRecord {
   source: string;
 }
 
+const EPC_API = 'https://api.get-energy-performance-data.communities.gov.uk';
+
 /**
- * EPC register — free key from epc.opendatacommunities.org. Credentials come
- * from the org's self-serve integration settings, falling back to env vars.
+ * EPC register — MHCLG's "get energy performance data" service (the old
+ * epc.opendatacommunities.org domain was retired May 2026). Auth is a Bearer
+ * token; credentials come from the org's self-serve integration settings,
+ * falling back to the EPC_BEARER_TOKEN env var. The search endpoint returns
+ * summaries only, so floor areas are joined from per-certificate lookups
+ * (bounded, concurrent — well inside the 6000/5min rate limit).
  */
 export async function fetchEpc(
   postcode: string,
-  creds?: { email?: string; key?: string } | null,
+  creds?: { key?: string } | null,
 ): Promise<{ status: 'ok' | 'not-configured' | 'error'; records: EpcRecord[]; note?: string }> {
-  const email = creds?.email || process.env.EPC_AUTH_EMAIL;
-  const key = creds?.key || process.env.EPC_AUTH_KEY;
-  if (!email || !key) {
+  const key = creds?.key || process.env.EPC_BEARER_TOKEN;
+  if (!key) {
     return {
       status: 'not-configured',
       records: [],
-      note: 'Free API key required — register at epc.opendatacommunities.org, then connect EPC Register on the Integrations screen.',
+      note: 'Free API key required — register at get-energy-performance-data.communities.gov.uk, then connect EPC Register on the Integrations screen.',
     };
   }
+  const auth = { authorization: `Bearer ${key}`, accept: 'application/json' };
+  // the service 404s when a register has no certificates for the postcode — that's an empty result, not an error
+  const search = async (register: 'domestic' | 'non-domestic') => {
+    try {
+      const d = await getJson<{ data?: any[] }>(`${EPC_API}/api/${register}/search?postcode=${encodeURIComponent(postcode)}`, auth);
+      return d.data ?? [];
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('404')) return [];
+      throw e;
+    }
+  };
   try {
-    const auth = Buffer.from(`${email}:${key}`).toString('base64');
-    const d = await getJson<{ rows?: any[] }>(
-      `https://epc.opendatacommunities.org/api/v1/domestic/search?postcode=${encodeURIComponent(postcode)}&size=50`,
-      { authorization: `Basic ${auth}` },
+    const [dom, nonDom] = await Promise.all([search('domestic'), search('non-domestic')]);
+    const summaries = [...dom, ...nonDom].slice(0, 24);
+    // per-certificate details carry total_floor_area — fetch them concurrently
+    const details = await Promise.allSettled(
+      summaries.map((s) =>
+        getJson<{ data?: any }>(`${EPC_API}/api/certificate?certificate_number=${encodeURIComponent(String(s.certificateNumber))}`, auth),
+      ),
     );
     return {
       status: 'ok',
-      records: (d.rows ?? []).map((r) => ({
-        address: String(r.address ?? ''),
-        floorAreaSqm: Number(r['total-floor-area']) || 0,
-        rating: String(r['current-energy-rating'] ?? ''),
-        propertyType: String(r['property-type'] ?? ''),
-        inspectionDate: String(r['inspection-date'] ?? ''),
-        source: 'EPC Register (OGL)',
-      })),
+      records: summaries.map((s, i) => {
+        const det = details[i]?.status === 'fulfilled' ? ((details[i] as PromiseFulfilledResult<{ data?: any }>).value.data ?? {}) : {};
+        return {
+          address: [s.addressLine1, s.addressLine2, s.addressLine3, s.addressLine4].filter(Boolean).join(', '),
+          // domestic certificates carry total_floor_area at the top level;
+          // non-domestic (CEPC) nest it under technical_information.floor_area
+          floorAreaSqm: Number(det.total_floor_area) || Number(det.technical_information?.floor_area) || 0,
+          rating: String(s.currentEnergyEfficiencyBand ?? det.current_energy_efficiency_band ?? ''),
+          propertyType: String(det.property_type ?? det.dwelling_type ?? ''),
+          inspectionDate: String(s.registrationDate ?? det.registration_date ?? ''),
+          source: 'EPC Register (OGL)',
+        };
+      }),
     };
   } catch (e) {
     return { status: 'error', records: [], note: e instanceof Error ? e.message : 'EPC fetch failed' };

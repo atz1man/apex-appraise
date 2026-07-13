@@ -23,6 +23,7 @@ services:
       DATABASE_URL: postgresql://apex:apex@db:5432/apex
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the environment}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EPC_BEARER_TOKEN: ${EPC_BEARER_TOKEN:-}
       NODE_ENV: production
       PORT: 4100
       WEB_URL: http://web:80

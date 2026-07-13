@@ -9,11 +9,8 @@ import type { PrismaClient } from '@prisma/client';
 /** Providers a workspace can connect with its own free API key. */
 export const SELF_SERVE_PROVIDERS = {
   'EPC Register': {
-    fields: [
-      { key: 'email', label: 'Account email' },
-      { key: 'key', label: 'API key' },
-    ],
-    signupUrl: 'https://epc.opendatacommunities.org',
+    fields: [{ key: 'key', label: 'Bearer token' }],
+    signupUrl: 'https://get-energy-performance-data.communities.gov.uk',
   },
   'Companies House': {
     fields: [{ key: 'key', label: 'API key' }],

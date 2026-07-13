@@ -310,9 +310,9 @@ export const integrationsRouter = router({
       }
       // live validation — never store a key the provider rejects
       if (input.provider === 'EPC Register') {
-        const probe = await fetchEpc('SW1A 1AA', { email: input.fields.email, key: input.fields.key });
+        const probe = await fetchEpc('SW1A 1AA', { key: input.fields.key });
         if (probe.status !== 'ok') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'EPC register rejected these credentials — check the email and key.' });
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'The EPC service rejected this token — check it and try again.' });
         }
       } else {
         try {
