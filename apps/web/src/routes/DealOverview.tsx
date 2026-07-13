@@ -20,6 +20,7 @@ import {
   TopBar,
   SPARKLE,
 } from '../components/ui';
+import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
 // ---------- Deal lifecycle ----------
@@ -179,6 +180,10 @@ export default function DealOverview() {
   const salesRollup = sales?.rollup;
   const hasSales = (salesRollup?.total ?? 0) > 0;
   const costOver = (costRollup?.variance ?? 0) > 0;
+  // Secured units as dated events for the velocity mini-chart
+  const velocityPoints = (sales?.units ?? [])
+    .filter((u) => u.status !== 'AVAILABLE' && u.reservedAt)
+    .map((u) => ({ t: new Date(u.reservedAt!).getTime(), value: u.agreedValue ?? u.appraisedValue, label: u.name }));
 
   return (
     <div className="min-h-screen">
@@ -396,6 +401,14 @@ export default function DealOverview() {
                     />
                   </div>
                 </div>
+                {(cost?.packages.length ?? 0) > 1 && (
+                  <div className="mt-3 pt-3 border-t border-border-faint">
+                    <div className="label-mono text-ink-3 mb-2">Largest packages · forecast vs budget</div>
+                    <CostVarianceStrip
+                      packages={(cost?.packages ?? []).map((p) => ({ name: p.name, budget: p.budget, forecast: p.forecast }))}
+                    />
+                  </div>
+                )}
                 <Link to={`/deal/${dealId}/costs`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
                   Open cost monitoring →
                 </Link>
@@ -438,6 +451,12 @@ export default function DealOverview() {
                   <span>Deposits held</span>
                   <span className="fig font-semibold text-ink">{fM(salesRollup.depositsHeld)}</span>
                 </div>
+                {velocityPoints.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-border-faint">
+                    <div className="label-mono text-ink-3 mb-2">GDV secured over time</div>
+                    <SalesVelocityChart points={velocityPoints} target={salesRollup.gdvAppraised} />
+                  </div>
+                )}
                 <Link to={`/deal/${dealId}/sales`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
                   Open sales & lettings →
                 </Link>

@@ -278,6 +278,54 @@ export function SalesVelocityChart({
 }
 
 /**
+ * Cost variance strip — per-package budget vs forecast as compact rows.
+ * The track is the budget; the fill is the forecast (green within budget,
+ * with a red segment for any overrun beyond the budget mark).
+ */
+export function CostVarianceStrip({
+  packages,
+  max = 5,
+}: {
+  packages: Array<{ name: string; budget: number; forecast: number }>;
+  max?: number;
+}) {
+  const top = useMemo(
+    () => [...packages].sort((a, b) => b.budget - a.budget).slice(0, max),
+    [packages, max],
+  );
+  const scale = Math.max(...top.map((p) => Math.max(p.budget, p.forecast)), 1);
+  return (
+    <div className="flex flex-col gap-2" data-testid="cost-variance-strip">
+      {top.map((p) => {
+        const over = p.forecast > p.budget;
+        const delta = p.forecast - p.budget;
+        const budgetPct = (p.budget / scale) * 100;
+        const withinPct = (Math.min(p.forecast, p.budget) / scale) * 100;
+        const overPct = over ? ((p.forecast - p.budget) / scale) * 100 : 0;
+        return (
+          <div key={p.name} title={`${p.name} · budget ${fM(p.budget)} · forecast ${fM(p.forecast)}`}>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-ink-2 truncate pr-2">{p.name}</span>
+              <span className="fig font-semibold shrink-0" style={{ color: over ? '#B23A2E' : '#1E7A55' }}>
+                {delta === 0 ? 'on plan' : formatSigned(delta)}
+              </span>
+            </div>
+            <div className="mt-1 relative h-[7px] rounded-[4px] bg-sunken-2 overflow-hidden">
+              {/* budget mark */}
+              <div className="absolute top-0 bottom-0 w-[2px] bg-surface z-10" style={{ left: `${budgetPct}%` }} />
+              <div className="absolute top-0 bottom-0 left-0 rounded-l-[4px]" style={{ width: `${withinPct}%`, background: REV }} />
+              {over && (
+                <div className="absolute top-0 bottom-0" style={{ left: `${budgetPct}%`, width: `${overPct}%`, background: '#B23A2E' }} />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * Profit bridge — waterfall from GDV down through every cost block to
  * developer profit. Deductions share one hue; the two result bars are green.
  */

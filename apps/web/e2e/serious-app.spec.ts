@@ -48,6 +48,9 @@ test('deal overview shows KPIs, workfile and lifecycle', async ({ page }) => {
   await expect(page.getByText('Workfile')).toBeVisible();
   await expect(page.getByText('Construction cost health')).toBeVisible();
   await expect(page.getByText('Sales health')).toBeVisible();
+  // health panels carry the mini-charts: per-package variance strip + GDV velocity
+  await expect(page.getByTestId('cost-variance-strip')).toBeVisible();
+  await expect(page.getByTestId('sales-velocity')).toBeVisible();
   // deal nav jumps tools without going back to the board
   await page.getByRole('navigation').getByRole('link', { name: 'Costs' }).click();
   await expect(page.getByText('Cost report — packages & contractors')).toBeVisible();
