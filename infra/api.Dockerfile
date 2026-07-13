@@ -12,12 +12,14 @@ RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates tt
 ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 
-COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
 COPY packages/appraisal-engine/package.json packages/appraisal-engine/
 COPY packages/types/package.json packages/types/
 COPY packages/ui-tokens/package.json packages/ui-tokens/
-RUN pnpm install --frozen-lockfile=false
+# frozen lockfile: the image resolves exactly what runs locally and in CI
+RUN pnpm install --frozen-lockfile
 
 COPY packages ./packages
 COPY apps/api ./apps/api

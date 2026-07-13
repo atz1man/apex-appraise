@@ -1,3 +1,4 @@
+import { monteCarlo, sensitivityGrid } from '@apex/appraisal-engine';
 import type { AppraisalInput, AppraisalResult, JvResult } from '@apex/appraisal-engine';
 import type ExcelJSNS from 'exceljs';
 
@@ -239,6 +240,56 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   jvs.addRow([]);
   const tiers = jvs.addRow(['Tiers: 1 return of capital → 2 preferred → 3 residual split → 4 promote']);
   tiers.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+
+  // ---- Risk & sensitivity ----
+  const rs = wb.addWorksheet('Risk & sensitivity', { properties: { tabColor: { argb: 'FF9A6212' } } });
+  rs.columns = [{ width: 30 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }];
+  titleBlock(rs, dealName, address, 'Sensitivity matrix & Monte Carlo risk — engine-computed', 6);
+  headerRow(rs, ['Return on cost — build ↓ / GDV →', '−10%', '−5%', 'Base', '+5%', '+10%']);
+  const grid = sensitivityGrid(input, 'roc');
+  const baseRoC = R.poc;
+  const GRID_TINTS = { good: 'FFE4F1EA', warn: 'FFF8F0DE', bad: 'FFF9EAE7' };
+  const rowLabels = ['Build +10%', 'Build +5%', 'Build base', 'Build −5%', 'Build −10%'];
+  grid.forEach((cells, ri) => {
+    const r = rs.addRow([rowLabels[ri], ...cells.map((c) => c.value)]);
+    body(r.getCell(1));
+    cells.forEach((c, ci) => {
+      const cell = r.getCell(ci + 2);
+      cell.numFmt = FMT_PCT;
+      cell.alignment = { horizontal: 'right' };
+      cell.font = { name: 'Arial', size: 10, bold: c.isBase };
+      const tint = c.value < 0 ? GRID_TINTS.bad : c.value >= baseRoC - 0.001 ? GRID_TINTS.good : GRID_TINTS.warn;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: tint } };
+      if (c.isBase) cell.border = { top: thin, bottom: thin, left: thin, right: thin };
+    });
+  });
+  rs.addRow([]);
+  headerRow(rs, ['Monte Carlo — 400 seeded iterations, land held at base', 'Value']);
+  const mc = monteCarlo(input, { iterations: 400, seed: 42 });
+  const mcRows: Array<[string, number, string]> = [
+    ['Profit P10 (downside)', Math.round(mc.profit.p10), FMT_MONEY],
+    ['Profit P50 (median)', Math.round(mc.profit.p50), FMT_MONEY],
+    ['Profit P90 (upside)', Math.round(mc.profit.p90), FMT_MONEY],
+    ['Return on cost P10', mc.poc.p10, FMT_PCT],
+    ['Return on cost P50', mc.poc.p50, FMT_PCT],
+    ['Return on cost P90', mc.poc.p90, FMT_PCT],
+    ['Probability profit ≥ target', mc.probAtTarget, FMT_PCT],
+    ['Probability of loss', mc.probLoss, FMT_PCT],
+    ['Land held constant at', Math.round(mc.landFixed), FMT_MONEY],
+  ];
+  for (const [label, value, fmt] of mcRows) {
+    const r = rs.addRow([label, value]);
+    body(r.getCell(1));
+    const v = r.getCell(2);
+    v.numFmt = fmt;
+    v.font = { name: 'Arial', bold: true, size: 10 };
+    v.alignment = { horizontal: 'right' };
+    v.border = { bottom: thin };
+  }
+  rs.addRow([]);
+  const rsNote = rs.addRow(['Each sensitivity cell re-runs the full appraisal (incl. monthly finance) at the stated movements; Monte Carlo draws GDV and build multipliers from seeded normal distributions.']);
+  rsNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+  rs.views = [{ state: 'frozen', ySplit: 5 }];
 
   // ---- Assumptions ----
   const a = wb.addWorksheet('Assumptions', { properties: { tabColor: { argb: 'FF9AA09A' } } });
