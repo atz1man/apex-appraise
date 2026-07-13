@@ -116,7 +116,7 @@ export function EyebrowTitle({ eyebrow, title, sub, actions }: { eyebrow: string
     <div className="flex items-end justify-between gap-4 flex-wrap">
       <div>
         <div className="eyebrow">{eyebrow}</div>
-        <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.8px] leading-tight">{title}</h1>
+        <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px] leading-tight">{title}</h1>
         {sub && <div className="mt-1 text-[13.5px] text-ink-2">{sub}</div>}
       </div>
       {actions && <div className="flex items-center gap-2.5">{actions}</div>}
@@ -130,7 +130,7 @@ export function StatCard({ label, value, tone, sub }: { label: string; value: Re
   return (
     <div className="flex-1 min-w-[130px] bg-surface rounded-card shadow-rest px-4 py-3.5">
       <div className="label-mono text-ink-3">{label}</div>
-      <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px]" style={tone ? { color: tone } : undefined}>
+      <div className="fig mt-1.5 text-[23px] font-semibold tracking-[-1px]" style={tone ? { color: tone } : undefined}>
         {value}
       </div>
       {sub && <div className="mt-0.5 text-[11.5px] text-ink-3">{sub}</div>}
@@ -141,7 +141,7 @@ export function StatCard({ label, value, tone, sub }: { label: string; value: Re
 export function Panel({ title, right, children, className = '', accent }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string }) {
   return (
     <section
-      className={`bg-surface rounded-panel shadow-rest p-5 ${className}`}
+      className={`bg-surface rounded-panel shadow-rest p-5 sm:p-6 ${className}`}
       style={accent ? { borderTop: `3px solid ${accent}` } : undefined}
     >
       {(title || right) && (

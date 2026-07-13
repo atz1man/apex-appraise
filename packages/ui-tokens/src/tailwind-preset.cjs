@@ -63,9 +63,9 @@ module.exports = {
       },
       boxShadow: {
         // Apple-soft layered elevation: hairline definition + wide ambient falloff
-        rest: '0 0 0 1px rgba(20,30,25,0.045), 0 1px 2px rgba(20,30,25,0.04), 0 12px 32px -16px rgba(20,30,25,0.14)',
-        float: '0 0 0 1px rgba(20,30,25,0.05), 0 18px 44px -18px rgba(20,30,25,0.28)',
-        drawer: '-24px 0 80px rgba(20,30,25,0.22)',
+        rest: '0 0 0 1px rgb(var(--shadow-ink, 20 30 25) / 0.045), 0 1px 2px rgb(var(--shadow-ink, 20 30 25) / 0.04), 0 12px 32px -16px rgb(var(--shadow-ink, 20 30 25) / 0.14)',
+        float: '0 0 0 1px rgb(var(--shadow-ink, 20 30 25) / 0.05), 0 18px 44px -18px rgb(var(--shadow-ink, 20 30 25) / 0.30)',
+        drawer: '-24px 0 80px rgb(var(--shadow-ink, 20 30 25) / 0.24)',
         'dark-card': '0 26px 60px -28px rgba(0,0,0,0.5)',
         pill: '0 1px 3px rgba(20,30,25,0.10), 0 1px 1px rgba(20,30,25,0.05)',
       },

@@ -72,6 +72,7 @@ function Protected({ children, portal }: { children: JSX.Element; portal?: 'buye
 }
 
 export default function App() {
+  const location = useLocation();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -94,6 +95,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
         <Suspense fallback={<Splash />}>
+        <div key={location.pathname} className="page-enter">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -121,6 +123,7 @@ export default function App() {
           <Route path="/portal/buyer" element={<Protected portal="buyer"><BuyerPortal /></Protected>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </div>
         </Suspense>
         </ToastProvider>
       </QueryClientProvider>
