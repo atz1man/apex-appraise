@@ -7,10 +7,10 @@
 
 const API = 'https://api.company-information.service.gov.uk';
 
-export const companiesHouseConfigured = () => Boolean(process.env.COMPANIES_HOUSE_KEY);
+export const companiesHouseConfigured = (orgKey?: string | null) => Boolean(orgKey || process.env.COMPANIES_HOUSE_KEY);
 
-async function chFetch<T>(path: string): Promise<T> {
-  const key = process.env.COMPANIES_HOUSE_KEY;
+async function chFetch<T>(path: string, orgKey?: string | null): Promise<T> {
+  const key = orgKey || process.env.COMPANIES_HOUSE_KEY;
   if (!key) throw new Error('not-configured');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12_000);
@@ -35,8 +35,8 @@ export interface CompanySummary {
   address: string;
 }
 
-export async function searchCompanies(q: string): Promise<CompanySummary[]> {
-  const d = await chFetch<{ items: any[] }>(`/search/companies?q=${encodeURIComponent(q)}&items_per_page=8`);
+export async function searchCompanies(q: string, orgKey?: string | null): Promise<CompanySummary[]> {
+  const d = await chFetch<{ items: any[] }>(`/search/companies?q=${encodeURIComponent(q)}&items_per_page=8`, orgKey);
   return (d.items ?? []).map((i) => ({
     companyNumber: String(i.company_number ?? ''),
     name: String(i.title ?? ''),
@@ -56,11 +56,11 @@ export interface CompanyProfile {
 }
 
 /** Profile + officers + charges — the "who are we buying from?" answer. */
-export async function companyProfile(companyNumber: string): Promise<CompanyProfile> {
+export async function companyProfile(companyNumber: string, orgKey?: string | null): Promise<CompanyProfile> {
   const [profile, officers, charges] = await Promise.allSettled([
-    chFetch<any>(`/company/${companyNumber}`),
-    chFetch<{ items: any[] }>(`/company/${companyNumber}/officers?items_per_page=10`),
-    chFetch<{ total_count?: number; unfiltered_count?: number; items?: any[] }>(`/company/${companyNumber}/charges`),
+    chFetch<any>(`/company/${companyNumber}`, orgKey),
+    chFetch<{ items: any[] }>(`/company/${companyNumber}/officers?items_per_page=10`, orgKey),
+    chFetch<{ total_count?: number; unfiltered_count?: number; items?: any[] }>(`/company/${companyNumber}/charges`, orgKey),
   ]);
   if (profile.status !== 'fulfilled') throw new Error('company not found');
   const p = profile.value;

@@ -411,4 +411,5 @@ model IntegrationConnection {
   provider String
   status   String @default("NOT_CONNECTED") // CONNECTED | ATTENTION | NOT_CONNECTED
   lastSync DateTime?
+  config   String @default("{}") // provider credentials (JSON) — server-side only, never returned to clients
 }

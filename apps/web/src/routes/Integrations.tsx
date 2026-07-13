@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Skeleton, TopBar } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { Button, Dot, Drawer, EmptyState, Skeleton, TopBar } from '../components/ui';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -21,6 +22,7 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
     items: [
       { provider: 'HM Land Registry', name: 'HM Land Registry', mark: 'LR', desc: 'Sold price paid data and title information for comparable evidence and ownership.' },
       { provider: 'EPC Register', name: 'EPC Register', mark: 'EP', desc: 'Energy performance certificates — floor areas and ratings for the subject and comps.' },
+      { provider: 'Companies House', name: 'Companies House', mark: 'CH', desc: 'Counterparty due diligence — officers, charges and filing status on the site pack.' },
       { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Automated valuation and market intelligence as a cross-check band on every appraisal.' },
     ],
   },
@@ -59,9 +61,29 @@ function rel(d: Date | string): string {
 }
 
 export default function Integrations() {
+  const toast = useToast();
   const utils = trpc.useUtils();
   const { data: rows, isLoading } = trpc.integrations.list.useQuery();
   const connect = trpc.integrations.connect.useMutation({ onSuccess: () => utils.integrations.list.invalidate() });
+  // self-serve key flow: drawer with the provider's fields, validated live on save
+  const [credProvider, setCredProvider] = useState<string | null>(null);
+  const [credFields, setCredFields] = useState<Record<string, string>>({});
+  const saveCreds = trpc.integrations.saveCredentials.useMutation({
+    onSuccess: (res) => {
+      utils.integrations.list.invalidate();
+      setCredProvider(null);
+      setCredFields({});
+      toast.success(`${res.provider} connected — key validated against the live API`);
+    },
+  });
+  const disconnect = trpc.integrations.disconnect.useMutation({
+    onSuccess: () => {
+      utils.integrations.list.invalidate();
+      setCredProvider(null);
+      setCredFields({});
+      toast.success('Disconnected — the stored key has been removed');
+    },
+  });
   const { data: dealsData } = trpc.deals.list.useQuery({});
   const [syncDealId, setSyncDealId] = useState('');
   const [syncResult, setSyncResult] = useState<Record<string, string>>({});
@@ -176,7 +198,13 @@ export default function Integrations() {
                                 Sync to deal
                               </Button>
                             )}
-                            <Button variant="secondary" size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="min-h-10 sm:min-h-0"
+                              loading={pending}
+                              onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                            >
                               Manage
                             </Button>
                           </div>
@@ -185,7 +213,12 @@ export default function Integrations() {
                             Reconnect
                           </Button>
                         ) : (
-                          <Button size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                          <Button
+                            size="sm"
+                            className="min-h-10 sm:min-h-0"
+                            loading={pending}
+                            onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                          >
                             Connect
                           </Button>
                         )}
@@ -198,6 +231,64 @@ export default function Integrations() {
           ))
         )}
       </main>
+
+      {/* self-serve key drawer — validated live before it's stored */}
+      {(() => {
+        const row = credProvider ? byProvider.get(credProvider) : undefined;
+        const spec = row?.selfServe;
+        if (!credProvider || !spec) return null;
+        const isConnected = row?.status === 'CONNECTED';
+        const valid = spec.fields.every((f) => credFields[f.key]?.trim());
+        return (
+          <Drawer open onClose={() => { setCredProvider(null); setCredFields({}); }} title={`Connect ${credProvider}`}>
+            <div className="flex flex-col gap-4">
+              <p className="text-[12.5px] text-ink-2 leading-relaxed">
+                {credProvider} uses your workspace&rsquo;s own free API key. Get one at{' '}
+                <a href={spec.signupUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-500 hover:text-brand-700">
+                  {spec.signupUrl.replace('https://', '')}
+                </a>
+                {' '}— the key is checked against the live API before it&rsquo;s saved, stored server-side only, and never shown again.
+              </p>
+              {spec.fields.map((f) => (
+                <div key={f.key}>
+                  <label htmlFor={`cred-${f.key}`} className="label-mono text-ink-3 block mb-1">{f.label}</label>
+                  <input
+                    id={`cred-${f.key}`}
+                    className="w-full fig"
+                    type={f.key === 'key' ? 'password' : 'text'}
+                    autoComplete="off"
+                    value={credFields[f.key] ?? ''}
+                    onChange={(e) => setCredFields((s) => ({ ...s, [f.key]: e.target.value }))}
+                  />
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <Button
+                  loading={saveCreds.isPending}
+                  disabled={!valid}
+                  onClick={() => saveCreds.mutate({ provider: credProvider as 'EPC Register' | 'Companies House', fields: credFields })}
+                >
+                  {isConnected ? 'Replace key' : 'Validate & connect'}
+                </Button>
+                <Button variant="ghost" onClick={() => { setCredProvider(null); setCredFields({}); }}>Cancel</Button>
+                {isConnected && (
+                  <Button
+                    variant="danger"
+                    className="ml-auto"
+                    loading={disconnect.isPending}
+                    onClick={() => disconnect.mutate(credProvider as 'EPC Register' | 'Companies House')}
+                  >
+                    Disconnect
+                  </Button>
+                )}
+              </div>
+              {isConnected && row?.hasCredentials && (
+                <div className="text-[11.5px] text-ink-3">A key is on file for this workspace. Replacing it re-validates against the live API.</div>
+              )}
+            </div>
+          </Drawer>
+        );
+      })()}
     </div>
   );
 }

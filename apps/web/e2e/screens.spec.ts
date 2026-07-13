@@ -86,6 +86,16 @@ test.describe('internal screens', () => {
     await page.goto('/integrations');
     await expect(page.getByText('Connect your data sources')).toBeVisible();
     await expect(page.getByText('HM Land Registry')).toBeVisible();
+    // self-serve key flow: Companies House opens a credentials drawer, not a demo connect
+    await expect(page.getByText('Companies House')).toBeVisible();
+    const chCard = page.locator('.rounded-card', { hasText: 'Companies House' }).first();
+    await chCard.getByRole('button', { name: /Connect|Manage/ }).click();
+    await expect(page.getByRole('heading', { name: 'Connect Companies House' })).toBeVisible();
+    await expect(page.getByLabel('API key')).toBeVisible();
+    // save is gated until a key is entered; escape closes without saving
+    await expect(page.getByRole('button', { name: /Validate & connect|Replace key/ })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('API key')).toHaveCount(0);
   });
 
   test('workbench reconciles market value', async ({ page }) => {

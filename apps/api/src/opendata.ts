@@ -192,15 +192,21 @@ export interface EpcRecord {
   source: string;
 }
 
-/** EPC register — free key from epc.opendatacommunities.org (EPC_AUTH_EMAIL + EPC_AUTH_KEY). */
-export async function fetchEpc(postcode: string): Promise<{ status: 'ok' | 'not-configured' | 'error'; records: EpcRecord[]; note?: string }> {
-  const email = process.env.EPC_AUTH_EMAIL;
-  const key = process.env.EPC_AUTH_KEY;
+/**
+ * EPC register — free key from epc.opendatacommunities.org. Credentials come
+ * from the org's self-serve integration settings, falling back to env vars.
+ */
+export async function fetchEpc(
+  postcode: string,
+  creds?: { email?: string; key?: string } | null,
+): Promise<{ status: 'ok' | 'not-configured' | 'error'; records: EpcRecord[]; note?: string }> {
+  const email = creds?.email || process.env.EPC_AUTH_EMAIL;
+  const key = creds?.key || process.env.EPC_AUTH_KEY;
   if (!email || !key) {
     return {
       status: 'not-configured',
       records: [],
-      note: 'Free API key required — register at epc.opendatacommunities.org, then set EPC_AUTH_EMAIL and EPC_AUTH_KEY.',
+      note: 'Free API key required — register at epc.opendatacommunities.org, then connect EPC Register on the Integrations screen.',
     };
   }
   try {

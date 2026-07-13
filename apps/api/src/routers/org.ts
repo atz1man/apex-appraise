@@ -25,6 +25,7 @@ const adminProcedure = internalProcedure.use(({ ctx, next }) => {
 const DEFAULT_INTEGRATIONS = [
   'HM Land Registry',
   'EPC Register',
+  'Companies House',
   'PriceHubble AVM',
   'Planning Portal',
   'Ordnance Survey',

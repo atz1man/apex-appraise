@@ -2,6 +2,9 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
+import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
+import { fetchEpc } from '../opendata.js';
+import { searchCompanies } from '../companieshouse.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -269,9 +272,79 @@ export const documentsRouter = router({
 // ---------- Integrations & org ----------
 
 export const integrationsRouter = router({
-  list: internalProcedure.query(({ ctx }) =>
-    ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId }, orderBy: { provider: 'asc' } }),
-  ),
+  list: internalProcedure.query(async ({ ctx }) => {
+    // Backfill any providers added since this org registered (e.g. Companies House)
+    const existing = await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId } });
+    const missing = Object.keys(SELF_SERVE_PROVIDERS).filter((p) => !existing.some((e) => e.provider === p));
+    for (const provider of missing) {
+      await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider } });
+    }
+    const rows = missing.length
+      ? await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId }, orderBy: { provider: 'asc' } })
+      : existing.sort((a, b) => a.provider.localeCompare(b.provider));
+    // config (credentials) never leaves the server — expose only whether keys are set
+    return rows.map(({ config, ...row }) => ({
+      ...row,
+      hasCredentials: config !== '{}' && config !== '',
+      selfServe: row.provider in SELF_SERVE_PROVIDERS ? SELF_SERVE_PROVIDERS[row.provider as SelfServeProvider] : null,
+    }));
+  }),
+
+  /**
+   * Save a workspace's own API key for a self-serve provider. The key is
+   * validated against the live upstream before it's accepted, stored
+   * server-side only, and the connection flips to CONNECTED.
+   */
+  saveCredentials: internalProcedure
+    .input(
+      z.object({
+        provider: z.enum(['EPC Register', 'Companies House']),
+        fields: z.record(z.string().min(1).max(300)),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
+      const spec = SELF_SERVE_PROVIDERS[input.provider];
+      for (const f of spec.fields) {
+        if (!input.fields[f.key]?.trim()) throw new TRPCError({ code: 'BAD_REQUEST', message: `${f.label} is required` });
+      }
+      // live validation — never store a key the provider rejects
+      if (input.provider === 'EPC Register') {
+        const probe = await fetchEpc('SW1A 1AA', { email: input.fields.email, key: input.fields.key });
+        if (probe.status !== 'ok') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'EPC register rejected these credentials — check the email and key.' });
+        }
+      } else {
+        try {
+          await searchCompanies('test', input.fields.key);
+        } catch {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House rejected this key — check it and try again.' });
+        }
+      }
+      const existing = await ctx.prisma.integrationConnection.findFirst({
+        where: { orgId: ctx.principal.orgId, provider: input.provider },
+      });
+      const data = { status: 'CONNECTED', lastSync: new Date(), config: JSON.stringify(input.fields) };
+      const row = existing
+        ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
+        : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
+      return { id: row.id, provider: row.provider, status: row.status };
+    }),
+
+  /** Remove a self-serve provider's stored key and mark it not connected. */
+  disconnect: internalProcedure
+    .input(z.enum(['EPC Register', 'Companies House']))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
+      const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
+      if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.prisma.integrationConnection.update({
+        where: { id: conn.id },
+        data: { status: 'NOT_CONNECTED', config: '{}' },
+      });
+      return { disconnected: true };
+    }),
+
   connect: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
     if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });

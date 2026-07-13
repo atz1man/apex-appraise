@@ -11,6 +11,7 @@ import {
   matchPsf,
 } from '../opendata.js';
 import { companiesHouseConfigured, companyProfile, searchCompanies } from '../companieshouse.js';
+import { getIntegrationCreds } from '../integration-creds.js';
 import { internalProcedure, router } from '../trpc.js';
 
 /**
@@ -40,10 +41,11 @@ export const sitePackRouter = router({
         return { status: 'bad-postcode' as const, dealName: deal.name, address: deal.address, postcode };
       }
 
+      const epcCreds = await getIntegrationCreds(ctx.prisma, ctx.principal.orgId, 'EPC Register');
       const [soldRes, constraintsRes, epcRes, floodRes, amenityRes] = await Promise.allSettled([
         fetchSoldPrices(geo.postcode),
         fetchConstraints(geo.latitude, geo.longitude),
-        fetchEpc(geo.postcode),
+        fetchEpc(geo.postcode, epcCreds),
         fetchFloodWarnings(geo.latitude, geo.longitude),
         fetchAmenities(geo.latitude, geo.longitude),
       ]);
@@ -83,21 +85,23 @@ export const sitePackRouter = router({
       };
     }),
 
-  /** Counterparty due diligence — Companies House (free key: COMPANIES_HOUSE_KEY). */
-  companySearch: internalProcedure.input(z.object({ q: z.string().min(2).max(80) })).query(async ({ input }) => {
-    if (!companiesHouseConfigured()) {
+  /** Counterparty due diligence — Companies House (self-serve key on the Integrations screen). */
+  companySearch: internalProcedure.input(z.object({ q: z.string().min(2).max(80) })).query(async ({ ctx, input }) => {
+    const creds = await getIntegrationCreds(ctx.prisma, ctx.principal.orgId, 'Companies House');
+    if (!companiesHouseConfigured(creds?.key)) {
       return {
         status: 'not-configured' as const,
-        note: 'Free API key required — register at developer.company-information.service.gov.uk, then set COMPANIES_HOUSE_KEY.',
+        note: 'Free API key required — register at developer.company-information.service.gov.uk, then connect Companies House on the Integrations screen.',
         results: [],
       };
     }
-    return { status: 'ok' as const, results: await searchCompanies(input.q) };
+    return { status: 'ok' as const, results: await searchCompanies(input.q, creds?.key) };
   }),
 
-  company: internalProcedure.input(z.object({ companyNumber: z.string().min(4).max(10) })).query(async ({ input }) => {
-    if (!companiesHouseConfigured()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House key not configured' });
-    return companyProfile(input.companyNumber);
+  company: internalProcedure.input(z.object({ companyNumber: z.string().min(4).max(10) })).query(async ({ ctx, input }) => {
+    const creds = await getIntegrationCreds(ctx.prisma, ctx.principal.orgId, 'Companies House');
+    if (!companiesHouseConfigured(creds?.key)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House key not configured' });
+    return companyProfile(input.companyNumber, creds?.key);
   }),
 
   /** Turn selected sold-price records into real comparables on the deal. */
