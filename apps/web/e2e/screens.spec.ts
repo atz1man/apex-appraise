@@ -106,6 +106,9 @@ test.describe('internal screens', () => {
     await page.goto(`/deal/${id}/redbook`);
     await expect(page.locator('.a4-page').first()).toBeVisible();
     await expect(page.getByText('Market Value').first()).toBeVisible();
+    // comparable evidence page carries the adjustment ladder with the supported rate
+    await expect(page.getByTestId('comps-ladder')).toBeVisible();
+    await expect(page.getByTestId('comps-ladder').getByText(/Supported £\d+\/ft²/)).toBeVisible();
   });
 
   test('field app frames the mobile companion', async ({ page }) => {

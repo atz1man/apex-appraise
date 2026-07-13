@@ -278,6 +278,70 @@ export function SalesVelocityChart({
 }
 
 /**
+ * Comparable evidence ladder — one row per comp: open dot at the base £/ft²,
+ * filled dot at the adjusted £/ft², connected; the concluded (weighted)
+ * rate runs as a dashed reference through all rows. Valuation-report standard.
+ */
+export function CompsLadder({
+  comps,
+  supported,
+}: {
+  comps: Array<{ address: string; basePsf: number; adjustedPsf: number }>;
+  supported: number;
+}) {
+  const narrow = useNarrow();
+  const W = narrow ? 360 : 700;
+  const LABEL_W = narrow ? 92 : 170;
+  const ROW_H = 30;
+  const TOP = 24;
+  const H = TOP + comps.length * ROW_H + 26;
+  const values = comps.flatMap((c) => [c.basePsf, c.adjustedPsf]).concat(supported);
+  const lo = Math.min(...values) * 0.96;
+  const hi = Math.max(...values) * 1.04;
+  const xOf = (v: number) => LABEL_W + ((v - lo) / (hi - lo || 1)) * (W - LABEL_W - 56);
+  const nameLen = narrow ? 11 : 22;
+
+  return (
+    <div data-testid="comps-ladder">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Comparable evidence: base and adjusted pounds per square foot per comparable, with the supported rate marked">
+        {/* supported reference */}
+        <line x1={xOf(supported)} x2={xOf(supported)} y1={TOP - 12} y2={H - 18} stroke={INK} strokeWidth="1.2" strokeDasharray="4 4" />
+        <text x={Math.min(xOf(supported) + 6, W - 108)} y={TOP - 12} fontSize="10" className="fig" fontWeight="600" fill={INK}>
+          Supported £{Math.round(supported)}/ft²
+        </text>
+        {comps.map((c, i) => {
+          const y = TOP + i * ROW_H + ROW_H / 2;
+          const xb = xOf(c.basePsf);
+          const xa = xOf(c.adjustedPsf);
+          return (
+            <g key={c.address}>
+              <title>{`${c.address} · base £${Math.round(c.basePsf)} → adjusted £${Math.round(c.adjustedPsf)}/ft²`}</title>
+              <text x={0} y={y + 3} fontSize={narrow ? 9 : 10.5} fill="#5F665F">
+                {c.address.length > nameLen ? `${c.address.slice(0, nameLen - 1)}…` : c.address}
+              </text>
+              <line x1={LABEL_W} x2={W - 56} y1={y} y2={y} stroke={GRID} strokeWidth="1" />
+              <line x1={xb} x2={xa} y1={y} y2={y} stroke={MUTED} strokeWidth="1.5" />
+              <circle cx={xb} cy={y} r="4" fill="#fff" stroke={MUTED} strokeWidth="1.5" />
+              <circle cx={xa} cy={y} r="4.5" fill={REV} stroke="#fff" strokeWidth="1.5" />
+              <text x={W - 50} y={y + 3} fontSize={narrow ? 9 : 10.5} className="fig" fontWeight="600" fill={INK}>
+                £{Math.round(c.adjustedPsf)}
+              </text>
+            </g>
+          );
+        })}
+        {/* legend */}
+        <g transform={`translate(${LABEL_W}, ${H - 6})`}>
+          <circle cx="4" cy="-3" r="3.5" fill="#fff" stroke={MUTED} strokeWidth="1.5" />
+          <text x="12" y="0" fontSize="9.5" fill={MUTED}>Base</text>
+          <circle cx="52" cy="-3" r="4" fill={REV} stroke="#fff" strokeWidth="1.5" />
+          <text x="60" y="0" fontSize="9.5" fill={MUTED}>Adjusted</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/**
  * Cost variance strip — per-package budget vs forecast as compact rows.
  * The track is the budget; the fill is the forecast (green within budget,
  * with a red segment for any overrun beyond the budget mark).

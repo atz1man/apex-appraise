@@ -5,6 +5,7 @@ import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { BrandMark, Button, Spinner } from '../components/ui';
+import { CompsLadder } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -536,6 +537,18 @@ export default function RedBookReport() {
               </div>
             )}
           </div>
+
+          {hasComps && summary.comps.length > 1 && (
+            <div className="mt-4 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px 8px' }}>
+              <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px', marginBottom: 8 }}>
+                Adjustment ladder — base to adjusted £/ft²
+              </div>
+              <CompsLadder
+                comps={summary.comps.map((c) => ({ address: c.address, basePsf: c.basePsf, adjustedPsf: c.adjustedPsf }))}
+                supported={summary.supportedPsf}
+              />
+            </div>
+          )}
 
           <div className="mt-3.5 flex gap-3">
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
