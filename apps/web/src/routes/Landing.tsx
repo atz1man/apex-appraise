@@ -512,7 +512,7 @@ function WorkfileMock() {
   ];
   return (
     <MockCard>
-      <div className="label-mono text-ink-3">Data room · Northgate Works</div>
+      <div className="label-mono text-ink-2b">Data room · Northgate Works</div>
       <div className="mt-3 flex flex-col">
         {docs.map(([name, chip], i) => (
           <div key={name} className={`flex items-center justify-between gap-3 py-2.5 ${i > 0 ? 'border-t border-border-faint' : ''}`}>
@@ -537,7 +537,7 @@ function CostMock() {
   ];
   return (
     <MockCard>
-      <div className="label-mono text-ink-3">Budget vs actual · month 7 of 14</div>
+      <div className="label-mono text-ink-2b">Budget vs actual · month 7 of 14</div>
       <div className="mt-4 flex flex-col gap-3.5">
         {trades.map(([trade, pct, delta, tone]) => (
           <div key={trade}>
@@ -564,7 +564,7 @@ function CostMock() {
 function PortalMock() {
   return (
     <MockCard>
-      <div className="label-mono text-ink-3">LP statement · Q2 2026</div>
+      <div className="label-mono text-ink-2b">LP statement · Q2 2026</div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         {(
           [
@@ -575,7 +575,7 @@ function PortalMock() {
           ] as Array<[string, string]>
         ).map(([label, value]) => (
           <div key={label} className="rounded-[12px] bg-sunken border border-border-strong px-3.5 py-3">
-            <div className="label-mono text-ink-3">{label}</div>
+            <div className="label-mono text-ink-2b">{label}</div>
             <div className="fig mt-1.5 text-[19px] font-semibold tracking-[-1px] text-brand-700">{value}</div>
           </div>
         ))}
@@ -626,7 +626,8 @@ function HeroAppMock() {
           </div>
           {/* the real product, not a sketch */}
           <div className="rounded-t-[10px] overflow-hidden max-h-[380px]">
-            <img src="/tour/hub.png" alt="" className="block w-full" loading="lazy" />
+            {/* React 18 lacks the fetchPriority prop type — pass the DOM attribute directly */}
+            <img src="/tour/hub.png" alt="" className="block w-full" decoding="async" {...({ fetchpriority: 'high' } as Record<string, string>)} />
           </div>
         </div>
       </div>
@@ -729,6 +730,7 @@ export default function Landing() {
         </div>
       </div>
 
+      <main>
       {/* HERO */}
       <div className="relative text-white overflow-hidden" style={{ background: 'linear-gradient(165deg,#14503B 0%,#0F3528 55%,#0C2A20 100%)' }}>
         <div className="absolute -top-40 -right-32 w-[620px] h-[620px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />
@@ -773,8 +775,8 @@ export default function Landing() {
       {/* LOGOS / TRUST */}
       <div className="bg-surface border-b border-border-strong">
         <div className={`${WRAP} py-[30px] flex items-center gap-7 flex-wrap justify-center`}>
-          <span className="font-mono text-[12px] font-medium tracking-[0.5px] text-ink-3">Trusted by developers &amp; surveying firms across the UK</span>
-          <div className="flex gap-9 items-center opacity-70 flex-wrap justify-center">
+          <span className="font-mono text-[12px] font-medium tracking-[0.5px] text-ink-2b">Trusted by developers &amp; surveying firms across the UK</span>
+          <div className="flex gap-9 items-center flex-wrap justify-center">
             {LOGOS.map((name) => (
               <span key={name} className="text-[17px] font-bold text-ink-2b">
                 {name}
@@ -872,7 +874,7 @@ export default function Landing() {
                   </div>
                 )}
                 <div className="flex-1 text-center px-2">
-                  <div className={`font-mono text-[13px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-700' : 'text-ink-3'}`}>{num}</div>
+                  <div className={`font-mono text-[13px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-700' : 'text-ink-2b'}`}>{num}</div>
                   <div className={`mt-2 text-[16px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-700' : ''}`}>{title}</div>
                   <div className="mt-[5px] text-[12.5px] text-ink-2b leading-[1.4]">{desc}</div>
                 </div>
@@ -953,7 +955,7 @@ export default function Landing() {
               </div>
               <div className="fig mt-3 text-[38px] font-semibold tracking-[-1.5px]">
                 £{price}
-                <span className="text-[13px] text-ink-3 font-medium tracking-normal">/month</span>
+                <span className="text-[13px] text-ink-2b font-medium tracking-normal">/month</span>
               </div>
               <div className="mt-1.5 text-[13px] text-ink-2">{blurb}</div>
               <ul className="mt-5 flex flex-col gap-2.5 flex-1">
@@ -980,7 +982,7 @@ export default function Landing() {
             </div>
           ))}
         </div>
-        <div className="mt-6 text-center text-[12px] text-ink-3">
+        <div className="mt-6 text-center text-[12px] text-ink-2b">
           14-day trial on every plan · cancel any time · prices exclude VAT
         </div>
       </div>
@@ -1005,6 +1007,8 @@ export default function Landing() {
         </div>
       </div>
 
+      </main>
+
       {/* FOOTER */}
       <footer id="footer" className="bg-surface border-t border-border-strong">
         <div className={`${WRAP} py-11`}>
@@ -1026,7 +1030,7 @@ export default function Landing() {
               ] as Array<[string, Array<[string, string]>]>
             ).map(([heading, links]) => (
               <div key={heading}>
-                <div className="label-mono text-ink-3">{heading}</div>
+                <div className="label-mono text-ink-2b">{heading}</div>
                 <div className="mt-3 flex flex-col gap-2">
                   {links.map(([label, href]) => (
                     <a key={label} href={href} className="text-[12.5px] font-medium text-ink-2b hover:text-ink">
@@ -1038,8 +1042,8 @@ export default function Landing() {
             ))}
           </div>
           <div className="mt-9 pt-5 border-t border-border-std flex items-center justify-between gap-4 flex-wrap">
-            <span className="font-mono text-[11.5px] text-ink-3">© 2026 Apex Appraise Ltd</span>
-            <span className="font-mono text-[11.5px] text-ink-3">Registered in England &amp; Wales</span>
+            <span className="font-mono text-[11.5px] text-ink-2b">© 2026 Apex Appraise Ltd</span>
+            <span className="font-mono text-[11.5px] text-ink-2b">Registered in England &amp; Wales</span>
           </div>
         </div>
       </footer>
