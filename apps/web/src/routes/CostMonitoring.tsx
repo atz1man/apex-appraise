@@ -223,12 +223,25 @@ export default function CostMonitoring() {
 
       <DealNav dealId={dealId} active="costs" />
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        {packages.length === 0 ? (
+          // no cost plan yet — one guided empty state instead of a wall of dashes
+          <div className="mt-5">
+            <EmptyState
+              title="No cost plan on this deal yet"
+              cta={<Button to={`/deal/${dealId}/appraisal`}>Open the appraisal →</Button>}
+            >
+              Cost monitoring lights up once the build cost plan is broken out into packages —
+              budgets, contractor commitments and variance alerts all flow from the appraisal.
+            </EmptyState>
+          </div>
+        ) : (
+          <>
         {/* KPI strip */}
         <div className="mt-5 flex gap-3 flex-wrap">
           <StatCard label="Appraised cost" value={packages.length ? fM(rollup!.appraised) : '—'} sub={cost?.hasAppraisal ? 'from current appraisal' : 'no appraisal saved'} />
           <StatCard label="Committed" value={packages.length ? fM(rollup!.committed) : '—'} />
           <StatCard label="Forecast final" value={packages.length ? fM(rollup!.forecast) : '—'} />
-          <div className="flex-1 min-w-[150px] rounded-card shadow-rest px-4 py-3.5" style={{ background: packages.length ? (over ? statusTokens.red.bg : statusTokens.green.bg) : '#fff', border: `1px solid ${neutral.borderStrong}` }}>
+          <div className="flex-1 min-w-[150px] rounded-card shadow-rest px-4 py-3.5" style={{ background: packages.length ? (over ? statusTokens.red.bg : statusTokens.green.bg) : 'rgb(var(--surface, 255 255 255))', border: `1px solid ${neutral.borderStrong}` }}>
             <div className="label-mono" style={{ color: packages.length ? varTone(rollup!.variance) : neutral.ink3 }}>Variance to appraisal</div>
             <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px]" style={{ color: packages.length ? varTone(rollup!.variance) : neutral.ink3 }}>
               {packages.length ? formatDelta(rollup!.variance) : '—'}
@@ -404,6 +417,8 @@ export default function CostMonitoring() {
             </Panel>
           </aside>
         </div>
+          </>
+        )}
 
         {/* ===== Contractors & actions ===== */}
         <div className="mt-8">

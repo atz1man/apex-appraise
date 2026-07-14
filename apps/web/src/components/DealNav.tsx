@@ -39,7 +39,12 @@ export function DealNav({ dealId, active }: { dealId: string; active: DealTool }
   const { data } = trpc.deals.list.useQuery({});
   const activePath = TOOLS.find(([k]) => k === active)?.[2] ?? '';
   return (
-    <nav className="sticky top-14 z-30 bg-surface/95 border-b border-border-std px-5 flex items-center gap-0.5 overflow-x-auto backdrop-blur">
+    <nav className="sticky top-14 z-30 bg-surface/95 border-b border-border-std px-5 flex items-center backdrop-blur">
+      {/* tabs scroll in their own strip — hidden scrollbar, right-edge fade as the overflow affordance */}
+      <div
+        className="flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ WebkitMaskImage: 'linear-gradient(to right, black 94%, transparent)', maskImage: 'linear-gradient(to right, black 94%, transparent)' }}
+      >
       {TOOLS.map(([key, label, path]) => (
         <Link
           key={key}
@@ -54,9 +59,10 @@ export function DealNav({ dealId, active }: { dealId: string; active: DealTool }
           {label}
         </Link>
       ))}
+      </div>
       {data && data.deals.length > 1 && (
         <select
-          className="ml-auto my-1.5 h-7 text-[11.5px] max-w-[220px]"
+          className="ml-3 my-1.5 h-7 text-[11.5px] max-w-[220px] shrink-0"
           value={dealId}
           onChange={(e) => navigate(`/deal/${e.target.value}${activePath}`)}
           aria-label="Switch deal"
