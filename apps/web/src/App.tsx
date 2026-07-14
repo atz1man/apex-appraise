@@ -44,6 +44,7 @@ const Calendar = lazy(() => import('./routes/Calendar'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Register = lazy(() => import('./routes/Register'));
 const SitePack = lazy(() => import('./routes/SitePack'));
+const WhatsNew = lazy(() => import('./routes/WhatsNew'));
 
 /** Branded splash while a route chunk loads — calm, no layout jank. */
 function Splash() {
@@ -100,6 +101,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/welcome" element={<Landing />} />
+          <Route path="/whats-new" element={<WhatsNew />} />
           <Route path="/" element={<Protected><Hub /></Protected>} />
           <Route path="/board" element={<Protected><Board /></Protected>} />
           <Route path="/calendar" element={<Protected><Calendar /></Protected>} />

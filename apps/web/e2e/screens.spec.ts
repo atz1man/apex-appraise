@@ -169,6 +169,12 @@ test('landing page renders the marketing site', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Sign in' }).first()).toBeVisible();
 });
 
+test('whats new page lists recent shipping', async ({ page }) => {
+  await page.goto('/whats-new'); // public — no sign-in
+  await expect(page.getByRole('heading', { name: "What's new" })).toBeVisible();
+  await expect(page.getByText('Ask the workfile').first()).toBeVisible();
+});
+
 test('buyer portal signs a document (persisted)', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: /Buyer portal/ }).click();

@@ -1024,7 +1024,7 @@ export default function Landing() {
             </div>
             {(
               [
-                ['Product', [['Platform', '#platform'], ['Features', '#features'], ['Pricing', '#pricing']]],
+                ['Product', [['Platform', '#platform'], ['Features', '#features'], ['Pricing', '#pricing'], ["What's new", '/whats-new']]],
                 ['Company', [['Customers', '#customers'], ['Security', '#footer'], ['Contact', DEMO_MAILTO]]],
                 ['Legal', [['Privacy', '#footer'], ['Terms', '#footer']]],
               ] as Array<[string, Array<[string, string]>]>
