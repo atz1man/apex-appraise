@@ -2,6 +2,7 @@ import './env.js';
 import cors from '@fastify/cors';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import Fastify from 'fastify';
+import { registerAdmin } from './admin.js';
 import { createContext } from './context.js';
 import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
@@ -20,6 +21,7 @@ async function main() {
   await registerUploads(app);
   registerReports(app);
   registerWebhooks(app);
+  registerAdmin(app);
   app.get('/health', async () => ({ ok: true, service: 'apex-api' }));
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`apex-api listening on :${PORT}`);

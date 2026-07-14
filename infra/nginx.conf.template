@@ -33,6 +33,13 @@ server {
     proxy_set_header Host $host;
   }
 
+  # Nightly demo reset (token-guarded in the API; api app is flycast-only)
+  location /admin/ {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+  }
+
   # Hashed build assets never change — cache forever
   location /assets/ {
     add_header Cache-Control "public, max-age=31536000, immutable";

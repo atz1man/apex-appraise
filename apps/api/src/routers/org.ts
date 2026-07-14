@@ -6,6 +6,7 @@ import { computeAppraisal, jvWaterfall, type AppraisalInput } from '@apex/apprai
 import { JWT_SECRET } from '../context.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, sendMail, welcomeEmail } from '../email.js';
+import { orgCascadeDeletes } from '../org-delete.js';
 import { internalProcedure, publicProcedure, router } from '../trpc.js';
 
 const initialsOf = (name: string) =>
@@ -440,30 +441,7 @@ export const orgRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Type the workspace name exactly to confirm deletion' });
       }
       // Children first (no orgId of their own), then org-scoped rows, then the org
-      await ctx.prisma.$transaction([
-        ctx.prisma.salesMilestone.deleteMany({ where: { unit: { orgId } } }),
-        ctx.prisma.holding.deleteMany({ where: { investor: { orgId } } }),
-        ctx.prisma.cashflow.deleteMany({ where: { investor: { orgId } } }),
-        ctx.prisma.unit.deleteMany({ where: { orgId } }),
-        ctx.prisma.tenancy.deleteMany({ where: { orgId } }),
-        ctx.prisma.investor.deleteMany({ where: { orgId } }),
-        ctx.prisma.payment.deleteMany({ where: { orgId } }),
-        ctx.prisma.appraisal.deleteMany({ where: { orgId } }),
-        ctx.prisma.comparable.deleteMany({ where: { orgId } }),
-        ctx.prisma.scenario.deleteMany({ where: { orgId } }),
-        ctx.prisma.inspection.deleteMany({ where: { orgId } }),
-        ctx.prisma.contractor.deleteMany({ where: { orgId } }),
-        ctx.prisma.costPackage.deleteMany({ where: { orgId } }),
-        ctx.prisma.sitePhoto.deleteMany({ where: { orgId } }),
-        ctx.prisma.document.deleteMany({ where: { orgId } }),
-        ctx.prisma.task.deleteMany({ where: { orgId } }),
-        ctx.prisma.activityEvent.deleteMany({ where: { orgId } }),
-        ctx.prisma.benchmarkPoint.deleteMany({ where: { orgId } }),
-        ctx.prisma.integrationConnection.deleteMany({ where: { orgId } }),
-        ctx.prisma.deal.deleteMany({ where: { orgId } }),
-        ctx.prisma.user.deleteMany({ where: { orgId } }),
-        ctx.prisma.organisation.delete({ where: { id: orgId } }),
-      ]);
+      await ctx.prisma.$transaction(orgCascadeDeletes(ctx.prisma, orgId));
       return { deleted: true };
     }),
 });
