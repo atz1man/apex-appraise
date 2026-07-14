@@ -982,7 +982,7 @@ export default function Landing() {
             </div>
           ))}
         </div>
-        <div className="mt-6 text-center text-[12px] text-ink-2b">
+        <div className="mt-6 text-center text-[12px] text-ink-2">
           14-day trial on every plan · cancel any time · prices exclude VAT
         </div>
       </div>
