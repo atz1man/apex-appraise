@@ -627,7 +627,7 @@ function HeroAppMock() {
           {/* the real product, not a sketch */}
           <div className="rounded-t-[10px] overflow-hidden max-h-[380px]">
             {/* React 18 lacks the fetchPriority prop type — pass the DOM attribute directly */}
-            <img src="/tour/hub.png" alt="" className="block w-full" decoding="async" {...({ fetchpriority: 'high' } as Record<string, string>)} />
+            <img src="/tour/hub-hero.webp" alt="" className="block w-full" decoding="async" {...({ fetchpriority: 'high' } as Record<string, string>)} />
           </div>
         </div>
       </div>

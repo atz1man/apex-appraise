@@ -40,7 +40,7 @@ server {
   }
 
   # Static icons/manifest: a day is plenty (stable names, contents rarely change)
-  location ~* \.(png|svg|webmanifest|txt)$ {
+  location ~* \.(png|webp|svg|webmanifest|txt)$ {
     add_header Cache-Control "public, max-age=86400";
     try_files $uri /index.html;
   }
