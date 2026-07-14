@@ -356,7 +356,7 @@ export default function DevelopmentAppraisal() {
                       </thead>
                       <tbody>
                         {input.units.map((u, i) => (
-                          <tr key={i}>
+                          <tr key={i} className="hover:bg-sunken transition-colors">
                             <td className="py-1.5 pr-2 border-t border-border-faint">
                               <input className="w-full" aria-label={`Unit type ${i + 1} label`} value={u.label} onChange={(e) => set({ units: input.units.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                             </td>
@@ -573,7 +573,7 @@ export default function DevelopmentAppraisal() {
                       </thead>
                       <tbody>
                         {cash.rows.map((r) => (
-                          <tr key={r.m} style={{ background: r.m % 2 === 0 ? 'rgb(var(--sunken, 251 252 251))' : '#fff' }}>
+                          <tr key={r.m} style={{ background: r.m % 2 === 0 ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}>
                             <td className="py-1.5 text-[12px] fig">{monthLabel(r.m)}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.cost ? fM(r.cost) : '—'}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.intr ? fM(r.intr) : '—'}</td>
@@ -768,7 +768,7 @@ export default function DevelopmentAppraisal() {
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                      style={{ background: t.done ? '#14503B' : '#fff', borderColor: t.done ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                      style={{ background: t.done ? '#14503B' : 'rgb(var(--surface, 255 255 255))', borderColor: t.done ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
                     >
                       {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>

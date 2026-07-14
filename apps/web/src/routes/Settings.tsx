@@ -209,7 +209,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
               {(members ?? []).map((m) => {
                 const isSelf = m.id === selfId;
                 return (
-                  <tr key={m.id}>
+                  <tr key={m.id} className="hover:bg-sunken transition-colors">
                     <td className="py-2.5 px-2 border-t border-border-faint">
                       <span className="flex items-center gap-2.5">
                         <Avatar initials={m.initials} />
@@ -374,7 +374,7 @@ function DataPrivacyPanel() {
                 <table className="w-full border-collapse">
                   <tbody>
                     {(auditQ.data ?? []).map((e) => (
-                      <tr key={e.id}>
+                      <tr key={e.id} className="hover:bg-sunken transition-colors">
                         <td className="py-2 px-3 border-b border-border-faint fig text-[11px] text-ink-3 whitespace-nowrap align-top">{fmtAt(e.at)}</td>
                         <td className="py-2 px-3 border-b border-border-faint text-[12px] align-top">
                           <span className="font-semibold">{e.actor}</span>{' '}
@@ -539,7 +539,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                 <div
                   key={p.key}
                   className="rounded-card border p-4 flex flex-col"
-                  style={{ borderColor: current ? '#14503B' : 'rgb(var(--border-strong, 230 229 222))', background: current ? 'rgb(var(--sunken, 251 252 251))' : '#fff' }}
+                  style={{ borderColor: current ? '#14503B' : 'rgb(var(--border-strong, 230 229 222))', background: current ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-semibold">{p.name}</span>

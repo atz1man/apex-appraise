@@ -261,7 +261,7 @@ export default function DealOverview() {
                           done
                             ? { background: brand[700] }
                             : current
-                              ? { background: '#fff', border: `2px solid ${brand[700]}` }
+                              ? { background: 'rgb(var(--surface, 255 255 255))', border: `2px solid ${brand[700]}` }
                               : { background: neutral.sunken2, border: `1px solid ${neutral.borderStrong}` }
                         }
                       >
@@ -480,7 +480,7 @@ export default function DealOverview() {
                       <div key={t.id} className="flex items-center gap-2.5 py-1">
                         <span
                           className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                          style={{ background: '#fff', borderColor: neutral.dashed }}
+                          style={{ background: 'rgb(var(--surface, 255 255 255))', borderColor: neutral.dashed }}
                           aria-hidden="true"
                         />
                         <span className="flex-1 min-w-0">
