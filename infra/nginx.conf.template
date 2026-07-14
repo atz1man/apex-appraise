@@ -12,24 +12,24 @@ server {
              application/manifest+json font/ttf font/otf;
 
   location /trpc/ {
-    proxy_pass http://api:4100;
+    proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
   }
 
   location /uploads/ {
-    proxy_pass http://api:4100;
+    proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
     client_max_body_size 100m;
   }
 
   location /reports/ {
-    proxy_pass http://api:4100;
+    proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
     proxy_read_timeout 120s;
   }
 
   location /webhooks/ {
-    proxy_pass http://api:4100;
+    proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
   }
 

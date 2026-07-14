@@ -1,0 +1,53 @@
+# Fly.io config — API. Deploy from the repo root:
+#   flyctl deploy -c infra/fly.api.toml
+#
+# The API is private: it has no public IPs, only a flycast address the web
+# app's nginx proxies to (release public IPs after first deploy if any were
+# allocated: `flyctl ips release <ip> -a apex-appraise-api`).
+#
+# Required secrets (flyctl secrets set -a apex-appraise-api ...):
+#   DATABASE_URL   — set automatically by `flyctl postgres attach`
+#   JWT_SECRET     — openssl rand -hex 32
+# Optional: ANTHROPIC_API_KEY, EPC_BEARER_TOKEN, STRIPE_SECRET_KEY,
+#   STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, SMTP_URL, EMAIL_FROM
+
+app = "apex-appraise-api"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "infra/api.Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4100"
+  # public URL used in email links; flip to the custom domain when one exists
+  APP_URL = "https://apex-appraise-web.fly.dev"
+  # server-side PDF renderer loads the web app; the public host has a cert,
+  # flycast does not (web's force_https would 301 flycast HTTP into a dead end)
+  WEB_URL = "https://apex-appraise-web.fly.dev"
+
+[http_service]
+  internal_port = 4100
+  # flycast-only: force_https would 301 internal HTTP calls from nginx
+  force_https = false
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # login throttling and Stripe webhooks want a warm machine
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    # first boot pushes the schema and seeds the demo org
+    grace_period = "90s"
+    method = "GET"
+    path = "/health"
+
+[[mounts]]
+  source = "uploads"
+  destination = "/app/apps/api/uploads"
+  initial_size = "3gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

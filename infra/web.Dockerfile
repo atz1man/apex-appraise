@@ -17,6 +17,7 @@ RUN cd apps/api && npx prisma generate
 RUN cd apps/web && pnpm build
 
 FROM nginx:alpine
-COPY infra/nginx.conf /etc/nginx/conf.d/default.conf
+COPY infra/nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV API_UPSTREAM=api:4100
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

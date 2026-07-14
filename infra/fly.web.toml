@@ -1,0 +1,25 @@
+# Fly.io config — web (nginx static + API proxy). Deploy from the repo root:
+#   flyctl deploy -c infra/fly.web.toml
+#
+# nginx.conf.template is envsubst'd at container start; API_UPSTREAM points at
+# the API app's flycast address (private, load-balanced, wakes stopped machines).
+
+app = "apex-appraise-web"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "infra/web.Dockerfile"
+
+[env]
+  API_UPSTREAM = "apex-appraise-api.flycast:80"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
