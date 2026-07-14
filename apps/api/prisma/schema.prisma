@@ -122,6 +122,7 @@ model Appraisal {
   startYear  Int?
   startMonth Int?
   resultCache String?
+  narrative  String? // JSON {marketCommentary, valuationRationale, riskCommentary, generatedAt, model}
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

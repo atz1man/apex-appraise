@@ -119,6 +119,15 @@ function Body({ children }: { children: ReactNode }) {
   return <div className="mt-2.5 text-[13px] leading-[1.62]" style={{ color: '#2C342E', textWrap: 'pretty' as never }}>{children}</div>;
 }
 
+/** Screen-only provenance flag beside AI-drafted narrative sections — never printed. */
+function AiDraftNote() {
+  return (
+    <span className="no-print print:hidden fig text-[10px] font-medium normal-case text-inactive" style={{ marginLeft: 10, letterSpacing: '0.3px' }}>
+      AI-drafted — valuer to review
+    </span>
+  );
+}
+
 function SummaryRow({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) {
   return (
     <div className="flex justify-between items-baseline gap-3 py-[11px] border-b border-border-faint">
@@ -135,6 +144,11 @@ export default function RedBookReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  const utils = trpc.useUtils();
+  const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
+    onSuccess: () => utils.appraisal.getCurrent.invalidate(dealId),
+  });
+  const narrative = appr?.narrative ?? null;
 
   const input = appr?.input;
   // All figures from the shared engine — never hand-rolled.
@@ -159,6 +173,14 @@ export default function RedBookReport() {
       <span className="text-[13px] text-ink-2 truncate">{subject}</span>
       <span className="fig text-[11px] font-medium text-ink-3">{refCode}</span>
       <div className="ml-auto flex gap-2">
+        <Button
+          variant="secondary"
+          className="print:hidden"
+          loading={draftNarrative.isPending}
+          onClick={() => draftNarrative.mutate(dealId)}
+        >
+          Draft narrative with AI
+        </Button>
         <Button
           variant="secondary"
           onClick={() => window.open(`/reports/${dealId}/redbook.pdf?t=${encodeURIComponent(getToken() ?? '')}`, '_blank')}
@@ -486,11 +508,24 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <Micro>Market commentary</Micro>
+          {narrative && (
+            <>
+              <Micro>Valuation rationale<AiDraftNote /></Micro>
+              <Body>{narrative.valuationRationale}</Body>
+            </>
+          )}
+
+          <Micro>Market commentary{narrative && <AiDraftNote />}</Micro>
           <Body>
-            The local market for property of this class and price band remains active, with good demand and limited supply of directly
-            comparable stock. Transaction volumes are stable and marketing periods for well-presented properties are typically six to
-            eight weeks. No material valuation uncertainty is reported.
+            {narrative ? (
+              narrative.marketCommentary
+            ) : (
+              <>
+                The local market for property of this class and price band remains active, with good demand and limited supply of directly
+                comparable stock. Transaction volumes are stable and marketing periods for well-presented properties are typically six to
+                eight weeks. No material valuation uncertainty is reported.
+              </>
+            )}
           </Body>
 
           <PageFoot>Page 4 of 6 · Apex Appraise · Reference {refCode}</PageFoot>
@@ -596,6 +631,15 @@ export default function RedBookReport() {
           <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
             The valuation assumes vacant possession on completion. No special assumptions have otherwise been made.
           </div>
+
+          {narrative && (
+            <>
+              <Micro mt={20}>Risk commentary<AiDraftNote /></Micro>
+              <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
+                {narrative.riskCommentary}
+              </div>
+            </>
+          )}
 
           <Micro mt={20}>Conditions &amp; scope</Micro>
           <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>

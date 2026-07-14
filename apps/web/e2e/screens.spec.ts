@@ -119,6 +119,19 @@ test.describe('internal screens', () => {
     // comparable evidence page carries the adjustment ladder with the supported rate
     await expect(page.getByTestId('comps-ladder')).toBeVisible();
     await expect(page.getByTestId('comps-ladder').getByText(/Supported £\d+\/ft²/)).toBeVisible();
+    // AI narrative drafting is offered from the screen toolbar (not clicked here — see the dedicated test)
+    await expect(page.getByRole('button', { name: 'Draft narrative with AI' })).toBeVisible();
+  });
+
+  test('red book narrative drafts via AI', async ({ page }) => {
+    test.setTimeout(120_000); // live LLM drafting can take ~15-40s
+    const id = await northgateId(page);
+    await page.goto(`/deal/${id}/redbook`);
+    await page.getByRole('button', { name: 'Draft narrative with AI' }).click();
+    // live LLM drafting when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
+    await expect(page.getByText('AI-drafted — valuer to review').first()).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('Valuation rationale')).toBeVisible();
+    await expect(page.getByText('Market commentary')).toBeVisible();
   });
 
   test('field app frames the mobile companion', async ({ page }) => {

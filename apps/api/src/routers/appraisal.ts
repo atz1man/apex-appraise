@@ -9,7 +9,7 @@ import {
   type AppraisalResult,
 } from '@apex/appraisal-engine';
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
-import { appraisalRowToEngineInput, P, toPence } from '../mappers.js';
+import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 
 const spendProfileToDb: Record<string, string> = {
@@ -80,6 +80,7 @@ export const appraisalRouter = router({
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,
+      narrative: J<NarrativePayload | null>(row.narrative, null),
       ...fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>),
     };
   }),
@@ -208,7 +209,169 @@ export const appraisalRouter = router({
   sensitivity: internalProcedure
     .input(z.object({ input: zAppraisalInput, metric: z.enum(['roc', 'profit', 'residual']) }))
     .query(({ input }) => sensitivityGrid(input.input, input.metric)),
+
+  /**
+   * AI-drafted Red Book narrative — market commentary, valuation rationale and
+   * risk commentary. Every figure comes from the deterministic engine; the LLM
+   * only writes prose around them. Persisted onto the current appraisal so the
+   * report renders the same narrative until it is redrafted.
+   */
+  draftNarrative: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const deal = await assertDeal(ctx, input);
+    const row = await ctx.prisma.appraisal.findFirst({
+      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to draft a narrative from — save an appraisal first.' });
+    const engineInput = appraisalRowToEngineInput(row);
+    const { result } = fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>);
+    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    const summary = comps.length
+      ? weightedComparables(
+          comps.map((c: any) => ({
+            address: c.address,
+            basePsf: c.basePsf,
+            adjustments: { size: c.adjSize, condition: c.adjCondition, date: c.adjDate, location: c.adjLocation },
+          })),
+        )
+      : null;
+    const sections = await draftNarrativeSections({
+      subject: deal.name,
+      address: deal.address ?? '',
+      assetType: deal.assetType ?? 'RESIDENTIAL',
+      gdv: result.gdv,
+      nia: result.nia,
+      profit: result.profit,
+      poc: result.poc,
+      planningStatus: row.planningStatus,
+      compCount: comps.length,
+      supportedPsf: summary ? Math.round(summary.supportedPsf) : null,
+      compAddresses: comps.map((c: any) => c.address),
+    });
+    const payload: NarrativePayload = {
+      ...sections,
+      generatedAt: new Date().toISOString(),
+      model: process.env.ANTHROPIC_API_KEY ? NARRATIVE_MODEL : 'demo',
+    };
+    await ctx.prisma.appraisal.update({ where: { id: row.id }, data: { narrative: JSON.stringify(payload) } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input,
+        actor: 'AI Development Director',
+        action: 'drafted Red Book narrative for',
+        target: deal.name,
+      },
+    });
+    return payload;
+  }),
 });
+
+// ---------- Red Book narrative (AI-drafted, figures from the engine) ----------
+
+const NARRATIVE_MODEL = 'claude-sonnet-5';
+
+type NarrativeSections = { marketCommentary: string; valuationRationale: string; riskCommentary: string };
+type NarrativePayload = NarrativeSections & { generatedAt: string; model: string };
+
+const zNarrativeSections = z.object({
+  marketCommentary: z.string().min(1),
+  valuationRationale: z.string().min(1),
+  riskCommentary: z.string().min(1),
+});
+
+/** JSON Schema for the forced tool call — three plain-prose report sections. */
+const NARRATIVE_TOOL = {
+  name: 'record_narrative',
+  description:
+    'Record the three narrative sections for a RICS Red Book valuation report. Plain prose only — no markdown, no headings, no bullet points.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      marketCommentary: { type: 'string', description: '90-140 words on local market conditions and the comparable evidence base' },
+      valuationRationale: { type: 'string', description: '90-140 words on method and reconciliation, ending with the Market Value opinion' },
+      riskCommentary: { type: 'string', description: '90-140 words on planning, market and lending risks material to the valuation' },
+    },
+    required: ['marketCommentary', 'valuationRationale', 'riskCommentary'],
+  },
+} as const;
+
+const gbp = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`;
+
+/**
+ * Draft the three report sections. The LLM is FORCED through a tool call so
+ * output is schema-valid JSON by construction, and every number it may cite is
+ * supplied (engine-computed) — it authors register, never arithmetic. Falls
+ * back to deterministic templates when no ANTHROPIC_API_KEY (demo mode).
+ */
+async function draftNarrativeSections(facts: {
+  subject: string;
+  address: string;
+  assetType: string;
+  gdv: number;
+  nia: number;
+  profit: number;
+  poc: number;
+  planningStatus: string | null;
+  compCount: number;
+  supportedPsf: number | null;
+  compAddresses: string[];
+}): Promise<NarrativeSections> {
+  const mv = Math.round(facts.gdv / 1000) * 1000; // Market Value — GDV to the nearest £1,000, as reported
+  const psf = facts.nia > 0 ? Math.round(mv / facts.nia) : 0;
+  const compLine = facts.compCount
+    ? `${facts.compCount} adjusted comparable${facts.compCount === 1 ? '' : 's'} (${facts.compAddresses.join('; ')}) supporting ${facts.supportedPsf != null ? `£${facts.supportedPsf}/ft²` : 'the adopted rate'}`
+    : 'no comparables logged — appraisal-led evidence only';
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (key) {
+    const instruction = `Write the three narrative sections of a RICS Red Book valuation report via record_narrative.
+
+FACTS (use these figures verbatim — do not invent or recompute any number):
+- Subject: ${facts.subject}, ${facts.address} (${facts.assetType.toLowerCase().replace('_', ' ')})
+- Market Value opinion: ${gbp(mv)} (GDV ${gbp(facts.gdv)}; analysed rate £${psf}/ft² on ${Math.round(facts.nia).toLocaleString('en-GB')} ft² NIA)
+- Forecast developer's profit: ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost)
+- Planning status: ${facts.planningStatus ?? 'not assessed'}
+- Comparable evidence: ${compLine}
+
+RULES: each section 90-140 words; UK valuation-report register; third person ("the valuer", "the subject property") — no first person; plain prose, no markdown; each section MUST reference the deal's actual figures above (Market Value/GDV, supported £/ft², comparable count as relevant); valuationRationale MUST end with the Market Value opinion of ${gbp(mv)}.`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: NARRATIVE_MODEL,
+        max_tokens: 2000,
+        tools: [NARRATIVE_TOOL],
+        tool_choice: { type: 'tool', name: 'record_narrative' },
+        messages: [{ role: 'user', content: instruction }],
+      }),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+      const toolUse = body.content.find((c) => c.type === 'tool_use');
+      const parsed = zNarrativeSections.safeParse(toolUse?.input);
+      if (parsed.success) return parsed.data;
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI narrative drafting returned an unusable response — try again.' });
+    }
+    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `AI narrative drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+    });
+  }
+  // demo fallback: deterministic templates interpolating the same engine figures
+  const evidence = facts.compCount
+    ? `${facts.compCount} adjusted comparable transaction${facts.compCount === 1 ? '' : 's'}, which support${facts.compCount === 1 ? 's' : ''} a rate of £${facts.supportedPsf}/ft²`
+    : 'the current development appraisal, pending comparable evidence';
+  return {
+    marketCommentary:
+      `The market for ${facts.assetType.toLowerCase().replace('_', ' ')} property in the locality of ${facts.subject} remains active, with steady occupier and investor demand and a limited supply of directly comparable stock. Pricing evidence is drawn from ${evidence}. Transaction volumes over the preceding twelve months have been stable and marketing periods for well-presented accommodation are typically six to eight weeks. Against a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft²` : ''}, the valuer considers current conditions to provide a reasonable evidential basis, and no material valuation uncertainty is reported as at the valuation date.`,
+    valuationRationale:
+      `Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches. ${facts.compCount ? `The ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'} analysed support${facts.compCount === 1 ? 's' : ''} £${facts.supportedPsf}/ft², which applied to ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area corroborates the appraisal-derived figure.` : 'In the absence of logged comparables, greatest weight is afforded to the residual development appraisal.'} The appraisal indicates a gross development value of ${gbp(facts.gdv)} and a forecast developer's profit of ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost), consistent with market-standard return requirements. Reconciling the approaches, the valuer's opinion of Market Value is ${gbp(mv)}.`,
+    riskCommentary:
+      `Planning status is recorded as ${(facts.planningStatus ?? 'not assessed').toLowerCase()}, and the valuation assumes all stated consents remain in effect. The principal risks to the reported figure of ${gbp(mv)} are movement in local sales rates${facts.supportedPsf ? ` away from the supported £${facts.supportedPsf}/ft²` : ''}, build-cost inflation compressing the ${(facts.poc * 100).toFixed(1)}% profit on cost, and any extension of the sales period. The evidence base of ${facts.compCount || 'no'} comparable${facts.compCount === 1 ? '' : 's'} is ${facts.compCount ? 'considered adequate for the class' : 'limited, and the figure should be read accordingly'}. No special assumptions have been made and no material valuation uncertainty is declared.`,
+  };
+}
 
 // ---------- Auto-Appraisal ----------
 
