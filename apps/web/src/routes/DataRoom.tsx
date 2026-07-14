@@ -68,6 +68,9 @@ const fmtWhen = (d: Date | string) => {
   return `${fmtDay(date)} · ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 };
 
+/** one answered (or unanswerable) workfile question, kept locally */
+type AskEntry = { q: string; status: 'ok' | 'demo' | 'no-docs'; answer?: string; sources?: string[] };
+
 export default function DataRoom() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
@@ -91,6 +94,23 @@ export default function DataRoom() {
   const setExtraction = trpc.documents.setExtraction.useMutation({
     onSuccess: () => utils.documents.list.invalidate(),
   });
+
+  // ---- Ask the workfile: AI Q&A over the deal's readable documents ----
+  const ask = trpc.documents.ask.useMutation();
+  const [question, setQuestion] = useState('');
+  const [askHistory, setAskHistory] = useState<AskEntry[]>([]);
+  const onAsk = async () => {
+    const q = question.trim();
+    if (q.length < 3 || ask.isPending) return;
+    try {
+      const res = await ask.mutateAsync({ dealId, question: q });
+      setAskHistory((h) => [{ q, ...res }, ...h].slice(0, 3)); // last 3 Q&As, local only
+      setQuestion('');
+      if (res.status !== 'no-docs') utils.documents.activity.invalidate(dealId);
+    } catch {
+      /* surfaced via ask.error below */
+    }
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState({ name: '', category: 'Architectural' });
@@ -350,6 +370,54 @@ export default function DataRoom() {
                   <div className="text-[10.5px] text-ink-3">{a.role}</div>
                 </div>
                 <span className="fig text-[10px] font-medium text-ink-3">{a.perm}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 text-[13px] font-semibold">Ask the workfile</div>
+          <div className="mt-1 text-[11px] text-ink-3">The AI answers from this deal's uploaded documents only.</div>
+          <div className="mt-2.5 flex gap-2">
+            <input
+              className="flex-1 min-w-0"
+              placeholder="e.g. What does the cost plan allow for M&E?"
+              maxLength={500}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onAsk()}
+            />
+            <Button onClick={onAsk} disabled={question.trim().length < 3} loading={ask.isPending}>
+              {!ask.isPending && 'Ask'}
+            </Button>
+          </div>
+          {ask.error && <div className="mt-2 text-[11.5px] text-status-red">{ask.error.message}</div>}
+          <div className="mt-3 flex flex-col gap-3">
+            {askHistory.map((entry, i) => (
+              <div key={`${entry.q}-${i}`} className="bg-sunken border border-border-std rounded-[11px] p-3">
+                <div className="text-[12px] font-semibold leading-snug">{entry.q}</div>
+                {entry.status === 'no-docs' ? (
+                  <div className="mt-1.5 text-[12px] text-ink-3 leading-normal">
+                    Upload PDFs or images and the AI can answer from them.
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-1.5 text-[12px] text-ink-2 leading-normal whitespace-pre-wrap">
+                      {entry.status === 'demo' && (
+                        <span className="mr-1.5 align-middle"><StatusChip status="neutral" label="DEMO" /></span>
+                      )}
+                      {entry.answer}
+                    </div>
+                    {(entry.sources ?? []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="label-mono text-ink-3">Sources</span>
+                        {entry.sources!.map((s) => (
+                          <span key={s} className="fig text-[10px] font-medium text-ink-2b bg-surface border border-border-std rounded-[5px] px-1.5 py-0.5">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </div>

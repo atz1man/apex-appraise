@@ -463,7 +463,7 @@ type ContentBlock =
   | { type: 'image'; source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg'; data: string } };
 
 /** Load data-room documents as Anthropic content blocks (PDFs + images, capped). */
-async function documentBlocks(
+export async function documentBlocks(
   prisma: any,
   orgId: string,
   documentIds: string[],

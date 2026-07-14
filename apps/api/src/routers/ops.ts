@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
+import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
@@ -267,7 +268,112 @@ export const documentsRouter = router({
       take: 20,
     }),
   ),
+
+  /**
+   * "Ask the workfile" — AI Q&A over the deal's readable documents. The model
+   * reads the actual uploaded PDFs/images and answers ONLY from them; without
+   * an ANTHROPIC_API_KEY it returns a deterministic demo answer instead.
+   */
+  ask: internalProcedure
+    .input(z.object({ dealId: z.string(), question: z.string().min(3).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      // readable = a stored file the AI can actually open (mirrors Auto-Appraisal)
+      const docs = await ctx.prisma.document.findMany({
+        where: { dealId: input.dealId, orgId: ctx.principal.orgId },
+        orderBy: { addedAt: 'desc' },
+      });
+      const readable = docs
+        .filter((d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
+        .slice(0, 4);
+      if (readable.length === 0) return { status: 'no-docs' as const };
+      const audit = () =>
+        ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            actor: 'AI Development Director',
+            action: 'asked the workfile about',
+            target: input.question.length > 80 ? `${input.question.slice(0, 79)}…` : input.question,
+          },
+        });
+      if (!process.env.ANTHROPIC_API_KEY) {
+        await audit();
+        return {
+          status: 'demo' as const,
+          answer: `The workfile holds ${readable.length} readable document${readable.length === 1 ? '' : 's'} (${readable.map((d) => d.name).join('; ')}). Configure ANTHROPIC_API_KEY and the AI will answer questions directly from their contents.`,
+          sources: [] as string[],
+          documentsRead: readable.map((d) => d.name),
+        };
+      }
+      const blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, readable.map((d) => d.id));
+      if (blocks.blocks.length === 0) return { status: 'no-docs' as const }; // files missing on disk
+      const names = blocks.used.map((d) => d.name);
+      const { answer, sources } = await answerFromWorkfile(input.question, blocks.blocks, names);
+      await audit();
+      return { status: 'ok' as const, answer, sources, documentsRead: names };
+    }),
 });
+
+const zWorkfileAnswer = z.object({ answer: z.string().min(1), sources: z.array(z.string()) });
+
+/** JSON Schema for the forced tool call — answer plus the documents it draws on. */
+const ANSWER_TOOL = {
+  name: 'record_answer',
+  description:
+    'Record the answer to a question about the attached workfile documents. Plain prose only — no markdown, no headings, no bullet points.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      answer: { type: 'string', description: 'At most 200 words of plain prose answering the question from the attached documents alone' },
+      sources: { type: 'array', items: { type: 'string' }, description: 'Names of the attached documents the answer draws on — a subset of the document names provided, empty if none were useful' },
+    },
+    required: ['answer', 'sources'],
+  },
+} as const;
+
+/**
+ * Ask the LLM a question about the attached documents. FORCED through a tool
+ * call so output is schema-valid JSON by construction, and instructed to answer
+ * only from the documents — never from general knowledge.
+ */
+async function answerFromWorkfile(
+  question: string,
+  docBlocks: Awaited<ReturnType<typeof documentBlocks>>['blocks'],
+  docNames: string[],
+): Promise<{ answer: string; sources: string[] }> {
+  const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
+
+QUESTION:
+${question}`;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-5',
+      max_tokens: 1500,
+      tools: [ANSWER_TOOL],
+      tool_choice: { type: 'tool', name: 'record_answer' },
+      messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
+    }),
+  });
+  if (res.ok) {
+    const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+    const toolUse = body.content.find((c) => c.type === 'tool_use');
+    const parsed = zWorkfileAnswer.safeParse(toolUse?.input);
+    if (parsed.success) {
+      return { answer: parsed.data.answer, sources: parsed.data.sources.filter((s) => docNames.includes(s)) };
+    }
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'The AI returned an unusable answer — try again.' });
+  }
+  // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+  const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  throw new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+  });
+}
 
 // ---------- Integrations & org ----------
 
