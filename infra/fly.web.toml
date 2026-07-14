@@ -7,8 +7,10 @@
 app = "apex-appraise-web"
 primary_region = "lhr"
 
+# dockerfile resolves relative to THIS file; build context is the cwd flyctl
+# runs from (the repo root)
 [build]
-  dockerfile = "infra/web.Dockerfile"
+  dockerfile = "web.Dockerfile"
 
 [env]
   API_UPSTREAM = "apex-appraise-api.flycast:80"

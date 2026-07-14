@@ -14,8 +14,10 @@
 app = "apex-appraise-api"
 primary_region = "lhr"
 
+# dockerfile resolves relative to THIS file; build context is the cwd flyctl
+# runs from (the repo root)
 [build]
-  dockerfile = "infra/api.Dockerfile"
+  dockerfile = "api.Dockerfile"
 
 [env]
   NODE_ENV = "production"
