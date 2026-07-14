@@ -80,6 +80,7 @@ export default function Hub() {
   const principal = getPrincipal();
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
   const loadSample = trpc.org.loadSampleDeal.useMutation({
     onSuccess: (res) => {
       utils.deals.list.invalidate();
@@ -128,19 +129,28 @@ export default function Hub() {
       <main className="max-w-[1480px] mx-auto px-4 sm:px-6 pb-14">
         {/* dark evergreen hero with live portfolio summary */}
         <section
-          className="mt-6 rounded-[22px] p-6 sm:p-8 text-white shadow-dark-card"
+          className="relative overflow-hidden mt-6 rounded-[22px] p-6 sm:p-8 text-white shadow-dark-card"
           style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
         >
-          <div className="font-mono uppercase text-[11px] tracking-[2px] text-accent-muted-3 font-semibold">
-            Brookfield (personal) · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {/* soft accent bloom + hairline top edge give the flat gradient physical depth */}
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none rounded-[22px]"
+            style={{
+              background: 'radial-gradient(640px 320px at 88% -30%, rgba(63,216,148,0.16), transparent 70%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07), inset 0 0 0 1px rgba(255,255,255,0.03)',
+            }}
+          />
+          <div className="relative font-mono uppercase text-[11px] tracking-[2px] text-accent-muted-3 font-semibold">
+            {org?.name ?? ' '} · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </div>
-          <h1 className="mt-2 text-[26px] sm:text-[34px] font-bold tracking-[-1.4px] leading-tight">
+          <h1 className="relative mt-2 text-[26px] sm:text-[34px] font-bold tracking-[-1.4px] leading-tight">
             One connected workfile,
             <br />
             sourcing to completion.
           </h1>
           {isLoading || !R ? (
-            <div className="mt-7 flex flex-wrap gap-6 sm:gap-8" role="status" aria-label="Loading">
+            <div className="relative mt-7 flex flex-wrap gap-6 sm:gap-8" role="status" aria-label="Loading">
               {Array.from({ length: 5 }, (_, i) => (
                 <div key={i} className="opacity-25">
                   <Skeleton height={10} width={90} />
@@ -149,7 +159,7 @@ export default function Hub() {
               ))}
             </div>
           ) : (
-            <div className="mt-7 flex flex-wrap gap-6 sm:gap-8">
+            <div className="relative mt-7 flex flex-wrap gap-6 sm:gap-8">
               {(
                 [
                   ['Pipeline GDV', fM(R.pipelineGdv)],
