@@ -766,4 +766,180 @@ export const scenariosRouter = router({
       if (id) return ctx.prisma.scenario.update({ where: { id }, data });
       return ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
     }),
+
+  /**
+   * AI-drafted comparative risk commentary across the scheme options. Every
+   * figure comes from the deterministic engine (same compute as the compare
+   * grid); the LLM only writes prose around them. Ephemeral — returned to the
+   * caller, never persisted.
+   */
+  draftRisk: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const deal = await assertDeal(ctx, input);
+    const rows = await ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    const options = rows.slice(0, 3).map((s: any) => ({
+      name: s.name as string,
+      descriptor: s.descriptor as string,
+      blendedPsf: s.blendedPsf as number,
+      buildPsf: s.buildPsf as number,
+      gia: s.gia as number,
+      targetProfitPct: s.targetProfitPct as number,
+      ...scenarioMetrics(s),
+    }));
+    if (options.length < 2)
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'At least two scheme options are needed to compare risk — add another option first.' });
+    const commentary = await draftRiskCommentary({ subject: deal.name, options });
+    return {
+      commentary,
+      generatedAt: new Date().toISOString(),
+      model: process.env.ANTHROPIC_API_KEY ? NARRATIVE_MODEL : 'demo',
+    };
+  }),
 });
+
+// ---------- Scenario risk commentary (AI-drafted, figures from the engine) ----------
+
+/**
+ * Fixed appraisal assumptions behind the scenario compare — kept in lockstep
+ * with the grid in apps/web/src/routes/Scenarios.tsx (fees 11%, contingency 5%,
+ * CIL £40/m² + S106 £150k, disposal 2%, 60% LTC @ 7.5% over 18+3 months,
+ * 1.5% arrangement, 6.8% acq).
+ */
+const SCENARIO_ASSUMPTIONS = {
+  efficiency: 90,
+  profFeePct: 11,
+  contingencyPct: 5,
+  cilPerSqm: 40,
+  s106: 150_000,
+  agentPct: 1.5,
+  legalPct: 0.5,
+  ltcPct: 60,
+  ratePct: 7.5,
+  periodMonths: 18,
+  salesMonths: 3,
+  arrangementFeePct: 1.5,
+  acqPct: 6.8,
+} as const;
+
+/** Scenario levers → engine metrics — identical maths to the web compare grid. */
+function scenarioMetrics(s: { blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }) {
+  const A = SCENARIO_ASSUMPTIONS;
+  const r = autoAppraise({
+    units: [{ label: 'Blended', count: 1, area: s.gia * (A.efficiency / 100), cap: s.blendedPsf }],
+    efficiency: A.efficiency,
+    buildPerSqft: s.buildPsf,
+    profFeePct: A.profFeePct,
+    contingencyPct: A.contingencyPct,
+    cilPerSqm: A.cilPerSqm,
+    s106: A.s106,
+    agentPct: A.agentPct,
+    legalPct: A.legalPct,
+    ltcPct: A.ltcPct,
+    ratePct: A.ratePct,
+    periodMonths: A.periodMonths,
+    salesMonths: A.salesMonths,
+    arrangementFeePct: A.arrangementFeePct,
+    targetProfitPct: s.targetProfitPct,
+    acqPct: A.acqPct,
+    asking: 0,
+  });
+  const land = r.residualNet * (1 + A.acqPct / 100);
+  const totalCost = r.saleCosts + r.build + r.fees + r.cont + r.other + r.finance + land;
+  const profit = r.gdv - totalCost;
+  return { residual: r.residualNet, gdv: r.gdv, totalCost, profit, poc: totalCost > 0 ? profit / totalCost : 0 };
+}
+
+type RiskOption = {
+  name: string;
+  descriptor: string;
+  blendedPsf: number;
+  buildPsf: number;
+  gia: number;
+  targetProfitPct: number;
+  residual: number;
+  gdv: number;
+  totalCost: number;
+  profit: number;
+  poc: number;
+};
+
+const zRiskCommentary = z.object({ commentary: z.string().min(1) });
+
+/** JSON Schema for the forced tool call — one plain-prose comparative paragraph. */
+const RISK_TOOL = {
+  name: 'record_risk_commentary',
+  description:
+    'Record the comparative risk commentary for the scheme options being appraised. Plain prose only — no markdown, no headings, no bullet points.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      commentary: {
+        type: 'string',
+        description: "100-160 words comparing the options' risk profiles and naming the more resilient option",
+      },
+    },
+    required: ['commentary'],
+  },
+} as const;
+
+/**
+ * Draft the comparative risk commentary. The LLM is FORCED through a tool call
+ * so output is schema-valid JSON by construction, and every number it may cite
+ * is supplied (engine-computed) — it authors register, never arithmetic. Falls
+ * back to a deterministic template when no ANTHROPIC_API_KEY (demo mode).
+ */
+async function draftRiskCommentary(facts: { subject: string; options: RiskOption[] }): Promise<string> {
+  const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+  const optionLines = facts.options
+    .map(
+      (o) =>
+        `- ${o.name} (${o.descriptor}): GDV ${gbp(o.gdv)}; residual land value ${gbp(o.residual)}; forecast profit ${gbp(o.profit)} (${(o.poc * 100).toFixed(1)}% on cost); ${Math.round(o.gia).toLocaleString('en-GB')} ft² GIA at £${Math.round(o.blendedPsf)}/ft² blended sales and £${Math.round(o.buildPsf)}/ft² build`,
+    )
+    .join('\n');
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (key) {
+    const instruction = `Write the comparative risk commentary for a UK development-appraisal scenario comparison via record_risk_commentary.
+
+FACTS (use these figures verbatim — do not invent or recompute any number):
+- Subject: ${facts.subject}
+- Scheme options under comparison:
+${optionLines}
+- All options assume ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost debt at ${SCENARIO_ASSUMPTIONS.ratePct}% over an ${SCENARIO_ASSUMPTIONS.periodMonths}-month build plus ${SCENARIO_ASSUMPTIONS.salesMonths}-month sales period
+
+RULES: 100-160 words; UK development-appraisal register; third person — no first person; plain prose, no markdown; compare the options' risk profiles across planning, cost, sales absorption and finance/leverage; reference the deal's actual figures above (GDV, profit on cost, residual land value); name ${best.name} as the more resilient option and explain why its ${(best.poc * 100).toFixed(1)}% profit on cost gives the widest margin.`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: NARRATIVE_MODEL,
+        max_tokens: 1000,
+        tools: [RISK_TOOL],
+        tool_choice: { type: 'tool', name: 'record_risk_commentary' },
+        messages: [{ role: 'user', content: instruction }],
+      }),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+      const toolUse = body.content.find((c) => c.type === 'tool_use');
+      const parsed = zRiskCommentary.safeParse(toolUse?.input);
+      if (parsed.success) return parsed.data.commentary;
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
+    }
+    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `AI risk drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+    });
+  }
+  // demo fallback: deterministic template interpolating the same engine figures
+  const others = facts.options.filter((o) => o !== best);
+  const spread = others
+    .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
+    .join(', while ');
+  return (
+    `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
+    `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
+    `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
+    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
+  );
+}

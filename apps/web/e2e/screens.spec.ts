@@ -47,6 +47,17 @@ test.describe('internal screens', () => {
     await expect(page.getByText('Compare scheme options').first()).toBeVisible();
     await expect(page.getByText('Option A — consented scheme').first()).toBeVisible();
     await expect(page.getByText('BEST').first()).toBeVisible();
+    // AI risk commentary is offered below the grid (not clicked here — see the dedicated test)
+    await expect(page.getByRole('button', { name: 'Draft risk commentary' })).toBeVisible();
+  });
+
+  test('scenarios drafts AI risk commentary', async ({ page }) => {
+    test.setTimeout(120_000); // live LLM drafting can take ~15-40s
+    const id = await northgateId(page);
+    await page.goto(`/deal/${id}/scenarios`);
+    await page.getByRole('button', { name: 'Draft risk commentary' }).click();
+    // live LLM drafting when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
+    await expect(page.getByText('AI-drafted — for discussion, not advice.')).toBeVisible({ timeout: 90_000 });
   });
 
   test('cost monitoring shows variance rollup', async ({ page }) => {

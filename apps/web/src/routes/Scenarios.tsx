@@ -96,6 +96,7 @@ export default function Scenarios() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: rows, isLoading } = trpc.scenarios.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.scenarios.upsert.useMutation({ onSuccess: () => utils.scenarios.list.invalidate(dealId) });
+  const draftRisk = trpc.scenarios.draftRisk.useMutation();
 
   // local lever overlay for live recompute; persisted on slider release / input blur
   const [edits, setEdits] = useState<Record<string, Partial<Record<LeverKey, number>>>>({});
@@ -360,6 +361,33 @@ export default function Scenarios() {
           })}
         </div>
         </div>
+
+        {/* AI risk view — ephemeral comparative commentary; figures from the engine */}
+        <section className="mt-6 bg-surface border border-border-strong rounded-panel shadow-rest p-5">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-[15px] font-bold tracking-[-0.3px]">AI risk view</div>
+              <div className="mt-0.5 text-[12.5px] text-ink-3">
+                Compares the options&apos; risk profiles — planning, cost, sales absorption and leverage — against the figures above.
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              loading={draftRisk.isPending}
+              disabled={scenarios.length < 2}
+              onClick={() => draftRisk.mutate(dealId)}
+            >
+              Draft risk commentary
+            </Button>
+          </div>
+          {draftRisk.error && <div className="mt-3 text-[11.5px] text-status-red">{draftRisk.error.message}</div>}
+          {draftRisk.data && (
+            <div className="mt-4 pt-4 border-t border-border-faint">
+              <p className="text-[13px] text-ink-2 leading-relaxed">{draftRisk.data.commentary}</p>
+              <div className="mt-2.5 text-[11px] text-ink-3">AI-drafted — for discussion, not advice.</div>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
