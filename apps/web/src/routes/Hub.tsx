@@ -88,21 +88,28 @@ export default function Hub() {
     },
   });
   const flagship = data?.deals.find((d) => d.name.startsWith('Northgate')) ?? data?.deals[0];
-  const dealTools: Array<[string, string, string, string]> = flagship
+  // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
+  const TOOL_TINTS: Record<string, string> = {
+    appraise: 'bg-tint-success text-brand-700',
+    site: 'bg-status-amber-bg text-status-amber',
+    sell: 'bg-status-blue-bg text-status-blue',
+    records: 'bg-status-purple-bg text-status-purple',
+  };
+  const dealTools: Array<[string, string, string, string, string]> = flagship
     ? [
-        ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`],
-        ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`],
-        ['comps', 'Comparables', 'Adjustment grid → supported £/ft²', `/deal/${flagship.id}/comparables`],
-        ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`],
-        ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`],
-        ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`],
-        ['dataroom', 'Data room', 'Deal documents with live extraction', `/deal/${flagship.id}/dataroom`],
-        ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`],
-        ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field'],
-        ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking'],
-        ['investor', 'Investor portal', 'LP positions, cashflows, capital calls', '/portal/investor'],
-        ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board'],
-        ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations'],
+        ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
+        ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],
+        ['comps', 'Comparables', 'Adjustment grid → supported £/ft²', `/deal/${flagship.id}/comparables`, 'appraise'],
+        ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`, 'appraise'],
+        ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`, 'site'],
+        ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`, 'sell'],
+        ['dataroom', 'Data room', 'Deal documents with live extraction', `/deal/${flagship.id}/dataroom`, 'records'],
+        ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`, 'records'],
+        ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field', 'site'],
+        ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking', 'appraise'],
+        ['investor', 'Investor portal', 'LP positions, cashflows, capital calls', '/portal/investor', 'sell'],
+        ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board', 'appraise'],
+        ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
       ]
     : [];
 
@@ -211,13 +218,13 @@ export default function Hub() {
                   <Skeleton height={11} width="85%" className="mt-2" />
                 </div>
               ))}
-            {dealTools.map(([icon, title, desc, to]) => (
+            {dealTools.map(([icon, title, desc, to, cat]) => (
               <Link
                 key={title}
                 to={to}
                 className="group bg-surface border border-border-strong rounded-panel shadow-rest p-5 transition-all hover:-translate-y-1 hover:shadow-float"
               >
-                <span className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-tint-success text-brand-700" aria-hidden="true">
+                <span className={`inline-flex items-center justify-center w-9 h-9 rounded-[10px] ${TOOL_TINTS[cat] ?? TOOL_TINTS.appraise}`} aria-hidden="true">
                   <Icon d={ICONS[icon]} size={18} strokeWidth={1.9} />
                 </span>
                 <div className="mt-3 text-[14.5px] font-semibold tracking-[-0.2px] truncate">{title}</div>
