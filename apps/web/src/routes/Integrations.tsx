@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Button, Dot, Drawer, EmptyState, Skeleton, TopBar } from '../components/ui';
+import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -154,11 +154,13 @@ export default function Integrations() {
           {deals.length > 0 && (
             <div className="mt-3 flex items-center gap-2.5 flex-wrap">
               <span className="label-mono text-ink-3">Sync target deal</span>
-              <select value={effectiveDealId} onChange={(e) => setSyncDealId(e.target.value)} className="h-8 min-w-0 max-w-full" aria-label="Sync target deal">
-                {deals.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              <Listbox
+                value={effectiveDealId}
+                options={deals.map((d) => ({ value: d.id, label: d.name }))}
+                onChange={setSyncDealId}
+                ariaLabel="Sync target deal"
+                className="min-w-0 max-w-full"
+              />
             </div>
           )}
         </div>

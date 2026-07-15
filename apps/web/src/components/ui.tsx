@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
 import { getPrincipal } from '../lib/trpc';
@@ -323,6 +323,106 @@ export function EmptyState({ icon, title, children, cta }: { icon?: ReactNode; t
       {title && <div className="text-[14px] font-semibold text-ink-2 tracking-[-0.2px]">{title}</div>}
       <div className="text-[12.5px] text-ink-3b leading-relaxed max-w-[360px]">{children}</div>
       {cta && <div className="mt-2.5">{cta}</div>}
+    </div>
+  );
+}
+
+// ---------- Listbox ----------
+
+/** Styled replacement for native <select> — trigger + token-surfaced menu, full keyboard/ARIA. */
+export function Listbox({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className = '',
+  alignRight = false,
+}: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+  className?: string;
+  alignRight?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(() => Math.max(0, options.findIndex((o) => o.value === value)));
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const current = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const openMenu = () => {
+    setActiveIdx(Math.max(0, options.findIndex((o) => o.value === value)));
+    setOpen(true);
+  };
+  const pick = (v: string) => {
+    setOpen(false);
+    if (v !== value) onChange(v);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!open && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      openMenu();
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'Escape') setOpen(false);
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(options.length - 1, i + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(0, i - 1)); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(options[activeIdx]?.value ?? value); }
+  };
+
+  return (
+    <div ref={wrapRef} className={`relative ${className}`} onKeyDown={onKey}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={current?.label}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className="h-8 max-w-full inline-flex items-center gap-1.5 rounded-[10px] px-2.5 text-[11.5px] font-medium bg-surface text-ink hover:bg-sunken transition-colors"
+        style={{ border: '1px solid rgb(var(--control-border, 20 30 25) / 0.14)' }}
+      >
+        <span className="truncate">{current?.label ?? '—'}</span>
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-ink-3">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label={ariaLabel}
+          className={`absolute z-40 mt-1.5 min-w-full w-max max-w-[300px] max-h-64 overflow-y-auto bg-surface border border-border-std rounded-[12px] shadow-float py-1 ${alignRight ? 'right-0' : 'left-0'}`}
+        >
+          {options.map((o, i) => (
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected={o.value === value}
+              onClick={() => pick(o.value)}
+              onMouseEnter={() => setActiveIdx(i)}
+              className={`w-full text-left px-3 py-1.5 text-[12px] flex items-center gap-2 transition-colors ${i === activeIdx ? 'bg-sunken' : ''} ${o.value === value ? 'font-medium text-ink' : 'text-ink-2'}`}
+            >
+              <span className="w-3 shrink-0">
+                {o.value === value && (
+                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1E7A55" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
+                )}
+              </span>
+              <span className="truncate">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

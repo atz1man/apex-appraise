@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import { Listbox } from './ui';
 
 export type DealTool =
   | 'overview'
@@ -61,18 +62,14 @@ export function DealNav({ dealId, active }: { dealId: string; active: DealTool }
       ))}
       </div>
       {data && data.deals.length > 1 && (
-        <select
-          className="ml-3 my-1.5 h-7 text-[11.5px] max-w-[220px] shrink-0"
+        <Listbox
+          className="ml-3 my-1.5 max-w-[220px] shrink-0"
           value={dealId}
-          onChange={(e) => navigate(`/deal/${e.target.value}${activePath}`)}
-          aria-label="Switch deal"
-        >
-          {data.deals.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
+          options={data.deals.map((d) => ({ value: d.id, label: d.name }))}
+          onChange={(v) => navigate(`/deal/${v}${activePath}`)}
+          ariaLabel="Switch deal"
+          alignRight
+        />
       )}
     </nav>
   );
