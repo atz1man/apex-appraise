@@ -1,6 +1,6 @@
 # Mobile strategy — decision memo
 
-_Status: recommended · 13 July 2026_
+_Status: trigger fired — hosting is live · updated 15 July 2026_
 
 ## Where mobile stands today
 
@@ -30,27 +30,29 @@ mobile experience:
 **Stay on A until the product is hosted publicly and has first users, then
 ship B.** Reasoning:
 
-1. A native shell wrapping `localhost` is meaningless — public hosting is a
-   hard prerequisite, and it's also the top unlock for everything else.
+1. ~~A native shell wrapping `localhost` is meaningless~~ **Done 14 Jul 2026:
+   the app is live at https://apex-appraise-web.fly.dev** (private API via
+   flycast, nightly demo reset, CI-deployed). The hosting prerequisite no
+   longer blocks B — only the store accounts do.
 2. The paying-user feature that genuinely needs native is **push
    notifications** (investor capital calls, sales-milestone and cost-overrun
    alerts). That's a Expo-shell feature, not a rewrite feature.
 3. Option B preserves the single-codebase economics that let this product
    move at its current pace. Option C should never happen.
 
-## What B needs when triggered
+## What B needs now (trigger has fired)
 
-- Public HTTPS deployment of web + api (Fly.io recommended; `infra/` compose
-  is the reference stack).
-- Apple Developer Program + Google Play Console accounts (owner-held).
+- ~~Public HTTPS deployment~~ **live**: https://apex-appraise-web.fly.dev
+  (see `infra/fly.*.toml`; custom domain is a 5-minute wire-up per
+  `infra/DOMAIN.md` once owned).
+- **Apple Developer Program ($99/yr) + Google Play Console ($25) accounts —
+  the only remaining blockers, owner-held.**
 - ~1–2 weeks: Expo app with auth/session bridge, push token registration
   (new `devices` table + notification fan-out on ActivityEvent), deep links
   into deals, store assets (the brand kit and screenshots already exist).
 
-## Related scoped project: dark mode
+## Related scoped project: dark mode — SHIPPED
 
-Audited 13 Jul 2026: ~250 hardcoded hex occurrences across 29 files sit
-outside the token system (charts, button chrome, report print styles —
-reports must stay light for print). Proper dark mode = CSS-variable token
-remap + full sweep + dual-mode verification of every screen: a 2–3 session
-project, deliberately not started mid-loop. Tracked in the loop roadmap.
+Completed 13–14 Jul 2026: full CSS-variable token system, both themes on
+every screen (reports pinned light for print), theme toggle with
+persistence, Lighthouse accessibility 100. The audit above is historical.
