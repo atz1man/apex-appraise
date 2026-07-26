@@ -76,13 +76,20 @@ export const zIncomeInput = z.object({
 });
 export type IncomeInputDto = z.infer<typeof zIncomeInput>;
 
+/** When a cost line falls — omitted means "follow the scheme profile over the build". */
+export const zCostTiming = z.object({
+  start: z.number().min(1).max(120).optional(),
+  months: z.number().min(1).max(120).optional(),
+  profile: z.enum(['scurve', 'even', 'linear', 'front', 'back']).optional(),
+});
+
 export const zAppraisalInput = z.object({
   units: z.array(zAppraisalUnit),
   efficiency: z.number().positive().max(120),
-  trades: z.array(z.object({ label: z.string(), rate: z.number() })),
+  trades: z.array(z.object({ label: z.string(), rate: z.number(), timing: zCostTiming.optional() })),
   profFeePct: z.number().min(0).max(50),
   contingencyPct: z.number().min(0).max(50),
-  otherCosts: z.array(z.object({ label: z.string(), amount: z.number() })),
+  otherCosts: z.array(z.object({ label: z.string(), amount: z.number(), timing: zCostTiming.optional() })),
   finance: z.object({
     ltcPct: z.number().min(0).max(100),
     ratePct: z.number().min(0).max(40),

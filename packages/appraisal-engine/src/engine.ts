@@ -6,6 +6,7 @@ import type {
   CashflowRow,
   ComparableInput,
   ComparablesSummary,
+  CostTiming,
   IncomeInput,
   IncomeLineResult,
   IncomeResult,
@@ -237,9 +238,31 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   }
   const constructionTotal = build + fees + cont + otherTotal;
   const totalMonths = P + sM;
-  const incs = buildSpendProfile(P, F.spendProfile ?? 'scurve');
+  const profile = F.spendProfile ?? 'scurve';
+  const incs = buildSpendProfile(P, profile);
   const constrSeries = new Array<number>(totalMonths + 1).fill(0);
-  for (let i = 0; i < P; i++) constrSeries[i + 1] = constructionTotal * incs[i];
+  // Fast path: with no per-line timing every cost follows one profile over the
+  // build, so the aggregate spread is exactly today's arithmetic — kept literally
+  // identical rather than re-derived, because the golden fixture is penny-locked.
+  const timed = input.trades.some((t) => t.timing) || input.otherCosts.some((o) => o.timing);
+  if (!timed) {
+    for (let i = 0; i < P; i++) constrSeries[i + 1] = constructionTotal * incs[i];
+  } else {
+    // Per-line: trades carry build, fees and contingency pro rata (both are a
+    // percentage of build, so they fall as the build falls); other costs spread
+    // on their own timing. A line may extend past practical completion.
+    const spread = (amount: number, timing: CostTiming | undefined, into: number[]) => {
+      const start = clamp(Math.round(timing?.start ?? 1), 1, totalMonths);
+      const months = clamp(Math.round(timing?.months ?? P), 1, totalMonths - start + 1);
+      const w = buildSpendProfile(months, timing?.profile ?? profile);
+      for (let i = 0; i < months; i++) into[start + i] += amount * w[i];
+    };
+    const tradeSeries = new Array<number>(totalMonths + 1).fill(0);
+    for (const t of input.trades) spread(t.rate * buildMult * gia, t.timing, tradeSeries);
+    const onCosts = 1 + (input.profFeePct + input.contingencyPct) / 100;
+    for (let m = 1; m <= totalMonths; m++) constrSeries[m] = tradeSeries[m] * onCosts;
+    for (const o of input.otherCosts) spread(o.amount, o.timing, constrSeries);
+  }
   const mRate = F.ratePct / 100 / 12;
   const ltcF = F.ltcPct / 100;
   const intSeries = new Array<number>(totalMonths + 1).fill(0);
@@ -247,25 +270,27 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   let totalInterest = 0;
   let peak = 0;
   let drawn = 0;
-  for (let m = 1; m <= P; m++) {
+  const saleNet = gdv - saleCosts;
+  const revSeries = new Array<number>(totalMonths + 1).fill(0);
+  for (let m = P + 1; m <= totalMonths; m++) revSeries[m] = saleNet * revShare[m - P - 1];
+  // One pass over the whole programme: interest on the drawn balance, then the
+  // month's spend, then whatever revenue arrives repays. Costs timed past
+  // practical completion draw on the facility like any other — the old split
+  // loops assumed nothing could be spent after PC.
+  for (let m = 1; m <= totalMonths; m++) {
     const intr = bal * mRate;
     intSeries[m] = intr;
     totalInterest += intr;
     const draw = constrSeries[m] * ltcF;
     drawn += draw;
     bal += intr + draw;
-    if (bal > peak) peak = bal;
-  }
-  const saleNet = gdv - saleCosts;
-  const revSeries = new Array<number>(totalMonths + 1).fill(0);
-  for (let m = P + 1; m <= totalMonths; m++) {
-    const intr = bal * mRate;
-    intSeries[m] = intr;
-    totalInterest += intr;
-    bal += intr;
-    revSeries[m] = saleNet * revShare[m - P - 1];
-    const repay = Math.min(revSeries[m], bal);
-    bal -= repay;
+    if (revSeries[m] > 0) {
+      const repay = Math.min(revSeries[m], bal);
+      bal -= repay;
+    }
+    // peak is the CLOSING balance: a month's receipts clear the interest accrued
+    // that month before the facility is measured. Checking mid-month instead
+    // inflates the peak by one month's interest and with it the arrangement fee.
     if (bal > peak) peak = bal;
   }
   const facility = peak;

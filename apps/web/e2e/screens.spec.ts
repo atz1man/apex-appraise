@@ -416,3 +416,44 @@ test('terms of engagement run draft → issued → accepted', async ({ page }) =
   await expect(page.getByText('ACCEPTED', { exact: true })).toBeVisible();
   await expect(page.getByText(/J\. Marchmont/)).toBeVisible();
 });
+
+/**
+ * Cashflow depth — the ledger reads monthly, quarterly or annually, and cost
+ * lines fall when they are timed to (Kingsway markets after practical
+ * completion, so spend continues past the build).
+ */
+test('cashflow rolls up to quarters and years, and honours cost timing', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Cashflow', exact: true }).click();
+
+  // monthly by default — 12 build months + 4 letting months
+  await expect(page.getByText('Monthly cashflow')).toBeVisible();
+  await expect(page.locator('table tbody tr')).toHaveCount(16 + 5); // ledger + sensitivity grid rows
+
+  await page.getByRole('tab', { name: 'Quarterly', exact: true }).click();
+  await expect(page.getByText('Quarterly cashflow')).toBeVisible();
+  await expect(page.getByText("Q1 · Jul–Sep '26")).toBeVisible();
+  await expect(page.getByText("Q3 · Jan–Mar '27")).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Annual', exact: true }).click();
+  await expect(page.getByText('Annual cashflow')).toBeVisible();
+  await expect(page.getByText("Year 1 · Jul '26–Jun '27")).toBeVisible();
+
+  // marketing is timed into the letting period, so cost continues after the build
+  await page.getByRole('button', { name: 'Other Costs', exact: true }).click();
+  // cost labels are inputs, not text (same trap as the rent roll — assert the value)
+  await expect(page.getByLabel('Cost 2 label')).toHaveValue('Marketing & letting fees');
+  await expect(page.getByText(/Start month and duration control when each line is spent/)).toBeVisible();
+  // it is timed to start in month 13 — after the 12-month build — and run 4 months
+  const timingRow = page.locator('div').filter({ has: page.getByLabel('Cost 2 label') }).last();
+  await expect(timingRow.getByLabel('Start month')).toHaveValue('13');
+  await expect(timingRow.getByLabel('Months')).toHaveValue('4');
+});

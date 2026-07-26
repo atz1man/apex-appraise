@@ -1,4 +1,4 @@
-import { monteCarlo, sensitivityGrid } from '@apex/appraisal-engine';
+import { monteCarlo, rollUpCashflow, sensitivityGrid } from '@apex/appraisal-engine';
 import type { AppraisalInput, AppraisalResult, JvResult } from '@apex/appraisal-engine';
 import type ExcelJSNS from 'exceljs';
 
@@ -295,6 +295,33 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   cfTot.getCell(2).numFmt = FMT_MONEY;
   cfTot.getCell(2).alignment = { horizontal: 'right' };
   totalRow(cfTot, 2);
+
+  // ---- period summaries — the same rows read quarterly and annually ----
+  const periodOpts = { startYear: input.startYear, startMonth: input.startMonth };
+  for (const [period, heading] of [['quarter', 'Quarterly summary'], ['year', 'Annual summary']] as const) {
+    const rolled = rollUpCashflow(R.cash?.rows ?? [], period, periodOpts);
+    if (rolled.length < 2) continue; // a single bucket says nothing the ledger doesn't
+    cf.addRow([]);
+    headerRow(cf, [heading, 'Cost', 'Interest', 'Revenue', 'Net', 'Closing']);
+    rolled.forEach((row) => {
+      const r = cf.addRow([
+        row.label,
+        Math.round(row.cost),
+        Math.round(row.intr),
+        Math.round(row.rev),
+        Math.round(row.net),
+        Math.round(row.cum),
+      ]);
+      r.eachCell((c, col) => {
+        body(c);
+        if (col >= 2) {
+          c.numFmt = FMT_MONEY;
+          c.alignment = { horizontal: 'right' };
+        }
+      });
+    });
+  }
+
   cf.views = [{ state: 'frozen', ySplit: 5 }];
   cf.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 

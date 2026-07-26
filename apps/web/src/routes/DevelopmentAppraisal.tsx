@@ -5,10 +5,13 @@ import {
   jvWaterfall,
   monteCarlo,
   sensitivityGrid,
+  rollUpCashflow,
   formatPct,
   formatSigned,
   type AppraisalInput,
+  type CostTiming,
   type IncomeInput,
+  type Periodicity,
 } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -90,6 +93,48 @@ const DEFAULT_INPUT: AppraisalInput = {
   startMonth: 4,
 };
 
+/**
+ * When a cost line falls. Blank = follow the scheme profile across the whole
+ * build, which is what every line did before timing existed.
+ */
+function TimingFields({ timing, buildMonths, onChange }: { timing?: CostTiming; buildMonths: number; onChange: (t: CostTiming | undefined) => void }) {
+  const start = timing?.start ?? 1;
+  const months = timing?.months ?? buildMonths;
+  const custom = !!timing;
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="number"
+        min={1}
+        className="w-14 text-right fig text-[12px]"
+        aria-label="Start month"
+        title="Start month"
+        value={start}
+        onChange={(e) => onChange({ ...timing, start: Math.max(1, parseInt(e.target.value) || 1), months })}
+      />
+      <span className="text-[11px] text-ink-3">for</span>
+      <input
+        type="number"
+        min={1}
+        className="w-14 text-right fig text-[12px]"
+        aria-label="Months"
+        title="Months spread over (1 = a single lump)"
+        value={months}
+        onChange={(e) => onChange({ ...timing, start, months: Math.max(1, parseInt(e.target.value) || 1) })}
+      />
+      <button
+        type="button"
+        className="text-[11px] text-ink-3 hover:text-brand-700 px-1 disabled:opacity-40"
+        title="Follow the scheme profile across the build"
+        disabled={!custom}
+        onClick={() => onChange(undefined)}
+      >
+        reset
+      </button>
+    </div>
+  );
+}
+
 function NumField({ label, value, onChange, suffix, step }: { label: string; value: number; onChange: (v: number) => void; suffix?: string; step?: number }) {
   return (
     <label className="block">
@@ -121,6 +166,7 @@ export default function DevelopmentAppraisal() {
   const toast = useToast();
   const [tab, setTab] = useState('revenue');
   const [sensTab, setSensTab] = useState<'roc' | 'profit' | 'residual'>('roc');
+  const [period, setPeriod] = useState<Periodicity>('month');
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionLabel, setVersionLabel] = useState('');
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
@@ -243,6 +289,12 @@ export default function DevelopmentAppraisal() {
 
   const cash = R.cash!;
   const maxBar = Math.max(...cash.rows.map((r) => Math.max(r.cost, r.rev)), 1);
+  // the ledger can be read monthly, quarterly or annually — same engine rows,
+  // bucketed; the chart stays monthly because that is where the shape lives
+  const periodRows = useMemo(
+    () => rollUpCashflow(cash.rows, period, { startYear: startY, startMonth: startM }),
+    [cash.rows, period, startY, startM],
+  );
 
   if (isLoading || !loaded) {
     return (
@@ -576,6 +628,11 @@ export default function DevelopmentAppraisal() {
                         onChange={(e) => set({ trades: input.trades.map((x, j) => (j === i ? { ...x, rate: parseFloat(e.target.value) || 0 } : x)) })}
                       />
                       <span className="fig w-20 text-right text-[12px] text-ink-2">{fM(t.rate * R.gia)}</span>
+                      <TimingFields
+                        timing={t.timing}
+                        buildMonths={R.period}
+                        onChange={(timing) => set({ trades: input.trades.map((x, j) => (j === i ? { ...x, timing } : x)) })}
+                      />
                     </div>
                   ))}
                   <div className="mt-3 border-t border-border-std pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -604,9 +661,18 @@ export default function DevelopmentAppraisal() {
                         value={o.amount}
                         onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, amount: parseFloat(e.target.value) || 0 } : x)) })}
                       />
+                      <TimingFields
+                        timing={o.timing}
+                        buildMonths={R.period}
+                        onChange={(timing) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, timing } : x)) })}
+                      />
                       <button aria-label={`Remove ${o.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ otherCosts: input.otherCosts.filter((_, j) => j !== i) })}>×</button>
                     </div>
                   ))}
+                  <div className="mt-2 text-[11px] text-ink-3 leading-snug">
+                    Start month and duration control when each line is spent. Leave them and the line follows the scheme
+                    profile across the build; set 1 month for a lump such as an S106 payment on implementation.
+                  </div>
                   <div className="mt-3 border-t border-border-std pt-3">
                     <Kv k="Other costs total" v={fM(R.otherTotal)} tone="#14503B" />
                   </div>
@@ -698,9 +764,14 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'cashflow' && (
                 <Panel
-                  title="Monthly cashflow"
+                  title={period === 'month' ? 'Monthly cashflow' : period === 'quarter' ? 'Quarterly cashflow' : 'Annual cashflow'}
                   right={
                     <div className="flex items-center gap-3 flex-wrap justify-end">
+                      <SegmentedToggle
+                        options={[['month', 'Monthly'], ['quarter', 'Quarterly'], ['year', 'Annual']]}
+                        value={period as never}
+                        onChange={(p) => setPeriod(p as Periodicity)}
+                      />
                       <SegmentedToggle
                         options={[['scurve', 'S-curve'], ['even', 'Even'], ['front', 'Front'], ['back', 'Back']]}
                         value={(input.finance.spendProfile ?? 'scurve') as never}
@@ -721,15 +792,15 @@ export default function DevelopmentAppraisal() {
                     <table className="w-full min-w-[560px]">
                       <thead className="sticky top-0 bg-surface">
                         <tr>
-                          {['Month', 'Cost', 'Interest', 'Revenue', 'Net', 'Cumulative'].map((h, i) => (
+                          {[period === 'month' ? 'Month' : period === 'quarter' ? 'Quarter' : 'Year', 'Cost', 'Interest', 'Revenue', 'Net', 'Cumulative'].map((h, i) => (
                             <th key={h} className={`label-mono text-ink-3 pb-2 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {cash.rows.map((r) => (
-                          <tr key={r.m} style={{ background: r.m % 2 === 0 ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}>
-                            <td className="py-1.5 text-[12px] fig">{monthLabel(r.m)}</td>
+                        {periodRows.map((r, i) => (
+                          <tr key={r.from} style={{ background: i % 2 === 1 ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}>
+                            <td className="py-1.5 text-[12px] fig whitespace-nowrap">{r.label}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.cost ? fM(r.cost) : '—'}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.intr ? fM(r.intr) : '—'}</td>
                             <td className="py-1.5 text-right fig text-[12px]">{r.rev ? fM(r.rev) : '—'}</td>

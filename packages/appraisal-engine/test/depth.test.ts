@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capitaliseIncome, computeAppraisal, monteCarlo, sdltResidential, type AppraisalInput, type IncomeInput } from '../src/index.js';
+import { capitaliseIncome, computeAppraisal, monteCarlo, rollUpCashflow, sdltResidential, type AppraisalInput, type IncomeInput } from '../src/index.js';
 
 const base: AppraisalInput = {
   units: [{ label: 'Apartments', count: 10, area: 750, cap: 400 }],
@@ -205,5 +205,141 @@ describe('computeAppraisal — GDV composition with a held element', () => {
     const up = computeAppraisal({ ...base, income: shed }, { salesMult: 1.1 });
     expect(up.investmentValue).toBeCloseTo(flat.investmentValue * 1.1, 6);
     expect(up.gdv).toBeCloseTo(flat.gdv * 1.1, 6);
+  });
+});
+
+// ---- Cost timing: when a line falls, not just how much it is ----
+const timedBase: AppraisalInput = {
+  ...base,
+  finance: { ...base.finance, periodMonths: 12, salesMonths: 4, spendProfile: 'even' },
+  trades: [{ label: 'Build', rate: 180 }],
+  otherCosts: [{ label: 'S106', amount: 120_000 }],
+};
+
+describe('per-line cost timing', () => {
+  it('is inert when no line carries timing — the scheme profile still governs', () => {
+    const R = computeAppraisal(timedBase, { withCash: true });
+    const spend = R.cash!.rows.slice(0, 12).map((r) => Math.round(r.cost - (r.m === 1 ? R.landGross : 0)));
+    // 'even' profile: twelve equal months of (build + fees + cont + other)
+    const monthly = (R.build + R.fees + R.cont + R.otherTotal) / 12;
+    for (const s of spend) expect(s).toBe(Math.round(monthly));
+  });
+
+  it('lands a single-month lump in exactly that month', () => {
+    const R = computeAppraisal(
+      { ...timedBase, otherCosts: [{ label: 'S106', amount: 120_000, timing: { start: 6, months: 1 } }] },
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    const build = R.build + R.fees + R.cont;
+    expect(Math.round(rows[5].cost)).toBe(Math.round(build / 12 + 120_000)); // month 6 carries the lump
+    expect(Math.round(rows[4].cost)).toBe(Math.round(build / 12)); // month 5 does not
+    expect(rows.reduce((a, r) => a + r.cost, 0)).toBeCloseTo(build + 120_000 + R.landGross, 6);
+  });
+
+  it('spending later costs less interest than spending early', () => {
+    const early = computeAppraisal({
+      ...timedBase,
+      otherCosts: [{ label: 'S106', amount: 120_000, timing: { start: 1, months: 1 } }],
+    });
+    const late = computeAppraisal({
+      ...timedBase,
+      otherCosts: [{ label: 'S106', amount: 120_000, timing: { start: 12, months: 1 } }],
+    });
+    expect(late.interest).toBeLessThan(early.interest);
+    // and the cheaper finance supports a bigger residual land bid
+    expect(late.residualNet).toBeGreaterThan(early.residualNet);
+  });
+
+  it('honours a per-line profile independent of the scheme profile', () => {
+    const R = computeAppraisal(
+      {
+        ...timedBase,
+        trades: [
+          { label: 'Substructure', rate: 60, timing: { start: 1, months: 4, profile: 'front' } },
+          { label: 'Fit-out', rate: 120, timing: { start: 9, months: 4, profile: 'back' } },
+        ],
+      },
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    // months 5–8 carry no trade spend at all — only the S106 spread across the build
+    const gap = rows.slice(4, 8).map((r) => Math.round(r.cost));
+    for (const g of gap) expect(g).toBe(Math.round(120_000 / 12));
+    // fit-out is back-loaded, so month 12 is the heaviest of the programme
+    const heaviest = Math.max(...rows.slice(1).map((r) => r.cost));
+    expect(Math.round(rows[11].cost)).toBe(Math.round(heaviest));
+  });
+
+  it('draws costs timed after practical completion — the facility still funds them', () => {
+    const R = computeAppraisal(
+      { ...timedBase, otherCosts: [{ label: 'Marketing', amount: 120_000, timing: { start: 14, months: 2 } }] },
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    expect(rows.length).toBe(16); // 12 build + 4 sales
+    expect(Math.round(rows[13].cost)).toBe(60_000); // month 14 — after PC
+    expect(Math.round(rows[14].cost)).toBe(60_000);
+    // and the full amount is still spent
+    expect(rows.reduce((a, r) => a + r.cost, 0)).toBeCloseTo(R.build + R.fees + R.cont + 120_000 + R.landGross, 6);
+  });
+
+  it('clamps a line that would run past the end of the programme', () => {
+    const R = computeAppraisal(
+      { ...timedBase, otherCosts: [{ label: 'Late', amount: 90_000, timing: { start: 15, months: 12 } }] },
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    const spentAfter14 = rows.slice(14).reduce((a, r) => a + r.cost, 0);
+    expect(spentAfter14).toBeCloseTo(90_000, 6); // squeezed into the remaining months, never dropped
+  });
+});
+
+describe('rollUpCashflow', () => {
+  const R = computeAppraisal({ ...timedBase, startYear: 2026, startMonth: 6 }, { withCash: true });
+  const rows = R.cash!.rows;
+  const opts = { startYear: 2026, startMonth: 6 };
+
+  it('quarters and years reconcile exactly to the monthly ledger', () => {
+    for (const period of ['month', 'quarter', 'year'] as const) {
+      const p = rollUpCashflow(rows, period, opts);
+      expect(p.reduce((a, r) => a + r.cost, 0)).toBeCloseTo(rows.reduce((a, r) => a + r.cost, 0), 6);
+      expect(p.reduce((a, r) => a + r.rev, 0)).toBeCloseTo(rows.reduce((a, r) => a + r.rev, 0), 6);
+      expect(p.reduce((a, r) => a + r.intr, 0)).toBeCloseTo(R.interest, 6);
+      // the closing position is carried, never summed
+      expect(p[p.length - 1].cum).toBeCloseTo(rows[rows.length - 1].cum, 6);
+    }
+  });
+
+  it('buckets 16 months into 6 quarters and 2 years', () => {
+    expect(rows.length).toBe(16);
+    const q = rollUpCashflow(rows, 'quarter', opts);
+    const y = rollUpCashflow(rows, 'year', opts);
+    expect(q.length).toBe(6); // 5 full quarters + a stub
+    expect(q[0]).toMatchObject({ from: 1, to: 3 });
+    expect(q[5]).toMatchObject({ from: 16, to: 16 }); // partial final period, not dropped
+    expect(y.length).toBe(2);
+    expect(y[0]).toMatchObject({ from: 1, to: 12 });
+    expect(y[1]).toMatchObject({ from: 13, to: 16 });
+  });
+
+  it('labels periods with the calendar months they cover', () => {
+    // programme starts July 2026 (startMonth 6 is 0-based)
+    expect(rollUpCashflow(rows, 'month', opts)[0].label).toBe("Jul '26");
+    expect(rollUpCashflow(rows, 'quarter', opts)[0].label).toBe("Q1 · Jul–Sep '26");
+    // a quarter spanning the new year names both years
+    expect(rollUpCashflow(rows, 'quarter', opts)[1].label).toBe("Q2 · Oct–Dec '26");
+    expect(rollUpCashflow(rows, 'quarter', opts)[2].label).toBe("Q3 · Jan–Mar '27");
+    expect(rollUpCashflow(rows, 'year', opts)[0].label).toBe("Year 1 · Jul '26–Jun '27");
+    // a stub period covering one month names that month, not a Oct–Oct range
+    const q = rollUpCashflow(rows, 'quarter', opts);
+    expect(q[q.length - 1].label).toBe("Q6 · Oct '27");
+  });
+
+  it('monthly roll-up is the ledger itself', () => {
+    const m = rollUpCashflow(rows, 'month', opts);
+    expect(m.length).toBe(rows.length);
+    expect(m[7].cost).toBeCloseTo(rows[7].cost, 10);
+    expect(m[7].cum).toBeCloseTo(rows[7].cum, 10);
   });
 });

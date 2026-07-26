@@ -11,14 +11,28 @@ export interface AppraisalUnit {
   source?: string;
 }
 
+/**
+ * When a cost line actually falls, independent of the scheme-wide profile.
+ * Groundworks front-load, fit-out lands late, an S106 payment is a single
+ * lump at implementation — spreading them all identically misstates interest
+ * and peak debt. Omit and the line follows the scheme profile over the build.
+ */
+export interface CostTiming {
+  start?: number; // 1-based project month the line starts
+  months?: number; // how long it spreads (1 = a single lump)
+  profile?: SpendProfileKey; // how it spreads within its own window
+}
+
 export interface BuildTrade {
   label: string;
   rate: number; // £/ft² — Σ rates = build rate
+  timing?: CostTiming;
 }
 
 export interface OtherCost {
   label: string;
   amount: number; // £
+  timing?: CostTiming;
 }
 
 export type SpendProfileKey = 'scurve' | 'even' | 'linear' | 'front' | 'back';

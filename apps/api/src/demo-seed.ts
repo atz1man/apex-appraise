@@ -158,8 +158,10 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
         { label: 'Externals, parking & landscaping', rate: 5 },
       ]),
       otherCosts: JSON.stringify([
-        { label: 'Planning & professional', amount: 2500000 },
-        { label: 'Marketing & letting fees', amount: 3500000 },
+        // planning fees fall up front; marketing runs through the letting period
+        // AFTER practical completion — both timed, not smeared across the build
+        { label: 'Planning & professional', amount: 2500000, timing: { start: 1, months: 2 } },
+        { label: 'Marketing & letting fees', amount: 3500000, timing: { start: 13, months: 4 } },
       ]),
       profFeePct: 11, contingencyPct: 5,
       ltcPct: 60, ratePct: 7.5, periodMonths: 12, salesMonths: 4, arrangementFeePct: 1.5,

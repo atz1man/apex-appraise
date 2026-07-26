@@ -196,3 +196,46 @@ describe('buildAppraisalWorkbook — with a held element', async () => {
     expect(plain.worksheets.map((w) => w.name)).not.toContain('Rent roll');
   });
 });
+
+/**
+ * Period summaries — the workbook has to read the same ledger quarterly and
+ * annually, and the buckets must reconcile to the monthly rows.
+ */
+describe('buildAppraisalWorkbook — cashflow period summaries', async () => {
+  const R3 = computeAppraisal(referenceCase, { withCash: true });
+  const wb3 = await buildAppraisalWorkbook({
+    dealName: 'Golden Fixture Works',
+    address: 'Bournemouth',
+    input: { ...referenceCase, startYear: 2026, startMonth: 6 },
+    R: R3,
+    jv: jvWaterfall(R3.equity, R3.profit, R3.holdYears, referenceCase.jv!),
+    monthLabel,
+  });
+
+  it('adds quarterly and annual blocks under the monthly ledger', () => {
+    const cf = wb3.getWorksheet('Cashflow')!;
+    const labels: string[] = [];
+    cf.eachRow((row) => labels.push(String(row.getCell(1).value ?? '')));
+    expect(labels).toContain('Quarterly summary');
+    expect(labels).toContain('Annual summary');
+    expect(labels.some((l) => l.startsWith('Q1 · Jul–Sep'))).toBe(true);
+    expect(labels.some((l) => l.startsWith('Year 1 · Jul'))).toBe(true);
+  });
+
+  it('annual costs add back to the monthly ledger', () => {
+    const cf = wb3.getWorksheet('Cashflow')!;
+    let inAnnual = false;
+    let annualCost = 0;
+    cf.eachRow((row) => {
+      const label = String(row.getCell(1).value ?? '');
+      if (label === 'Annual summary') {
+        inAnnual = true;
+        return;
+      }
+      if (inAnnual && label.startsWith('Year ')) annualCost += Number(row.getCell(2).value ?? 0);
+    });
+    const monthly = (R3.cash?.rows ?? []).reduce((a, r) => a + Math.round(r.cost), 0);
+    // rounding is per row on both sides, so allow a pound or two of drift
+    expect(Math.abs(annualCost - monthly)).toBeLessThan(25);
+  });
+});

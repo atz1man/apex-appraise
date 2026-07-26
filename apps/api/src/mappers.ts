@@ -1,5 +1,5 @@
 import type { Appraisal } from '@prisma/client';
-import type { AppraisalInput, IncomeInput, SpendProfileKey } from '@apex/appraisal-engine';
+import type { AppraisalInput, CostTiming, IncomeInput, SpendProfileKey } from '@apex/appraisal-engine';
 
 /** BigInt pence → £ number (engine-internal unit). */
 export const P = (pence: bigint | null | undefined): number => (pence == null ? 0 : Number(pence) / 100);
@@ -26,10 +26,11 @@ export const J = <T>(raw: string | null | undefined, fallback: T): T => {
 /** DB appraisal row → engine input (£). otherCosts are stored in pence. */
 export function appraisalRowToEngineInput(a: Appraisal): AppraisalInput {
   const units = J<Array<{ label: string; count: number; area: number; cap: number; conf?: 'high' | 'med' | 'low'; source?: string }>>(a.units, []);
-  const trades = J<Array<{ label: string; rate: number }>>(a.trades, []);
-  const otherCosts = J<Array<{ label: string; amount: number }>>(a.otherCosts, []).map((o) => ({
+  const trades = J<Array<{ label: string; rate: number; timing?: CostTiming }>>(a.trades, []);
+  const otherCosts = J<Array<{ label: string; amount: number; timing?: CostTiming }>>(a.otherCosts, []).map((o) => ({
     label: o.label,
     amount: o.amount / 100,
+    timing: o.timing,
   }));
   return {
     units,

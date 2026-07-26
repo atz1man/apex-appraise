@@ -41,7 +41,8 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     efficiency: input.efficiency,
     units: JSON.stringify(input.units),
     trades: JSON.stringify(input.trades),
-    otherCosts: JSON.stringify(input.otherCosts.map((o) => ({ label: o.label, amount: Math.round(o.amount * 100) }))),
+    // amounts persist in pence; timing rides along untouched
+    otherCosts: JSON.stringify(input.otherCosts.map((o) => ({ label: o.label, amount: Math.round(o.amount * 100), timing: o.timing }))),
     profFeePct: input.profFeePct,
     contingencyPct: input.contingencyPct,
     ltcPct: input.finance.ltcPct,
