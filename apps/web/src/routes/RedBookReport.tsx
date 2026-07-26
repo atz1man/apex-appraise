@@ -18,6 +18,8 @@ const PRINT_CSS = `
   .no-print { display: none !important; }
   .a4-canvas { padding: 0 !important; gap: 0 !important; background: #fff !important; }
   .a4-page { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; page-break-after: always; break-after: page; }
+  /* without this the final break emits a trailing blank sheet — every PDF printed one page more than its footers claimed */
+  .a4-page:last-child { page-break-after: auto !important; break-after: auto !important; }
 }
 `;
 
@@ -83,7 +85,9 @@ function A4Page({ children, pad = true }: { children: ReactNode; pad?: boolean }
       className="a4-page bg-surface flex flex-col overflow-hidden"
       style={{
         width: 794,
-        minHeight: 1123,
+        // 1122, not 1123: chromium prints A4 at 1122.5px, so a page sized to the
+        // rounded-up height spills a blank sheet and desyncs the "page n of N" footers
+        minHeight: 1122,
         borderRadius: 3,
         boxShadow: '0 4px 24px rgba(20,30,25,0.12)',
         padding: pad ? '54px 64px' : 0,
@@ -144,15 +148,36 @@ export default function RedBookReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  // AI-use disclosure — derived from the deal's audit trail, printed with the report
+  const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
   const utils = trpc.useUtils();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
-    onSuccess: () => utils.appraisal.getCurrent.invalidate(dealId),
+    onSuccess: () => {
+      utils.appraisal.getCurrent.invalidate(dealId);
+      // drafting IS an AI use — the disclosure has to change with it, not on next reload
+      utils.appraisal.aiDisclosure.invalidate(dealId);
+    },
   });
   const narrative = appr?.narrative ?? null;
 
   const input = appr?.input;
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input) : null), [input]);
+
+  // Pagination: AI-drafted commentary earns its own sheet, so the page count is
+  // dynamic. Footers must match what actually prints — a "6 of 6" on a nine-sheet
+  // PDF is exactly the kind of thing a client notices.
+  const hasCommentaryPage = !!narrative;
+  const pageNo = {
+    cover: 1,
+    certificate: 2,
+    property: 3,
+    methodology: 4,
+    comparables: 5,
+    commentary: hasCommentaryPage ? 6 : 0,
+    declaration: hasCommentaryPage ? 7 : 6,
+  };
+  const pageTotal = pageNo.declaration;
 
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const today = fmtLong(new Date());
@@ -404,7 +429,7 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <PageFoot>Page 2 of 6 · This certificate must be read in conjunction with the assumptions and conditions set out on page 6.</PageFoot>
+          <PageFoot>Page {pageNo.certificate} of {pageTotal} · This certificate must be read in conjunction with the assumptions and conditions set out on page {pageNo.declaration}.</PageFoot>
         </A4Page>
 
         {/* ============ PAGE 3 — PROPERTY & LOCATION ============ */}
@@ -465,7 +490,7 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <PageFoot>Page 3 of 6 · Apex Appraise · {subject}</PageFoot>
+          <PageFoot>Page {pageNo.property} of {pageTotal} · Apex Appraise · {subject}</PageFoot>
         </A4Page>
 
         {/* ============ PAGE 4 — METHODOLOGY & RECONCILIATION ============ */}
@@ -521,27 +546,20 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          {narrative && (
+          {/* Drafted commentary moves to its own page — three narrative sections do
+              not fit under the reconciliation without spilling the sheet. */}
+          {!narrative && (
             <>
-              <Micro>Valuation rationale<AiDraftNote /></Micro>
-              <Body>{narrative.valuationRationale}</Body>
-            </>
-          )}
-
-          <Micro>Market commentary{narrative && <AiDraftNote />}</Micro>
-          <Body>
-            {narrative ? (
-              narrative.marketCommentary
-            ) : (
-              <>
+              <Micro>Market commentary</Micro>
+              <Body>
                 The local market for property of this class and price band remains active, with good demand and limited supply of directly
                 comparable stock. Transaction volumes are stable and marketing periods for well-presented properties are typically six to
                 eight weeks. No material valuation uncertainty is reported.
-              </>
-            )}
-          </Body>
+              </Body>
+            </>
+          )}
 
-          <PageFoot>Page 4 of 6 · Apex Appraise · Reference {refCode}</PageFoot>
+          <PageFoot>Page {pageNo.methodology} of {pageTotal} · Apex Appraise · Reference {refCode}</PageFoot>
         </A4Page>
 
         {/* ============ PAGE 5 — COMPARABLE EVIDENCE ============ */}
@@ -623,12 +641,33 @@ export default function RedBookReport() {
             records and local agency confirmation.
           </Body>
 
-          <PageFoot>Page 5 of 6 · Comparable schedule</PageFoot>
+          <PageFoot>Page {pageNo.comparables} of {pageTotal} · Comparable schedule</PageFoot>
         </A4Page>
 
-        {/* ============ PAGE 6 — ASSUMPTIONS & DECLARATION ============ */}
+        {/* ====== PAGE — DRAFTED COMMENTARY (only when a narrative exists) ====== */}
+        {narrative && (
+          <A4Page>
+            <PageHead title="Valuation commentary" right="Section 5" />
+
+            <Micro mt={20}>Valuation rationale<AiDraftNote /></Micro>
+            <Body>{narrative.valuationRationale}</Body>
+
+            <Micro>Market commentary<AiDraftNote /></Micro>
+            <Body>{narrative.marketCommentary}</Body>
+
+            <Micro>Risk commentary<AiDraftNote /></Micro>
+            <Body>{narrative.riskCommentary}</Body>
+
+            <PageFoot>
+              Page {pageNo.commentary} of {pageTotal} · Commentary drafted with AI assistance and reviewed by the valuer — see the AI-use
+              disclosure on page {pageNo.declaration}.
+            </PageFoot>
+          </A4Page>
+        )}
+
+        {/* ============ FINAL PAGE — ASSUMPTIONS & DECLARATION ============ */}
         <A4Page>
-          <PageHead title="Assumptions & declaration" right="Section 5–6" />
+          <PageHead title="Assumptions & declaration" right={narrative ? 'Section 6–7' : 'Section 5–6'} />
 
           <Micro mt={20}>General assumptions</Micro>
           <div className="mt-2.5 flex flex-col gap-2">
@@ -645,14 +684,32 @@ export default function RedBookReport() {
             The valuation assumes vacant possession on completion. No special assumptions have otherwise been made.
           </div>
 
-          {narrative && (
-            <>
-              <Micro mt={20}>Risk commentary<AiDraftNote /></Micro>
-              <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
-                {narrative.riskCommentary}
-              </div>
-            </>
-          )}
+          {/* RICS professional standards require the valuer to state whether and how
+              AI was used — derived from the audit trail, never hand-declared. */}
+          <Micro mt={20}>Use of artificial intelligence</Micro>
+          <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
+            {ai?.used ? (
+              <>
+                <div>
+                  Artificial intelligence was used in preparing this valuation, as follows
+                  {ai.model && ai.model !== 'demo' ? ` (model: ${ai.model})` : ''}:
+                </div>
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {ai.items.map((t) => (
+                    <div key={t.key} className="flex gap-2.5">
+                      <span className="shrink-0 font-semibold" style={{ color: brand[700] }}>·</span>
+                      <span>
+                        <b className="font-semibold">{t.label}</b> — {t.purpose}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1.5">{ai.statement}</div>
+              </>
+            ) : (
+              <>{ai?.statement ?? 'No artificial intelligence was used in the preparation of this valuation.'}</>
+            )}
+          </div>
 
           <Micro mt={20}>Conditions &amp; scope</Micro>
           <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
@@ -677,7 +734,7 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <PageFoot>Page 6 of 6 · © Apex Appraise Ltd · This report remains the property of Apex Appraise until fees are settled in full.</PageFoot>
+          <PageFoot>Page {pageNo.declaration} of {pageTotal} · © Apex Appraise Ltd · This report remains the property of Apex Appraise until fees are settled in full.</PageFoot>
         </A4Page>
       </div>
     </div>

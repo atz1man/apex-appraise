@@ -10,6 +10,7 @@ import {
 } from '@apex/appraisal-engine';
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
+import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { internalProcedure, router } from '../trpc.js';
 
 const spendProfileToDb: Record<string, string> = {
@@ -212,6 +213,47 @@ export const appraisalRouter = router({
     .query(({ input }) => sensitivityGrid(input.input, input.metric)),
 
   /**
+   * AI-use disclosure for a deal, derived from the audit trail rather than
+   * declared by hand — RICS professional standards require valuers to be
+   * transparent about whether and how AI was used, so the report states it and
+   * this is where the statement comes from. Every AI touchpoint writes an
+   * ActivityEvent under the 'AI Development Director' actor; anything absent
+   * from that trail is absent from the disclosure.
+   */
+  aiDisclosure: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    await assertDeal(ctx, input);
+    const events = await ctx.prisma.activityEvent.findMany({
+      where: { dealId: input, orgId: ctx.principal.orgId, actor: AI_ACTOR },
+      orderBy: { at: 'desc' },
+    });
+    const items = AI_TOUCHPOINTS.map((t) => {
+      const matching = events.filter((e: { action: string }) => e.action === t.action);
+      return {
+        key: t.key,
+        label: t.label,
+        purpose: t.purpose,
+        count: matching.length,
+        lastUsed: matching.length ? (matching[0] as { at: Date }).at.toISOString() : null,
+      };
+    }).filter((t) => t.count > 0);
+
+    const row = await ctx.prisma.appraisal.findFirst({
+      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const narrative = J<NarrativePayload | null>(row?.narrative, null);
+    return {
+      used: items.length > 0,
+      items,
+      // the model that drafted the prose currently reproduced in the report
+      model: narrative?.model ?? null,
+      narrativeEmbedded: !!narrative,
+      narrativeDraftedAt: narrative?.generatedAt ?? null,
+      statement: items.length > 0 ? AI_STANDING_STATEMENT : AI_NONE_STATEMENT,
+    };
+  }),
+
+  /**
    * AI-drafted Red Book narrative — market commentary, valuation rationale and
    * risk commentary. Every figure comes from the deterministic engine; the LLM
    * only writes prose around them. Persisted onto the current appraisal so the
@@ -259,7 +301,7 @@ export const appraisalRouter = router({
       data: {
         orgId: ctx.principal.orgId,
         dealId: input,
-        actor: 'AI Development Director',
+        actor: AI_ACTOR,
         action: 'drafted Red Book narrative for',
         target: deal.name,
       },
@@ -617,7 +659,7 @@ export const autoAppraisalRouter = router({
       for (const doc of blocks.used) {
         await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: 'EXTRACTED' } });
         await ctx.prisma.activityEvent.create({
-          data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: 'AI Development Director', action: 'extracted scheme from', target: doc.name },
+          data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: AI_ACTOR, action: 'extracted scheme from', target: doc.name },
         });
       }
       return {
@@ -789,6 +831,17 @@ export const scenariosRouter = router({
     if (options.length < 2)
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'At least two scheme options are needed to compare risk — add another option first.' });
     const commentary = await draftRiskCommentary({ subject: deal.name, options });
+    // audited like every other AI touchpoint — the report's AI-use disclosure is
+    // derived from this trail, so an unlogged call would be an undisclosed one
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input,
+        actor: AI_ACTOR,
+        action: 'drafted scenario risk commentary for',
+        target: deal.name,
+      },
+    });
     return {
       commentary,
       generatedAt: new Date().toISOString(),

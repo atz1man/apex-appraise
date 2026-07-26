@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
+import { AI_ACTOR } from '../ai-disclosure.js';
 import { internalProcedure, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
@@ -293,7 +294,7 @@ export const documentsRouter = router({
           data: {
             orgId: ctx.principal.orgId,
             dealId: input.dealId,
-            actor: 'AI Development Director',
+            actor: AI_ACTOR,
             action: 'asked the workfile about',
             target: input.question.length > 80 ? `${input.question.slice(0, 79)}…` : input.question,
           },

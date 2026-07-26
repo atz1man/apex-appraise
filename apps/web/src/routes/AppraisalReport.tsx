@@ -18,6 +18,8 @@ const PRINT_CSS = `
   .no-print { display: none !important; }
   .a4-canvas { padding: 0 !important; gap: 0 !important; background: #fff !important; }
   .a4-page { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; page-break-after: always; break-after: page; }
+  /* without this the final break emits a trailing blank sheet — every PDF printed one page more than its footers claimed */
+  .a4-page:last-child { page-break-after: auto !important; break-after: auto !important; }
 }
 `;
 
@@ -53,7 +55,9 @@ function A4Page({ children, pad = true }: { children: ReactNode; pad?: boolean }
       className="a4-page bg-surface flex flex-col overflow-hidden"
       style={{
         width: 794,
-        minHeight: 1123,
+        // 1122, not 1123: chromium prints A4 at 1122.5px, so a page sized to the
+        // rounded-up height spills a blank sheet and desyncs the "page n of N" footers
+        minHeight: 1122,
         borderRadius: 3,
         boxShadow: '0 4px 24px rgba(20,30,25,0.12)',
         padding: pad ? '56px 60px' : 0,
@@ -118,6 +122,8 @@ export default function AppraisalReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: photos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  // AI-use disclosure — derived from the deal's audit trail, printed with the report
+  const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
 
   const input = appr?.input;
 
@@ -631,7 +637,30 @@ export default function AppraisalReport() {
             ))}
           </div>
 
-          <SectionTitle>7 · Important notice</SectionTitle>
+          {/* AI-use disclosure — RICS professional standards require transparency
+              about whether and how AI was used; the register comes from the audit trail. */}
+          <SectionTitle>7 · Use of artificial intelligence</SectionTitle>
+          {ai?.used ? (
+            <>
+              <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
+                Artificial intelligence was used in preparing this appraisal
+                {ai.model && ai.model !== 'demo' ? ` (model: ${ai.model})` : ''}:{' '}
+                {ai.items.map((t, i) => (
+                  <span key={t.key}>
+                    {i > 0 ? ' ' : ''}
+                    <b className="font-semibold">{t.label}</b> — {t.purpose}
+                  </span>
+                ))}
+              </p>
+              <p className="mt-2 text-[11px] text-ink-2b leading-[1.6]">{ai.statement}</p>
+            </>
+          ) : (
+            <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
+              {ai?.statement ?? 'No artificial intelligence was used in the preparation of this appraisal.'}
+            </p>
+          )}
+
+          <SectionTitle>8 · Important notice</SectionTitle>
           <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">{DISCLAIMER}</p>
 
           <div className="mt-8 flex gap-10">

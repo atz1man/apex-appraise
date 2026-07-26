@@ -152,8 +152,17 @@ test.describe('internal screens', () => {
     await page.getByRole('button', { name: 'Draft narrative with AI' }).click();
     // live LLM drafting when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
     await expect(page.getByText('AI-drafted — valuer to review').first()).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByText('Valuation rationale')).toBeVisible();
-    await expect(page.getByText('Market commentary')).toBeVisible();
+    // drafted prose gets its own sheet; scope to it — the AI-use disclosure on the
+    // final page names the same sections, so unscoped text matches collide (M2)
+    const commentary = page.locator('.a4-page', { hasText: 'Valuation commentary' });
+    await expect(commentary.getByText('Valuation rationale')).toBeVisible();
+    await expect(commentary.getByText('Market commentary')).toBeVisible();
+    await expect(commentary.getByText('Risk commentary')).toBeVisible();
+    await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
+    await expect(page.getByText(/Report narrative — drafted the market commentary/)).toBeVisible();
+    await expect(page.getByText(/No artificial intelligence system computed, adjusted or approved any figure/)).toBeVisible();
+    await expect(page.locator('.a4-page')).toHaveCount(7);
+    await expect(page.getByText(/Page 7 of 7/)).toBeVisible();
   });
 
   test('field app frames the mobile companion', async ({ page }) => {
@@ -303,4 +312,33 @@ test('appraisal without a held element offers to add a rent roll', async ({ page
   await expect(page.getByText('No held element')).toBeVisible();
   await page.getByRole('button', { name: 'Add a rent roll' }).click();
   await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
+});
+
+
+/**
+ * AI-use disclosure — RICS professional standards require the valuer to state
+ * whether and how AI was used. Kingsway has had no AI run against it, so the
+ * report must say so explicitly rather than staying silent.
+ */
+test('reports disclose that no AI was used when none was', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+
+  await page.goto(`/deal/${id}/redbook`);
+  await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
+  await expect(page.getByText('No artificial intelligence was used in the preparation of this valuation.')).toBeVisible();
+  // no drafted commentary → no extra sheet, and the footers say so
+  await expect(page.locator('.a4-page')).toHaveCount(6);
+  await expect(page.getByText(/Page 6 of 6 · © Apex Appraise/)).toBeVisible();
+
+  // and the valuer can see the same record in-product before issuing
+  await page.goto(`/deal/${id}`);
+  await expect(page.getByText('AI use on this deal')).toBeVisible();
+  await expect(page.getByText('No AI has been used on this deal. The reports say so explicitly.')).toBeVisible();
 });

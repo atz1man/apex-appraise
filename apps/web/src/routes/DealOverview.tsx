@@ -81,6 +81,7 @@ export default function DealOverview() {
   const { data: appraisal, isLoading: appraisalLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: tasks, isLoading: tasksLoading } = trpc.tasks.list.useQuery({ dealId }, { enabled: !!dealId });
   const { data: activity, isLoading: activityLoading } = trpc.documents.activity.useQuery(dealId, { enabled: !!dealId });
+  const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
   const { data: cost, isLoading: costLoading } = trpc.cost.packages.useQuery(dealId, { enabled: !!dealId });
   const { data: sales, isLoading: salesLoading } = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
 
@@ -499,6 +500,37 @@ export default function DealOverview() {
               <Link to="/calendar" className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
                 View all in calendar →
               </Link>
+            </Panel>
+
+            {/* AI use — what the reports will disclose, reviewable before issue */}
+            <Panel
+              title={<span className="text-[13px] font-semibold">AI use on this deal</span>}
+              right={<StatusChip status={ai?.used ? 'amber' : 'green'} label={ai?.used ? 'DISCLOSED' : 'NONE'} />}
+            >
+              {!ai ? (
+                <SkeletonRows rows={3} />
+              ) : ai.used ? (
+                <>
+                  <div className="flex flex-col">
+                    {ai.items.map((t) => (
+                      <div key={t.key} className="flex justify-between gap-3 py-2 border-b border-border-faint last:border-0">
+                        <span className="text-[12px]">{t.label}</span>
+                        <span className="fig text-[10.5px] text-ink-3 shrink-0">
+                          {t.count}× · {t.lastUsed ? fmtAt(new Date(t.lastUsed)) : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2.5 text-[11px] text-ink-3 leading-snug">
+                    Stated in the appraisal and Red Book reports. No AI computed any figure — the engine does, and the
+                    valuer signs.
+                  </div>
+                </>
+              ) : (
+                <div className="text-[12px] text-ink-2 leading-snug">
+                  No AI has been used on this deal. The reports say so explicitly.
+                </div>
+              )}
             </Panel>
 
             {/* Recent activity */}
