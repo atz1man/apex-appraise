@@ -106,3 +106,93 @@ describe('buildAppraisalWorkbook', async () => {
     expect(byLabel['Probability of loss'].value).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * Investment method — a rent roll adds a 'Rent roll' sheet and the unit-schedule
+ * GDV total has to keep reconciling to the engine once part of the value is
+ * capitalised rather than sold.
+ */
+describe('buildAppraisalWorkbook — with a held element', async () => {
+  const holdCase: AppraisalInput = {
+    ...referenceCase,
+    income: {
+      lines: [{ label: 'Retail parade', count: 4, area: 1500, rentPsf: 18, voidPct: 4 }],
+      nonRecoverablePct: 5,
+      annualDeductions: 1200,
+      yieldPct: 7.25,
+      purchaserCostsPct: 6.8,
+      letUpMonths: 6,
+    },
+  };
+  const R2 = computeAppraisal(holdCase, { withCash: true });
+  const jv2 = jvWaterfall(R2.equity, R2.profit, R2.holdYears, holdCase.jv!);
+  const wb2 = await buildAppraisalWorkbook({
+    dealName: 'Golden Fixture Works',
+    address: 'Bournemouth',
+    input: holdCase,
+    R: R2,
+    jv: jv2,
+    monthLabel,
+  });
+
+  it('inserts the Rent roll sheet after the unit schedule', () => {
+    expect(wb2.worksheets.map((w) => w.name)).toEqual([
+      'Summary',
+      'Unit schedule',
+      'Rent roll',
+      'Residual appraisal',
+      'Cashflow',
+      'JV returns',
+      'Risk & sensitivity',
+      'Assumptions',
+    ]);
+  });
+
+  it('carries the capitalised value into the unit schedule so GDV still reconciles', () => {
+    const u = wb2.getWorksheet('Unit schedule')!;
+    let capitalised: number | null = null;
+    u.eachRow((row) => {
+      if (String(row.getCell(1).value ?? '').startsWith('Capitalised investment value')) {
+        capitalised = row.getCell(5).value as number;
+      }
+    });
+    expect(capitalised).not.toBeNull();
+    expect(capitalised).toBe(Math.round(R2.investmentValue));
+    // units sold + capitalised = the engine's GDV
+    const unitsTotal = holdCase.units.reduce((a, x) => a + x.count * x.area * x.cap, 0);
+    expect(unitsTotal + (capitalised as unknown as number)).toBeCloseTo(Math.round(R2.gdv), 0);
+  });
+
+  it('states the capitalisation ladder with £ formats and the net initial yield', () => {
+    const rr = wb2.getWorksheet('Rent roll')!;
+    const labels: string[] = [];
+    let ncv: number | null = null;
+    let niyFmt = '';
+    rr.eachRow((row) => {
+      const label = String(row.getCell(1).value ?? '');
+      labels.push(label);
+      if (label.startsWith('Investment value in GDV')) {
+        ncv = row.getCell(6).value as number;
+        expect(row.getCell(6).numFmt).toBe('"£"#,##0;[Red]-"£"#,##0');
+      }
+      if (label === 'Net initial yield') niyFmt = row.getCell(6).numFmt ?? '';
+    });
+    expect(labels.some((l) => l.startsWith('Gross capital value — YP'))).toBe(true);
+    expect(labels.some((l) => l.startsWith("Purchaser's costs"))).toBe(true);
+    expect(labels.some((l) => l.startsWith('Let-up void'))).toBe(true);
+    expect(ncv).toBe(Math.round(R2.investmentValue));
+    expect(niyFmt).toBe('0.0%');
+  });
+
+  it('omits the Rent roll sheet when there is no held element', async () => {
+    const plain = await buildAppraisalWorkbook({
+      dealName: 'Golden Fixture Works',
+      address: 'Bournemouth',
+      input: referenceCase,
+      R: computeAppraisal(referenceCase, { withCash: true }),
+      jv: jv2,
+      monthLabel,
+    });
+    expect(plain.worksheets.map((w) => w.name)).not.toContain('Rent roll');
+  });
+});

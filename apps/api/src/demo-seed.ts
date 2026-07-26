@@ -94,6 +94,48 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     },
   });
 
+  // ---- Kingsway appraisal — mixed exit: one pod sold, the parade held and let
+  // (exercises the investment method: rent roll capitalised into GDV) ----
+  await prisma.appraisal.create({
+    data: {
+      orgId: org.id, dealId: deals['Kingsway Retail Units'], isCurrent: true, label: 'Base', source: 'manual',
+      efficiency: 92,
+      units: JSON.stringify([
+        { label: 'Drive-thru pod (sold on)', count: 1, area: 2400, cap: 420, conf: 'med', source: 'Agent quote' },
+      ]),
+      income: JSON.stringify({
+        lines: [
+          { label: 'Retail units (ground floor)', count: 6, area: 1650, rentPsf: 18, voidPct: 4 },
+          { label: 'First-floor offices', count: 3, area: 900, rentPsf: 13, voidPct: 8 },
+        ],
+        nonRecoverablePct: 5,
+        annualDeductions: 2400,
+        yieldPct: 7.25,
+        purchaserCostsPct: 6.8,
+        letUpMonths: 6,
+      }),
+      trades: JSON.stringify([
+        { label: 'Strip-out & structural repairs', rate: 14 },
+        { label: 'Shopfronts & glazing', rate: 18 },
+        { label: 'Roof & envelope repairs', rate: 16 },
+        { label: 'M&E services', rate: 20 },
+        { label: 'Internal fit-out — shell & core', rate: 12 },
+        { label: 'Externals, parking & landscaping', rate: 5 },
+      ]),
+      otherCosts: JSON.stringify([
+        { label: 'Planning & professional', amount: 2500000 },
+        { label: 'Marketing & letting fees', amount: 3500000 },
+      ]),
+      profFeePct: 11, contingencyPct: 5,
+      ltcPct: 60, ratePct: 7.5, periodMonths: 12, salesMonths: 4, arrangementFeePct: 1.5,
+      drawFactorPct: 55, spendProfile: 'SCURVE',
+      siteMode: 'RESIDUAL', landFixed: p(0), acqPct: 6.8, agentPct: 1.5, legalPct: 0.5,
+      targetProfitOnGdvPct: 18, jvGpCoinvestPct: 10, jvPrefPct: 8, jvPromotePct: 20,
+      planningStatus: 'Permitted development — change of use confirmed',
+      startYear: 2026, startMonth: 6,
+    },
+  });
+
   // ---- Sales units (Harbour Reach — Sales CRM prototype) ----
   const salesMilestones = ['Reserved', 'Memorandum of sale', 'Searches ordered', 'Enquiries raised', 'Mortgage offer', 'Exchanged', 'Completed', 'Handover & snagging'];
   const statusForProg = (prog: number) => (prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 3 ? 'RESERVED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE');

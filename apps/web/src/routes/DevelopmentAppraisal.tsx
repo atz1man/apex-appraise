@@ -8,18 +8,20 @@ import {
   formatPct,
   formatSigned,
   type AppraisalInput,
+  type IncomeInput,
 } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, Drawer, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
 const TABS: Array<[string, string]> = [
   ['general', 'General'],
   ['revenue', 'Revenue'],
+  ['income', 'Investment'],
   ['build', 'Build'],
   ['other', 'Other Costs'],
   ['finance', 'Finance'],
@@ -29,8 +31,25 @@ const TABS: Array<[string, string]> = [
 ];
 
 const ASPECT: Record<string, string> = {
-  general: 'Site visit', revenue: 'Comparables', build: 'Cost plan', other: 'Planning',
+  general: 'Site visit', revenue: 'Comparables', income: 'Letting', build: 'Cost plan', other: 'Planning',
   finance: 'Finance', site: 'Site purchase', cashflow: 'Cashflow', returns: 'Returns',
+};
+
+/** Starting rent roll when a scheme first takes on a held element. */
+const DEFAULT_INCOME: IncomeInput = {
+  lines: [{ label: 'Let space', count: 1, area: 5000, rentPsf: 15, voidPct: 5 }],
+  nonRecoverablePct: 5,
+  annualDeductions: 0,
+  yieldPct: 7,
+  purchaserCostsPct: 6.8,
+  letUpMonths: 6,
+};
+
+const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct', string> = {
+  count: 'number of tenancies',
+  area: 'area sq ft',
+  rentPsf: 'rent per sq ft per year',
+  voidPct: 'void allowance percent',
 };
 
 const PRESETS: Record<string, number[]> = {
@@ -188,8 +207,17 @@ export default function DevelopmentAppraisal() {
   const [newTask, setNewTask] = useState('');
   const [newWho, setNewWho] = useState('AO');
 
+  // rent-roll editing helpers — the income block is optional, so every patch guards it
+  const inc = input.income;
+  const setIncome = (patch: Partial<IncomeInput>) => set({ income: { ...(inc ?? DEFAULT_INCOME), ...patch } });
+  const setLine = (i: number, patch: Partial<IncomeInput['lines'][number]>) =>
+    setIncome({ lines: (inc?.lines ?? []).map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+
   const breakdown: Array<[string, number, boolean?]> = [
     ['Gross development value', R.gdv],
+    ...(R.investmentValue > 0
+      ? ([['— units sold', R.salesGdv], ['— capitalised investment value', R.investmentValue]] as Array<[string, number, boolean?]>)
+      : []),
     ['Disposal costs', -R.saleCosts],
     ['Construction', -R.build],
     ['Professional fees', -R.fees],
@@ -395,6 +423,133 @@ export default function DevelopmentAppraisal() {
                     <div className="mt-3 text-[12px] text-ink-2">Disposal costs <span className="fig font-semibold">{fM(R.saleCosts)}</span></div>
                   </Panel>
                 </>
+              )}
+
+              {tab === 'income' && (
+                inc && R.income ? (
+                  <>
+                    <Panel
+                      title="Rent roll"
+                      right={
+                        <div className="flex gap-1.5">
+                          <Button variant="secondary" size="sm" onClick={() => setIncome({ lines: [...inc.lines, { label: 'Let space', count: 1, area: 2000, rentPsf: 15, voidPct: 5 }] })}>+ Add line</Button>
+                          <Button variant="secondary" size="sm" onClick={() => set({ income: undefined })}>Remove</Button>
+                        </div>
+                      }
+                    >
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[560px]">
+                          <thead>
+                            <tr>
+                              <th className="label-mono text-ink-3 text-left pb-2">Tenancy / space</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-16">No.</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Rent £/ft²</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-20">Void %</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-28">Rent £/yr</th>
+                              <th className="w-8" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inc.lines.map((l, i) => (
+                              <tr key={i} className="hover:bg-sunken transition-colors">
+                                <td className="py-1.5 pr-2 border-t border-border-faint">
+                                  <input className="w-full" aria-label={`Tenancy ${i + 1} label`} value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} />
+                                </td>
+                                {(['count', 'area', 'rentPsf', 'voidPct'] as const).map((k) => (
+                                  <td key={k} className="py-1.5 px-1 border-t border-border-faint">
+                                    <input
+                                      type="number"
+                                      className="w-full text-right fig"
+                                      aria-label={`${l.label} ${RENT_COL_ARIA[k]}`}
+                                      value={k === 'voidPct' ? l.voidPct ?? 0 : l[k]}
+                                      onChange={(e) => setLine(i, { [k]: parseFloat(e.target.value) || 0 })}
+                                    />
+                                  </td>
+                                ))}
+                                <td className="fig text-right text-[12.5px] font-semibold border-t border-border-faint">{formatSigned(R.income!.lines[i]?.grossRent ?? 0)}</td>
+                                <td className="text-right border-t border-border-faint">
+                                  <button aria-label={`Remove ${l.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => setIncome({ lines: inc.lines.filter((_, j) => j !== i) })}>×</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
+                        <Kv k="Lettable area" v={`${n0(R.income.totalArea)} ft²`} />
+                        <Kv k="Gross rent" v={`${formatSigned(R.income.grossRent)} pa`} />
+                        <Kv k="Blended rent" v={`£${R.income.blendedRentPsf.toFixed(2)}/ft²`} />
+                      </div>
+                    </Panel>
+
+                    <Panel title="Capitalisation">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <NumField label="All-risks yield" suffix="%" value={inc.yieldPct} step={0.05} onChange={(v) => setIncome({ yieldPct: v })} />
+                        <NumField label="Purchaser's costs" suffix="%" value={inc.purchaserCostsPct ?? 6.8} step={0.1} onChange={(v) => setIncome({ purchaserCostsPct: v })} />
+                        <NumField label="Non-recoverables" suffix="% of rent" value={inc.nonRecoverablePct} step={0.5} onChange={(v) => setIncome({ nonRecoverablePct: v })} />
+                        <NumField label="Fixed deductions" suffix="£/yr" value={inc.annualDeductions ?? 0} onChange={(v) => setIncome({ annualDeductions: v })} />
+                        <NumField label="Let-up void" suffix="months" value={inc.letUpMonths ?? 0} step={1} onChange={(v) => setIncome({ letUpMonths: v })} />
+                      </div>
+
+                      {/* the valuation ladder — every step the engine takes, in order */}
+                      <div className="mt-4 border-t border-border-std pt-3">
+                        {([
+                          ['Gross rent', R.income.grossRent],
+                          ['Void allowance', -R.income.voidAllowance],
+                          ['Non-recoverables', -R.income.nonRecoverable],
+                          ['Fixed deductions', -R.income.deductions],
+                          ['Net rent (NOI)', R.income.netRent, 'sub'],
+                          [`Years purchase @ ${inc.yieldPct}%`, R.income.grossCapitalValue, 'mult'],
+                          [`Let-up void — ${inc.letUpMonths ?? 0} months`, -R.income.letUpDeduction],
+                          [`Purchaser's costs`, -R.income.purchaserCosts],
+                          ['Investment value in GDV', R.income.netCapitalValue, 'final'],
+                        ] as Array<[string, number, string?]>).map(([label, val, kind]) => (
+                          <div
+                            key={label}
+                            className={`flex justify-between py-[7px] border-t first:border-t-0 ${kind === 'final' || kind === 'sub' ? 'border-border-std' : 'border-border-faint'}`}
+                          >
+                            <span className={kind === 'final' ? 'text-[13px] font-bold text-brand-700' : kind === 'sub' ? 'text-[12.5px] font-semibold' : 'text-[12px] text-ink-2'}>
+                              {label}
+                              {kind === 'mult' && <span className="fig text-ink-3"> · YP {R.income!.yearsPurchase.toFixed(2)}</span>}
+                            </span>
+                            <span
+                              className="fig"
+                              style={{
+                                fontWeight: kind === 'final' ? 700 : kind === 'sub' ? 600 : 500,
+                                fontSize: kind === 'final' ? 14 : 12,
+                                color: kind === 'final' ? '#14503B' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))',
+                              }}
+                            >
+                              {formatSigned(val)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
+                        <Kv k="Net initial yield" v={formatPct(R.income.netInitialYield, 2)} tone="#14503B" />
+                        <Kv k="Capital value" v={`£${Math.round(R.income.capitalValuePsf)}/ft²`} />
+                        <Kv k="Share of GDV" v={formatPct(R.gdv > 0 ? R.investmentValue / R.gdv : 0, 0)} />
+                      </div>
+                      <div className="mt-3 text-[11px] text-ink-3 leading-snug">
+                        Net rent is capitalised in perpetuity at the all-risks yield; the let-up void is taken as a capital
+                        deduction, which is why the net initial yield sits above the capitalisation yield. The lettable area
+                        counts towards GIA, so the held space carries its share of build cost.
+                      </div>
+                    </Panel>
+                  </>
+                ) : (
+                  <Panel title="Investment value">
+                    <EmptyState
+                      title="No held element"
+                      cta={<Button size="sm" onClick={() => set({ income: DEFAULT_INCOME })}>Add a rent roll</Button>}
+                    >
+                      If part of the scheme is retained and let rather than sold on, add a rent roll. The engine capitalises
+                      the net rent at your yield and adds the capital value — net of purchaser's costs — to GDV.
+                    </EmptyState>
+                  </Panel>
+                )
               )}
 
               {tab === 'build' && (

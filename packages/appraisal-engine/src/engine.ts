@@ -6,6 +6,9 @@ import type {
   CashflowRow,
   ComparableInput,
   ComparablesSummary,
+  IncomeInput,
+  IncomeLineResult,
+  IncomeResult,
   JvInput,
   JvResult,
   MonteCarloOptions,
@@ -116,6 +119,69 @@ export function sdltResidential(price: number, opts: { additionalDwelling?: bool
   return sdlt;
 }
 
+/** UK market standard: SDLT 5% + agent + legal, applied to the price a purchaser pays. */
+export const DEFAULT_PURCHASER_COSTS_PCT = 6.8;
+
+/**
+ * Investment method (RICS) — capitalise the net rent of the held element into a
+ * capital value.
+ *
+ *   gross rent − voids − non-recoverables − fixed deductions = net rent (NOI)
+ *   net rent × YP (= 100 / yield) = gross capital value
+ *   less the let-up void, then divided by (1 + purchaser's costs) = net capital value
+ *
+ * The net capital value is what the developer receives — purchaser's costs sit on
+ * top of it, so the costs-inclusive price is what the yield is measured against.
+ * The let-up deduction is the plain undiscounted rent forgone while the space is
+ * being let; it is not a discounted-cashflow term, and it pushes the net initial
+ * yield above the capitalisation yield.
+ */
+export function capitaliseIncome(input: IncomeInput): IncomeResult {
+  const lines: IncomeLineResult[] = input.lines.map((l) => {
+    const totalArea = l.count * l.area;
+    const grossRent = totalArea * l.rentPsf;
+    const voidAllowance = (grossRent * (l.voidPct ?? 0)) / 100;
+    return { label: l.label, count: l.count, area: l.area, totalArea, grossRent, voidAllowance, rentAfterVoid: grossRent - voidAllowance };
+  });
+
+  const totalArea = lines.reduce((a, l) => a + l.totalArea, 0);
+  const grossRent = lines.reduce((a, l) => a + l.grossRent, 0);
+  const voidAllowance = lines.reduce((a, l) => a + l.voidAllowance, 0);
+  const rentAfterVoid = grossRent - voidAllowance;
+  const nonRecoverable = (rentAfterVoid * input.nonRecoverablePct) / 100;
+  const deductions = input.annualDeductions ?? 0;
+  const netRent = rentAfterVoid - nonRecoverable - deductions;
+
+  const y = input.yieldPct;
+  // a non-positive yield does not capitalise — return the rent analysis with a nil value
+  const yearsPurchase = y > 0 ? 100 / y : 0;
+  const grossCapitalValue = netRent * yearsPurchase;
+  const letUpDeduction = (netRent * (input.letUpMonths ?? 0)) / 12;
+  const capitalValueBeforeCosts = grossCapitalValue - letUpDeduction;
+  const pc = input.purchaserCostsPct ?? DEFAULT_PURCHASER_COSTS_PCT;
+  const netCapitalValue = capitalValueBeforeCosts / (1 + pc / 100);
+  const purchaserCosts = capitalValueBeforeCosts - netCapitalValue;
+
+  return {
+    lines,
+    totalArea,
+    grossRent,
+    voidAllowance,
+    nonRecoverable,
+    deductions,
+    netRent,
+    yearsPurchase,
+    grossCapitalValue,
+    letUpDeduction,
+    capitalValueBeforeCosts,
+    purchaserCosts,
+    netCapitalValue,
+    netInitialYield: capitalValueBeforeCosts > 0 ? netRent / capitalValueBeforeCosts : 0,
+    capitalValuePsf: totalArea > 0 ? netCapitalValue / totalArea : 0,
+    blendedRentPsf: totalArea > 0 ? grossRent / totalArea : 0,
+  };
+}
+
 export interface ComputeOpts {
   salesMult?: number;
   buildMult?: number;
@@ -132,8 +198,14 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   const buildMult = opts.buildMult ?? 1;
   const F = input.finance;
 
-  const nia = input.units.reduce((a, u) => a + u.count * u.area, 0);
-  const gdv = input.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult;
+  const salesGdv = input.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult;
+  // held-and-let element valued by the investment method; shocked with sales in
+  // sensitivity/Monte Carlo runs because a value shift moves both exits
+  const income = input.income ? capitaliseIncome(input.income) : undefined;
+  const investmentValue = income ? income.netCapitalValue * salesMult : 0;
+  const gdv = salesGdv + investmentValue;
+  // the let space still has to be built — its lettable area counts towards NIA/GIA
+  const nia = input.units.reduce((a, u) => a + u.count * u.area, 0) + (income?.totalArea ?? 0);
   const eff = input.efficiency / 100 || 1;
   const gia = eff > 0 ? nia / eff : nia;
   const buildRate = input.trades.reduce((a, t) => a + t.rate, 0) * buildMult;
@@ -223,6 +295,9 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     nia,
     gia,
     gdv,
+    salesGdv,
+    investmentValue,
+    ...(income ? { income } : {}),
     buildRate,
     build,
     fees,

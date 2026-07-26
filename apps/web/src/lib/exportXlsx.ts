@@ -136,7 +136,17 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     r.getCell(4).numFmt = FMT_MONEY_PSF;
     for (let c = 2; c <= 5; c++) r.getCell(c).alignment = { horizontal: 'right' };
   });
-  const lastUnit = u.rowCount;
+  let lastUnit = u.rowCount;
+  // a held element contributes its capitalised value, not a £/ft² sale price —
+  // carry it as its own line so the sheet's GDV total still reconciles to the engine
+  if (R.income && R.investmentValue > 0) {
+    const ir = u.addRow(['Capitalised investment value (see Rent roll)', null, Math.round(R.income.totalArea), null, Math.round(R.investmentValue)]);
+    ir.eachCell((c) => body(c));
+    ir.getCell(3).numFmt = FMT_NUM;
+    ir.getCell(5).numFmt = FMT_MONEY;
+    for (let c = 2; c <= 5; c++) ir.getCell(c).alignment = { horizontal: 'right' };
+    lastUnit = u.rowCount;
+  }
   const tr = u.addRow(['Gross development value', null, null, null, null]);
   tr.getCell(5).value = { formula: `SUM(E${firstUnit}:E${lastUnit})` };
   tr.getCell(5).numFmt = FMT_MONEY;
@@ -148,13 +158,87 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   eff.getCell(2).alignment = { horizontal: 'right' };
   u.views = [{ state: 'frozen', ySplit: 5 }];
 
+  // ---- Rent roll & capitalisation (investment method) — only when the scheme holds space ----
+  if (R.income && input.income) {
+    const I = R.income;
+    const rr = wb.addWorksheet('Rent roll', { properties: { tabColor: { argb: 'FF1E7A55' } } });
+    rr.columns = [{ width: 40 }, { width: 9 }, { width: 13 }, { width: 12 }, { width: 10 }, { width: 16 }];
+    titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 6);
+    headerRow(rr, ['Tenancy / space', 'No.', 'Area (sq ft)', 'Rent £/sq ft', 'Void %', 'Rent (£ pa)']);
+    const firstRent = rr.rowCount + 1;
+    input.income.lines.forEach((l, i) => {
+      const r = rr.addRow([l.label, l.count, l.area, l.rentPsf, (l.voidPct ?? 0) / 100, null]);
+      r.eachCell((c) => body(c));
+      const rowN = firstRent + i;
+      r.getCell(6).value = { formula: `B${rowN}*C${rowN}*D${rowN}` };
+      r.getCell(3).numFmt = FMT_NUM;
+      r.getCell(4).numFmt = FMT_MONEY_PSF;
+      r.getCell(5).numFmt = FMT_PCT;
+      r.getCell(6).numFmt = FMT_MONEY;
+      for (let c = 2; c <= 6; c++) r.getCell(c).alignment = { horizontal: 'right' };
+    });
+    const lastRent = rr.rowCount;
+    const grossRow = rr.addRow(['Gross rent', null, Math.round(I.totalArea), null, null, null]);
+    grossRow.getCell(3).numFmt = FMT_NUM;
+    grossRow.getCell(3).alignment = { horizontal: 'right' };
+    grossRow.getCell(6).value = { formula: `SUM(F${firstRent}:F${lastRent})` };
+    grossRow.getCell(6).numFmt = FMT_MONEY;
+    grossRow.getCell(6).alignment = { horizontal: 'right' };
+    totalRow(grossRow, 6);
+    rr.addRow([]);
+
+    // the valuation ladder, in the order the engine applies it
+    headerRow(rr, ['Capitalisation', '', '', '', '', 'Amount']);
+    const ladder: Array<[string, number, boolean?]> = [
+      ['Void allowance', -Math.round(I.voidAllowance)],
+      [`Non-recoverables (${input.income.nonRecoverablePct}% of rent after voids)`, -Math.round(I.nonRecoverable)],
+      ['Fixed deductions (ground rent, service-charge shortfall)', -Math.round(I.deductions)],
+      ['Net rent (NOI)', Math.round(I.netRent), true],
+      [`Gross capital value — YP ${I.yearsPurchase.toFixed(2)} @ ${input.income.yieldPct}%`, Math.round(I.grossCapitalValue), true],
+      [`Let-up void (${input.income.letUpMonths ?? 0} months)`, -Math.round(I.letUpDeduction)],
+      [`Purchaser's costs (${input.income.purchaserCostsPct ?? 6.8}%)`, -Math.round(I.purchaserCosts)],
+    ];
+    ladder.forEach(([label, v, sub]) => {
+      const r = rr.addRow([label, null, null, null, null, v]);
+      body(r.getCell(1));
+      const c = r.getCell(6);
+      c.numFmt = FMT_MONEY;
+      c.font = { name: 'Arial', size: 10, bold: !!sub };
+      c.alignment = { horizontal: 'right' };
+      c.border = { bottom: thin };
+      if (sub) r.getCell(1).font = { name: 'Arial', size: 10, bold: true };
+    });
+    const ncv = rr.addRow(['Investment value in GDV (net of purchaser costs)', null, null, null, null, Math.round(I.netCapitalValue)]);
+    ncv.getCell(6).numFmt = FMT_MONEY;
+    ncv.getCell(6).alignment = { horizontal: 'right' };
+    totalRow(ncv, 6);
+    rr.addRow([]);
+    const niy = rr.addRow(['Net initial yield', null, null, null, null, I.netInitialYield]);
+    niy.getCell(6).numFmt = FMT_PCT;
+    niy.getCell(6).alignment = { horizontal: 'right' };
+    body(niy.getCell(1));
+    const cvp = rr.addRow(['Capital value £/sq ft', null, null, null, null, I.capitalValuePsf]);
+    cvp.getCell(6).numFmt = FMT_MONEY_PSF;
+    cvp.getCell(6).alignment = { horizontal: 'right' };
+    body(cvp.getCell(1));
+    const rrNote = rr.addRow(['Net rent is capitalised in perpetuity at the all-risks yield. The let-up void is a capital deduction, so the net initial yield sits above the capitalisation yield. Lettable area is included in GIA and carries its share of build cost.']);
+    rrNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+    rrNote.getCell(1).alignment = { wrapText: true };
+    rr.views = [{ state: 'frozen', ySplit: 5 }];
+    rr.pageSetup = { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  }
+
   // ---- Residual appraisal ----
   const ra = wb.addWorksheet('Residual appraisal', { properties: { tabColor: { argb: BRAND } } });
   ra.columns = [{ width: 42 }, { width: 18 }];
   titleBlock(ra, dealName, address, isResidual ? 'Residual land value at target profit' : 'Profit at fixed land price', 2);
   headerRow(ra, ['Line', 'Amount']);
+  const gdvLabel =
+    R.investmentValue > 0
+      ? `Gross development value (£${Math.round(R.salesGdv).toLocaleString('en-GB')} sold + £${Math.round(R.investmentValue).toLocaleString('en-GB')} capitalised)`
+      : 'Gross development value';
   const lines: Array<[string, number]> = [
-    ['Gross development value', Math.round(R.gdv)],
+    [gdvLabel, Math.round(R.gdv)],
     ['Disposal costs (agent + legal)', -Math.round(R.saleCosts)],
     [`Construction (£${Math.round(R.buildRate)}/sq ft on GIA)`, -Math.round(R.build)],
     [`Professional fees (${input.profFeePct}%)`, -Math.round(R.fees)],

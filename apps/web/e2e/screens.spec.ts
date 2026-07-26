@@ -251,3 +251,56 @@ test('theme toggle switches to dark mode and persists', async ({ page }) => {
     .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
     .toBe('rgb(243, 244, 241)');
 });
+
+/**
+ * Investment method — Kingsway is seeded with a mixed exit (one pod sold, the
+ * parade held and let), so the appraisal must show the capitalisation ladder and
+ * fold the capitalised value into GDV.
+ */
+test('appraisal capitalises a rent roll into GDV', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Investment', exact: true }).click();
+
+  // rent roll totals — 6 × 1,650 ft² + 3 × 900 ft² = 12,600 ft² at £213,300 pa gross
+  await expect(page.getByLabel('Tenancy 1 label')).toHaveValue('Retail units (ground floor)');
+  await expect(page.getByText('12,600 ft²')).toBeVisible();
+  await expect(page.getByText('£213,300 pa')).toBeVisible();
+
+  // the ladder ends at the capitalised value that enters GDV
+  await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
+  await expect(page.getByText('£2,374,783').first()).toBeVisible();
+  // the let-up void pushes the net initial yield above the 7.25% capitalisation yield
+  await expect(page.getByText('7.52%')).toBeVisible();
+
+  // and the right-rail residual breakdown states the GDV composition
+  await expect(page.getByText('— capitalised investment value')).toBeVisible();
+  await expect(page.getByText('— units sold')).toBeVisible();
+
+  // live engine: a sharper yield capitalises the same rent into a bigger number
+  await page.getByLabel('All-risks yield (%)').fill('6');
+  await expect(page.getByText('£2,888,139').first()).toBeVisible();
+});
+
+test('appraisal without a held element offers to add a rent roll', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Investment', exact: true }).click();
+  await expect(page.getByText('No held element')).toBeVisible();
+  await page.getByRole('button', { name: 'Add a rent roll' }).click();
+  await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
+});

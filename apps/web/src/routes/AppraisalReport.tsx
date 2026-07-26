@@ -230,6 +230,17 @@ export default function AppraisalReport() {
   type BreakRow = { label: string; note?: string; val: string; kind?: 'head' | 'sub' | 'final' };
   const breakRows: BreakRow[] = [
     { label: 'Gross development value', val: formatMoneyFull(R.gdv), kind: 'head' },
+    // a held element is valued by the investment method — show the composition, never a bare total
+    ...(R.investmentValue > 0 && R.income
+      ? ([
+          { label: 'Units sold', val: formatMoneyFull(R.salesGdv) },
+          {
+            label: 'Capitalised investment value',
+            note: `${formatMoneyFull(R.income.netRent)} pa @ ${input.income?.yieldPct}%`,
+            val: formatMoneyFull(R.investmentValue),
+          },
+        ] as BreakRow[])
+      : []),
     { label: 'Less: sale & letting costs', note: formatPct(disposalPct / 100), val: `(${formatMoneyFull(R.saleCosts)})` },
     { label: 'Net development value', val: formatMoneyFull(R.gdv - R.saleCosts), kind: 'sub' },
     { label: 'Construction cost', note: `£${Math.round(R.buildRate)}/ft²`, val: `(${formatMoneyFull(R.build)})` },

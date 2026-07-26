@@ -232,8 +232,15 @@ export default function RedBookReport() {
   const mv = round1k(R.gdv); // Market Value — appraisal GDV, reported to the nearest £1,000
   const compApproach = hasComps && nia > 0 ? round1k(summary.supportedPsf * nia) : mv;
   const drcApproach = round1k(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
-  const rentPcm = Math.round((mv * 0.042) / 12 / 25) * 25; // 4.2% net yield basis (investment cross-check)
-  const invApproach = round1k((rentPcm * 12) / 0.042);
+  // Investment cross-check. With a real rent roll the analysed net rate and the
+  // valuer's own yield drive it; without one it falls back to the 4.2% net-yield
+  // convention applied to the reported Market Value.
+  const inv = R.income;
+  const invYieldPct = input.income?.yieldPct ?? 4.2;
+  const rentPcm = inv && inv.totalArea > 0
+    ? Math.round((inv.netRent / inv.totalArea) * nia / 12 / 25) * 25
+    : Math.round((mv * 0.042) / 12 / 25) * 25;
+  const invApproach = round1k(((rentPcm * 12) / (invYieldPct / 100)) / (1 + (input.income?.purchaserCostsPct ?? 0) / 100));
   const reinstatement = Math.round((R.build + R.fees) / 5000) * 5000;
   const range = hasComps && nia > 0
     ? { lo: round1k(summary.range.lo * nia), hi: round1k(summary.range.hi * nia) }
@@ -266,7 +273,13 @@ export default function RedBookReport() {
   const approaches = [
     { name: 'Comparable', value: compApproach, note: hasComps ? `${comps.length} adjusted comparable${comps.length === 1 ? '' : 's'}` : 'No comparables logged', weight: 70, dot: brand[700] },
     { name: 'DRC', value: drcApproach, note: 'Land + depreciated build', weight: 20, dot: brand[400] },
-    { name: 'Investment', value: invApproach, note: 'Net rent × YP (4.2%)', weight: 10, dot: neutral.ink3 },
+    {
+      name: 'Investment',
+      value: invApproach,
+      note: inv ? `Rent roll ${formatMoneyFull(inv.netRent)} pa net @ ${invYieldPct}%` : 'Net rent × YP (4.2%)',
+      weight: 10,
+      dot: neutral.ink3,
+    },
   ];
 
   return (

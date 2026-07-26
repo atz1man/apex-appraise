@@ -121,6 +121,7 @@ model Appraisal {
   planningRisk Int?
   startYear  Int?
   startMonth Int?
+  income     String? // JSON IncomeInput — held-and-let element valued by the investment method (rent in £/ft²/yr)
   resultCache String?
   narrative  String? // JSON {marketCommentary, valuationRationale, riskCommentary, generatedAt, model}
   createdAt  DateTime @default(now())

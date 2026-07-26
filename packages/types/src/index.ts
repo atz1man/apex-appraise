@@ -57,6 +57,25 @@ export const zAppraisalUnit = z.object({
   source: z.string().optional(),
 });
 
+/** Investment method — the held-and-let element of the scheme (rents in £/ft²/yr). */
+export const zIncomeInput = z.object({
+  lines: z.array(
+    z.object({
+      label: z.string(),
+      count: z.number().min(0),
+      area: z.number().min(0),
+      rentPsf: z.number().min(0),
+      voidPct: z.number().min(0).max(100).optional(),
+    }),
+  ),
+  nonRecoverablePct: z.number().min(0).max(100),
+  annualDeductions: z.number().min(0).optional(),
+  yieldPct: z.number().min(0).max(30),
+  purchaserCostsPct: z.number().min(0).max(20).optional(),
+  letUpMonths: z.number().min(0).max(60).optional(),
+});
+export type IncomeInputDto = z.infer<typeof zIncomeInput>;
+
 export const zAppraisalInput = z.object({
   units: z.array(zAppraisalUnit),
   efficiency: z.number().positive().max(120),
@@ -87,6 +106,7 @@ export const zAppraisalInput = z.object({
       promotePct: z.number().min(0).max(60),
     })
     .optional(),
+  income: zIncomeInput.optional(),
   startYear: z.number().int().min(2000).max(2100).optional(),
   startMonth: z.number().int().min(0).max(11).optional(),
 });
