@@ -457,3 +457,59 @@ test('cashflow rolls up to quarters and years, and honours cost timing', async (
   await expect(timingRow.getByLabel('Start month')).toHaveValue('13');
   await expect(timingRow.getByLabel('Months')).toHaveValue('4');
 });
+
+/**
+ * Multi-phase schemes — Harbour Reach is seeded as two overlapping blocks, so
+ * phase A sells while phase B is still on site.
+ */
+test('phased scheme shows its programme and reports sane returns', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+
+  // returns must be positive: a phase selling before the last one completes used
+  // to drop those receipts from the IRR series and report a negative return
+  // labels are uppercased by CSS, so match the DOM text and read the card's value
+  const irrCard = page.getByText('Project IRR', { exact: true }).locator('..');
+  await expect(irrCard).toBeVisible();
+  await expect(irrCard).not.toContainText('−'); // true minus: a negative IRR
+  await expect(irrCard).not.toContainText('N/A');
+
+  await page.getByRole('button', { name: 'Phases', exact: true }).click();
+  // 'Programme' is also a Kv label and the tasks-panel aspect — scope to the heading
+  await expect(page.getByRole('heading', { name: 'Programme', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Phase 1 name')).toHaveValue('Phase A — quayside block');
+  await expect(page.getByLabel('Phase 2 name')).toHaveValue('Phase B — courtyard block');
+  await expect(page.getByText(/Phases share one facility/)).toBeVisible();
+  // phase A completes in month 14 and sells over 6
+  await expect(page.getByLabel('Starts month').first()).toHaveValue('1');
+  await expect(page.getByLabel('Build (months)').first()).toHaveValue('14');
+
+  // and the revenue tab admits it is no longer the source of truth
+  await page.getByRole('button', { name: 'Revenue', exact: true }).click();
+  await expect(page.getByText(/This scheme is phased/)).toBeVisible();
+});
+
+test('an unphased scheme offers to split into phases', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Phases', exact: true }).click();
+  await expect(page.getByText('Single-phase scheme')).toBeVisible();
+  await page.getByRole('button', { name: 'Split into phases' }).click();
+  // the existing accommodation moves onto phase 1 rather than being retyped
+  await expect(page.getByLabel('Phase 1 name')).toHaveValue('Phase 1');
+  await expect(page.getByLabel('Phase 1 unit 1 label')).toHaveValue('Trade counter units');
+});

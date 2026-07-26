@@ -158,6 +158,47 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   eff.getCell(2).alignment = { horizontal: 'right' };
   u.views = [{ state: 'frozen', ySplit: 5 }];
 
+  // ---- Phases — programme and per-phase value, only when the scheme is phased ----
+  if (R.phases?.length) {
+    const ph = wb.addWorksheet('Phases', { properties: { tabColor: { argb: 'FF3C7FB5' } } });
+    ph.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 11 }, { width: 13 }, { width: 16 }, { width: 16 }];
+    titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 8);
+    headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', 'NIA (sq ft)', 'Construction', 'GDV']);
+    const firstPhase = ph.rowCount + 1;
+    R.phases.forEach((p) => {
+      const r = ph.addRow([
+        p.name,
+        monthLabel(p.start),
+        p.buildMonths,
+        p.salesMonths,
+        p.unitCount,
+        Math.round(p.nia),
+        Math.round(p.cost),
+        Math.round(p.gdv),
+      ]);
+      r.eachCell((c) => body(c));
+      r.getCell(6).numFmt = FMT_NUM;
+      r.getCell(7).numFmt = FMT_MONEY;
+      r.getCell(8).numFmt = FMT_MONEY;
+      for (let c = 2; c <= 8; c++) r.getCell(c).alignment = { horizontal: 'right' };
+    });
+    const lastPhase = ph.rowCount;
+    const pt = ph.addRow(['Total', null, null, null, null, null, null, null]);
+    pt.getCell(7).value = { formula: `SUM(G${firstPhase}:G${lastPhase})` };
+    pt.getCell(8).value = { formula: `SUM(H${firstPhase}:H${lastPhase})` };
+    for (const c of [7, 8]) {
+      pt.getCell(c).numFmt = FMT_MONEY;
+      pt.getCell(c).alignment = { horizontal: 'right' };
+    }
+    totalRow(pt, 8);
+    ph.addRow([]);
+    const note = ph.addRow([
+      `Phases share one facility: peak debt ${Math.round(R.facility).toLocaleString('en-GB')} against a ${R.period + R.salesMonths}-month programme. Receipts from a completed phase repay the facility while a later phase is still drawing.`,
+    ]);
+    note.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+    ph.views = [{ state: 'frozen', ySplit: 5 }];
+  }
+
   // ---- Rent roll & capitalisation (investment method) — only when the scheme holds space ----
   if (R.income && input.income) {
     const I = R.income;

@@ -83,8 +83,19 @@ export const zCostTiming = z.object({
   profile: z.enum(['scurve', 'even', 'linear', 'front', 'back']).optional(),
 });
 
+/** A phase of a phased scheme — its own accommodation and its own programme. */
+export const zPhase = z.object({
+  name: z.string().max(80),
+  start: z.number().min(1).max(240),
+  buildMonths: z.number().min(1).max(60),
+  salesMonths: z.number().min(1).max(24),
+  absorptionUnitsPerMonth: z.number().positive().max(500).optional(),
+  units: z.array(zAppraisalUnit),
+});
+
 export const zAppraisalInput = z.object({
   units: z.array(zAppraisalUnit),
+  phases: z.array(zPhase).max(12).optional(),
   efficiency: z.number().positive().max(120),
   trades: z.array(z.object({ label: z.string(), rate: z.number(), timing: zCostTiming.optional() })),
   profFeePct: z.number().min(0).max(50),

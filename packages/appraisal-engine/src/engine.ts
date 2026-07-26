@@ -199,14 +199,19 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   const buildMult = opts.buildMult ?? 1;
   const F = input.finance;
 
-  const salesGdv = input.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult;
+  // A phased scheme's accommodation lives on the phases; the flat units array is
+  // the single-phase form of the same thing.
+  const phased = input.phases && input.phases.length > 0 ? input.phases : null;
+  const allUnits = phased ? phased.flatMap((p) => p.units) : input.units;
+
+  const salesGdv = allUnits.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult;
   // held-and-let element valued by the investment method; shocked with sales in
   // sensitivity/Monte Carlo runs because a value shift moves both exits
   const income = input.income ? capitaliseIncome(input.income) : undefined;
   const investmentValue = income ? income.netCapitalValue * salesMult : 0;
   const gdv = salesGdv + investmentValue;
   // the let space still has to be built — its lettable area counts towards NIA/GIA
-  const nia = input.units.reduce((a, u) => a + u.count * u.area, 0) + (income?.totalArea ?? 0);
+  const nia = allUnits.reduce((a, u) => a + u.count * u.area, 0) + (income?.totalArea ?? 0);
   const eff = input.efficiency / 100 || 1;
   const gia = eff > 0 ? nia / eff : nia;
   const buildRate = input.trades.reduce((a, t) => a + t.rate, 0) * buildMult;
@@ -217,25 +222,63 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   const saleCosts = (gdv * (input.disposal.agentPct + input.disposal.legalPct)) / 100;
 
   // ---- monthly drawdown with rolled-up interest ----
-  const P = clamp(Math.round(F.periodMonths) || 12, 4, 22);
-  // sales period: absorption-derived (units actually selling) or the classic even spread
-  const totalUnitCount = input.units.reduce((a, u) => a + u.count, 0);
-  const absorption = F.absorptionUnitsPerMonth;
-  let sM: number;
-  let revShare: number[]; // fraction of net sales revenue arriving in each sales month
-  if (absorption && absorption > 0 && totalUnitCount > 0) {
-    sM = clamp(Math.ceil(totalUnitCount / absorption), 1, 24);
-    revShare = [];
-    let remaining = totalUnitCount;
-    for (let k = 0; k < sM; k++) {
-      const sold = Math.min(absorption, remaining);
-      remaining -= sold;
-      revShare.push(sold / totalUnitCount);
+  /** how many months a unit count takes to sell, and the share arriving each month */
+  const absorptionShare = (unitCount: number, perMonth: number | undefined, fallbackMonths: number, cap: number) => {
+    if (perMonth && perMonth > 0 && unitCount > 0) {
+      const months = clamp(Math.ceil(unitCount / perMonth), 1, 24);
+      const share: number[] = [];
+      let remaining = unitCount;
+      for (let k = 0; k < months; k++) {
+        const sold = Math.min(perMonth, remaining);
+        remaining -= sold;
+        share.push(sold / unitCount);
+      }
+      return { months, share };
     }
-  } else {
-    sM = clamp(Math.round(F.salesMonths) || 1, 1, 8);
-    revShare = new Array<number>(sM).fill(1 / sM);
-  }
+    const months = clamp(Math.round(fallbackMonths) || 1, 1, cap);
+    return { months, share: new Array<number>(months).fill(1 / months) };
+  };
+
+  // Phase programme — each phase builds, completes, then sells on its own clock.
+  const phaseCalc = phased
+    ? phased.map((p) => {
+        const pNia = p.units.reduce((a, u) => a + u.count * u.area, 0);
+        const pGia = eff > 0 ? pNia / eff : pNia;
+        const unitCount = p.units.reduce((a, u) => a + u.count, 0);
+        const start = clamp(Math.round(p.start) || 1, 1, 240);
+        const buildMonths = clamp(Math.round(p.buildMonths) || 12, 1, 60);
+        const { months: salesMonths, share } = absorptionShare(unitCount, p.absorptionUnitsPerMonth, p.salesMonths, 24);
+        const pBuild = buildRate * pGia;
+        return {
+          name: p.name,
+          start,
+          buildMonths,
+          salesMonths,
+          practicalCompletion: start + buildMonths - 1,
+          end: start + buildMonths + salesMonths - 1,
+          nia: pNia,
+          gia: pGia,
+          gdv: p.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult,
+          cost: pBuild * (1 + (input.profFeePct + input.contingencyPct) / 100),
+          unitCount,
+          share,
+        };
+      })
+    : null;
+
+  // P is the last month anything is under construction; sM is what follows it.
+  const P = phaseCalc
+    ? Math.max(...phaseCalc.map((p) => p.practicalCompletion))
+    : clamp(Math.round(F.periodMonths) || 12, 4, 22);
+  const totalUnitCount = allUnits.reduce((a, u) => a + u.count, 0);
+  const { months: schemeSalesMonths, share: schemeShare } = absorptionShare(
+    totalUnitCount,
+    F.absorptionUnitsPerMonth,
+    F.salesMonths,
+    8,
+  );
+  const sM = phaseCalc ? Math.max(...phaseCalc.map((p) => p.end)) - P : schemeSalesMonths;
+  const revShare = schemeShare; // fraction of net sales revenue arriving in each sales month
   const constructionTotal = build + fees + cont + otherTotal;
   const totalMonths = P + sM;
   const profile = F.spendProfile ?? 'scurve';
@@ -245,7 +288,30 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   // build, so the aggregate spread is exactly today's arithmetic — kept literally
   // identical rather than re-derived, because the golden fixture is penny-locked.
   const timed = input.trades.some((t) => t.timing) || input.otherCosts.some((o) => o.timing);
-  if (!timed) {
+  if (phaseCalc) {
+    // Each phase's construction falls across its own build window. The held
+    // element (if any) is not part of a phase, so its build spreads across the
+    // whole envelope; other costs are scheme-level and use their own timing.
+    const spreadPhase = (amount: number, start: number, months: number) => {
+      const w = buildSpendProfile(months, profile);
+      for (let i = 0; i < months; i++) {
+        const m = start + i;
+        if (m >= 1 && m <= totalMonths) constrSeries[m] += amount * w[i];
+      }
+    };
+    for (const p of phaseCalc) spreadPhase(p.cost, p.start, p.buildMonths);
+    const phasedGia = phaseCalc.reduce((a, p) => a + p.gia, 0);
+    const unphasedGia = gia - phasedGia; // the held element's floor area
+    if (unphasedGia > 0.0001) {
+      spreadPhase(buildRate * unphasedGia * (1 + (input.profFeePct + input.contingencyPct) / 100), 1, P);
+    }
+    for (const o of input.otherCosts) {
+      const start = clamp(Math.round(o.timing?.start ?? 1), 1, totalMonths);
+      const months = clamp(Math.round(o.timing?.months ?? P), 1, totalMonths - start + 1);
+      const w = buildSpendProfile(months, o.timing?.profile ?? profile);
+      for (let i = 0; i < months; i++) constrSeries[start + i] += o.amount * w[i];
+    }
+  } else if (!timed) {
     for (let i = 0; i < P; i++) constrSeries[i + 1] = constructionTotal * incs[i];
   } else {
     // Per-line: trades carry build, fees and contingency pro rata (both are a
@@ -272,7 +338,26 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   let drawn = 0;
   const saleNet = gdv - saleCosts;
   const revSeries = new Array<number>(totalMonths + 1).fill(0);
-  for (let m = P + 1; m <= totalMonths; m++) revSeries[m] = saleNet * revShare[m - P - 1];
+  const disposalRate = (input.disposal.agentPct + input.disposal.legalPct) / 100;
+  if (phaseCalc) {
+    // Each phase sells as it completes — that is what makes phasing pay: early
+    // receipts repay the facility while a later phase is still drawing on it.
+    for (const p of phaseCalc) {
+      const net = p.gdv * (1 - disposalRate);
+      for (let i = 0; i < p.salesMonths; i++) {
+        const m = p.practicalCompletion + 1 + i;
+        if (m <= totalMonths) revSeries[m] += net * p.share[i];
+      }
+    }
+    // the capitalised investment element is realised once everything is complete
+    if (investmentValue > 0) {
+      const net = investmentValue * (1 - disposalRate);
+      const window = totalMonths - P;
+      for (let i = 0; i < window; i++) revSeries[P + 1 + i] += net / window;
+    }
+  } else {
+    for (let m = P + 1; m <= totalMonths; m++) revSeries[m] = saleNet * revShare[m - P - 1];
+  }
   // One pass over the whole programme: interest on the drawn balance, then the
   // month's spend, then whatever revenue arrives repays. Costs timed past
   // practical completion draw on the facility like any other — the old split
@@ -323,6 +408,11 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     salesGdv,
     investmentValue,
     ...(income ? { income } : {}),
+    ...(phaseCalc
+      ? {
+          phases: phaseCalc.map(({ share: _share, ...p }) => p),
+        }
+      : {}),
     buildRate,
     build,
     fees,
@@ -359,18 +449,21 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
       cum += net;
       rows.push({ m, cost: costTot, intr, rev, net, cum });
     }
+    // IRR series walk every month and net spend against receipts in that month.
+    // Splitting them at practical completion assumed all costs precede all
+    // revenue — untrue once a phase sells while another builds, or a cost is
+    // timed past PC, and it silently dropped those flows from the IRR.
     const cfU = new Array<number>(totalMonths + 1).fill(0);
     cfU[0] = -landGross;
-    for (let m = 1; m <= P; m++) cfU[m] = -constrSeries[m];
-    for (let m = P + 1; m <= totalMonths; m++) cfU[m] = revSeries[m];
+    for (let m = 1; m <= totalMonths; m++) cfU[m] = revSeries[m] - constrSeries[m];
     const cfE = new Array<number>(totalMonths + 1).fill(0);
     cfE[0] = -landGross;
-    for (let m = 1; m <= P; m++) cfE[m] = -constrSeries[m] * (1 - ltcF);
     let debtOut = drawn + totalInterest;
-    for (let m = P + 1; m <= totalMonths; m++) {
+    for (let m = 1; m <= totalMonths; m++) {
+      cfE[m] -= constrSeries[m] * (1 - ltcF); // equity funds the unfinanced share
       const repay = Math.min(revSeries[m], debtOut);
       debtOut -= repay;
-      cfE[m] += revSeries[m] - repay;
+      cfE[m] += revSeries[m] - repay; // receipts service the facility first
     }
     out.cash = {
       rows,

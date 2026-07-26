@@ -94,6 +94,60 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     },
   });
 
+  // ---- Harbour Reach appraisal — PHASED: block A completes and sells while
+  // block B is still on site, so its receipts hold peak debt down ----
+  await prisma.appraisal.create({
+    data: {
+      orgId: org.id, dealId: harbourReach, isCurrent: true, label: 'Base', source: 'manual',
+      efficiency: 82,
+      units: JSON.stringify([]),
+      phases: JSON.stringify([
+        {
+          name: 'Phase A — quayside block',
+          start: 1,
+          buildMonths: 14,
+          salesMonths: 6,
+          absorptionUnitsPerMonth: 4,
+          units: [
+            { label: '1-bed apartments', count: 8, area: 560, cap: 520, conf: 'high', source: 'Agent evidence' },
+            { label: '2-bed apartments', count: 12, area: 790, cap: 495, conf: 'high', source: 'Agent evidence' },
+          ],
+        },
+        {
+          name: 'Phase B — courtyard block',
+          start: 12,
+          buildMonths: 15,
+          salesMonths: 8,
+          absorptionUnitsPerMonth: 3,
+          units: [
+            { label: '2-bed apartments', count: 13, area: 800, cap: 500, conf: 'med', source: 'Agent evidence' },
+            { label: '3-bed duplexes', count: 5, area: 1150, cap: 470, conf: 'med', source: 'Agent evidence' },
+          ],
+        },
+      ]),
+      trades: JSON.stringify([
+        { label: 'Groundworks & substructure', rate: 24 },
+        { label: 'Frame & superstructure', rate: 46 },
+        { label: 'Envelope — roof & cladding', rate: 33 },
+        { label: 'M&E services', rate: 28 },
+        { label: 'Internal fit-out', rate: 31 },
+        { label: 'Externals & landscaping', rate: 8 },
+      ]),
+      otherCosts: JSON.stringify([
+        { label: 'Planning & S106', amount: 42000000, timing: { start: 1, months: 1 } },
+        { label: 'Quayside remediation', amount: 18000000, timing: { start: 1, months: 4 } },
+        { label: 'Marketing suite & agency', amount: 9500000, timing: { start: 12, months: 12 } },
+      ]),
+      profFeePct: 12, contingencyPct: 5,
+      ltcPct: 60, ratePct: 7.25, periodMonths: 26, salesMonths: 8, arrangementFeePct: 1.5,
+      drawFactorPct: 55, spendProfile: 'SCURVE',
+      siteMode: 'RESIDUAL', landFixed: p(0), acqPct: 6.8, agentPct: 1.5, legalPct: 0.5,
+      targetProfitOnGdvPct: 19, jvGpCoinvestPct: 10, jvPrefPct: 8, jvPromotePct: 20,
+      planningStatus: 'Reserved matters approved — ref 9/25/0188',
+      startYear: 2026, startMonth: 1,
+    },
+  });
+
   // ---- Terms of engagement (VPS 1) — accepted, so the Red Book can cite them ----
   await prisma.engagementTerms.create({
     data: {

@@ -343,3 +343,164 @@ describe('rollUpCashflow', () => {
     expect(m[7].cum).toBeCloseTo(rows[7].cum, 10);
   });
 });
+
+// ---- Multi-phase schemes: one facility, several programmes ----
+const twoPhaseUnits = [
+  { label: 'Phase 1 houses', count: 12, area: 900, cap: 380 },
+  { label: 'Phase 2 houses', count: 12, area: 900, cap: 380 },
+];
+const phasedBase: AppraisalInput = {
+  ...base,
+  units: [],
+  finance: { ...base.finance, periodMonths: 10, salesMonths: 3, spendProfile: 'even' },
+};
+const phaseOf = (name: string, start: number, units: typeof twoPhaseUnits) => ({
+  name,
+  start,
+  buildMonths: 10,
+  salesMonths: 3,
+  units,
+});
+
+describe('multi-phase schemes', () => {
+  it('is inert when the scheme is not phased', () => {
+    expect(computeAppraisal(base).phases).toBeUndefined();
+  });
+
+  it('phases carry the accommodation — the flat units array is ignored', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      units: [{ label: 'Ignored', count: 99, area: 5000, cap: 999 }],
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+    });
+    expect(R.phases).toHaveLength(2);
+    expect(R.gdv).toBeCloseTo(24 * 900 * 380, 6); // both phases, not the decoy units
+    expect(R.nia).toBeCloseTo(24 * 900, 6);
+    expect(R.phases!.reduce((a, p) => a + p.gdv, 0)).toBeCloseTo(R.salesGdv, 6);
+    expect(R.phases!.reduce((a, p) => a + p.nia, 0)).toBeCloseTo(R.nia, 6);
+    expect(R.phases!.reduce((a, p) => a + p.cost, 0)).toBeCloseTo(R.build + R.fees + R.cont, 6);
+  });
+
+  it('derives the programme envelope from the phases', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+    }, { withCash: true });
+    const [p1, p2] = R.phases!;
+    expect(p1).toMatchObject({ start: 1, practicalCompletion: 10, end: 13 });
+    expect(p2).toMatchObject({ start: 8, practicalCompletion: 17, end: 20 });
+    expect(R.period).toBe(17); // last month anything is on site
+    expect(R.salesMonths).toBe(3); // what runs on after it
+    expect(R.cash!.rows).toHaveLength(20);
+  });
+
+  it('each phase sells as it completes, not all at the end', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+    }, { withCash: true });
+    const rows = R.cash!.rows;
+    const revenueMonths = rows.filter((r) => r.rev > 0).map((r) => r.m);
+    expect(revenueMonths).toEqual([11, 12, 13, 18, 19, 20]); // phase 1 sells while phase 2 builds
+    // and the receipts still add up to net sales value
+    expect(rows.reduce((a, r) => a + r.rev, 0)).toBeCloseTo(R.gdv - R.saleCosts, 6);
+  });
+
+  it('overlapping phases stack their spend in the overlap months', () => {
+    // no scheme-level other costs here: they spread across the whole envelope and
+    // would sit in both months, so doubling the solo month would double-count them
+    const overlap = computeAppraisal({
+      ...phasedBase,
+      otherCosts: [],
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+    }, { withCash: true });
+    const rows = overlap.cash!.rows;
+    const solo = rows[6].cost; // month 7 — phase 1 only
+    const both = rows[8].cost; // month 9 — both phases on site
+    expect(both).toBeCloseTo(solo * 2, 6);
+  });
+
+  it('sequential phasing holds peak debt below building everything at once', () => {
+    const together = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 1, [twoPhaseUnits[1]])],
+    });
+    const sequential = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 14, [twoPhaseUnits[1]])],
+    });
+    // the whole point of phasing: phase 1 receipts repay before phase 2 draws
+    expect(sequential.facility).toBeLessThan(together.facility);
+    expect(sequential.facility).toBeLessThan(together.facility * 0.75);
+    // it takes longer, so the equity is out for more months
+    expect(sequential.holdYears).toBeGreaterThan(together.holdYears);
+  });
+
+  it('honours per-phase absorption', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [
+        { ...phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), absorptionUnitsPerMonth: 4 },
+        phaseOf('Phase 2', 8, [twoPhaseUnits[1]]),
+      ],
+    }, { withCash: true });
+    // 12 units at 4/month = 3 months, so phase 1 still ends at month 13
+    expect(R.phases![0].salesMonths).toBe(3);
+    const R2 = computeAppraisal({
+      ...phasedBase,
+      phases: [
+        { ...phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), absorptionUnitsPerMonth: 2 },
+        phaseOf('Phase 2', 8, [twoPhaseUnits[1]]),
+      ],
+    });
+    expect(R2.phases![0].salesMonths).toBe(6); // 12 units at 2/month
+    expect(R2.phases![0].end).toBe(16);
+  });
+
+  it('still builds and realises a held element alongside the phases', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+      income: shed,
+    }, { withCash: true });
+    // the let space adds area, and therefore build cost, on top of the phases
+    expect(R.nia).toBeCloseTo(24 * 900 + 10_000, 6);
+    expect(R.build).toBeCloseTo(R.buildRate * R.gia, 6);
+    expect(R.phases!.reduce((a, p) => a + p.gia, 0)).toBeLessThan(R.gia);
+    // and its capital receipt lands after the last phase completes
+    const rows = R.cash!.rows;
+    expect(rows.reduce((a, r) => a + r.rev, 0)).toBeCloseTo(R.gdv - R.saleCosts, 6);
+    expect(R.gdv).toBeCloseTo(R.salesGdv + R.investmentValue, 6);
+  });
+});
+
+describe('IRR series across a phased or late-spending programme', () => {
+  it('counts receipts that arrive before the last phase completes', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 14, [twoPhaseUnits[1]])],
+    }, { withCash: true });
+    // phase 1 sells in months 11-13 while phase 2 is still on site; a profitable
+    // scheme must not report a negative IRR because those receipts were dropped
+    expect(R.poc).toBeGreaterThan(0.1);
+    expect(R.cash!.projIrr).toBeGreaterThan(0);
+    // (no ordering assertion between the two: receipts service the facility
+    // before equity, so a levered IRR below the unlevered one is legitimate)
+    expect(R.cash!.eqIrr).toBeGreaterThan(0);
+  });
+
+  it('counts spend that falls after practical completion', () => {
+    const R = computeAppraisal(
+      { ...timedBase, otherCosts: [{ label: 'Marketing', amount: 120_000, timing: { start: 14, months: 2 } }] },
+      { withCash: true },
+    );
+    // the unlevered series must include the post-PC spend, so it is strictly
+    // worse than the same scheme with that cost inside the build window
+    const early = computeAppraisal(
+      { ...timedBase, otherCosts: [{ label: 'Marketing', amount: 120_000, timing: { start: 1, months: 2 } }] },
+      { withCash: true },
+    );
+    expect(R.cash!.projIrr).not.toBeNull();
+    expect(R.cash!.projIrr!).toBeGreaterThan(early.cash!.projIrr!);
+  });
+});

@@ -12,6 +12,7 @@ import {
   type CostTiming,
   type IncomeInput,
   type Periodicity,
+  type Phase,
 } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -24,6 +25,7 @@ import { DealNav } from '../components/DealNav';
 const TABS: Array<[string, string]> = [
   ['general', 'General'],
   ['revenue', 'Revenue'],
+  ['phases', 'Phases'],
   ['income', 'Investment'],
   ['build', 'Build'],
   ['other', 'Other Costs'],
@@ -34,7 +36,7 @@ const TABS: Array<[string, string]> = [
 ];
 
 const ASPECT: Record<string, string> = {
-  general: 'Site visit', revenue: 'Comparables', income: 'Letting', build: 'Cost plan', other: 'Planning',
+  general: 'Site visit', revenue: 'Comparables', phases: 'Programme', income: 'Letting', build: 'Cost plan', other: 'Planning',
   finance: 'Finance', site: 'Site purchase', cashflow: 'Cashflow', returns: 'Returns',
 };
 
@@ -259,6 +261,23 @@ export default function DevelopmentAppraisal() {
   const setLine = (i: number, patch: Partial<IncomeInput['lines'][number]>) =>
     setIncome({ lines: (inc?.lines ?? []).map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
+  // ---- phases: the programme owns the accommodation once it exists ----
+  const phases = input.phases;
+  const setPhases = (next: Phase[] | undefined) => set({ phases: next?.length ? next : undefined });
+  const setPhase = (i: number, patch: Partial<Phase>) =>
+    setPhases((phases ?? []).map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const addPhase = () =>
+    setPhases([
+      ...(phases ?? []),
+      {
+        name: `Phase ${(phases?.length ?? 0) + 1}`,
+        start: (R.phases?.[R.phases.length - 1]?.practicalCompletion ?? 0) + 1 || 1,
+        buildMonths: 12,
+        salesMonths: 3,
+        units: [{ label: 'New unit type', count: 10, area: 900, cap: 350 }],
+      },
+    ]);
+
   const breakdown: Array<[string, number, boolean?]> = [
     ['Gross development value', R.gdv],
     ...(R.investmentValue > 0
@@ -460,6 +479,12 @@ export default function DevelopmentAppraisal() {
                       </tbody>
                     </table>
                     </div>
+                    {phases?.length ? (
+                      <div className="mt-3 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+                        This scheme is phased — the accommodation on the <b className="font-semibold">Phases</b> tab drives
+                        GDV and the programme. The schedule above is kept but not used.
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex gap-6 border-t border-border-std pt-3">
                       <Kv k="NIA" v={`${n0(R.nia)} ft²`} />
                       <Kv k="GIA (via efficiency)" v={`${n0(R.gia)} ft²`} />
@@ -475,6 +500,178 @@ export default function DevelopmentAppraisal() {
                     <div className="mt-3 text-[12px] text-ink-2">Disposal costs <span className="fig font-semibold">{fM(R.saleCosts)}</span></div>
                   </Panel>
                 </>
+              )}
+
+              {tab === 'phases' && (
+                phases?.length && R.phases?.length ? (
+                  <>
+                    <Panel
+                      title="Programme"
+                      right={<Button variant="secondary" size="sm" onClick={addPhase}>+ Add phase</Button>}
+                    >
+                      {/* one bar per phase: build then sales, on the scheme's month axis */}
+                      <div className="flex flex-col gap-2.5">
+                        {R.phases.map((p, i) => {
+                          const span = R.period + R.salesMonths;
+                          const pct = (m: number) => (m / span) * 100;
+                          return (
+                            <div key={i} className="flex items-center gap-3">
+                              <span className="w-[104px] shrink-0 truncate text-[12.5px] font-medium" title={p.name}>{p.name}</span>
+                              <div className="relative flex-1 h-[22px] rounded-[7px] bg-sunken-2 overflow-hidden">
+                                <div
+                                  className="absolute inset-y-0 rounded-[6px]"
+                                  style={{ left: `${pct(p.start - 1)}%`, width: `${pct(p.buildMonths)}%`, background: '#14503B' }}
+                                  title={`Build — months ${p.start}–${p.practicalCompletion}`}
+                                />
+                                <div
+                                  className="absolute inset-y-0 rounded-[6px]"
+                                  style={{ left: `${pct(p.practicalCompletion)}%`, width: `${pct(p.salesMonths)}%`, background: 'rgb(var(--tint-green-deep, 223 239 231))' }}
+                                  title={`Sales — months ${p.practicalCompletion + 1}–${p.end}`}
+                                />
+                              </div>
+                              <span className="fig w-[92px] shrink-0 text-right text-[11.5px] text-ink-2">{monthLabel(p.start)}–{monthLabel(p.end)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
+                        <Kv k="Programme" v={`${R.period + R.salesMonths} months`} />
+                        <Kv k="On site until" v={monthLabel(R.period)} />
+                        <Kv k="Peak debt" v={fM(R.facility)} tone="#14503B" />
+                      </div>
+                      <div className="mt-2.5 text-[11px] text-ink-3 leading-snug">
+                        Phases share one facility. Receipts from a completed phase repay it while a later phase is still
+                        drawing — that is what holds peak debt down. Dark bar = on site, light bar = selling.
+                      </div>
+                    </Panel>
+
+                    {phases.map((ph, i) => {
+                      const calc = R.phases![i];
+                      return (
+                        <Panel
+                          key={i}
+                          title={
+                            <input
+                              className="text-[13px] font-semibold w-[220px]"
+                              aria-label={`Phase ${i + 1} name`}
+                              value={ph.name}
+                              onChange={(e) => setPhase(i, { name: e.target.value })}
+                            />
+                          }
+                          right={
+                            <div className="flex items-center gap-2">
+                              <span className="fig text-[11.5px] text-ink-2">{fM(calc.gdv)} · {n0(calc.nia)} ft²</span>
+                              <Button variant="secondary" size="sm" onClick={() => setPhases(phases.filter((_, j) => j !== i))}>Remove</Button>
+                            </div>
+                          }
+                        >
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <NumField label="Starts month" value={ph.start} step={1} onChange={(v) => setPhase(i, { start: Math.max(1, Math.round(v)) })} />
+                            <NumField label="Build" suffix="months" value={ph.buildMonths} step={1} onChange={(v) => setPhase(i, { buildMonths: Math.max(1, Math.round(v)) })} />
+                            <NumField label="Sales" suffix="months" value={ph.salesMonths} step={1} onChange={(v) => setPhase(i, { salesMonths: Math.max(1, Math.round(v)) })} />
+                            <NumField
+                              label="Absorption"
+                              suffix="units/mo"
+                              value={ph.absorptionUnitsPerMonth ?? 0}
+                              step={1}
+                              onChange={(v) => setPhase(i, { absorptionUnitsPerMonth: v > 0 ? v : undefined })}
+                            />
+                          </div>
+
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="w-full min-w-[520px]">
+                              <thead>
+                                <tr>
+                                  <th className="label-mono text-ink-3 text-left pb-2">Unit type</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-16">No.</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">£/ft²</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">Value</th>
+                                  <th className="w-8" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ph.units.map((u, ui) => (
+                                  <tr key={ui} className="hover:bg-sunken transition-colors">
+                                    <td className="py-1.5 pr-2 border-t border-border-faint">
+                                      <input
+                                        className="w-full"
+                                        aria-label={`${ph.name} unit ${ui + 1} label`}
+                                        value={u.label}
+                                        onChange={(e) => setPhase(i, { units: ph.units.map((x, j) => (j === ui ? { ...x, label: e.target.value } : x)) })}
+                                      />
+                                    </td>
+                                    {(['count', 'area', 'cap'] as const).map((k) => (
+                                      <td key={k} className="py-1.5 px-1 border-t border-border-faint">
+                                        <input
+                                          type="number"
+                                          className="w-full text-right fig"
+                                          aria-label={`${ph.name} ${u.label} ${UNIT_COL_ARIA[k]}`}
+                                          value={u[k]}
+                                          onChange={(e) => setPhase(i, { units: ph.units.map((x, j) => (j === ui ? { ...x, [k]: parseFloat(e.target.value) || 0 } : x)) })}
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="fig text-right text-[12.5px] font-semibold border-t border-border-faint">{fM(u.count * u.area * u.cap)}</td>
+                                    <td className="text-right border-t border-border-faint">
+                                      <button
+                                        aria-label={`Remove ${u.label} from ${ph.name}`}
+                                        className="text-ink-3 hover:text-status-red px-1"
+                                        onClick={() => setPhase(i, { units: ph.units.filter((_, j) => j !== ui) })}
+                                      >
+                                        ×
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-2.5 flex items-center justify-between gap-3">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setPhase(i, { units: [...ph.units, { label: 'New unit type', count: 1, area: 900, cap: 350 }] })}
+                            >
+                              + Add unit
+                            </Button>
+                            <span className="fig text-[11.5px] text-ink-2">
+                              Construction {fM(calc.cost)} · completes {monthLabel(calc.practicalCompletion)}
+                            </span>
+                          </div>
+                        </Panel>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <Panel title="Programme">
+                    <EmptyState
+                      title="Single-phase scheme"
+                      cta={
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setPhases([
+                              {
+                                name: 'Phase 1',
+                                start: 1,
+                                buildMonths: input.finance.periodMonths,
+                                salesMonths: input.finance.salesMonths,
+                                units: input.units.length ? input.units : [{ label: 'New unit type', count: 10, area: 900, cap: 350 }],
+                              },
+                            ])
+                          }
+                        >
+                          Split into phases
+                        </Button>
+                      }
+                    >
+                      Build the scheme in phases and each one draws, completes and sells on its own clock. The accommodation
+                      moves onto the phases, and receipts from an early phase repay the facility while a later one is still
+                      drawing.
+                    </EmptyState>
+                  </Panel>
+                )
               )}
 
               {tab === 'income' && (

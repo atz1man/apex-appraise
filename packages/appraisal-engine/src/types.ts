@@ -111,8 +111,49 @@ export interface IncomeResult {
   blendedRentPsf: number;
 }
 
+/**
+ * One phase of a phased scheme: its own accommodation, its own place in the
+ * programme, its own sales window. Phases share one facility — that is the
+ * point of phasing, since receipts from an early phase fund a later one and
+ * hold peak debt down.
+ */
+export interface Phase {
+  name: string;
+  /** 1-based project month the phase starts on site */
+  start: number;
+  buildMonths: number;
+  /** sales window after this phase completes; ignored when absorption is set */
+  salesMonths: number;
+  /** units/month for this phase — derives its own sales window */
+  absorptionUnitsPerMonth?: number;
+  units: AppraisalUnit[];
+}
+
+export interface PhaseResult {
+  name: string;
+  start: number;
+  buildMonths: number;
+  salesMonths: number;
+  /** last month of this phase's build (start + buildMonths − 1) */
+  practicalCompletion: number;
+  /** last month of this phase's sales window */
+  end: number;
+  nia: number;
+  gia: number;
+  gdv: number;
+  /** construction incl. fees and contingency */
+  cost: number;
+  unitCount: number;
+}
+
 export interface AppraisalInput {
   units: AppraisalUnit[];
+  /**
+   * Phased programme. When present the phases' units are the scheme's
+   * accommodation and `units` above is ignored — the phase schedule owns both
+   * the revenue and the build programme.
+   */
+  phases?: Phase[];
   efficiency: number; // NIA/GIA %
   trades: BuildTrade[];
   profFeePct: number;
@@ -161,6 +202,8 @@ export interface AppraisalResult {
   investmentValue: number;
   /** present only when the appraisal carries a rent roll */
   income?: IncomeResult;
+  /** present only when the scheme is phased */
+  phases?: PhaseResult[];
   buildRate: number;
   build: number;
   fees: number;
