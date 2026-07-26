@@ -65,6 +65,7 @@ model Deal {
   ownerId      String?
   owner        User?   @relation(fields: [ownerId], references: [id])
   appraisals   Appraisal[]
+  engagement   EngagementTerms?
   units        Unit[]
   tenancies    Tenancy[]
   comparables  Comparable[]
@@ -308,6 +309,54 @@ model Document {
   addedAt  DateTime @default(now())
 
   @@index([dealId, category])
+}
+
+// Terms of engagement (RICS Red Book VPS 1) — the written agreement with the
+// client that must exist BEFORE the valuation is reported. One record per deal;
+// issuing freezes it and acceptance records who agreed and when.
+model EngagementTerms {
+  id       String @id @default(cuid())
+  orgId    String
+  dealId   String @unique
+  deal     Deal   @relation(fields: [dealId], references: [id])
+  status   String @default("DRAFT") // DRAFT | ISSUED | ACCEPTED
+
+  // parties and instruction
+  clientName     String
+  clientAddress  String @default("")
+  otherUsers     String @default("None. This report is for the addressee client only.")
+  purpose        String
+  interest       String // freehold / leasehold / part-freehold
+  basisOfValue   String // Market Value | Market Rent | Fair Value | Investment Value
+  valuationDate  DateTime?
+
+  // scope
+  extentOfInvestigation String
+  sourcesOfInformation  String
+  assumptions           String
+  specialAssumptions    String
+  reportFormat          String
+  restrictionsOnUse     String
+
+  // commercial terms
+  feeBasis            String
+  liabilityCap        BigInt? // pence; null = no stated cap
+  complaintsProcedure String
+
+  // AI use — stated up front, per RICS transparency requirements
+  aiUse String
+
+  valuerName String
+  valuerReg  String
+
+  issuedAt   DateTime?
+  acceptedAt DateTime?
+  acceptedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, status])
 }
 
 model ActivityEvent {

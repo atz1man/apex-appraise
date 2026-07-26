@@ -38,6 +38,8 @@ const FieldApp = lazy(() => import('./routes/FieldApp'));
 const Workbench = lazy(() => import('./routes/Workbench'));
 const AppraisalReport = lazy(() => import('./routes/AppraisalReport'));
 const RedBookReport = lazy(() => import('./routes/RedBookReport'));
+const Engagement = lazy(() => import('./routes/Engagement'));
+const EngagementDocument = lazy(() => import('./routes/EngagementDocument'));
 const Landing = lazy(() => import('./routes/Landing'));
 const DealOverview = lazy(() => import('./routes/DealOverview'));
 const Calendar = lazy(() => import('./routes/Calendar'));
@@ -119,6 +121,8 @@ export default function App() {
           <Route path="/deal/:dealId/workbench" element={<Protected><Workbench /></Protected>} />
           <Route path="/deal/:dealId/report" element={<Protected><AppraisalReport /></Protected>} />
           <Route path="/deal/:dealId/redbook" element={<Protected><RedBookReport /></Protected>} />
+          <Route path="/deal/:dealId/engagement" element={<Protected><Engagement /></Protected>} />
+          <Route path="/deal/:dealId/engagement/document" element={<Protected><EngagementDocument /></Protected>} />
           <Route path="/benchmarking" element={<Protected><Benchmarking /></Protected>} />
           <Route path="/integrations" element={<Protected><Integrations /></Protected>} />
           <Route path="/portal/investor" element={<Protected portal="investor"><InvestorPortal /></Protected>} />

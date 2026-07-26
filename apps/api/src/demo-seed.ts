@@ -94,6 +94,41 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     },
   });
 
+  // ---- Terms of engagement (VPS 1) — accepted, so the Red Book can cite them ----
+  await prisma.engagementTerms.create({
+    data: {
+      orgId: org.id, dealId: northgate, status: 'ACCEPTED',
+      clientName: 'Halewood Asset Finance Ltd',
+      clientAddress: '2 Temple Quay, Bristol BS1 6DZ',
+      otherUsers: 'None. This report is for the addressee client only and no responsibility is accepted to any other party.',
+      purpose: 'Secured lending in respect of the proposed development, and the client’s internal investment decision.',
+      interest: 'Freehold, with vacant possession assumed on completion.',
+      basisOfValue: 'Market Value',
+      valuationDate: new Date('2026-06-30'),
+      extentOfInvestigation:
+        'The valuer inspected Northgate Trade & Industrial Park, Holdenhurst Road, Bournemouth internally and externally to the extent reasonably accessible without specialist equipment. No structural survey, opening up of the fabric, testing of services, environmental survey or measured survey was undertaken.',
+      sourcesOfInformation:
+        'Areas, accommodation schedules, cost information and planning status supplied by the client and their professional team, together with comparable evidence from HM Land Registry, agency sources and the valuer’s own records. Information supplied by the client is relied upon as accurate and is not independently verified.',
+      assumptions:
+        'Good and marketable freehold title is held free from onerous restrictions; no deleterious materials are present; services are connected and in working order; the site is free from contamination and material flood risk; and all necessary consents have been obtained.',
+      specialAssumptions: 'None.',
+      reportFormat: 'A written valuation report in the firm’s standard Red Book format, issued in PDF, together with the supporting development appraisal.',
+      restrictionsOnUse:
+        'The report may not be reproduced, published or relied upon by any third party without the firm’s prior written consent, and may not be quoted in whole or in part in any prospectus or circular.',
+      feeBasis: 'A fixed fee of £4,750 plus VAT and reasonable disbursements, payable on delivery of the report.',
+      liabilityCap: p(2000000),
+      complaintsProcedure:
+        'The firm operates a complaints handling procedure in accordance with RICS requirements, a copy of which is available on request. Unresolved complaints may be referred to an independent redress scheme.',
+      aiUse:
+        'Artificial intelligence may be used on this instruction to assist with document extraction, report narrative, data-room questions and scenario risk commentary. No artificial intelligence system computed, adjusted or approved any figure in this valuation. All monetary outputs are produced by the deterministic Apex Appraise engine from inputs accepted by the valuer, who retains full professional responsibility for the valuation and its conclusions. The report will state which of these were actually used, and the firm will provide further detail on request.',
+      valuerName: 'Dana Whitlock MRICS',
+      valuerReg: 'RICS Registered Valuer · No. 1148207',
+      issuedAt: new Date('2026-05-18'),
+      acceptedAt: new Date('2026-05-21'),
+      acceptedBy: 'R. Halewood',
+    },
+  });
+
   // ---- Kingsway appraisal — mixed exit: one pod sold, the parade held and let
   // (exercises the investment method: rent roll capitalised into GDV) ----
   await prisma.appraisal.create({

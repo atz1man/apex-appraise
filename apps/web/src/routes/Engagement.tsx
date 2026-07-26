@@ -1,0 +1,364 @@
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { trpc, getToken } from '../lib/trpc';
+import { fM } from '../lib/format';
+import { useToast } from '../components/Toast';
+import { Button, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
+import { DealNav } from '../components/DealNav';
+
+/**
+ * Terms of engagement (RICS Red Book VPS 1) — drafted from the deal, edited by
+ * the valuer, issued to the client, acceptance recorded. Every valuation is
+ * supposed to have one settled before the report is written; the Red Book
+ * report cites it.
+ */
+
+const BASIS = ['Market Value', 'Market Rent', 'Fair Value', 'Investment Value'] as const;
+
+type Terms = {
+  clientName: string;
+  clientAddress: string;
+  otherUsers: string;
+  purpose: string;
+  interest: string;
+  basisOfValue: (typeof BASIS)[number];
+  valuationDate: string | null;
+  extentOfInvestigation: string;
+  sourcesOfInformation: string;
+  assumptions: string;
+  specialAssumptions: string;
+  reportFormat: string;
+  restrictionsOnUse: string;
+  feeBasis: string;
+  liabilityCap: number | null;
+  complaintsProcedure: string;
+  aiUse: string;
+  valuerName: string;
+  valuerReg: string;
+};
+
+const SECTIONS: Array<{ title: string; fields: Array<[keyof Terms, string, 'text' | 'area']> }> = [
+  {
+    title: 'Parties & instruction',
+    fields: [
+      ['clientName', 'Client', 'text'],
+      ['clientAddress', 'Client address', 'text'],
+      ['otherUsers', 'Other intended users', 'area'],
+      ['purpose', 'Purpose of the valuation', 'area'],
+      ['interest', 'Interest to be valued', 'area'],
+    ],
+  },
+  {
+    title: 'Scope of work',
+    fields: [
+      ['extentOfInvestigation', 'Extent of investigation', 'area'],
+      ['sourcesOfInformation', 'Nature and source of information relied on', 'area'],
+      ['assumptions', 'Assumptions', 'area'],
+      ['specialAssumptions', 'Special assumptions', 'area'],
+      ['reportFormat', 'Format of the report', 'area'],
+      ['restrictionsOnUse', 'Restrictions on use, distribution and publication', 'area'],
+    ],
+  },
+  {
+    title: 'Commercial terms',
+    fields: [
+      ['feeBasis', 'Basis of fees', 'area'],
+      ['complaintsProcedure', 'Complaints handling', 'area'],
+    ],
+  },
+  {
+    title: 'Use of artificial intelligence',
+    fields: [['aiUse', 'Stated to the client before the work starts', 'area']],
+  },
+  {
+    title: 'Valuer',
+    fields: [
+      ['valuerName', 'Valuer', 'text'],
+      ['valuerReg', 'Registration', 'text'],
+    ],
+  },
+];
+
+const STATUS_TONE = { DRAFT: 'amber', ISSUED: 'blue', ACCEPTED: 'green' } as const;
+
+export default function Engagement() {
+  const { dealId = '' } = useParams();
+  const utils = trpc.useUtils();
+  const toast = useToast();
+  const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
+  const { data: saved, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
+
+  const [terms, setTerms] = useState<Terms | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [acceptedBy, setAcceptedBy] = useState('');
+
+  useEffect(() => {
+    if (saved && !terms) {
+      setTerms({
+        clientName: saved.clientName,
+        clientAddress: saved.clientAddress,
+        otherUsers: saved.otherUsers,
+        purpose: saved.purpose,
+        interest: saved.interest,
+        basisOfValue: saved.basisOfValue as Terms['basisOfValue'],
+        valuationDate: saved.valuationDate ? new Date(saved.valuationDate).toISOString().slice(0, 10) : null,
+        extentOfInvestigation: saved.extentOfInvestigation,
+        sourcesOfInformation: saved.sourcesOfInformation,
+        assumptions: saved.assumptions,
+        specialAssumptions: saved.specialAssumptions,
+        reportFormat: saved.reportFormat,
+        restrictionsOnUse: saved.restrictionsOnUse,
+        feeBasis: saved.feeBasis,
+        liabilityCap: saved.liabilityCap ?? null,
+        complaintsProcedure: saved.complaintsProcedure,
+        aiUse: saved.aiUse,
+        valuerName: saved.valuerName,
+        valuerReg: saved.valuerReg,
+      });
+    }
+  }, [saved, terms]);
+
+  const invalidate = () => {
+    utils.engagement.get.invalidate(dealId);
+    utils.documents.activity.invalidate(dealId);
+  };
+  const save = trpc.engagement.save.useMutation({
+    onSuccess: () => {
+      setDirty(false);
+      invalidate();
+      toast.success('Terms saved');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const issue = trpc.engagement.issue.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success('Terms issued — send the PDF to the client');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const accept = trpc.engagement.accept.useMutation({
+    onSuccess: () => {
+      setAcceptedBy('');
+      invalidate();
+      toast.success('Client acceptance recorded');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const withdraw = trpc.engagement.withdraw.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success('Terms withdrawn — back to draft');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const status = (saved?.status ?? 'DRAFT') as keyof typeof STATUS_TONE;
+  const locked = status === 'ACCEPTED';
+  const set = (k: keyof Terms, v: string | number | null) => {
+    setTerms((t) => (t ? { ...t, [k]: v } : t));
+    setDirty(true);
+  };
+
+  if (isLoading || !terms) {
+    return (
+      <div className="min-h-screen">
+        <TopBar crumb="Terms of engagement" />
+        <DealNav dealId={dealId} active="engagement" />
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
+            <Panel>
+              <Skeleton height={16} width="40%" />
+              <SkeletonRows rows={10} height={18} />
+            </Panel>
+            <Panel>
+              <SkeletonRows rows={5} height={14} />
+            </Panel>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <TopBar
+        crumb={
+          <span>
+            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal?.name ?? 'Terms of engagement'}
+          </span>
+        }
+        right={
+          <>
+            <StatusChip status={STATUS_TONE[status]} label={status} />
+            <Button variant="secondary" to={`/deal/${dealId}/engagement/document`}>Preview</Button>
+            <Button
+              variant="secondary"
+              onClick={() => window.open(`/api/reports/${dealId}/engagement.pdf?t=${getToken()}`, '_blank')}
+            >
+              Download PDF
+            </Button>
+            <Button onClick={() => save.mutate({ dealId, terms })} loading={save.isPending} disabled={!dirty || locked}>
+              {dirty ? 'Save terms' : 'Saved'}
+            </Button>
+          </>
+        }
+      />
+      <DealNav dealId={dealId} active="engagement" />
+
+      <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
+          <div className="flex flex-col gap-4">
+            <Panel title="Basis of value & date">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="label-mono text-ink-3 block mb-1">Basis of value</span>
+                  <select
+                    className="w-full"
+                    aria-label="Basis of value"
+                    disabled={locked}
+                    value={terms.basisOfValue}
+                    onChange={(e) => set('basisOfValue', e.target.value)}
+                  >
+                    {BASIS.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="label-mono text-ink-3 block mb-1">Valuation date</span>
+                  <input
+                    type="date"
+                    className="w-full fig"
+                    aria-label="Valuation date"
+                    disabled={locked}
+                    value={terms.valuationDate ?? ''}
+                    onChange={(e) => set('valuationDate', e.target.value || null)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="label-mono text-ink-3 block mb-1">Liability cap (£)</span>
+                  <input
+                    type="number"
+                    className="w-full fig"
+                    aria-label="Liability cap"
+                    placeholder="No stated cap"
+                    disabled={locked}
+                    value={terms.liabilityCap ?? ''}
+                    onChange={(e) => set('liabilityCap', e.target.value === '' ? null : parseFloat(e.target.value) || 0)}
+                  />
+                </label>
+              </div>
+            </Panel>
+
+            {SECTIONS.map((section) => (
+              <Panel key={section.title} title={section.title}>
+                <div className="flex flex-col gap-3">
+                  {section.fields.map(([key, label, kind]) => (
+                    <label key={key} className="block">
+                      <span className="label-mono text-ink-3 block mb-1">{label}</span>
+                      {kind === 'area' ? (
+                        <textarea
+                          className="w-full text-[12.5px] leading-[1.55]"
+                          rows={key === 'specialAssumptions' ? 2 : 3}
+                          aria-label={label}
+                          disabled={locked}
+                          value={String(terms[key] ?? '')}
+                          onChange={(e) => set(key, e.target.value)}
+                        />
+                      ) : (
+                        <input
+                          className="w-full"
+                          aria-label={label}
+                          disabled={locked}
+                          value={String(terms[key] ?? '')}
+                          onChange={(e) => set(key, e.target.value)}
+                        />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </Panel>
+            ))}
+          </div>
+
+          <aside className="flex flex-col gap-4">
+            <Panel title="Status">
+              <div className="flex flex-col gap-2.5 text-[12.5px]">
+                <Row k="State" v={status === 'DRAFT' ? 'Draft — not yet with the client' : status === 'ISSUED' ? 'Issued, awaiting acceptance' : 'Accepted by the client'} />
+                <Row k="Issued" v={saved?.issuedAt ? fmtDate(saved.issuedAt) : '—'} />
+                <Row k="Accepted" v={saved?.acceptedAt ? `${fmtDate(saved.acceptedAt)} · ${saved.acceptedBy}` : '—'} />
+                <Row k="Liability cap" v={terms.liabilityCap ? fM(terms.liabilityCap) : 'None stated'} />
+              </div>
+
+              <div className="mt-3.5 border-t border-border-std pt-3.5 flex flex-col gap-2.5">
+                {status === 'DRAFT' && (
+                  <Button
+                    size="sm"
+                    loading={issue.isPending}
+                    disabled={dirty || !saved?.saved}
+                    onClick={() => issue.mutate(dealId)}
+                  >
+                    Issue to client
+                  </Button>
+                )}
+                {status === 'ISSUED' && (
+                  <>
+                    <input
+                      className="w-full"
+                      aria-label="Accepted by"
+                      placeholder="Name of the person accepting"
+                      value={acceptedBy}
+                      onChange={(e) => setAcceptedBy(e.target.value)}
+                    />
+                    <Button
+                      size="sm"
+                      loading={accept.isPending}
+                      disabled={acceptedBy.trim().length < 2}
+                      onClick={() => accept.mutate({ dealId, acceptedBy: acceptedBy.trim() })}
+                    >
+                      Record acceptance
+                    </Button>
+                  </>
+                )}
+                {status !== 'DRAFT' && (
+                  <Button size="sm" variant="secondary" loading={withdraw.isPending} onClick={() => withdraw.mutate(dealId)}>
+                    Withdraw & revise
+                  </Button>
+                )}
+                {dirty && status === 'DRAFT' && (
+                  <div className="text-[11px] text-ink-3 leading-snug">Save your edits before issuing.</div>
+                )}
+                {locked && (
+                  <div className="text-[11px] text-ink-3 leading-snug">
+                    Accepted terms are locked. Withdraw to draft a revision — the acceptance stays in the audit trail.
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel title="Why this matters">
+              <div className="text-[12px] text-ink-2 leading-relaxed">
+                RICS Red Book VPS 1 requires written terms of engagement agreed with the client before the valuation is
+                reported. The Red Book report cites these terms, and the AI paragraph tells the client up front what may be
+                used — the report afterwards states what actually was.
+              </div>
+            </Panel>
+          </aside>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+const fmtDate = (d: string | Date) =>
+  new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-ink-3">{k}</span>
+      <span className="text-right font-medium">{v}</span>
+    </div>
+  );
+}

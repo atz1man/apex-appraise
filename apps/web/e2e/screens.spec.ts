@@ -342,3 +342,77 @@ test('reports disclose that no AI was used when none was', async ({ page }) => {
   await expect(page.getByText('AI use on this deal')).toBeVisible();
   await expect(page.getByText('No AI has been used on this deal. The reports say so explicitly.')).toBeVisible();
 });
+
+/**
+ * Terms of engagement (RICS VPS 1) — Northgate is seeded with accepted terms,
+ * so the document and the Red Book must both reflect them.
+ */
+test('accepted terms of engagement are documented and cited by the Red Book', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+
+  await page.goto(`/deal/${id}/engagement`);
+  await expect(page.getByText('ACCEPTED', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Client', { exact: true })).toHaveValue('Halewood Asset Finance Ltd');
+  // accepted terms are locked against editing
+  await expect(page.getByLabel('Client', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Withdraw & revise' })).toBeVisible();
+
+  await page.goto(`/deal/${id}/engagement/document`);
+  await expect(page.locator('.a4-page')).toHaveCount(3);
+  await expect(page.getByText(/Issued 18 May 2026 · Accepted 21 May 2026/)).toBeVisible();
+  await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
+  await expect(page.getByText(/Page 3 of 3/)).toBeVisible();
+
+  // the valuation report is written under those terms and says so
+  await page.goto(`/deal/${id}/redbook`);
+  await expect(page.getByText(/terms of engagement accepted by R. Halewood on 21 May 2026/)).toBeVisible();
+});
+
+test('terms of engagement run draft → issued → accepted', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Elm Grove')).id;
+  });
+
+  await page.goto(`/deal/${id}/engagement`);
+  // idempotent: a previous run may have left this deal's terms issued/accepted.
+  // Wait for the status panel to render before deciding — checking too early
+  // reads "no withdraw button" on a page that simply hasn't loaded yet.
+  await expect(page.getByRole('button', { name: /Issue to client|Record acceptance|Withdraw & revise/ })).toBeVisible();
+  const withdraw = page.getByRole('button', { name: 'Withdraw & revise' });
+  if (await withdraw.count()) await withdraw.click();
+  await expect(page.getByText('DRAFT', { exact: true })).toBeVisible();
+
+  // the draft arrives prefilled from the deal — the valuer edits, never types it out
+  await expect(page.getByLabel('Purpose of the valuation')).not.toBeEmpty();
+  await expect(page.getByLabel('Stated to the client before the work starts')).toContainText(
+    'No artificial intelligence system computed',
+  );
+
+  // clear first: re-running against a deal that already holds this value would
+  // fire no change event, leave the form pristine, and never show Save terms
+  const client = page.getByLabel('Client', { exact: true });
+  await client.fill('');
+  await client.fill('Marchmont Estates LLP');
+  await page.getByRole('button', { name: 'Save terms' }).click();
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Issue to client' }).click();
+  await expect(page.getByText('ISSUED', { exact: true })).toBeVisible();
+
+  await page.getByLabel('Accepted by').fill('J. Marchmont');
+  await page.getByRole('button', { name: 'Record acceptance' }).click();
+  await expect(page.getByText('ACCEPTED', { exact: true })).toBeVisible();
+  await expect(page.getByText(/J\. Marchmont/)).toBeVisible();
+});

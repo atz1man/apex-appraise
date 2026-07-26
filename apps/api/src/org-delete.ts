@@ -17,6 +17,7 @@ export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.P
     prisma.investor.deleteMany({ where: { orgId } }),
     prisma.payment.deleteMany({ where: { orgId } }),
     prisma.appraisal.deleteMany({ where: { orgId } }),
+    prisma.engagementTerms.deleteMany({ where: { orgId } }),
     prisma.comparable.deleteMany({ where: { orgId } }),
     prisma.scenario.deleteMany({ where: { orgId } }),
     prisma.inspection.deleteMany({ where: { orgId } }),

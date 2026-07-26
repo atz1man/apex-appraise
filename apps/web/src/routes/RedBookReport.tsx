@@ -150,6 +150,8 @@ export default function RedBookReport() {
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
+  // the report is written under the agreed terms of engagement — cite them (VPS 1)
+  const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
   const utils = trpc.useUtils();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
     onSuccess: () => {
@@ -714,8 +716,21 @@ export default function RedBookReport() {
           <Micro mt={20}>Conditions &amp; scope</Micro>
           <div className="mt-2.5 text-[12.5px] leading-[1.55]" style={{ color: '#2C342E' }}>
             This report is prepared for the stated client and purpose only and may not be relied upon by any third party. It is not a
-            building survey and does not constitute advice on structural condition. Liability is limited in accordance with the agreed
-            terms of engagement. The valuer has no conflict of interest and acts as an external valuer under the RICS Red Book.
+            building survey and does not constitute advice on structural condition.{' '}
+            {toe?.status === 'ACCEPTED' && toe.acceptedAt ? (
+              <>
+                It is issued under the terms of engagement accepted by {toe.acceptedBy} on {fmtLong(new Date(toe.acceptedAt))}, on a{' '}
+                {toe.basisOfValue} basis, and liability is limited in accordance with those terms.
+              </>
+            ) : toe?.status === 'ISSUED' && toe.issuedAt ? (
+              <>
+                It is issued under the terms of engagement dated {fmtLong(new Date(toe.issuedAt))}, which remain to be accepted in
+                writing, and liability is limited in accordance with those terms.
+              </>
+            ) : (
+              <>Liability is limited in accordance with the agreed terms of engagement.</>
+            )}{' '}
+            The valuer has no conflict of interest and acts as an external valuer under the RICS Red Book.
           </div>
 
           <div className="mt-7 border-t border-border-std pt-6 flex justify-between items-end">

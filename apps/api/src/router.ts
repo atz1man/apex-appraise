@@ -10,12 +10,14 @@ import { inspectionsRouter } from './routers/inspections.js';
 import { sitePackRouter } from './routers/sitepack.js';
 import { billingRouter } from './routers/billing.js';
 import { benchmarksRouter } from './routers/benchmarks.js';
+import { engagementRouter } from './routers/engagement.js';
 
 export const appRouter = router({
   auth: authRouter,
   org: orgRouter,
   deals: dealsRouter,
   appraisal: appraisalRouter,
+  engagement: engagementRouter,
   autoAppraisal: autoAppraisalRouter,
   comparables: comparablesRouter,
   scenarios: scenariosRouter,

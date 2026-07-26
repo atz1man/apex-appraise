@@ -14,10 +14,12 @@ export type DealTool =
   | 'dataroom'
   | 'workbench'
   | 'report'
-  | 'redbook';
+  | 'redbook'
+  | 'engagement';
 
 const TOOLS: Array<[DealTool, string, string]> = [
   ['overview', 'Overview', ''],
+  ['engagement', 'Terms', '/engagement'],
   ['sitepack', 'Site pack', '/sitepack'],
   ['appraisal', 'Appraisal', '/appraisal'],
   ['auto', 'Auto-Appraisal', '/auto'],
