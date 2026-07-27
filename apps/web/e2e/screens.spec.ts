@@ -660,3 +660,53 @@ test('a revoked or unknown signing link cannot be used', async ({ page }) => {
   await expect(page.getByText('This signing link is no longer valid')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign and return' })).toHaveCount(0);
 });
+
+/**
+ * Firm-level policy: the AI note the reports carry, and the house style new
+ * terms of engagement draft from.
+ */
+test('firm policy sets the AI note and the terms house style', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: 'Valuation policy' })).toBeVisible();
+  // the factual statement about the engine is not something a firm can edit
+  await expect(page.getByText(/is not editable — it is a fact about how the engine works/)).toBeVisible();
+
+  const note = 'All AI-assisted text is reviewed and adopted by the signing valuer before issue.';
+  await page.getByLabel('AI policy note').fill(note);
+
+  // house style for new terms lives behind a disclosure
+  await page.getByRole('button', { name: /Terms of engagement — house style/ }).click();
+  await page.getByLabel('Purpose of the valuation').fill('Internal investment appraisal, as instructed.');
+  await page.getByLabel('Basis of fees').fill('A fixed fee of £4,750 plus VAT, payable on delivery.');
+  await page.getByLabel('Valuer registration line').fill('MRICS · RICS Registered Valuer no. 1148207');
+  await page.getByRole('button', { name: 'Save policy' }).click();
+  await expect(page.getByText('Firm policy saved — new terms will draft from it')).toBeVisible();
+
+  // a deal with no terms yet drafts from the house style…
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Clovelly')).id;
+  });
+  await page.goto(`/deal/${id}/engagement`);
+  await expect(page.getByLabel('Purpose of the valuation')).toHaveValue('Internal investment appraisal, as instructed.');
+  await expect(page.getByLabel('Basis of fees')).toHaveValue('A fixed fee of £4,750 plus VAT, payable on delivery.');
+  await expect(page.getByLabel('Registration')).toHaveValue('MRICS · RICS Registered Valuer no. 1148207');
+  // …while a field left blank still gets Apex's own wording
+  await expect(page.getByLabel('Other intended users')).toContainText('addressee client only');
+
+  // and the report carries the note after the standing statement, not instead of it
+  const northgate = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+  await page.goto(`/deal/${northgate}/redbook`);
+  await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
+  await expect(page.getByText(/No artificial intelligence/).first()).toBeVisible();
+  await expect(page.getByText(note)).toBeVisible();
+});

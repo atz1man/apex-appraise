@@ -13,7 +13,7 @@ async function main() {
   const tables = [
     'Payment', 'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
     'CostPackage', 'Contractor', 'SalesMilestone', 'Unit', 'Tenancy', 'Inspection',
-    'Scenario', 'Comparable', 'Appraisal', 'EngagementTerms', 'BenchmarkPoint', 'IntegrationConnection',
+    'Scenario', 'Comparable', 'Appraisal', 'EngagementTerms', 'OrgPolicy', 'BenchmarkPoint', 'IntegrationConnection',
     'Deal', 'User', 'Organisation',
   ];
   for (const t of tables) await prisma.$executeRawUnsafe(`DELETE FROM "${t}"`);

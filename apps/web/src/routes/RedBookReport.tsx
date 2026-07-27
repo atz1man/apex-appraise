@@ -707,9 +707,13 @@ export default function RedBookReport() {
                   ))}
                 </div>
                 <div className="mt-1.5">{ai.statement}</div>
+                {ai.firmPolicy && <div className="mt-1.5">{ai.firmPolicy}</div>}
               </>
             ) : (
-              <>{ai?.statement ?? 'No artificial intelligence was used in the preparation of this valuation.'}</>
+              <>
+                {ai?.statement ?? 'No artificial intelligence was used in the preparation of this valuation.'}
+                {ai?.firmPolicy ? <div className="mt-1.5">{ai.firmPolicy}</div> : null}
+              </>
             )}
           </div>
 

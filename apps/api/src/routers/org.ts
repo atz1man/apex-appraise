@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { computeAppraisal, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
 import { JWT_SECRET } from '../context.js';
+import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
@@ -123,6 +124,74 @@ export const orgRouter = router({
     .mutation(({ ctx, input }) =>
       ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { name: input.name } }),
     ),
+
+  /**
+   * Firm-level standing wording. Everyone can read it (the report and the terms
+   * draft need it); only an admin can change it.
+   */
+  policy: internalProcedure.query(async ({ ctx }) => {
+    const row = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+    return {
+      aiPolicy: row?.aiPolicy ?? '',
+      toePurpose: row?.toePurpose ?? '',
+      toeOtherUsers: row?.toeOtherUsers ?? '',
+      toeInterest: row?.toeInterest ?? '',
+      toeExtentOfInvestigation: row?.toeExtentOfInvestigation ?? '',
+      toeSourcesOfInformation: row?.toeSourcesOfInformation ?? '',
+      toeAssumptions: row?.toeAssumptions ?? '',
+      toeSpecialAssumptions: row?.toeSpecialAssumptions ?? '',
+      toeReportFormat: row?.toeReportFormat ?? '',
+      toeRestrictionsOnUse: row?.toeRestrictionsOnUse ?? '',
+      toeFeeBasis: row?.toeFeeBasis ?? '',
+      toeComplaintsProcedure: row?.toeComplaintsProcedure ?? '',
+      toeValuerReg: row?.toeValuerReg ?? '',
+      toeLiabilityCap: row?.toeLiabilityCap == null ? null : P(row.toeLiabilityCap),
+      updatedAt: row?.updatedAt ?? null,
+    };
+  }),
+
+  savePolicy: adminProcedure
+    .input(
+      z.object({
+        aiPolicy: z.string().max(1200),
+        toePurpose: z.string().max(1000),
+        toeOtherUsers: z.string().max(1000),
+        toeInterest: z.string().max(600),
+        toeExtentOfInvestigation: z.string().max(2000),
+        toeSourcesOfInformation: z.string().max(2000),
+        toeAssumptions: z.string().max(2000),
+        toeSpecialAssumptions: z.string().max(2000),
+        toeReportFormat: z.string().max(1000),
+        toeRestrictionsOnUse: z.string().max(1000),
+        toeFeeBasis: z.string().max(1000),
+        toeComplaintsProcedure: z.string().max(1000),
+        toeValuerReg: z.string().max(120),
+        toeLiabilityCap: z.number().min(0).nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const data = { ...input, toeLiabilityCap: input.toeLiabilityCap == null ? null : toPence(input.toeLiabilityCap) };
+      await ctx.prisma.orgPolicy.upsert({
+        where: { orgId: ctx.principal.orgId },
+        create: { ...data, orgId: ctx.principal.orgId },
+        update: data,
+      });
+      // ActivityEvent requires a dealId; org-level events hang off the first deal,
+      // the same convention exportData already uses
+      const anyDeal = await ctx.prisma.deal.findFirst({ where: { orgId: ctx.principal.orgId }, select: { id: true } });
+      if (anyDeal) {
+        await ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: anyDeal.id,
+            actor: ctx.principal.name,
+            action: 'updated the firm valuation policy',
+            target: 'Settings — AI policy & terms defaults',
+          },
+        });
+      }
+      return { ok: true };
+    }),
 
   members: internalProcedure.query(({ ctx }) =>
     ctx.prisma.user.findMany({

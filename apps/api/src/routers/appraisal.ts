@@ -239,14 +239,20 @@ export const appraisalRouter = router({
       };
     }).filter((t) => t.count > 0);
 
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const [row, policy] = await Promise.all([
+      ctx.prisma.appraisal.findFirst({
+        where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
+    ]);
     const narrative = J<NarrativePayload | null>(row?.narrative, null);
     return {
       used: items.length > 0,
       items,
+      // the firm's own policy note ADDS to the standing statement; it never
+      // replaces it, because that statement is a fact about how the engine works
+      firmPolicy: policy?.aiPolicy?.trim() || null,
       // the model that drafted the prose currently reproduced in the report
       model: narrative?.model ?? null,
       narrativeEmbedded: !!narrative,

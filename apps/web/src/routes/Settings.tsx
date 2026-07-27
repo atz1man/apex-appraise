@@ -437,6 +437,172 @@ function DataPrivacyPanel() {
 
 // ---------- About ----------
 
+/** Firm-level standing wording used by new terms of engagement and the reports. */
+type PolicyForm = {
+  aiPolicy: string;
+  toePurpose: string;
+  toeOtherUsers: string;
+  toeInterest: string;
+  toeExtentOfInvestigation: string;
+  toeSourcesOfInformation: string;
+  toeAssumptions: string;
+  toeSpecialAssumptions: string;
+  toeReportFormat: string;
+  toeRestrictionsOnUse: string;
+  toeFeeBasis: string;
+  toeComplaintsProcedure: string;
+  toeValuerReg: string;
+};
+
+const TOE_FIELDS: Array<[string, string, string]> = [
+  ['toePurpose', 'Purpose of the valuation', 'Secured lending and internal decision-making…'],
+  ['toeOtherUsers', 'Other intended users', 'None. This report is for the addressee client only…'],
+  ['toeInterest', 'Interest to be valued', 'Freehold, with vacant possession assumed on completion.'],
+  ['toeExtentOfInvestigation', 'Extent of investigation', 'The valuer will inspect the property internally and externally…'],
+  ['toeSourcesOfInformation', 'Nature and source of information', 'Areas, schedules and cost information supplied by the client…'],
+  ['toeAssumptions', 'Assumptions', 'Good and marketable title is held free from onerous restrictions…'],
+  ['toeSpecialAssumptions', 'Special assumptions', 'None.'],
+  ['toeReportFormat', 'Format of the report', 'A written valuation report in the firm’s standard Red Book format…'],
+  ['toeRestrictionsOnUse', 'Restrictions on use', 'The report may not be reproduced or relied upon by any third party…'],
+  ['toeFeeBasis', 'Basis of fees', 'A fixed fee as separately quoted, payable on delivery…'],
+  ['toeComplaintsProcedure', 'Complaints handling', 'The firm operates a complaints handling procedure…'],
+];
+
+function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
+  const utils = trpc.useUtils();
+  const toast = useToast();
+  const { data: policy, isLoading } = trpc.org.policy.useQuery();
+  const [form, setForm] = useState<Record<string, string> | null>(null);
+  const [cap, setCap] = useState<string>('');
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (policy && !form) {
+      const { updatedAt: _u, toeLiabilityCap, ...rest } = policy;
+      setForm(Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, String(v ?? '')])));
+      setCap(toeLiabilityCap == null ? '' : String(toeLiabilityCap));
+    }
+  }, [policy, form]);
+
+  const save = trpc.org.savePolicy.useMutation({
+    onSuccess: () => {
+      utils.org.policy.invalidate();
+      toast.success('Firm policy saved — new terms will draft from it');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  if (isLoading || !form) {
+    return (
+      <Panel title="Valuation policy">
+        <SkeletonRows rows={4} />
+      </Panel>
+    );
+  }
+
+  const set = (k: string, v: string) => setForm((f) => ({ ...(f ?? {}), [k]: v }));
+
+  return (
+    <Panel
+      title="Valuation policy"
+      right={
+        isAdmin ? (
+          <Button
+            size="sm"
+            loading={save.isPending}
+            onClick={() =>
+              save.mutate({
+                ...(form as unknown as PolicyForm),
+                toeLiabilityCap: cap.trim() === '' ? null : parseFloat(cap) || 0,
+              })
+            }
+          >
+            Save policy
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="text-[13.5px] font-semibold">AI policy note</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        Added to the AI-use disclosure in every report, after the standing statement. Use it for your own commitments —
+        how AI-assisted text is reviewed, where your full policy can be read.
+      </div>
+      <textarea
+        className="w-full mt-2.5 text-[12.5px] leading-[1.55]"
+        rows={3}
+        aria-label="AI policy note"
+        disabled={!isAdmin}
+        placeholder="e.g. All AI-assisted text is reviewed and adopted by the signing valuer. Our full AI policy is available on request."
+        value={form.aiPolicy ?? ''}
+        onChange={(e) => set('aiPolicy', e.target.value)}
+      />
+      <div className="mt-2 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+        The statement that no AI computed, adjusted or approved any figure is not editable — it is a fact about how the
+        engine works, not a policy position.
+      </div>
+
+      <div className="mt-5 border-t border-border-std pt-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-[13.5px] font-semibold"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <span className="text-ink-3">{open ? '▾' : '▸'}</span> Terms of engagement — house style
+        </button>
+        <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+          New terms draft from these. Leave a field blank and Apex&rsquo;s own wording is used; a valuer can still edit any
+          clause on the deal itself.
+        </div>
+        {open && (
+          <div className="mt-3 flex flex-col gap-3">
+            {TOE_FIELDS.map(([key, label, placeholder]) => (
+              <label key={key} className="block">
+                <span className="label-mono text-ink-3 block mb-1">{label}</span>
+                <textarea
+                  className="w-full text-[12.5px] leading-[1.55]"
+                  rows={2}
+                  aria-label={label}
+                  disabled={!isAdmin}
+                  placeholder={placeholder}
+                  value={form[key] ?? ''}
+                  onChange={(e) => set(key, e.target.value)}
+                />
+              </label>
+            ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="label-mono text-ink-3 block mb-1">Valuer registration line</span>
+                <input
+                  className="w-full"
+                  aria-label="Valuer registration line"
+                  disabled={!isAdmin}
+                  placeholder="RICS Registered Valuer"
+                  value={form.toeValuerReg ?? ''}
+                  onChange={(e) => set('toeValuerReg', e.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className="label-mono text-ink-3 block mb-1">Default liability cap (£)</span>
+                <input
+                  type="number"
+                  className="w-full fig"
+                  aria-label="Default liability cap"
+                  disabled={!isAdmin}
+                  placeholder="No stated cap"
+                  value={cap}
+                  onChange={(e) => setCap(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      {!isAdmin && <div className="mt-3 text-[11.5px] text-ink-3">Only an admin can change the firm policy.</div>}
+    </Panel>
+  );
+}
+
 function AboutPanel() {
   const navigate = useNavigate();
   return (
@@ -595,6 +761,7 @@ export default function Settings() {
         <OrganisationPanel isAdmin={isAdmin} />
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
+        <PolicyPanel isAdmin={isAdmin} />
         <SecurityPanel />
         {isAdmin && <DataPrivacyPanel />}
         <AboutPanel />

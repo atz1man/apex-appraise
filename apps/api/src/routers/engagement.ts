@@ -32,34 +32,71 @@ export function aiUseParagraph(): string {
   return `Artificial intelligence may be used on this instruction to assist with ${uses}. ${AI_STANDING_STATEMENT} The report will state which of these were actually used, and the firm will provide further detail on request.`;
 }
 
-/** A complete first draft from what the deal already tells us. */
-function draftFor(deal: { name: string; address: string; assetType: string | null }, orgName: string, valuer: { name: string }) {
+/** Firm-level standing wording; blank fields fall back to Apex's own. */
+export interface PolicyDefaults {
+  toePurpose: string;
+  toeOtherUsers: string;
+  toeInterest: string;
+  toeExtentOfInvestigation: string;
+  toeSourcesOfInformation: string;
+  toeAssumptions: string;
+  toeSpecialAssumptions: string;
+  toeReportFormat: string;
+  toeRestrictionsOnUse: string;
+  toeFeeBasis: string;
+  toeComplaintsProcedure: string;
+  toeValuerReg: string;
+  toeLiabilityCap: bigint | null;
+}
+
+/** A complete first draft from what the deal already tells us, in the firm's house style. */
+function draftFor(
+  deal: { name: string; address: string; assetType: string | null },
+  orgName: string,
+  valuer: { name: string },
+  policy?: PolicyDefaults | null,
+) {
   const residential = deal.assetType === 'RESIDENTIAL';
+  const houseStyle = <T,>(value: string | undefined, fallback: T) => (value && value.trim() ? value : fallback);
   return {
     status: 'DRAFT' as const,
     clientName: '',
     clientAddress: '',
-    otherUsers: 'None. This report is for the addressee client only and no responsibility is accepted to any other party.',
-    purpose: 'Secured lending and internal decision-making in respect of the proposed development.',
-    interest: 'Freehold, with vacant possession assumed on completion.',
+    otherUsers: houseStyle(policy?.toeOtherUsers, 'None. This report is for the addressee client only and no responsibility is accepted to any other party.'),
+    purpose: houseStyle(policy?.toePurpose, 'Secured lending and internal decision-making in respect of the proposed development.'),
+    interest: houseStyle(policy?.toeInterest, 'Freehold, with vacant possession assumed on completion.'),
     basisOfValue: 'Market Value' as (typeof BASIS_OF_VALUE)[number],
     valuationDate: null as Date | null,
-    extentOfInvestigation: `The valuer will inspect ${deal.name}, ${deal.address} internally and externally to the extent reasonably accessible without specialist equipment. No structural survey, opening up of the fabric, testing of services, environmental survey or measured survey will be undertaken.`,
-    sourcesOfInformation:
+    extentOfInvestigation: houseStyle(
+      policy?.toeExtentOfInvestigation,
+      `The valuer will inspect ${deal.name}, ${deal.address} internally and externally to the extent reasonably accessible without specialist equipment. No structural survey, opening up of the fabric, testing of services, environmental survey or measured survey will be undertaken.`,
+    ),
+    sourcesOfInformation: houseStyle(
+      policy?.toeSourcesOfInformation,
       'Areas, schedules of accommodation, cost information and planning status supplied by the client and their professional team, together with comparable evidence obtained from HM Land Registry, agency sources and the valuer’s own records. Information supplied by the client is relied upon as accurate and is not independently verified.',
-    assumptions: `Good and marketable ${residential ? 'freehold' : 'freehold'} title is held free from onerous restrictions; no deleterious materials are present; services are connected and in working order; the site is free from contamination and material flood risk; and all necessary consents have been obtained.`,
-    specialAssumptions: 'None.',
-    reportFormat:
+    ),
+    assumptions: houseStyle(
+      policy?.toeAssumptions,
+      `Good and marketable ${residential ? 'freehold' : 'freehold'} title is held free from onerous restrictions; no deleterious materials are present; services are connected and in working order; the site is free from contamination and material flood risk; and all necessary consents have been obtained.`,
+    ),
+    specialAssumptions: houseStyle(policy?.toeSpecialAssumptions, 'None.'),
+    reportFormat: houseStyle(
+      policy?.toeReportFormat,
       'A written valuation report in the firm’s standard Red Book format, issued in PDF, together with the supporting development appraisal.',
-    restrictionsOnUse:
+    ),
+    restrictionsOnUse: houseStyle(
+      policy?.toeRestrictionsOnUse,
       'The report may not be reproduced, published or relied upon by any third party without the firm’s prior written consent, and may not be quoted in whole or in part in any prospectus or circular.',
-    feeBasis: 'A fixed fee as separately quoted, payable on delivery of the report, plus VAT and reasonable disbursements.',
-    liabilityCap: null as number | null,
-    complaintsProcedure:
+    ),
+    feeBasis: houseStyle(policy?.toeFeeBasis, 'A fixed fee as separately quoted, payable on delivery of the report, plus VAT and reasonable disbursements.'),
+    liabilityCap: (policy?.toeLiabilityCap == null ? null : P(policy.toeLiabilityCap)) as number | null,
+    complaintsProcedure: houseStyle(
+      policy?.toeComplaintsProcedure,
       'The firm operates a complaints handling procedure in accordance with RICS requirements, a copy of which is available on request. Unresolved complaints may be referred to an independent redress scheme.',
+    ),
     aiUse: aiUseParagraph(),
     valuerName: valuer.name,
-    valuerReg: 'RICS Registered Valuer',
+    valuerReg: houseStyle(policy?.toeValuerReg, 'RICS Registered Valuer'),
     orgName,
   };
 }
@@ -96,14 +133,17 @@ export const engagementRouter = router({
   /** Existing terms, or an unsaved draft prefilled from the deal. */
   get: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
-    const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+    const [org, policy] = await Promise.all([
+      ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } }),
+      ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
+    ]);
     const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
     if (row) return { saved: true, ...shape(row, org?.name ?? 'Apex Appraise') };
     return {
       saved: false,
       id: null,
       dealId: input,
-      ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }),
+      ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }, policy),
       issuedAt: null,
       acceptedAt: null,
       acceptedBy: null,

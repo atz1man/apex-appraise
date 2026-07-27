@@ -312,6 +312,34 @@ model Document {
   @@index([dealId, category])
 }
 
+// Firm-level standing wording: the AI policy note added to reports, and the
+// house defaults new terms of engagement are drafted from. Blank fields fall
+// back to Apex's built-in wording — nothing here can weaken the engine's own
+// factual AI statement, which is not editable by design.
+model OrgPolicy {
+  id    String @id @default(cuid())
+  orgId String @unique
+
+  aiPolicy String @default("")
+
+  // terms-of-engagement house style
+  toePurpose               String @default("")
+  toeOtherUsers            String @default("")
+  toeInterest              String @default("")
+  toeExtentOfInvestigation String @default("")
+  toeSourcesOfInformation  String @default("")
+  toeAssumptions           String @default("")
+  toeSpecialAssumptions    String @default("")
+  toeReportFormat          String @default("")
+  toeRestrictionsOnUse     String @default("")
+  toeFeeBasis              String @default("")
+  toeComplaintsProcedure   String @default("")
+  toeValuerReg             String @default("")
+  toeLiabilityCap          BigInt? // pence
+
+  updatedAt DateTime @updatedAt
+}
+
 // Terms of engagement (RICS Red Book VPS 1) — the written agreement with the
 // client that must exist BEFORE the valuation is reported. One record per deal;
 // issuing freezes it and acceptance records who agreed and when.

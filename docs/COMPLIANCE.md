@@ -72,8 +72,22 @@ The `signToken` column is indexed but deliberately NOT unique: a unique constrai
 boot-time `prisma db push` demand `--accept-data-loss`, and that flag does not belong on a
 production start command.
 
+## Firm-level policy (Settings → Valuation policy)
+
+An admin can set the firm's own **AI policy note** and its **house style** for terms of
+engagement (`OrgPolicy`, one row per org).
+
+- The AI policy note is APPENDED to the standing statement in both reports. It never
+  replaces it: that no AI computed, adjusted or approved any figure is a fact about how the
+  engine works, not a policy position a firm may soften. The Settings panel says so, and the
+  API has no path to edit it.
+- House-style clauses (purpose, other users, interest, extent of investigation, sources,
+  assumptions, report format, restrictions, fees, complaints, valuer registration, default
+  liability cap) seed new terms of engagement. A blank field falls back to Apex's own
+  wording, and a valuer can still edit any clause on the deal itself.
+- Reading the policy is open to the team; writing it is admin-only and audited.
+
 ## What is not covered yet
 
-- No firm-level AI policy statement is stored; the wording above is fixed in code.
 - Signing links do not expire on a timer — they are revoked by withdrawing or re-issuing.
 - No email is sent: the valuer copies the link. SMTP is not configured.

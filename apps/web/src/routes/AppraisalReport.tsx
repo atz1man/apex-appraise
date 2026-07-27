@@ -711,11 +711,15 @@ export default function AppraisalReport() {
                 ))}
               </p>
               <p className="mt-2 text-[11px] text-ink-2b leading-[1.6]">{ai.statement}</p>
+              {ai.firmPolicy && <p className="mt-2 text-[11px] text-ink-2b leading-[1.6]">{ai.firmPolicy}</p>}
             </>
           ) : (
-            <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
-              {ai?.statement ?? 'No artificial intelligence was used in the preparation of this appraisal.'}
-            </p>
+            <>
+              <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
+                {ai?.statement ?? 'No artificial intelligence was used in the preparation of this appraisal.'}
+              </p>
+              {ai?.firmPolicy && <p className="mt-2 text-[11px] text-ink-2b leading-[1.6]">{ai.firmPolicy}</p>}
+            </>
           )}
 
           <SectionTitle>8 · Important notice</SectionTitle>
