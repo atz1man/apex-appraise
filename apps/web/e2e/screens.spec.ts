@@ -549,3 +549,43 @@ test('phases price independently and carry their own costs', async ({ page }) =>
   expect(blended).toBeGreaterThan(170);
   expect(blended).toBeLessThan(206);
 });
+
+/**
+ * The appraisal PDF for a phased scheme: the accommodation schedule reads from
+ * the phases (it used to read the empty top-level units array and print nothing)
+ * and a phasing table states each phase's programme, rate and value.
+ */
+test('appraisal report schedules a phased scheme by phase', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+  await page.goto(`/deal/${id}/report`);
+
+  const accommodation = page.locator('.a4-page').filter({ hasText: 'Accommodation schedule' });
+  await expect(accommodation).toBeVisible();
+  // units are grouped under their phase, with that phase's programme
+  // each phase name appears twice on this page: as the schedule's group header
+  // and as a row of the phasing table
+  await expect(accommodation.getByText('Phase A — quayside block')).toHaveCount(2);
+  await expect(accommodation.getByText('Phase B — courtyard block')).toHaveCount(2);
+  await expect(accommodation.getByText(/on site .* · sells to/).first()).toBeVisible();
+  // and the schedule is not empty — the regression that prompted this
+  await expect(accommodation.getByText('1-bed apartments')).toBeVisible();
+  await expect(accommodation.getByText('3-bed duplexes')).toBeVisible();
+  await expect(accommodation.getByText('£14,924,700').first()).toBeVisible();
+
+  // the phasing table states each phase's own rate
+  await expect(accommodation.getByText('Phasing')).toBeVisible();
+  await expect(accommodation.getByText('£206')).toBeVisible();
+  await expect(accommodation.getByText('£170')).toBeVisible();
+  await expect(accommodation.getByText(/delivered in 2 phases over 32 months/)).toBeVisible();
+
+  // page numbering still matches what prints
+  const pages = await page.locator('.a4-page').count();
+  await expect(page.getByText(`Page ${pages} of ${pages}`)).toBeVisible();
+});

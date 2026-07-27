@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { computeAppraisal, sensitivityGrid, formatMoneyFull, formatPct } from '@apex/appraisal-engine';
 import { accent, brand, neutral } from '@apex/ui-tokens';
@@ -309,13 +309,20 @@ export default function AppraisalReport() {
   const monitoringPageNo = assumptionsPageNo + 1;
   const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
 
-  const unitRows = input.units.map((u) => ({
+  // A phased scheme's accommodation lives on the phases — reading input.units
+  // here would print an empty schedule for exactly the schemes that need one.
+  const toRow = (u: { label: string; count: number; area: number; cap: number }) => ({
     label: u.label,
     count: u.count,
     area: u.count * u.area,
     rate: u.cap,
     value: u.count * u.area * u.cap,
-  }));
+  });
+  const phaseGroups =
+    R.phases?.length && input.phases?.length
+      ? R.phases.map((p, i) => ({ phase: p, rows: (input.phases![i]?.units ?? []).map(toRow) }))
+      : null;
+  const unitRows = phaseGroups ? phaseGroups.flatMap((g) => g.rows) : input.units.map(toRow);
 
   return (
     <div className="light min-h-screen bg-frame">
@@ -435,14 +442,30 @@ export default function AppraisalReport() {
               <div className="text-right" style={{ flex: 1, padding: '11px 14px' }}>£/ft²</div>
               <div className="text-right" style={{ flex: 1.3, padding: '11px 14px' }}>Value</div>
             </div>
-            {unitRows.map((u, i) => (
-              <div key={i} className="flex border-t border-border-faint fig text-[12px] font-medium">
-                <div className="font-ui text-[12.5px]" style={{ flex: 2.4, padding: '10px 14px' }}>{u.label}</div>
-                <div className="text-right" style={{ flex: 0.8, padding: '10px 14px' }}>{u.count}</div>
-                <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{n0(u.area)}</div>
-                <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{n0(u.rate)}</div>
-                <div className="text-right font-semibold" style={{ flex: 1.3, padding: '10px 14px', color: brand[700] }}>{formatMoneyFull(u.value)}</div>
-              </div>
+            {(phaseGroups ?? [{ phase: null, rows: unitRows }]).map((group, gi) => (
+              <Fragment key={gi}>
+                {group.phase && (
+                  <div
+                    className="flex border-t border-border-faint fig text-[11px] font-semibold uppercase"
+                    style={{ background: 'rgb(243 248 245)', letterSpacing: '0.4px', color: brand[700] }}
+                  >
+                    <div className="font-ui text-[11.5px]" style={{ flex: 2.4, padding: '8px 14px' }}>{group.phase.name}</div>
+                    <div className="text-right normal-case" style={{ flex: 4.2, padding: '8px 14px', color: neutral.ink2 }}>
+                      on site {monthLabel(group.phase.start)}–{monthLabel(group.phase.practicalCompletion)} · sells to{' '}
+                      {monthLabel(group.phase.end)}
+                    </div>
+                  </div>
+                )}
+                {group.rows.map((u, i) => (
+                  <div key={i} className="flex border-t border-border-faint fig text-[12px] font-medium">
+                    <div className="font-ui text-[12.5px]" style={{ flex: 2.4, padding: '10px 14px' }}>{u.label}</div>
+                    <div className="text-right" style={{ flex: 0.8, padding: '10px 14px' }}>{u.count}</div>
+                    <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{n0(u.area)}</div>
+                    <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{n0(u.rate)}</div>
+                    <div className="text-right font-semibold" style={{ flex: 1.3, padding: '10px 14px', color: brand[700] }}>{formatMoneyFull(u.value)}</div>
+                  </div>
+                ))}
+              </Fragment>
             ))}
             <div className="flex bg-sunken fig text-[12.5px] font-semibold" style={{ borderTop: `2px solid ${neutral.border}` }}>
               <div className="font-ui" style={{ flex: 2.4, padding: '11px 14px' }}>Gross development value</div>
@@ -453,18 +476,53 @@ export default function AppraisalReport() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-3">
+          <div className="mt-5 grid grid-cols-3 gap-3">
             <Kpi label="Net internal area" value={`${n0(R.nia)} ft²`} />
             <Kpi label="Gross internal area" value={`${n0(R.gia)} ft²`} />
             <Kpi label="Efficiency (NIA:GIA)" value={`${input.efficiency}%`} />
           </div>
 
-          <SectionTitle>Basis of areas</SectionTitle>
-          <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
-            Unit areas are net internal areas (NIA) in square feet as scheduled in the current appraisal. Gross internal area is derived
-            at the stated NIA:GIA efficiency of {input.efficiency}%. Capital values are applied per square foot of NIA; construction costs
-            are applied per square foot of GIA.
-          </p>
+          {R.phases?.length ? (
+            <>
+              <SectionTitle>Phasing</SectionTitle>
+              <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 10 }}>
+                <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
+                  <div style={{ flex: 2.2, padding: '9px 14px' }}>Phase</div>
+                  <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>On site</div>
+                  <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>Units</div>
+                  <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£/ft²</div>
+                  <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>Construction</div>
+                  <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>GDV</div>
+                </div>
+                {R.phases.map((p, i) => (
+                  <div key={i} className="flex border-t border-border-faint fig text-[11.5px] font-medium">
+                    <div className="font-ui text-[12px]" style={{ flex: 2.2, padding: '9px 14px' }}>{p.name}</div>
+                    <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{p.buildMonths} mo</div>
+                    <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>{p.unitCount}</div>
+                    <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£{n0(p.buildRate)}</div>
+                    <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{formatMoneyFull(p.cost + p.otherTotal)}</div>
+                    <div className="text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px', color: brand[700] }}>{formatMoneyFull(p.gdv)}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
+                The scheme is delivered in {R.phases.length} phases over {R.period + R.salesMonths} months, sharing one facility;
+                receipts from a completed phase repay it while a later phase is still drawing, holding peak debt to{' '}
+                {formatMoneyFull(R.facility)}. Construction is stated at each phase's own rate — a blended £{n0(R.buildRate)}/ft² of GIA
+                across the scheme — and includes fees, contingency and any costs booked to that phase. Areas are net internal (NIA);
+                gross internal area is derived at the stated {input.efficiency}% efficiency.
+              </p>
+            </>
+          ) : (
+            <>
+              <SectionTitle>Basis of areas</SectionTitle>
+              <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
+                Unit areas are net internal areas (NIA) in square feet as scheduled in the current appraisal. Gross internal area is derived
+                at the stated NIA:GIA efficiency of {input.efficiency}%. Capital values are applied per square foot of NIA; construction costs
+                are applied per square foot of GIA.
+              </p>
+            </>
+          )}
           <PageFoot no={3} total={pageTotal} refCode={refCode} />
         </A4Page>
 
