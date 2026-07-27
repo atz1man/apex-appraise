@@ -138,12 +138,13 @@ export const engagementRouter = router({
       ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
     ]);
     const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
-    if (row) return { saved: true, ...shape(row, org?.name ?? 'Apex Appraise') };
+    if (row) return { saved: true, ...shape(row, org?.name ?? 'Apex Appraise'), orgLogoUrl: org?.logoUrl ?? '' };
     return {
       saved: false,
       id: null,
       dealId: input,
       ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }, policy),
+      orgLogoUrl: org?.logoUrl ?? '',
       issuedAt: null,
       acceptedAt: null,
       acceptedBy: null,
@@ -252,6 +253,7 @@ export const engagementRouter = router({
     const { id: _id, orgId: _o, dealId: _d, signToken: _t, signedIp: _ip, signedUserAgent: _ua, ...terms } = row;
     return {
       ...shape(terms, org?.name ?? 'Apex Appraise'),
+      orgLogoUrl: org?.logoUrl ?? '',
       dealName: deal?.name ?? 'the property',
       dealAddress: deal?.address ?? '',
       dealPostcode: deal?.postcode ?? '',

@@ -86,6 +86,35 @@ export async function registerUploads(app: FastifyInstance) {
     return { id: doc.id, url: doc.url };
   });
 
+  /**
+   * Firm logo for client-facing documents. Admin only, raster only: an SVG
+   * served from this origin can carry script that runs when the file is opened
+   * directly, and a logo is not worth that.
+   */
+  app.post('/uploads/logo', async (req, reply) => {
+    const user = await principalFrom(req);
+    if (!user) return reply.code(401).send({ error: 'unauthorised' });
+    if (user.role !== 'ADMIN') return reply.code(403).send({ error: 'admin access required' });
+    const ALLOWED: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+    const MAX_BYTES = 2 * 1024 * 1024;
+    const file = await req.file();
+    if (!file) return reply.code(400).send({ error: 'file required' });
+    const ext = ALLOWED[file.mimetype];
+    if (!ext) return reply.code(415).send({ error: 'PNG, JPEG or WebP only' });
+    const key = `logo-${user.orgId}-${Date.now()}.${ext}`;
+    const dest = path.join(UPLOAD_DIR, key);
+    await pipeline(file.file, createWriteStream(dest));
+    const { stat, unlink } = await import('node:fs/promises');
+    const { size } = await stat(dest);
+    if (size > MAX_BYTES) {
+      await unlink(dest);
+      return reply.code(413).send({ error: 'Logo must be 2MB or smaller' });
+    }
+    const url = `/uploads/files/${key}`;
+    await prisma.organisation.update({ where: { id: user.orgId }, data: { logoUrl: url } });
+    return { url };
+  });
+
   app.post('/uploads/photo', async (req, reply) => {
     const user = await principalFrom(req);
     if (!user) return reply.code(401).send({ error: 'unauthorised' });

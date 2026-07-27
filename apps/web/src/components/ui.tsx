@@ -138,6 +138,24 @@ export function StatCard({ label, value, tone, sub }: { label: string; value: Re
   );
 }
 
+/**
+ * The mark on client-facing documents: the firm's own logo when they have
+ * uploaded one, otherwise Apex's. Documents belong to the firm; the app chrome
+ * stays Apex.
+ */
+export function FirmMark({ logoUrl, size = 32, alt }: { logoUrl?: string | null; size?: number; alt?: string }) {
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={alt ?? 'Firm logo'}
+        style={{ height: size, maxWidth: size * 4.5, objectFit: 'contain', display: 'block' }}
+      />
+    );
+  }
+  return <BrandMark size={size} />;
+}
+
 export function Panel({ title, right, children, className = '', accent }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string }) {
   return (
     <section

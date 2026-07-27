@@ -4,7 +4,7 @@ import { computeAppraisal, formatMoneyFull, formatPct, formatRent } from '@apex/
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
-import { BrandMark, Button, Spinner } from '../components/ui';
+import { Button, FirmMark, Spinner } from '../components/ui';
 import { CompsLadder } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
@@ -30,7 +30,7 @@ const PHOTO_GRADS = [
   'linear-gradient(150deg,#7FB99E 0%,#1E7A55 50%,#13402F 100%)',
 ];
 
-const VALUER = { name: 'Dana Whitlock MRICS', reg: 'RICS Registered Valuer · No. 1148207', firm: 'For and on behalf of Apex Appraise Ltd' };
+const VALUER = { name: 'Dana Whitlock MRICS', reg: 'RICS Registered Valuer · No. 1148207' };
 
 /** RICS Red Book definition of Market Value (VPS 4). */
 const MV_DEFINITION =
@@ -148,6 +148,8 @@ export default function RedBookReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  // client-facing documents carry the firm's identity, not the product's
+  const { data: org } = trpc.org.get.useQuery();
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
   // the report is written under the agreed terms of engagement — cite them (VPS 1)
@@ -181,6 +183,7 @@ export default function RedBookReport() {
   };
   const pageTotal = pageNo.declaration;
 
+  const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const today = fmtLong(new Date());
   const subject = deal?.name ?? 'Subject property';
@@ -321,8 +324,8 @@ export default function RedBookReport() {
             <div className="absolute rounded-full" style={{ top: -60, right: -50, width: 240, height: 240, background: 'rgba(255,255,255,0.06)' }} />
             <div className="absolute rounded-full" style={{ bottom: -90, left: -40, width: 200, height: 200, background: 'rgba(255,255,255,0.05)' }} />
             <div className="relative flex items-center gap-3">
-              <BrandMark size={38} />
-              <span className="text-[20px] font-bold tracking-[-0.3px]">Apex Appraise</span>
+              <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
+              <span className="text-[20px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
               <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>RICS Regulated</span>
             </div>
             <div className="relative mt-[88px] fig text-[12px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: 'rgba(255,255,255,0.66)' }}>Valuation Report</div>
@@ -492,7 +495,7 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <PageFoot>Page {pageNo.property} of {pageTotal} · Apex Appraise · {subject}</PageFoot>
+          <PageFoot>Page {pageNo.property} of {pageTotal} · {firmName} · {subject}</PageFoot>
         </A4Page>
 
         {/* ============ PAGE 4 — METHODOLOGY & RECONCILIATION ============ */}
@@ -561,7 +564,7 @@ export default function RedBookReport() {
             </>
           )}
 
-          <PageFoot>Page {pageNo.methodology} of {pageTotal} · Apex Appraise · Reference {refCode}</PageFoot>
+          <PageFoot>Page {pageNo.methodology} of {pageTotal} · {firmName} · Reference {refCode}</PageFoot>
         </A4Page>
 
         {/* ============ PAGE 5 — COMPARABLE EVIDENCE ============ */}
@@ -742,7 +745,7 @@ export default function RedBookReport() {
               <div style={{ width: 188, height: 48, borderBottom: `1.5px solid ${neutral.crumb}` }} />
               <div className="mt-2.5 text-[14px] font-semibold">{VALUER.name}</div>
               <div className="text-[12px] text-ink-2">{VALUER.reg}</div>
-              <div className="text-[12px] text-ink-2">{VALUER.firm}</div>
+              <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
               <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {today}</div>
             </div>
             <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
@@ -753,7 +756,7 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <PageFoot>Page {pageNo.declaration} of {pageTotal} · © Apex Appraise Ltd · This report remains the property of Apex Appraise until fees are settled in full.</PageFoot>
+          <PageFoot>Page {pageNo.declaration} of {pageTotal} · © {firmName} · This report remains the property of {firmName} until fees are settled in full.</PageFoot>
         </A4Page>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { computeAppraisal, sensitivityGrid, formatMoneyFull, formatPct } from '@
 import { accent, brand, neutral } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
-import { BrandMark, Button, Spinner } from '../components/ui';
+import { Button, FirmMark, Spinner } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
@@ -77,12 +77,12 @@ function PageHead({ title, scheme }: { title: string; scheme: string }) {
   );
 }
 
-function PageFoot({ no, total, refCode }: { no: number; total: number; refCode: string }) {
+function PageFoot({ no, total, refCode, firmName }: { no: number; total: number; refCode: string; firmName: string }) {
   return (
     <div className="mt-auto pt-6">
       <div className="flex items-center justify-between pt-2.5 text-[9.5px] text-ink-3" style={{ borderTop: '1px solid #ECEBE5' }}>
         <span>
-          <span className="font-semibold" style={{ color: brand[700] }}>Apex</span> Appraise · development appraisal
+          <span className="font-semibold" style={{ color: brand[700] }}>{firmName}</span> · development appraisal
         </span>
         <span className="fig">{refCode} · {fmtLong(new Date())}</span>
         <span className="fig font-medium">Page {no} of {total}</span>
@@ -122,6 +122,8 @@ export default function AppraisalReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: photos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  // client-facing documents carry the firm's identity, not the product's
+  const { data: org } = trpc.org.get.useQuery();
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
 
@@ -158,6 +160,7 @@ export default function AppraisalReport() {
     return out;
   }, [R]);
 
+  const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const today = fmtLong(new Date());
   const scheme = deal?.name ?? 'Development appraisal';
@@ -335,8 +338,8 @@ export default function AppraisalReport() {
           <div className="relative overflow-hidden text-white" style={{ background: `linear-gradient(155deg,${brand[600]},${brand[900]})`, padding: '64px 60px 56px' }}>
             <div className="absolute rounded-full" style={{ top: -60, right: -60, width: 280, height: 280, background: 'rgba(127,227,180,0.08)' }} />
             <div className="relative flex items-center gap-3">
-              <BrandMark size={38} />
-              <span className="text-[19px] font-bold tracking-[-0.3px]">Apex Appraise</span>
+              <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
+              <span className="text-[19px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
             </div>
             <div className="relative mt-20 fig text-[13px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: accent.muted2 }}>
               Development appraisal &amp; investment summary
@@ -388,7 +391,7 @@ export default function AppraisalReport() {
           </div>
           <div className="flex justify-between text-[11px] text-ink-3 border-t border-border-std" style={{ padding: '22px 60px' }}>
             <span>Strictly private &amp; confidential</span>
-            <span>Apex Appraise · {today}</span>
+            <span>{org?.name ?? 'Apex Appraise'} · {today}</span>
           </div>
         </A4Page>
 
@@ -428,7 +431,7 @@ export default function AppraisalReport() {
             <KvRow k="Total development cost" v={formatMoneyFull(R.totalCost)} />
             <KvRow k="Equity requirement" v={formatMoneyFull(R.equity)} />
           </div>
-          <PageFoot no={2} total={pageTotal} refCode={refCode} />
+          <PageFoot no={2} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGE 3 — ACCOMMODATION SCHEDULE ===== */}
@@ -523,7 +526,7 @@ export default function AppraisalReport() {
               </p>
             </>
           )}
-          <PageFoot no={3} total={pageTotal} refCode={refCode} />
+          <PageFoot no={3} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGE 4 — RESIDUAL APPRAISAL ===== */}
@@ -585,7 +588,7 @@ export default function AppraisalReport() {
               ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of GDV after acquisition costs of ${input.site.acqPct}%.`
               : `Developer profit is the amount remaining after all costs including the fixed land price plus ${input.site.acqPct}% acquisition costs.`}
           </p>
-          <PageFoot no={4} total={pageTotal} refCode={refCode} />
+          <PageFoot no={4} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGE 5 — SENSITIVITY ===== */}
@@ -626,7 +629,7 @@ export default function AppraisalReport() {
             price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
             A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in GDV moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
           </p>
-          <PageFoot no={5} total={pageTotal} refCode={refCode} />
+          <PageFoot no={5} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGES 6.. — CASHFLOW & RETURNS PROFILE ===== */}
@@ -682,7 +685,7 @@ export default function AppraisalReport() {
               ))}
             </div>
             )}
-            <PageFoot no={6 + pi} total={pageTotal} refCode={refCode} />
+            <PageFoot no={6 + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
           </A4Page>
         ))}
 
@@ -729,7 +732,7 @@ export default function AppraisalReport() {
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />
               <div className="text-[12px] font-medium">{deal?.owner?.name ?? 'D. Whitlock'} MRICS</div>
-              <div className="text-[11px] text-ink-3">For and on behalf of Apex Appraise</div>
+              <div className="text-[11px] text-ink-3">For and on behalf of {org?.name ?? 'Apex Appraise'}</div>
             </div>
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />
@@ -737,7 +740,7 @@ export default function AppraisalReport() {
               <div className="text-[11px] text-ink-3">{today}</div>
             </div>
           </div>
-          <PageFoot no={assumptionsPageNo} total={pageTotal} refCode={refCode} />
+          <PageFoot no={assumptionsPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGE — CONSTRUCTION MONITORING (only when photos exist) ===== */}
@@ -770,7 +773,7 @@ export default function AppraisalReport() {
                 </div>
               ))}
             </div>
-            <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} />
+            <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
           </A4Page>
         )}
       </div>

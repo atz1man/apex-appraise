@@ -335,7 +335,8 @@ test('reports disclose that no AI was used when none was', async ({ page }) => {
   await expect(page.getByText('No artificial intelligence was used in the preparation of this valuation.')).toBeVisible();
   // no drafted commentary → no extra sheet, and the footers say so
   await expect(page.locator('.a4-page')).toHaveCount(6);
-  await expect(page.getByText(/Page 6 of 6 · © Apex Appraise/)).toBeVisible();
+  // the footer carries the FIRM's name now, so assert the pagination, not the brand
+  await expect(page.getByText(/Page 6 of 6 · ©/)).toBeVisible();
 
   // and the valuer can see the same record in-product before issuing
   await page.goto(`/deal/${id}`);
@@ -709,4 +710,60 @@ test('firm policy sets the AI note and the terms house style', async ({ page }) 
   await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
   await expect(page.getByText(/No artificial intelligence/).first()).toBeVisible();
   await expect(page.getByText(note)).toBeVisible();
+});
+
+/**
+ * Firm logo — client-facing documents carry the firm's mark and name, not the
+ * product's. The app chrome stays Apex.
+ */
+test('firm logo brands the client-facing documents', async ({ page, request }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+
+  // upload a logo through the real endpoint
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAGQAAAAyCAYAAACqNX6+AAAAXklEQVR42u3QMQEAAAgDoC251a3gLwSgOZLKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysoPWx0AAWvpTMkAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const up = await request.post('/uploads/logo', {
+    headers: { authorization: `Bearer ${token}` },
+    multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: png } },
+  });
+  expect(up.ok()).toBeTruthy();
+  const { url } = (await up.json()) as { url: string };
+  expect(url).toMatch(/^\/uploads\/files\/logo-/);
+
+  // the uploaded file is reachable from the WEB origin, not just the API's —
+  // in production an nginx regex location used to swallow /uploads/*.png
+  const fetched = await request.get(url);
+  expect(fetched.status()).toBe(200);
+  expect(fetched.headers()['content-type']).toContain('image/png');
+
+  // settings shows the mark and offers to replace it
+  await page.goto('/settings');
+  await expect(page.getByText('Firm logo')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Replace logo' })).toBeVisible();
+
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+
+  // both reports carry the firm's mark and name
+  for (const route of ['report', 'redbook']) {
+    await page.goto(`/deal/${id}/${route}`);
+    const cover = page.locator('.a4-page').first();
+    await expect(cover.getByAltText(/logo/i)).toBeVisible();
+    await expect(cover.getByText('Brookfield Developments').first()).toBeVisible();
+  }
+
+  // and only an admin may change it
+  const nonAdmin = await request.post('/uploads/logo', {
+    headers: { authorization: 'Bearer not-a-token' },
+    multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: png } },
+  });
+  expect(nonAdmin.status()).toBe(401);
 });

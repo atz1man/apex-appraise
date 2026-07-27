@@ -16,7 +16,10 @@ server {
     proxy_set_header Host $host;
   }
 
-  location /uploads/ {
+  # ^~ matters: without it the .png/.webp regex location below wins over this
+  # prefix match, and every uploaded image — logos, site photos — 404s against
+  # the static root in production while working fine behind vite in dev.
+  location ^~ /uploads/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
     client_max_body_size 100m;

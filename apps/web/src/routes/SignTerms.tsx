@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { BrandMark, Button, Spinner } from '../components/ui';
+import { BrandMark, Button, FirmMark, Spinner } from '../components/ui';
 import { TermsDocument, TERMS_PRINT_CSS } from '../components/TermsDocument';
 
 /**
@@ -48,7 +48,7 @@ export default function SignTerms() {
       <style>{TERMS_PRINT_CSS}</style>
 
       <div className="no-print sticky top-0 z-40 bg-surface border-b border-border-strong px-5 py-3 flex items-center gap-3">
-        <BrandMark size={26} />
+        <FirmMark logoUrl={t.orgLogoUrl} size={26} alt={`${t.orgName} logo`} />
         <div className="min-w-0">
           <div className="text-[13px] font-semibold truncate">{t.orgName} — terms of engagement</div>
           <div className="text-[11.5px] text-ink-3 truncate">{t.dealName}</div>

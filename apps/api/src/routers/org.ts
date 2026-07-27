@@ -97,7 +97,7 @@ export const orgRouter = router({
       ctx.prisma.user.count({ where: { orgId: org.id, principalType: 'internal' } }),
       ctx.prisma.investor.count({ where: { orgId: org.id } }),
     ]);
-    return { id: org.id, name: org.name, createdAt: org.createdAt, counts: { deals, users, investors } };
+    return { id: org.id, name: org.name, logoUrl: org.logoUrl, createdAt: org.createdAt, counts: { deals, users, investors } };
   }),
 
   /** Activation checklist — real completion state for the Hub's getting-started card. */
@@ -117,6 +117,12 @@ export const orgRouter = router({
       hasComparable: comparables > 0,
       hasTeammate: members > 1,
     };
+  }),
+
+  /** Remove the firm mark and fall back to the Apex mark on documents. */
+  clearLogo: adminProcedure.mutation(async ({ ctx }) => {
+    await ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { logoUrl: '' } });
+    return { ok: true };
   }),
 
   update: adminProcedure

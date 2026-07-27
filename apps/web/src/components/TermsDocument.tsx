@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { formatMoneyFull } from '@apex/appraisal-engine';
-import { BrandMark } from './ui';
+import { FirmMark } from './ui';
 
 /**
  * The client-facing terms of engagement (RICS VPS 1), laid out for A4. Shared by
@@ -32,6 +32,7 @@ export interface TermsDocumentProps {
     aiUse: string;
     valuerName: string;
     valuerReg: string;
+    orgLogoUrl?: string | null;
     issuedAt: string | Date | null;
     acceptedAt: string | Date | null;
     acceptedBy: string | null;
@@ -96,7 +97,7 @@ export function TermsDocument({ t, subject, address, postcode, refCode: ref }: T
       <div className="a4-canvas flex flex-col items-center gap-7 px-5 pt-7 pb-14">
         <A4Page>
           <div className="flex items-center gap-3 border-b border-border-std pb-4">
-            <BrandMark size={30} />
+            <FirmMark logoUrl={t.orgLogoUrl} size={30} alt={`${t.orgName} logo`} />
             <span className="text-[17px] font-bold tracking-[-0.3px]">{t.orgName}</span>
             <span className="fig ml-auto text-[10.5px] font-medium uppercase text-ink-3" style={{ letterSpacing: '1px' }}>
               RICS Regulated

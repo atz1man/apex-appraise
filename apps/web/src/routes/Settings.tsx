@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, FirmMark, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 type Role = (typeof ROLES)[number];
@@ -35,6 +35,37 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
       toast.success('Workspace name updated');
     },
   });
+  const [uploading, setUploading] = useState(false);
+  const clearLogo = trpc.org.clearLogo.useMutation({
+    onSuccess: () => {
+      utils.org.get.invalidate();
+      toast.success('Firm logo removed — documents fall back to the Apex mark');
+    },
+  });
+
+  /** Documents carry the firm's mark; the app chrome stays Apex. */
+  const uploadLogo = async (file: File) => {
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await fetch('/uploads/logo', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${localStorage.getItem('apex_token') ?? ''}` },
+        body,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? 'Upload failed');
+      }
+      await utils.org.get.invalidate();
+      toast.success('Firm logo updated — it appears on reports and terms');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (isLoading || !org) {
     return (
@@ -55,6 +86,52 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const draft = name ?? org.name;
   const dirty = draft.trim() !== org.name && draft.trim().length >= 2;
+  const logoBlock = (
+    <div className="mt-5 border-t border-border-std pt-4">
+      <div className="text-[13.5px] font-semibold">Firm logo</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[520px]">
+        Appears on the appraisal report, the Red Book valuation and the terms of engagement — the documents your clients
+        see. PNG, JPEG or WebP, up to 2MB. Without one, those documents carry the Apex mark.
+      </div>
+      <div className="mt-3 flex items-center gap-4 flex-wrap">
+        <div
+          className="flex items-center justify-center rounded-card border border-border-std bg-sunken px-4"
+          style={{ height: 64, minWidth: 120 }}
+        >
+          <FirmMark logoUrl={org.logoUrl} size={36} alt={`${org.name} logo`} />
+        </div>
+        {isAdmin && (
+          <>
+            <label className="inline-flex">
+              <input
+                type="file"
+                className="sr-only"
+                aria-label="Upload firm logo"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadLogo(f);
+                  e.target.value = '';
+                }}
+              />
+              <span
+                className="inline-flex items-center justify-center font-semibold px-3 h-[31px] text-[12px] rounded-[10px] bg-surface text-ink-2 border border-border-strong hover:bg-sunken cursor-pointer"
+                role="button"
+              >
+                {uploading ? 'Uploading…' : org.logoUrl ? 'Replace logo' : 'Upload logo'}
+              </span>
+            </label>
+            {org.logoUrl && (
+              <Button size="sm" variant="secondary" loading={clearLogo.isPending} onClick={() => clearLogo.mutate()}>
+                Remove
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <Panel title="Organisation">
@@ -85,6 +162,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
         <StatCard label="Members" value={org.counts.users} />
         <StatCard label="Investors" value={org.counts.investors} />
       </div>
+      {logoBlock}
     </Panel>
   );
 }
