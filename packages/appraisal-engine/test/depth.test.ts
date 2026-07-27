@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { capitaliseIncome, computeAppraisal, monteCarlo, rollUpCashflow, sdltResidential, type AppraisalInput, type IncomeInput } from '../src/index.js';
+import {
+  capitaliseIncome,
+  computeAppraisal,
+  monteCarlo,
+  pvOfPound,
+  rollUpCashflow,
+  sdltResidential,
+  ypPerpetuity,
+  ypYears,
+  type AppraisalInput,
+  type IncomeInput,
+} from '../src/index.js';
 
 const base: AppraisalInput = {
   units: [{ label: 'Apartments', count: 10, area: 750, cap: 400 }],
@@ -581,5 +592,163 @@ describe('phase-level cost overrides', () => {
     expect(R.build).toBeCloseTo(180 * R.gia, 6);
     expect(R.phases!.every((p) => p.buildRate === 180)).toBe(true);
     expect(R.phases!.every((p) => p.otherTotal === 0)).toBe(true);
+  });
+});
+
+// ---- Reversionary investment valuation ----
+// A 1,000 ft² shop passing £20/ft² with an ERV of £30/ft², reviewed in 5 years.
+// Clean inputs (no voids, no non-recoverables, no purchaser's costs) so every
+// figure below is hand-computable:
+//   1.05^-5            = 0.78352616646
+//   YP 5 years @ 5%    = (1 - 0.78352616646) / 0.05 = 4.3294766708
+//   term      = 20,000 × 4.3294766708      =  86,589.53
+//   reversion = 30,000 × 20 × 0.78352616646 = 470,115.70
+const shop: IncomeInput = {
+  lines: [{ label: 'Shop', count: 1, area: 1_000, rentPsf: 20, ervPsf: 30, yearsToReview: 5 }],
+  nonRecoverablePct: 0,
+  yieldPct: 5,
+  purchaserCostsPct: 0,
+};
+
+describe('years purchase and deferment factors', () => {
+  it('are the standard valuation factors', () => {
+    expect(ypPerpetuity(0.05)).toBeCloseTo(20, 10);
+    expect(ypYears(5, 0.05)).toBeCloseTo(4.3294766708, 8);
+    expect(pvOfPound(5, 0.05)).toBeCloseTo(0.78352616646, 10);
+    // a nil yield cannot capitalise in perpetuity, but a term is still n years of rent
+    expect(ypPerpetuity(0)).toBe(0);
+    expect(ypYears(5, 0)).toBe(5);
+  });
+});
+
+describe('term and reversion', () => {
+  it('values the term at the passing rent and the reversion at the deferred ERV', () => {
+    const r = capitaliseIncome({ ...shop, method: 'termReversion' });
+    const line = r.lines[0];
+    expect(line.isReversionary).toBe(true);
+    expect(line.netPassing).toBe(20_000);
+    expect(line.netErv).toBe(30_000);
+    expect(line.termValue).toBeCloseTo(86_589.53, 2);
+    expect(line.reversionValue).toBeCloseTo(470_115.70, 2);
+    expect(r.grossCapitalValue).toBeCloseTo(556_705.23, 2);
+  });
+
+  it('is worth more than capitalising the passing rent alone', () => {
+    const flat = capitaliseIncome(shop); // perpetuity — ignores the reversion
+    const tr = capitaliseIncome({ ...shop, method: 'termReversion' });
+    expect(flat.grossCapitalValue).toBeCloseTo(400_000, 6); // 20,000 × YP 20
+    expect(tr.grossCapitalValue).toBeGreaterThan(flat.grossCapitalValue);
+  });
+
+  it('a longer wait for the reversion is worth less', () => {
+    const soon = capitaliseIncome({ ...shop, method: 'termReversion' });
+    const later = capitaliseIncome({
+      ...shop,
+      method: 'termReversion',
+      lines: [{ ...shop.lines[0], yearsToReview: 15 }],
+    });
+    expect(later.grossCapitalValue).toBeLessThan(soon.grossCapitalValue);
+  });
+});
+
+describe('hardcore / top slice', () => {
+  it('splits the income horizontally into a core and a deferred top slice', () => {
+    const r = capitaliseIncome({ ...shop, method: 'hardcore' });
+    const line = r.lines[0];
+    expect(line.termValue).toBeCloseTo(400_000, 6); // passing rent in perpetuity
+    expect(line.reversionValue).toBeCloseTo(156_705.23, 2); // uplift, deferred 5 years
+  });
+
+  it('agrees with term and reversion when one yield is used for both', () => {
+    // the vertical and horizontal splits are algebraically identical at a single
+    // yield — if these ever diverge, one of the formulas is wrong
+    const tr = capitaliseIncome({ ...shop, method: 'termReversion' });
+    const hc = capitaliseIncome({ ...shop, method: 'hardcore' });
+    expect(hc.grossCapitalValue).toBeCloseTo(tr.grossCapitalValue, 6);
+  });
+
+  it('parts company once the reversion is yielded differently', () => {
+    const tr = capitaliseIncome({ ...shop, method: 'termReversion', reversionYieldPct: 6 });
+    const hc = capitaliseIncome({ ...shop, method: 'hardcore', reversionYieldPct: 6 });
+    expect(Math.abs(hc.grossCapitalValue - tr.grossCapitalValue)).toBeGreaterThan(1_000);
+    // a harder reversion yield takes value off both
+    expect(tr.grossCapitalValue).toBeLessThan(capitaliseIncome({ ...shop, method: 'termReversion' }).grossCapitalValue);
+  });
+});
+
+describe('yields quoted on the valuation', () => {
+  it('equivalent yield equals the yield used when one rate values both halves', () => {
+    const r = capitaliseIncome({ ...shop, method: 'termReversion' });
+    expect(r.equivalentYield).toBeCloseTo(0.05, 6);
+  });
+
+  it('equivalent yield sits between the two rates when they differ', () => {
+    const r = capitaliseIncome({ ...shop, method: 'termReversion', reversionYieldPct: 6 });
+    expect(r.equivalentYield).toBeGreaterThan(0.05);
+    expect(r.equivalentYield).toBeLessThan(0.06);
+  });
+
+  it('initial yield reflects the passing rent, reversionary the ERV', () => {
+    const r = capitaliseIncome({ ...shop, method: 'termReversion' });
+    expect(r.netInitialYield).toBeCloseTo(20_000 / r.capitalValueBeforeCosts, 10);
+    expect(r.reversionaryYield).toBeCloseTo(30_000 / r.capitalValueBeforeCosts, 10);
+    expect(r.reversionaryYield).toBeGreaterThan(r.netInitialYield); // it is reversionary
+  });
+
+  it('collapses to the initial yield when nothing is reversionary', () => {
+    const rack = capitaliseIncome({
+      ...shop,
+      method: 'termReversion',
+      lines: [{ label: 'Shop', count: 1, area: 1_000, rentPsf: 20, yearsToReview: 5 }], // ERV = passing
+    });
+    expect(rack.lines[0].isReversionary).toBe(false);
+    expect(rack.grossCapitalValue).toBeCloseTo(400_000, 6);
+    expect(rack.equivalentYield).toBeCloseTo(0.05, 6);
+    expect(rack.reversionaryYield).toBeCloseTo(rack.netInitialYield, 10);
+  });
+});
+
+describe('per-tenancy yields', () => {
+  it('capitalises each line at its own rate', () => {
+    const r = capitaliseIncome({
+      lines: [
+        { label: 'Strong covenant', count: 1, area: 1_000, rentPsf: 20, yieldPct: 4 },
+        { label: 'Short let', count: 1, area: 1_000, rentPsf: 20, yieldPct: 8 },
+      ],
+      nonRecoverablePct: 0,
+      yieldPct: 6,
+      purchaserCostsPct: 0,
+    });
+    expect(r.lines[0].yieldUsed).toBe(4);
+    expect(r.lines[1].yieldUsed).toBe(8);
+    expect(r.lines[0].value).toBeCloseTo(20_000 / 0.04, 6); // £500,000
+    expect(r.lines[1].value).toBeCloseTo(20_000 / 0.08, 6); // £250,000
+    expect(r.grossCapitalValue).toBeCloseTo(750_000, 6);
+    // the blended equivalent yield lands between the two
+    expect(r.equivalentYield).toBeGreaterThan(0.04);
+    expect(r.equivalentYield).toBeLessThan(0.08);
+  });
+});
+
+describe('deductions across a reversionary rent roll', () => {
+  it('shares fixed deductions by rent and applies them to passing and ERV alike', () => {
+    const r = capitaliseIncome({
+      lines: [
+        { label: 'Big', count: 1, area: 3_000, rentPsf: 20, ervPsf: 25, yearsToReview: 3 },
+        { label: 'Small', count: 1, area: 1_000, rentPsf: 20, ervPsf: 25, yearsToReview: 3 },
+      ],
+      nonRecoverablePct: 10,
+      annualDeductions: 4_000,
+      yieldPct: 6,
+      purchaserCostsPct: 6.8,
+      method: 'termReversion',
+    });
+    // 75% of the rent carries 75% of the £4,000 ground rent
+    expect(r.lines[0].netPassing).toBeCloseTo(60_000 * 0.9 - 3_000, 6);
+    expect(r.lines[1].netPassing).toBeCloseTo(20_000 * 0.9 - 1_000, 6);
+    expect(r.lines[0].netPassing + r.lines[1].netPassing).toBeCloseTo(r.netRent, 6);
+    // the ERV is netted the same way
+    expect(r.lines[0].netErv).toBeCloseTo(75_000 * 0.9 - 3_000, 6);
+    expect(r.netErv).toBeGreaterThan(r.netRent);
   });
 });

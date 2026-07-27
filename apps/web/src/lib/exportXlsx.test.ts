@@ -171,11 +171,12 @@ describe('buildAppraisalWorkbook — with a held element', async () => {
     rr.eachRow((row) => {
       const label = String(row.getCell(1).value ?? '');
       labels.push(label);
+      // the rent roll gained ERV/review/yield columns, so amounts sit in column 9
       if (label.startsWith('Investment value in GDV')) {
-        ncv = row.getCell(6).value as number;
-        expect(row.getCell(6).numFmt).toBe('"£"#,##0;[Red]-"£"#,##0');
+        ncv = row.getCell(9).value as number;
+        expect(row.getCell(9).numFmt).toBe('"£"#,##0;[Red]-"£"#,##0');
       }
-      if (label === 'Net initial yield') niyFmt = row.getCell(6).numFmt ?? '';
+      if (label === 'Net initial yield') niyFmt = row.getCell(9).numFmt ?? '';
     });
     expect(labels.some((l) => l.startsWith('Gross capital value — YP'))).toBe(true);
     expect(labels.some((l) => l.startsWith("Purchaser's costs"))).toBe(true);

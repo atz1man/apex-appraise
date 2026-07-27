@@ -9,6 +9,7 @@ import type {
   CostTiming,
   IncomeInput,
   IncomeLineResult,
+  IncomeMethod,
   IncomeResult,
   JvInput,
   JvResult,
@@ -137,47 +138,154 @@ export const DEFAULT_PURCHASER_COSTS_PCT = 6.8;
  * being let; it is not a discounted-cashflow term, and it pushes the net initial
  * yield above the capitalisation yield.
  */
+/** Years purchase in perpetuity at yield i (fraction). */
+export const ypPerpetuity = (i: number) => (i > 0 ? 1 / i : 0);
+/** Years purchase for n years at yield i — the annuity factor. */
+export const ypYears = (n: number, i: number) => (i > 0 ? (1 - Math.pow(1 + i, -n)) / i : Math.max(0, n));
+/** Present value of £1 receivable in n years at yield i. */
+export const pvOfPound = (n: number, i: number) => (i > -1 ? Math.pow(1 + i, -n) : 0);
+
 export function capitaliseIncome(input: IncomeInput): IncomeResult {
-  const lines: IncomeLineResult[] = input.lines.map((l) => {
+  const method: IncomeMethod = input.method ?? 'perpetuity';
+  const pc = input.purchaserCostsPct ?? DEFAULT_PURCHASER_COSTS_PCT;
+
+  // ---- rent analysis, line by line ----
+  const raw = input.lines.map((l) => {
     const totalArea = l.count * l.area;
     const grossRent = totalArea * l.rentPsf;
-    const voidAllowance = (grossRent * (l.voidPct ?? 0)) / 100;
-    return { label: l.label, count: l.count, area: l.area, totalArea, grossRent, voidAllowance, rentAfterVoid: grossRent - voidAllowance };
+    const grossErv = totalArea * (l.ervPsf ?? l.rentPsf);
+    const voidRate = (l.voidPct ?? 0) / 100;
+    return {
+      line: l,
+      totalArea,
+      grossRent,
+      grossErv,
+      voidAllowance: grossRent * voidRate,
+      rentAfterVoid: grossRent * (1 - voidRate),
+      ervAfterVoid: grossErv * (1 - voidRate),
+    };
   });
 
-  const totalArea = lines.reduce((a, l) => a + l.totalArea, 0);
-  const grossRent = lines.reduce((a, l) => a + l.grossRent, 0);
-  const voidAllowance = lines.reduce((a, l) => a + l.voidAllowance, 0);
+  const totalArea = raw.reduce((a, r) => a + r.totalArea, 0);
+  const grossRent = raw.reduce((a, r) => a + r.grossRent, 0);
+  const grossErv = raw.reduce((a, r) => a + r.grossErv, 0);
+  const voidAllowance = raw.reduce((a, r) => a + r.voidAllowance, 0);
   const rentAfterVoid = grossRent - voidAllowance;
   const nonRecoverable = (rentAfterVoid * input.nonRecoverablePct) / 100;
   const deductions = input.annualDeductions ?? 0;
   const netRent = rentAfterVoid - nonRecoverable - deductions;
 
-  const y = input.yieldPct;
-  // a non-positive yield does not capitalise — return the rent analysis with a nil value
-  const yearsPurchase = y > 0 ? 100 / y : 0;
-  const grossCapitalValue = netRent * yearsPurchase;
+  // Fixed deductions are a property-level charge, so they are shared across the
+  // tenancies in proportion to the rent each contributes.
+  const share = (r: (typeof raw)[number]) => (rentAfterVoid > 0 ? r.rentAfterVoid / rentAfterVoid : 0);
+  const netOf = (afterVoid: number, s: number) => afterVoid * (1 - input.nonRecoverablePct / 100) - deductions * s;
+
+  const lines: IncomeLineResult[] = raw.map((r) => {
+    const s = share(r);
+    const netPassing = netOf(r.rentAfterVoid, s);
+    const netErv = netOf(r.ervAfterVoid, s);
+    const yieldUsed = r.line.yieldPct ?? input.yieldPct;
+    const reversionYieldUsed = input.reversionYieldPct ?? yieldUsed;
+    const i = yieldUsed / 100;
+    const j = reversionYieldUsed / 100;
+    const n = Math.max(0, r.line.yearsToReview ?? 0);
+    const uplift = netErv - netPassing;
+    const reversionary = method !== 'perpetuity' && n > 0 && Math.abs(uplift) > 1e-9;
+
+    let termValue: number;
+    let reversionValue: number;
+    if (!reversionary) {
+      // nothing to revert to (or the perpetuity method) — capitalise what is passing
+      termValue = netPassing * ypPerpetuity(i);
+      reversionValue = 0;
+    } else if (method === 'termReversion') {
+      // vertical split: the passing rent for the term, then the ERV in perpetuity
+      // deferred to the review date
+      termValue = netPassing * ypYears(n, i);
+      reversionValue = netErv * ypPerpetuity(j) * pvOfPound(n, j);
+    } else {
+      // horizontal split: the passing rent in perpetuity as the bottom slice,
+      // the uplift as a deferred top slice
+      termValue = netPassing * ypPerpetuity(i);
+      reversionValue = uplift * ypPerpetuity(j) * pvOfPound(n, j);
+    }
+
+    return {
+      label: r.line.label,
+      count: r.line.count,
+      area: r.line.area,
+      totalArea: r.totalArea,
+      grossRent: r.grossRent,
+      grossErv: r.grossErv,
+      voidAllowance: r.voidAllowance,
+      rentAfterVoid: r.rentAfterVoid,
+      netPassing,
+      netErv,
+      yearsToReview: n,
+      yieldUsed,
+      reversionYieldUsed,
+      termValue,
+      reversionValue,
+      value: termValue + reversionValue,
+      isReversionary: reversionary,
+    };
+  });
+
+  const netErv = lines.reduce((a, l) => a + l.netErv, 0);
+  const grossCapitalValue = lines.reduce((a, l) => a + l.value, 0);
   const letUpDeduction = (netRent * (input.letUpMonths ?? 0)) / 12;
   const capitalValueBeforeCosts = grossCapitalValue - letUpDeduction;
-  const pc = input.purchaserCostsPct ?? DEFAULT_PURCHASER_COSTS_PCT;
   const netCapitalValue = capitalValueBeforeCosts / (1 + pc / 100);
   const purchaserCosts = capitalValueBeforeCosts - netCapitalValue;
+
+  /**
+   * Equivalent yield: the single rate that reproduces this valuation when
+   * applied to both the term and the reversion. Solved by bisection because
+   * there is no closed form; it collapses to the initial yield when nothing is
+   * reversionary, which the tests assert.
+   */
+  const valueAtSingleYield = (i: number) =>
+    lines.reduce((a, l) => {
+      if (!l.isReversionary) return a + l.netPassing * ypPerpetuity(i);
+      if (method === 'termReversion') {
+        return a + l.netPassing * ypYears(l.yearsToReview, i) + l.netErv * ypPerpetuity(i) * pvOfPound(l.yearsToReview, i);
+      }
+      return a + l.netPassing * ypPerpetuity(i) + (l.netErv - l.netPassing) * ypPerpetuity(i) * pvOfPound(l.yearsToReview, i);
+    }, 0);
+
+  let equivalentYield = 0;
+  if (grossCapitalValue > 0) {
+    let lo = 0.001;
+    let hi = 0.4;
+    for (let k = 0; k < 80; k++) {
+      const mid = (lo + hi) / 2;
+      // value falls as the yield rises, so bracket accordingly
+      if (valueAtSingleYield(mid) > grossCapitalValue) lo = mid;
+      else hi = mid;
+    }
+    equivalentYield = (lo + hi) / 2;
+  }
 
   return {
     lines,
     totalArea,
     grossRent,
+    grossErv,
     voidAllowance,
     nonRecoverable,
     deductions,
     netRent,
-    yearsPurchase,
+    netErv,
+    method,
+    yearsPurchase: ypPerpetuity(input.yieldPct / 100),
     grossCapitalValue,
     letUpDeduction,
     capitalValueBeforeCosts,
     purchaserCosts,
     netCapitalValue,
     netInitialYield: capitalValueBeforeCosts > 0 ? netRent / capitalValueBeforeCosts : 0,
+    reversionaryYield: capitalValueBeforeCosts > 0 ? netErv / capitalValueBeforeCosts : 0,
+    equivalentYield,
     capitalValuePsf: totalArea > 0 ? netCapitalValue / totalArea : 0,
     blendedRentPsf: totalArea > 0 ? grossRent / totalArea : 0,
   };

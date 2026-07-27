@@ -50,11 +50,14 @@ const DEFAULT_INCOME: IncomeInput = {
   letUpMonths: 6,
 };
 
-const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct', string> = {
+const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct' | 'ervPsf' | 'yearsToReview' | 'yieldPct', string> = {
   count: 'number of tenancies',
   area: 'area sq ft',
-  rentPsf: 'rent per sq ft per year',
+  rentPsf: 'passing rent per sq ft per year',
   voidPct: 'void allowance percent',
+  ervPsf: 'estimated rental value per sq ft per year',
+  yearsToReview: 'years to review',
+  yieldPct: 'tenancy yield percent',
 };
 
 const PRESETS: Record<string, number[]> = {
@@ -778,7 +781,7 @@ export default function DevelopmentAppraisal() {
                       }
                     >
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[560px]">
+                        <table className="w-full min-w-[820px]">
                           <thead>
                             <tr>
                               <th className="label-mono text-ink-3 text-left pb-2">Tenancy / space</th>
@@ -786,6 +789,9 @@ export default function DevelopmentAppraisal() {
                               <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-24">Rent £/ft²</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-20">Void %</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">ERV £/ft²</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-20">Review yrs</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-20">Yield %</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-28">Rent £/yr</th>
                               <th className="w-8" />
                             </tr>
@@ -807,6 +813,19 @@ export default function DevelopmentAppraisal() {
                                     />
                                   </td>
                                 ))}
+                                {/* blank inherits: ERV = passing rent, yield = scheme yield */}
+                                {(['ervPsf', 'yearsToReview', 'yieldPct'] as const).map((k) => (
+                                  <td key={k} className="py-1.5 px-1 border-t border-border-faint">
+                                    <input
+                                      type="number"
+                                      className="w-full text-right fig"
+                                      aria-label={`${l.label} ${RENT_COL_ARIA[k]}`}
+                                      placeholder={k === 'ervPsf' ? String(l.rentPsf) : k === 'yieldPct' ? String(inc.yieldPct) : '—'}
+                                      value={l[k] ?? ''}
+                                      onChange={(e) => setLine(i, { [k]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                    />
+                                  </td>
+                                ))}
                                 <td className="fig text-right text-[12.5px] font-semibold border-t border-border-faint">{formatSigned(R.income!.lines[i]?.grossRent ?? 0)}</td>
                                 <td className="text-right border-t border-border-faint">
                                   <button aria-label={`Remove ${l.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => setIncome({ lines: inc.lines.filter((_, j) => j !== i) })}>×</button>
@@ -823,13 +842,31 @@ export default function DevelopmentAppraisal() {
                       </div>
                     </Panel>
 
-                    <Panel title="Capitalisation">
+                    <Panel
+                      title="Capitalisation"
+                      right={
+                        <SegmentedToggle
+                          options={[['perpetuity', 'Perpetuity'], ['termReversion', 'Term & reversion'], ['hardcore', 'Hardcore']]}
+                          value={(inc.method ?? 'perpetuity') as never}
+                          onChange={(m) => setIncome({ method: m as IncomeInput['method'] })}
+                        />
+                      }
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <NumField label="All-risks yield" suffix="%" value={inc.yieldPct} step={0.05} onChange={(v) => setIncome({ yieldPct: v })} />
                         <NumField label="Purchaser's costs" suffix="%" value={inc.purchaserCostsPct ?? 6.8} step={0.1} onChange={(v) => setIncome({ purchaserCostsPct: v })} />
                         <NumField label="Non-recoverables" suffix="% of rent" value={inc.nonRecoverablePct} step={0.5} onChange={(v) => setIncome({ nonRecoverablePct: v })} />
                         <NumField label="Fixed deductions" suffix="£/yr" value={inc.annualDeductions ?? 0} onChange={(v) => setIncome({ annualDeductions: v })} />
                         <NumField label="Let-up void" suffix="months" value={inc.letUpMonths ?? 0} step={1} onChange={(v) => setIncome({ letUpMonths: v })} />
+                        {(inc.method ?? 'perpetuity') !== 'perpetuity' && (
+                          <NumField
+                            label="Reversion yield"
+                            suffix="%"
+                            step={0.05}
+                            value={inc.reversionYieldPct ?? inc.yieldPct}
+                            onChange={(v) => setIncome({ reversionYieldPct: v })}
+                          />
+                        )}
                       </div>
 
                       {/* the valuation ladder — every step the engine takes, in order */}
@@ -840,7 +877,16 @@ export default function DevelopmentAppraisal() {
                           ['Non-recoverables', -R.income.nonRecoverable],
                           ['Fixed deductions', -R.income.deductions],
                           ['Net rent (NOI)', R.income.netRent, 'sub'],
-                          [`Years purchase @ ${inc.yieldPct}%`, R.income.grossCapitalValue, 'mult'],
+                          ...(R.income.lines.some((l) => l.isReversionary)
+                            ? ([
+                                ['Term — passing rent', R.income.lines.reduce((a, l) => a + l.termValue, 0)],
+                                [
+                                  R.income.method === 'hardcore' ? 'Top slice — deferred uplift' : 'Reversion — ERV deferred',
+                                  R.income.lines.reduce((a, l) => a + l.reversionValue, 0),
+                                ],
+                                ['Gross capital value', R.income.grossCapitalValue, 'sub'],
+                              ] as Array<[string, number, string?]>)
+                            : ([[`Years purchase @ ${inc.yieldPct}%`, R.income.grossCapitalValue, 'mult']] as Array<[string, number, string?]>)),
                           [`Let-up void — ${inc.letUpMonths ?? 0} months`, -R.income.letUpDeduction],
                           [`Purchaser's costs`, -R.income.purchaserCosts],
                           ['Investment value in GDV', R.income.netCapitalValue, 'final'],
@@ -869,13 +915,22 @@ export default function DevelopmentAppraisal() {
 
                       <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
                         <Kv k="Net initial yield" v={formatPct(R.income.netInitialYield, 2)} tone="#14503B" />
+                        {R.income.lines.some((l) => l.isReversionary) && (
+                          <>
+                            <Kv k="Reversionary yield" v={formatPct(R.income.reversionaryYield, 2)} />
+                            <Kv k="Equivalent yield" v={formatPct(R.income.equivalentYield, 2)} />
+                          </>
+                        )}
                         <Kv k="Capital value" v={`£${Math.round(R.income.capitalValuePsf)}/ft²`} />
                         <Kv k="Share of GDV" v={formatPct(R.gdv > 0 ? R.investmentValue / R.gdv : 0, 0)} />
                       </div>
                       <div className="mt-3 text-[11px] text-ink-3 leading-snug">
-                        Net rent is capitalised in perpetuity at the all-risks yield; the let-up void is taken as a capital
-                        deduction, which is why the net initial yield sits above the capitalisation yield. The lettable area
-                        counts towards GIA, so the held space carries its share of build cost.
+                        {R.income.lines.some((l) => l.isReversionary)
+                          ? R.income.method === 'hardcore'
+                            ? 'The passing rent is capitalised in perpetuity as the bottom slice; the uplift to ERV is a top slice deferred to review. Leave ERV blank on a line and it is rack-rented.'
+                            : 'The passing rent is valued for the term, then the ERV in perpetuity deferred to the review date. Leave ERV blank on a line and it is rack-rented.'
+                          : 'Net rent is capitalised in perpetuity at the all-risks yield; the let-up void is taken as a capital deduction, which is why the net initial yield sits above the capitalisation yield.'}{' '}
+                        The lettable area counts towards GIA, so the held space carries its share of build cost.
                       </div>
                     </Panel>
                   </>

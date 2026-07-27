@@ -283,19 +283,26 @@ test('appraisal capitalises a rent roll into GDV', async ({ page }) => {
   await expect(page.getByText('12,600 ft²')).toBeVisible();
   await expect(page.getByText('£213,300 pa')).toBeVisible();
 
-  // the ladder ends at the capitalised value that enters GDV
+  // the ladder ends at the capitalised value that enters GDV. The parade is
+  // reversionary (let below ERV, reviewed in three years), so the value carries
+  // a term and a deferred reversion — see the term & reversion tests in the engine
   await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
-  await expect(page.getByText('£2,374,783').first()).toBeVisible();
-  // the let-up void pushes the net initial yield above the 7.25% capitalisation yield
-  await expect(page.getByText('7.52%')).toBeVisible();
+  await expect(page.getByText('£2,588,358').first()).toBeVisible();
+  await expect(page.getByText('Term — passing rent')).toBeVisible();
+  await expect(page.getByText('Reversion — ERV deferred')).toBeVisible();
+  // the three yields a valuer quotes: on passing, on ERV, and the single
+  // equivalent rate between them
+  await expect(page.getByText('6.90%')).toBeVisible();
+  await expect(page.getByText('8.05%')).toBeVisible();
+  await expect(page.getByText('7.56%')).toBeVisible();
 
   // and the right-rail residual breakdown states the GDV composition
   await expect(page.getByText('— capitalised investment value')).toBeVisible();
   await expect(page.getByText('— units sold')).toBeVisible();
 
-  // live engine: a sharper yield capitalises the same rent into a bigger number
+  // live engine: a sharper term yield lifts the value of the term
   await page.getByLabel('All-risks yield (%)').fill('6');
-  await expect(page.getByText('£2,888,139').first()).toBeVisible();
+  await expect(page.getByText('£2,597,470').first()).toBeVisible();
 });
 
 test('appraisal without a held element offers to add a rent roll', async ({ page }) => {
@@ -766,4 +773,40 @@ test('firm logo brands the client-facing documents', async ({ page, request }) =
     multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: png } },
   });
   expect(nonAdmin.status()).toBe(401);
+});
+
+/**
+ * Reversionary income — a tenancy let below its ERV is worth more than its
+ * passing rent, and the valuer can switch between the vertical and horizontal
+ * splits.
+ */
+test('reversionary rent roll values term and reversion, and switches method', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Investment', exact: true }).click();
+
+  // the rent roll carries an ERV, a review date and a per-tenancy yield
+  await expect(page.getByLabel(/Retail units .* estimated rental value/)).toHaveValue('21.5');
+  await expect(page.getByLabel(/Retail units .* years to review/)).toHaveValue('3');
+  // no bracketed suffix on this label, so no wildcard between name and column
+  await expect(page.getByLabel(/First-floor offices tenancy yield/)).toHaveValue('8');
+
+  // hardcore restates the same income as a core plus a deferred top slice
+  await page.getByRole('tab', { name: 'Hardcore', exact: true }).click();
+  await expect(page.getByText('Top slice — deferred uplift')).toBeVisible();
+  await expect(page.getByText(/uplift to ERV is a top slice deferred to review/)).toBeVisible();
+
+  // and perpetuity ignores the reversion entirely — a different value on the same rent
+  const investmentRow = page.locator('div').filter({ hasText: /^— capitalised investment value/ });
+  const reversionaryValue = await investmentRow.innerText();
+  await page.getByRole('tab', { name: 'Perpetuity', exact: true }).click();
+  await expect(page.getByText(/Years purchase @/)).toBeVisible();
+  await expect(investmentRow).not.toHaveText(reversionaryValue);
 });

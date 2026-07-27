@@ -24,9 +24,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (94; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (107; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/web && npx playwright test` — e2e (53; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (54; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x docker compose up -d --build` — production stack: nginx :8080 → api → Postgres 16.
 

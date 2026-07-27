@@ -204,9 +204,13 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
         { label: 'Drive-thru pod (sold on)', count: 1, area: 2400, cap: 420, conf: 'med', source: 'Agent quote' },
       ]),
       income: JSON.stringify({
+        // the parade is reversionary: the ground-floor units are let below ERV
+        // with a review in three years, the offices are rack-rented
+        method: 'termReversion',
+        reversionYieldPct: 7.5,
         lines: [
-          { label: 'Retail units (ground floor)', count: 6, area: 1650, rentPsf: 18, voidPct: 4 },
-          { label: 'First-floor offices', count: 3, area: 900, rentPsf: 13, voidPct: 8 },
+          { label: 'Retail units (ground floor)', count: 6, area: 1650, rentPsf: 18, ervPsf: 21.5, yearsToReview: 3, voidPct: 4 },
+          { label: 'First-floor offices', count: 3, area: 900, rentPsf: 13, voidPct: 8, yieldPct: 8 },
         ],
         nonRecoverablePct: 5,
         annualDeductions: 2400,

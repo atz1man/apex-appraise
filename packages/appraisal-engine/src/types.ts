@@ -59,17 +59,45 @@ export interface IncomeLine {
   label: string;
   count: number;
   area: number; // sqft NIA per unit
-  rentPsf: number; // £/ft² per annum, headline
+  /** PASSING rent — what the tenant pays today, £/ft² per annum */
+  rentPsf: number;
   /** structural void / bad-debt allowance on this line, % of its gross rent */
   voidPct?: number;
+  /**
+   * Estimated rental value — what the space would let for today. Above the
+   * passing rent the tenancy is reversionary and the uplift is worth something
+   * at the next review or expiry. Omit and it equals the passing rent.
+   */
+  ervPsf?: number;
+  /** years until the next review or expiry — when the ERV can be captured */
+  yearsToReview?: number;
+  /** this tenancy's own yield; omit to use the scheme yield */
+  yieldPct?: number;
 }
 
 /**
  * Investment-method inputs (RICS): the part of the scheme that is HELD and let
  * rather than sold on. Capitalised at an all-risks yield to a capital value.
  */
+/**
+ * How a reversion is valued.
+ * - `perpetuity`  — capitalise the net passing rent in perpetuity; no reversion.
+ * - `termReversion` — the passing rent for the term, then the ERV in perpetuity
+ *   deferred to the review date (the classic vertical split).
+ * - `hardcore` — the passing rent in perpetuity as the bottom slice, plus the
+ *   uplift as a deferred top slice (the horizontal split).
+ */
+export type IncomeMethod = 'perpetuity' | 'termReversion' | 'hardcore';
+
 export interface IncomeInput {
   lines: IncomeLine[];
+  /** default `perpetuity`, which is what a scheme with no reversions needs */
+  method?: IncomeMethod;
+  /**
+   * Yield applied to the reversion (term & reversion) or the top slice
+   * (hardcore). Omit to use each line's own yield.
+   */
+  reversionYieldPct?: number;
   /** non-recoverable running costs (management, insurance, repairs) as % of rent after voids */
   nonRecoverablePct: number;
   /** fixed annual deductions — ground rent, service-charge shortfall (£/yr) */
@@ -87,9 +115,23 @@ export interface IncomeLineResult {
   count: number;
   area: number;
   totalArea: number; // count × area
-  grossRent: number; // £/yr before voids
+  grossRent: number; // £/yr passing, before voids
   voidAllowance: number;
   rentAfterVoid: number;
+  /** net of voids, non-recoverables and this line's share of fixed deductions */
+  netPassing: number;
+  /** the same treatment applied to the ERV */
+  netErv: number;
+  grossErv: number;
+  yearsToReview: number;
+  yieldUsed: number; // % — term/core yield
+  reversionYieldUsed: number; // % — reversion/top-slice yield
+  /** capitalised value of this tenancy before let-up and purchaser's costs */
+  value: number;
+  /** the two halves of the split, whichever method produced them */
+  termValue: number;
+  reversionValue: number;
+  isReversionary: boolean;
 }
 
 export interface IncomeResult {
@@ -106,7 +148,18 @@ export interface IncomeResult {
   capitalValueBeforeCosts: number; // what a purchaser pays in total, costs included
   purchaserCosts: number;
   netCapitalValue: number; // the GDV contribution — price net of purchaser's costs
-  netInitialYield: number; // fraction — netRent ÷ costs-inclusive price
+  netInitialYield: number; // fraction — net passing rent ÷ costs-inclusive price
+  /** fraction — net ERV ÷ costs-inclusive price; what the yield becomes on reversion */
+  reversionaryYield: number;
+  /**
+   * The single yield that reproduces this valuation — the figure a UK valuer
+   * quotes. Equal to the net initial yield when nothing is reversionary.
+   */
+  equivalentYield: number;
+  /** £/yr of ERV, net of the same deductions as the passing rent */
+  netErv: number;
+  grossErv: number;
+  method: IncomeMethod;
   capitalValuePsf: number;
   blendedRentPsf: number;
 }

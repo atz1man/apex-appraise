@@ -208,65 +208,95 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   if (R.income && input.income) {
     const I = R.income;
     const rr = wb.addWorksheet('Rent roll', { properties: { tabColor: { argb: 'FF1E7A55' } } });
-    rr.columns = [{ width: 40 }, { width: 9 }, { width: 13 }, { width: 12 }, { width: 10 }, { width: 16 }];
-    titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 6);
-    headerRow(rr, ['Tenancy / space', 'No.', 'Area (sq ft)', 'Rent £/sq ft', 'Void %', 'Rent (£ pa)']);
+    rr.columns = [{ width: 34 }, { width: 8 }, { width: 12 }, { width: 12 }, { width: 9 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 15 }];
+    titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 9);
+    headerRow(rr, ['Tenancy / space', 'No.', 'Area (sq ft)', 'Rent £/sq ft', 'Void %', 'ERV £/sq ft', 'Review (yrs)', 'Yield %', 'Rent (£ pa)']);
     const firstRent = rr.rowCount + 1;
     input.income.lines.forEach((l, i) => {
-      const r = rr.addRow([l.label, l.count, l.area, l.rentPsf, (l.voidPct ?? 0) / 100, null]);
+      const calc = I.lines[i];
+      const r = rr.addRow([
+        l.label,
+        l.count,
+        l.area,
+        l.rentPsf,
+        (l.voidPct ?? 0) / 100,
+        l.ervPsf ?? l.rentPsf,
+        calc?.yearsToReview || null,
+        (calc?.yieldUsed ?? input.income!.yieldPct) / 100,
+        null,
+      ]);
       r.eachCell((c) => body(c));
       const rowN = firstRent + i;
-      r.getCell(6).value = { formula: `B${rowN}*C${rowN}*D${rowN}` };
+      r.getCell(9).value = { formula: `B${rowN}*C${rowN}*D${rowN}` };
       r.getCell(3).numFmt = FMT_NUM;
       r.getCell(4).numFmt = FMT_MONEY_PSF;
       r.getCell(5).numFmt = FMT_PCT;
-      r.getCell(6).numFmt = FMT_MONEY;
-      for (let c = 2; c <= 6; c++) r.getCell(c).alignment = { horizontal: 'right' };
+      r.getCell(6).numFmt = FMT_MONEY_PSF;
+      r.getCell(8).numFmt = FMT_PCT;
+      r.getCell(9).numFmt = FMT_MONEY;
+      for (let c = 2; c <= 9; c++) r.getCell(c).alignment = { horizontal: 'right' };
     });
     const lastRent = rr.rowCount;
-    const grossRow = rr.addRow(['Gross rent', null, Math.round(I.totalArea), null, null, null]);
+    const grossRow = rr.addRow(['Gross rent (passing)', null, Math.round(I.totalArea), null, null, null, null, null, null]);
     grossRow.getCell(3).numFmt = FMT_NUM;
     grossRow.getCell(3).alignment = { horizontal: 'right' };
-    grossRow.getCell(6).value = { formula: `SUM(F${firstRent}:F${lastRent})` };
-    grossRow.getCell(6).numFmt = FMT_MONEY;
-    grossRow.getCell(6).alignment = { horizontal: 'right' };
-    totalRow(grossRow, 6);
+    grossRow.getCell(9).value = { formula: `SUM(I${firstRent}:I${lastRent})` };
+    grossRow.getCell(9).numFmt = FMT_MONEY;
+    grossRow.getCell(9).alignment = { horizontal: 'right' };
+    totalRow(grossRow, 9);
     rr.addRow([]);
 
     // the valuation ladder, in the order the engine applies it
-    headerRow(rr, ['Capitalisation', '', '', '', '', 'Amount']);
+    headerRow(rr, ['Capitalisation', '', '', '', '', '', '', '', 'Amount']);
     const ladder: Array<[string, number, boolean?]> = [
       ['Void allowance', -Math.round(I.voidAllowance)],
       [`Non-recoverables (${input.income.nonRecoverablePct}% of rent after voids)`, -Math.round(I.nonRecoverable)],
       ['Fixed deductions (ground rent, service-charge shortfall)', -Math.round(I.deductions)],
       ['Net rent (NOI)', Math.round(I.netRent), true],
-      [`Gross capital value — YP ${I.yearsPurchase.toFixed(2)} @ ${input.income.yieldPct}%`, Math.round(I.grossCapitalValue), true],
+      ...(I.lines.some((l) => l.isReversionary)
+        ? ([
+            ['Term — passing rent capitalised', Math.round(I.lines.reduce((a, l) => a + l.termValue, 0))],
+            [
+              I.method === 'hardcore' ? 'Top slice — uplift deferred to review' : 'Reversion — ERV deferred to review',
+              Math.round(I.lines.reduce((a, l) => a + l.reversionValue, 0)),
+            ],
+            ['Gross capital value', Math.round(I.grossCapitalValue), true],
+          ] as Array<[string, number, boolean?]>)
+        : ([[`Gross capital value — YP ${I.yearsPurchase.toFixed(2)} @ ${input.income.yieldPct}%`, Math.round(I.grossCapitalValue), true]] as Array<[string, number, boolean?]>)),
       [`Let-up void (${input.income.letUpMonths ?? 0} months)`, -Math.round(I.letUpDeduction)],
       [`Purchaser's costs (${input.income.purchaserCostsPct ?? 6.8}%)`, -Math.round(I.purchaserCosts)],
     ];
     ladder.forEach(([label, v, sub]) => {
-      const r = rr.addRow([label, null, null, null, null, v]);
+      const r = rr.addRow([label, null, null, null, null, null, null, null, v]);
       body(r.getCell(1));
-      const c = r.getCell(6);
+      const c = r.getCell(9);
       c.numFmt = FMT_MONEY;
       c.font = { name: 'Arial', size: 10, bold: !!sub };
       c.alignment = { horizontal: 'right' };
       c.border = { bottom: thin };
       if (sub) r.getCell(1).font = { name: 'Arial', size: 10, bold: true };
     });
-    const ncv = rr.addRow(['Investment value in GDV (net of purchaser costs)', null, null, null, null, Math.round(I.netCapitalValue)]);
-    ncv.getCell(6).numFmt = FMT_MONEY;
-    ncv.getCell(6).alignment = { horizontal: 'right' };
-    totalRow(ncv, 6);
+    const ncv = rr.addRow(['Investment value in GDV (net of purchaser costs)', null, null, null, null, null, null, null, Math.round(I.netCapitalValue)]);
+    ncv.getCell(9).numFmt = FMT_MONEY;
+    ncv.getCell(9).alignment = { horizontal: 'right' };
+    totalRow(ncv, 9);
     rr.addRow([]);
-    const niy = rr.addRow(['Net initial yield', null, null, null, null, I.netInitialYield]);
-    niy.getCell(6).numFmt = FMT_PCT;
-    niy.getCell(6).alignment = { horizontal: 'right' };
-    body(niy.getCell(1));
-    const cvp = rr.addRow(['Capital value £/sq ft', null, null, null, null, I.capitalValuePsf]);
-    cvp.getCell(6).numFmt = FMT_MONEY_PSF;
-    cvp.getCell(6).alignment = { horizontal: 'right' };
-    body(cvp.getCell(1));
+    const yieldRows: Array<[string, number, string]> = [
+      ['Net initial yield', I.netInitialYield, FMT_PCT],
+      ...(I.lines.some((l) => l.isReversionary)
+        ? ([
+            ['Reversionary yield', I.reversionaryYield, FMT_PCT],
+            ['Equivalent yield', I.equivalentYield, FMT_PCT],
+          ] as Array<[string, number, string]>)
+        : []),
+      ['Capital value £/sq ft', I.capitalValuePsf, FMT_MONEY_PSF],
+    ];
+    for (const [label, value, fmt] of yieldRows) {
+      const row = rr.addRow([label, null, null, null, null, null, null, null, value]);
+      row.getCell(9).numFmt = fmt;
+      row.getCell(9).alignment = { horizontal: 'right' };
+      body(row.getCell(1));
+    }
     const rrNote = rr.addRow(['Net rent is capitalised in perpetuity at the all-risks yield. The let-up void is a capital deduction, so the net initial yield sits above the capitalisation yield. Lettable area is included in GIA and carries its share of build cost.']);
     rrNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
     rrNote.getCell(1).alignment = { wrapText: true };
