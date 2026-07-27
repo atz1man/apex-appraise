@@ -108,6 +108,18 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
           buildMonths: 14,
           salesMonths: 6,
           absorptionUnitsPerMonth: 4,
+          // waterfront block: piled basement and a marine-grade envelope, and it
+          // carries the remediation — priced and costed on the phase, not the scheme
+          trades: [
+            { label: 'Piling & basement', rate: 38 },
+            { label: 'Frame & superstructure', rate: 52 },
+            { label: 'Envelope — marine grade', rate: 41 },
+            { label: 'M&E services', rate: 30 },
+            { label: 'Internal fit-out', rate: 33 },
+            { label: 'Externals & quay edge', rate: 12 },
+          ],
+          contingencyPct: 7,
+          otherCosts: [{ label: 'Quayside remediation', amount: 180000, timing: { start: 1, months: 4 } }],
           units: [
             { label: '1-bed apartments', count: 8, area: 560, cap: 520, conf: 'high', source: 'Agent evidence' },
             { label: '2-bed apartments', count: 12, area: 790, cap: 495, conf: 'high', source: 'Agent evidence' },
@@ -135,7 +147,6 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       ]),
       otherCosts: JSON.stringify([
         { label: 'Planning & S106', amount: 42000000, timing: { start: 1, months: 1 } },
-        { label: 'Quayside remediation', amount: 18000000, timing: { start: 1, months: 4 } },
         { label: 'Marketing suite & agency', amount: 9500000, timing: { start: 12, months: 12 } },
       ]),
       profFeePct: 12, contingencyPct: 5,

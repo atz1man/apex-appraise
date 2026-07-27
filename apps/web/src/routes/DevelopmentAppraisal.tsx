@@ -261,6 +261,8 @@ export default function DevelopmentAppraisal() {
   const setLine = (i: number, patch: Partial<IncomeInput['lines'][number]>) =>
     setIncome({ lines: (inc?.lines ?? []).map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
+  const schemeBuildRate = input.trades.reduce((a, t) => a + t.rate, 0);
+
   // ---- phases: the programme owns the accommodation once it exists ----
   const phases = input.phases;
   const setPhases = (next: Phase[] | undefined) => set({ phases: next?.length ? next : undefined });
@@ -638,6 +640,95 @@ export default function DevelopmentAppraisal() {
                             <span className="fig text-[11.5px] text-ink-2">
                               Construction {fM(calc.cost)} · completes {monthLabel(calc.practicalCompletion)}
                             </span>
+                          </div>
+
+                          {/* cost overrides — blank inherits the scheme, so a podium
+                              block can price above a later terrace */}
+                          <div className="mt-4 border-t border-border-std pt-3">
+                            <div className="label-mono text-ink-3 mb-2">Cost overrides — blank inherits the scheme</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <label className="block">
+                                <span className="label-mono text-ink-3 block mb-1">Build rate (£/ft²)</span>
+                                <input
+                                  type="number"
+                                  className="w-full fig"
+                                  aria-label={`${ph.name} build rate`}
+                                  placeholder={`${Math.round(schemeBuildRate)} (scheme)`}
+                                  value={ph.trades?.length ? ph.trades.reduce((a, t) => a + t.rate, 0) : ''}
+                                  onChange={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    setPhase(i, { trades: e.target.value === '' || !Number.isFinite(v) ? undefined : [{ label: `${ph.name} build`, rate: v }] });
+                                  }}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="label-mono text-ink-3 block mb-1">Professional fees (%)</span>
+                                <input
+                                  type="number"
+                                  className="w-full fig"
+                                  aria-label={`${ph.name} professional fees`}
+                                  placeholder={`${input.profFeePct} (scheme)`}
+                                  value={ph.profFeePct ?? ''}
+                                  onChange={(e) => setPhase(i, { profFeePct: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="label-mono text-ink-3 block mb-1">Contingency (%)</span>
+                                <input
+                                  type="number"
+                                  className="w-full fig"
+                                  aria-label={`${ph.name} contingency`}
+                                  placeholder={`${input.contingencyPct} (scheme)`}
+                                  value={ph.contingencyPct ?? ''}
+                                  onChange={(e) => setPhase(i, { contingencyPct: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                />
+                              </label>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <span className="label-mono text-ink-3">Costs booked to this phase</span>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setPhase(i, { otherCosts: [...(ph.otherCosts ?? []), { label: 'New cost', amount: 0 }] })}
+                              >
+                                + Add cost
+                              </Button>
+                            </div>
+                            {(ph.otherCosts ?? []).map((o, oi) => (
+                              <div key={oi} className="flex items-center gap-3 py-1.5 border-t border-border-faint">
+                                <input
+                                  className="flex-1"
+                                  aria-label={`${ph.name} cost ${oi + 1} label`}
+                                  value={o.label}
+                                  onChange={(e) => setPhase(i, { otherCosts: (ph.otherCosts ?? []).map((x, j) => (j === oi ? { ...x, label: e.target.value } : x)) })}
+                                />
+                                <input
+                                  type="number"
+                                  className="w-32 text-right fig"
+                                  aria-label={`${ph.name} cost ${oi + 1} amount`}
+                                  value={o.amount}
+                                  onChange={(e) => setPhase(i, { otherCosts: (ph.otherCosts ?? []).map((x, j) => (j === oi ? { ...x, amount: parseFloat(e.target.value) || 0 } : x)) })}
+                                />
+                                <TimingFields
+                                  timing={o.timing}
+                                  buildMonths={ph.buildMonths}
+                                  onChange={(timing) => setPhase(i, { otherCosts: (ph.otherCosts ?? []).map((x, j) => (j === oi ? { ...x, timing } : x)) })}
+                                />
+                                <button
+                                  aria-label={`Remove ${o.label} from ${ph.name}`}
+                                  className="text-ink-3 hover:text-status-red px-1"
+                                  onClick={() => setPhase(i, { otherCosts: (ph.otherCosts ?? []).filter((_, j) => j !== oi) })}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            <div className="mt-2 text-[11px] text-ink-3 leading-snug">
+                              Timing here runs from the phase's own first month on site, not the project's. Phase total{' '}
+                              <span className="fig font-semibold">{fM(calc.cost + calc.otherTotal)}</span> at{' '}
+                              <span className="fig font-semibold">£{Math.round(calc.buildRate)}/ft²</span>.
+                            </div>
                           </div>
                         </Panel>
                       );

@@ -91,6 +91,11 @@ export const zPhase = z.object({
   salesMonths: z.number().min(1).max(24),
   absorptionUnitsPerMonth: z.number().positive().max(500).optional(),
   units: z.array(zAppraisalUnit),
+  // cost overrides — omitted fields inherit the scheme
+  trades: z.array(z.object({ label: z.string(), rate: z.number(), timing: zCostTiming.optional() })).optional(),
+  profFeePct: z.number().min(0).max(50).optional(),
+  contingencyPct: z.number().min(0).max(50).optional(),
+  otherCosts: z.array(z.object({ label: z.string(), amount: z.number(), timing: zCostTiming.optional() })).optional(),
 });
 
 export const zAppraisalInput = z.object({

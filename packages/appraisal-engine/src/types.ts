@@ -127,6 +127,17 @@ export interface Phase {
   /** units/month for this phase — derives its own sales window */
   absorptionUnitsPerMonth?: number;
   units: AppraisalUnit[];
+
+  // ---- cost overrides: omit any of these and the phase inherits the scheme ----
+  /** replaces the scheme trades for this phase — a podium block is not a terrace */
+  trades?: BuildTrade[];
+  profFeePct?: number;
+  contingencyPct?: number;
+  /**
+   * Costs belonging to this phase alone (remediation, a s278, its own marketing).
+   * Timing here is RELATIVE TO THE PHASE: start 1 is the phase's first month.
+   */
+  otherCosts?: OtherCost[];
 }
 
 export interface PhaseResult {
@@ -141,8 +152,15 @@ export interface PhaseResult {
   nia: number;
   gia: number;
   gdv: number;
-  /** construction incl. fees and contingency */
+  /** £/ft² applied to this phase (its own trades, or the scheme's) */
+  buildRate: number;
+  build: number;
+  fees: number;
+  cont: number;
+  /** construction incl. fees and contingency — excludes this phase's other costs */
   cost: number;
+  /** costs booked to this phase alone */
+  otherTotal: number;
   unitCount: number;
 }
 

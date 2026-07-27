@@ -504,3 +504,82 @@ describe('IRR series across a phased or late-spending programme', () => {
     expect(R.cash!.projIrr!).toBeGreaterThan(early.cash!.projIrr!);
   });
 });
+
+describe('phase-level cost overrides', () => {
+  const podium = { ...phaseOf('Phase 1 — podium', 1, [twoPhaseUnits[0]]), trades: [{ label: 'Podium build', rate: 260 }] };
+  const terrace = phaseOf('Phase 2 — terrace', 14, [twoPhaseUnits[1]]);
+
+  it('prices each phase at its own rate and blends the headline', () => {
+    const R = computeAppraisal({ ...phasedBase, phases: [podium, terrace] });
+    const [p1, p2] = R.phases!;
+    expect(p1.buildRate).toBe(260);
+    expect(p2.buildRate).toBe(180); // inherits the scheme trades
+    expect(p1.build).toBeCloseTo(260 * p1.gia, 6);
+    expect(p2.build).toBeCloseTo(180 * p2.gia, 6);
+    expect(R.build).toBeCloseTo(p1.build + p2.build, 6);
+    // the scheme rate is now a weighted blend, not either phase's rate
+    expect(R.buildRate).toBeGreaterThan(180);
+    expect(R.buildRate).toBeLessThan(260);
+    expect(R.buildRate).toBeCloseTo(R.build / R.gia, 10);
+  });
+
+  it('applies per-phase fees and contingency', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [{ ...podium, profFeePct: 14, contingencyPct: 10 }, terrace],
+    });
+    const [p1, p2] = R.phases!;
+    expect(p1.fees).toBeCloseTo((p1.build * 14) / 100, 6);
+    expect(p1.cont).toBeCloseTo((p1.build * 10) / 100, 6);
+    // phase 2 inherits the scheme's 10% / 5%
+    expect(p2.fees).toBeCloseTo((p2.build * 10) / 100, 6);
+    expect(p2.cont).toBeCloseTo((p2.build * 5) / 100, 6);
+    expect(R.fees).toBeCloseTo(p1.fees + p2.fees, 6);
+    expect(R.cont).toBeCloseTo(p1.cont + p2.cont, 6);
+    expect(R.phases!.reduce((a, p) => a + p.cost, 0)).toBeCloseTo(R.build + R.fees + R.cont, 6);
+  });
+
+  it('times a phase cost relative to the phase, not the project', () => {
+    const R = computeAppraisal(
+      {
+        ...phasedBase,
+        otherCosts: [],
+        phases: [
+          podium,
+          { ...terrace, otherCosts: [{ label: 'Remediation', amount: 240_000, timing: { start: 1, months: 1 } }] },
+        ],
+      },
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    // phase 2 starts in project month 14, so its "month 1" cost lands there
+    const build2 = R.phases![1].cost / R.phases![1].buildMonths; // 'even' profile
+    expect(rows[13].cost).toBeCloseTo(build2 + 240_000, 6);
+    expect(rows[12].cost).toBeCloseTo(0, 6); // month 13: phase 1 finished, phase 2 not started
+  });
+
+  it('books phase costs into the scheme total and the residual', () => {
+    const without = computeAppraisal({ ...phasedBase, otherCosts: [], phases: [podium, terrace] });
+    const withCost = computeAppraisal({
+      ...phasedBase,
+      otherCosts: [],
+      phases: [podium, { ...terrace, otherCosts: [{ label: 'Remediation', amount: 240_000 }] }],
+    });
+    expect(withCost.otherTotal).toBeCloseTo(without.otherTotal + 240_000, 6);
+    expect(withCost.phases![1].otherTotal).toBe(240_000);
+    expect(withCost.phases![0].otherTotal).toBe(0);
+    // a cost is a cost: it comes off the land bid, plus the finance it attracts
+    expect(withCost.residualNet).toBeLessThan(without.residualNet - 240_000 * 0.9);
+  });
+
+  it('leaves an override-free phased scheme exactly as it was', () => {
+    const R = computeAppraisal({
+      ...phasedBase,
+      phases: [phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), phaseOf('Phase 2', 8, [twoPhaseUnits[1]])],
+    });
+    expect(R.buildRate).toBeCloseTo(180, 10);
+    expect(R.build).toBeCloseTo(180 * R.gia, 6);
+    expect(R.phases!.every((p) => p.buildRate === 180)).toBe(true);
+    expect(R.phases!.every((p) => p.otherTotal === 0)).toBe(true);
+  });
+});

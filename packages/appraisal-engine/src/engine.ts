@@ -214,11 +214,7 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
   const nia = allUnits.reduce((a, u) => a + u.count * u.area, 0) + (income?.totalArea ?? 0);
   const eff = input.efficiency / 100 || 1;
   const gia = eff > 0 ? nia / eff : nia;
-  const buildRate = input.trades.reduce((a, t) => a + t.rate, 0) * buildMult;
-  const build = buildRate * gia;
-  const fees = (build * input.profFeePct) / 100;
-  const cont = (build * input.contingencyPct) / 100;
-  const otherTotal = input.otherCosts.reduce((a, o) => a + o.amount, 0);
+  const schemeRate = input.trades.reduce((a, t) => a + t.rate, 0) * buildMult;
   const saleCosts = (gdv * (input.disposal.agentPct + input.disposal.legalPct)) / 100;
 
   // ---- monthly drawdown with rolled-up interest ----
@@ -239,7 +235,8 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     return { months, share: new Array<number>(months).fill(1 / months) };
   };
 
-  // Phase programme — each phase builds, completes, then sells on its own clock.
+  // Phase programme — each phase builds, completes, then sells on its own clock,
+  // at its own rate and on-costs when it overrides the scheme's.
   const phaseCalc = phased
     ? phased.map((p) => {
         const pNia = p.units.reduce((a, u) => a + u.count * u.area, 0);
@@ -248,7 +245,10 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
         const start = clamp(Math.round(p.start) || 1, 1, 240);
         const buildMonths = clamp(Math.round(p.buildMonths) || 12, 1, 60);
         const { months: salesMonths, share } = absorptionShare(unitCount, p.absorptionUnitsPerMonth, p.salesMonths, 24);
-        const pBuild = buildRate * pGia;
+        const pRate = p.trades?.length ? p.trades.reduce((a, t) => a + t.rate, 0) * buildMult : schemeRate;
+        const pBuild = pRate * pGia;
+        const pFees = (pBuild * (p.profFeePct ?? input.profFeePct)) / 100;
+        const pCont = (pBuild * (p.contingencyPct ?? input.contingencyPct)) / 100;
         return {
           name: p.name,
           start,
@@ -259,12 +259,33 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
           nia: pNia,
           gia: pGia,
           gdv: p.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult,
-          cost: pBuild * (1 + (input.profFeePct + input.contingencyPct) / 100),
+          buildRate: pRate,
+          build: pBuild,
+          fees: pFees,
+          cont: pCont,
+          cost: pBuild + pFees + pCont,
+          otherCosts: p.otherCosts ?? [],
+          otherTotal: (p.otherCosts ?? []).reduce((a, o) => a + o.amount, 0),
           unitCount,
           share,
         };
       })
     : null;
+
+  // Scheme totals. Unphased schemes keep the original single-rate arithmetic
+  // literally; phased ones sum their phases, since each may carry its own rate.
+  const unphasedGia = phaseCalc ? gia - phaseCalc.reduce((a, p) => a + p.gia, 0) : gia;
+  const build = phaseCalc ? phaseCalc.reduce((a, p) => a + p.build, 0) + schemeRate * unphasedGia : schemeRate * gia;
+  const fees = phaseCalc
+    ? phaseCalc.reduce((a, p) => a + p.fees, 0) + (schemeRate * unphasedGia * input.profFeePct) / 100
+    : (build * input.profFeePct) / 100;
+  const cont = phaseCalc
+    ? phaseCalc.reduce((a, p) => a + p.cont, 0) + (schemeRate * unphasedGia * input.contingencyPct) / 100
+    : (build * input.contingencyPct) / 100;
+  // the headline rate is blended once phases price differently
+  const buildRate = gia > 0 ? build / gia : schemeRate;
+  const otherTotal =
+    input.otherCosts.reduce((a, o) => a + o.amount, 0) + (phaseCalc ? phaseCalc.reduce((a, p) => a + p.otherTotal, 0) : 0);
 
   // P is the last month anything is under construction; sM is what follows it.
   const P = phaseCalc
@@ -299,18 +320,26 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
         if (m >= 1 && m <= totalMonths) constrSeries[m] += amount * w[i];
       }
     };
-    for (const p of phaseCalc) spreadPhase(p.cost, p.start, p.buildMonths);
-    const phasedGia = phaseCalc.reduce((a, p) => a + p.gia, 0);
-    const unphasedGia = gia - phasedGia; // the held element's floor area
+    /** spread a cost over `months` from an absolute project month */
+    const spreadFrom = (amount: number, from: number, months: number, timingProfile?: SpendProfileKey) => {
+      const start = clamp(Math.round(from), 1, totalMonths);
+      const span = clamp(Math.round(months), 1, totalMonths - start + 1);
+      const w = buildSpendProfile(span, timingProfile ?? profile);
+      for (let i = 0; i < span; i++) constrSeries[start + i] += amount * w[i];
+    };
+    for (const p of phaseCalc) {
+      spreadPhase(p.cost, p.start, p.buildMonths);
+      // a phase's own costs are timed RELATIVE TO THE PHASE — start 1 is the
+      // phase's first month on site, not the project's
+      for (const o of p.otherCosts) {
+        spreadFrom(o.amount, p.start + (Math.round(o.timing?.start ?? 1) - 1), o.timing?.months ?? p.buildMonths, o.timing?.profile);
+      }
+    }
     if (unphasedGia > 0.0001) {
-      spreadPhase(buildRate * unphasedGia * (1 + (input.profFeePct + input.contingencyPct) / 100), 1, P);
+      // the held element is not in any phase: its build spreads over the envelope
+      spreadPhase(schemeRate * unphasedGia * (1 + (input.profFeePct + input.contingencyPct) / 100), 1, P);
     }
-    for (const o of input.otherCosts) {
-      const start = clamp(Math.round(o.timing?.start ?? 1), 1, totalMonths);
-      const months = clamp(Math.round(o.timing?.months ?? P), 1, totalMonths - start + 1);
-      const w = buildSpendProfile(months, o.timing?.profile ?? profile);
-      for (let i = 0; i < months; i++) constrSeries[start + i] += o.amount * w[i];
-    }
+    for (const o of input.otherCosts) spreadFrom(o.amount, o.timing?.start ?? 1, o.timing?.months ?? P, o.timing?.profile);
   } else if (!timed) {
     for (let i = 0; i < P; i++) constrSeries[i + 1] = constructionTotal * incs[i];
   } else {
@@ -410,7 +439,7 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     ...(income ? { income } : {}),
     ...(phaseCalc
       ? {
-          phases: phaseCalc.map(({ share: _share, ...p }) => p),
+          phases: phaseCalc.map(({ share: _share, otherCosts: _oc, ...p }) => p),
         }
       : {}),
     buildRate,

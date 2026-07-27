@@ -161,9 +161,9 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Phases — programme and per-phase value, only when the scheme is phased ----
   if (R.phases?.length) {
     const ph = wb.addWorksheet('Phases', { properties: { tabColor: { argb: 'FF3C7FB5' } } });
-    ph.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 11 }, { width: 13 }, { width: 16 }, { width: 16 }];
-    titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 8);
-    headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', 'NIA (sq ft)', 'Construction', 'GDV']);
+    ph.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 13 }, { width: 11 }, { width: 15 }, { width: 14 }, { width: 16 }];
+    titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 10);
+    headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', 'NIA (sq ft)', '£/sq ft', 'Construction', 'Phase costs', 'GDV']);
     const firstPhase = ph.rowCount + 1;
     R.phases.forEach((p) => {
       const r = ph.addRow([
@@ -173,24 +173,29 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
         p.salesMonths,
         p.unitCount,
         Math.round(p.nia),
+        p.buildRate,
         Math.round(p.cost),
+        Math.round(p.otherTotal),
         Math.round(p.gdv),
       ]);
       r.eachCell((c) => body(c));
       r.getCell(6).numFmt = FMT_NUM;
-      r.getCell(7).numFmt = FMT_MONEY;
+      r.getCell(7).numFmt = FMT_MONEY_PSF;
       r.getCell(8).numFmt = FMT_MONEY;
-      for (let c = 2; c <= 8; c++) r.getCell(c).alignment = { horizontal: 'right' };
+      r.getCell(9).numFmt = FMT_MONEY;
+      r.getCell(10).numFmt = FMT_MONEY;
+      for (let c = 2; c <= 10; c++) r.getCell(c).alignment = { horizontal: 'right' };
     });
     const lastPhase = ph.rowCount;
-    const pt = ph.addRow(['Total', null, null, null, null, null, null, null]);
-    pt.getCell(7).value = { formula: `SUM(G${firstPhase}:G${lastPhase})` };
+    const pt = ph.addRow(['Total', null, null, null, null, null, null, null, null, null]);
     pt.getCell(8).value = { formula: `SUM(H${firstPhase}:H${lastPhase})` };
-    for (const c of [7, 8]) {
+    pt.getCell(9).value = { formula: `SUM(I${firstPhase}:I${lastPhase})` };
+    pt.getCell(10).value = { formula: `SUM(J${firstPhase}:J${lastPhase})` };
+    for (const c of [8, 9, 10]) {
       pt.getCell(c).numFmt = FMT_MONEY;
       pt.getCell(c).alignment = { horizontal: 'right' };
     }
-    totalRow(pt, 8);
+    totalRow(pt, 10);
     ph.addRow([]);
     const note = ph.addRow([
       `Phases share one facility: peak debt ${Math.round(R.facility).toLocaleString('en-GB')} against a ${R.period + R.salesMonths}-month programme. Receipts from a completed phase repay the facility while a later phase is still drawing.`,

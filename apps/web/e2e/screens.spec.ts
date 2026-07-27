@@ -513,3 +513,39 @@ test('an unphased scheme offers to split into phases', async ({ page }) => {
   await expect(page.getByLabel('Phase 1 name')).toHaveValue('Phase 1');
   await expect(page.getByLabel('Phase 1 unit 1 label')).toHaveValue('Trade counter units');
 });
+
+/**
+ * Phase-level cost overrides — the quayside block is piled and marine-grade, so
+ * it prices above the courtyard block and carries the remediation itself.
+ */
+test('phases price independently and carry their own costs', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Phases', exact: true }).click();
+
+  // phase A overrides the rate and the contingency; phase B inherits both
+  await expect(page.getByLabel('Phase A — quayside block build rate')).toHaveValue('206');
+  await expect(page.getByLabel('Phase A — quayside block contingency')).toHaveValue('7');
+  const inherited = page.getByLabel('Phase B — courtyard block build rate');
+  await expect(inherited).toHaveValue('');
+  await expect(inherited).toHaveAttribute('placeholder', /scheme/);
+
+  // the remediation is booked to phase A, timed from the phase's own month 1
+  await expect(page.getByLabel('Phase A — quayside block cost 1 label')).toHaveValue('Quayside remediation');
+  await expect(page.getByLabel('Phase A — quayside block cost 1 amount')).toHaveValue('180000');
+  await expect(page.getByText(/Timing here runs from the phase's own first month/).first()).toBeVisible();
+
+  // the blended scheme rate sits between the two phase rates
+  await page.getByRole('button', { name: 'Build', exact: true }).click();
+  const rate = await page.getByText(/^£\d+\/ft²$/).first().innerText();
+  const blended = parseInt(rate.replace(/[^\d]/g, ''), 10);
+  expect(blended).toBeGreaterThan(170);
+  expect(blended).toBeLessThan(206);
+});
