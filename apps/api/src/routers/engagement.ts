@@ -1,6 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { internalProcedure, router } from '../trpc.js';
+import { internalProcedure, publicProcedure, router } from '../trpc.js';
 import { AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { toPence, P } from '../mappers.js';
 
@@ -143,9 +144,20 @@ export const engagementRouter = router({
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save the terms before issuing them.' });
     if (!row.clientName.trim())
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Name the client before issuing — terms of engagement are addressed to someone.' });
+    // a fresh token every issue: re-issuing revokes any link already sent
     const updated = await ctx.prisma.engagementTerms.update({
       where: { id: row.id },
-      data: { status: 'ISSUED', issuedAt: new Date(), acceptedAt: null, acceptedBy: null },
+      data: {
+        status: 'ISSUED',
+        issuedAt: new Date(),
+        acceptedAt: null,
+        acceptedBy: null,
+        signToken: randomBytes(24).toString('hex'),
+        signedName: null,
+        signedAt: null,
+        signedIp: null,
+        signedUserAgent: null,
+      },
     });
     await ctx.prisma.activityEvent.create({
       data: {
@@ -156,7 +168,7 @@ export const engagementRouter = router({
         target: `${deal.name} — ${row.clientName}`,
       },
     });
-    return { status: updated.status, issuedAt: updated.issuedAt };
+    return { status: updated.status, issuedAt: updated.issuedAt, signToken: updated.signToken };
   }),
 
   /** Record the client's written acceptance (name + date), audited. */
@@ -185,6 +197,72 @@ export const engagementRouter = router({
       return { status: updated.status, acceptedAt: updated.acceptedAt, acceptedBy: updated.acceptedBy };
     }),
 
+  /**
+   * PUBLIC — the client's view of issued terms, reached by signing token only.
+   * Returns the document and nothing else: no ids, no org internals, no other
+   * deal. An unknown, revoked or draft token is simply not found.
+   */
+  publicGet: publicProcedure.input(z.object({ token: z.string().min(16).max(96) })).query(async ({ ctx, input }) => {
+    const row = await ctx.prisma.engagementTerms.findFirst({ where: { signToken: input.token } });
+    if (!row || row.status === 'DRAFT') throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is no longer valid.' });
+    const [deal, org] = await Promise.all([
+      ctx.prisma.deal.findUnique({ where: { id: row.dealId } }),
+      ctx.prisma.organisation.findUnique({ where: { id: row.orgId } }),
+    ]);
+    const { id: _id, orgId: _o, dealId: _d, signToken: _t, signedIp: _ip, signedUserAgent: _ua, ...terms } = row;
+    return {
+      ...shape(terms, org?.name ?? 'Apex Appraise'),
+      dealName: deal?.name ?? 'the property',
+      dealAddress: deal?.address ?? '',
+      dealPostcode: deal?.postcode ?? '',
+    };
+  }),
+
+  /**
+   * PUBLIC — the client signs. A typed name plus an explicit agreement is the
+   * standard e-signature form; what makes it defensible later is the evidence
+   * recorded alongside it, so time, IP and user agent are captured too.
+   */
+  sign: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(16).max(96),
+        name: z.string().trim().min(2).max(120),
+        agreed: z.literal(true),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.prisma.engagementTerms.findFirst({ where: { signToken: input.token } });
+      if (!row || row.status === 'DRAFT') throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is no longer valid.' });
+      if (row.status === 'ACCEPTED') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'These terms have already been signed.' });
+      }
+      const signedAt = new Date();
+      await ctx.prisma.engagementTerms.update({
+        where: { id: row.id },
+        data: {
+          status: 'ACCEPTED',
+          acceptedAt: signedAt,
+          acceptedBy: input.name.trim(),
+          signedName: input.name.trim(),
+          signedAt,
+          signedIp: ctx.ip ?? null,
+          signedUserAgent: ctx.userAgent,
+        },
+      });
+      const deal = await ctx.prisma.deal.findUnique({ where: { id: row.dealId } });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: row.orgId,
+          dealId: row.dealId,
+          actor: input.name.trim(),
+          action: 'signed the terms of engagement for',
+          target: `${deal?.name ?? 'the deal'} — signed electronically`,
+        },
+      });
+      return { signedAt, signedName: input.name.trim() };
+    }),
+
   /** Back to draft for a revision — never deletes the audit trail of the issue. */
   withdraw: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
@@ -192,7 +270,18 @@ export const engagementRouter = router({
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to withdraw.' });
     await ctx.prisma.engagementTerms.update({
       where: { id: row.id },
-      data: { status: 'DRAFT', issuedAt: null, acceptedAt: null, acceptedBy: null },
+      data: {
+        status: 'DRAFT',
+        issuedAt: null,
+        acceptedAt: null,
+        acceptedBy: null,
+        // revoke the signing link — a withdrawn set of terms must not stay signable
+        signToken: null,
+        signedName: null,
+        signedAt: null,
+        signedIp: null,
+        signedUserAgent: null,
+      },
     });
     await ctx.prisma.activityEvent.create({
       data: {

@@ -389,7 +389,8 @@ test('terms of engagement run draft → issued → accepted', async ({ page }) =
   // idempotent: a previous run may have left this deal's terms issued/accepted.
   // Wait for the status panel to render before deciding — checking too early
   // reads "no withdraw button" on a page that simply hasn't loaded yet.
-  await expect(page.getByRole('button', { name: /Issue to client|Record acceptance|Withdraw & revise/ })).toBeVisible();
+  // .first(): an issued record now shows BOTH 'Record acceptance' and 'Withdraw'
+  await expect(page.getByRole('button', { name: /Issue to client|Record acceptance|Withdraw & revise/ }).first()).toBeVisible();
   const withdraw = page.getByRole('button', { name: 'Withdraw & revise' });
   if (await withdraw.count()) await withdraw.click();
   await expect(page.getByText('DRAFT', { exact: true })).toBeVisible();
@@ -588,4 +589,74 @@ test('appraisal report schedules a phased scheme by phase', async ({ page }) => 
   // page numbering still matches what prints
   const pages = await page.locator('.a4-page').count();
   await expect(page.getByText(`Page ${pages} of ${pages}`)).toBeVisible();
+});
+
+/**
+ * E-signature on the terms of engagement. The client has no account: the link
+ * the valuer sends IS the credential, and signing records an evidence trail.
+ */
+test('client signs the terms through a public link', async ({ page, browser }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Southbourne')).id;
+  });
+
+  // issue a fresh set of terms (idempotent: withdraw anything left by a prior run)
+  await page.goto(`/deal/${id}/engagement`);
+  // .first(): an issued record now shows BOTH 'Record acceptance' and 'Withdraw'
+  await expect(page.getByRole('button', { name: /Issue to client|Record acceptance|Withdraw & revise/ }).first()).toBeVisible();
+  const withdraw = page.getByRole('button', { name: 'Withdraw & revise' });
+  if (await withdraw.count()) await withdraw.click();
+  await expect(page.getByText('DRAFT', { exact: true })).toBeVisible();
+  const client = page.getByLabel('Client', { exact: true });
+  await client.fill('');
+  await client.fill('Southbourne Holdings Ltd');
+  await page.getByRole('button', { name: 'Save terms' }).click();
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
+  await page.getByRole('button', { name: 'Issue to client' }).click();
+  await expect(page.getByText('ISSUED', { exact: true })).toBeVisible();
+
+  // the valuer gets a link to send
+  await expect(page.getByText('Signing link — send this to the client')).toBeVisible();
+  const link = await page.getByText(/\/terms\/[0-9a-f]{48}/).innerText();
+  const signPath = new URL(link.trim()).pathname;
+
+  // the client opens it in a SEPARATE browser context — genuinely no session,
+  // and clearing storage on a shared context would sign the valuer out instead
+  const clientContext = await browser.newContext();
+  const clientPage = await clientContext.newPage();
+  await clientPage.goto(signPath);
+  await expect(clientPage.evaluate(() => localStorage.getItem('apex_token'))).resolves.toBeNull();
+  await expect(clientPage.getByText('Sign these terms')).toBeVisible();
+  await expect(clientPage.locator('.a4-page')).toHaveCount(3); // the document, in full
+  await expect(clientPage.getByText('Southbourne Holdings Ltd').first()).toBeVisible();
+
+  // signing needs both a name and an explicit agreement
+  const signBtn = clientPage.getByRole('button', { name: 'Sign and return' });
+  await expect(signBtn).toBeDisabled();
+  await clientPage.getByLabel('Full name').fill('Jane Marchmont');
+  await expect(signBtn).toBeDisabled(); // name alone is not agreement
+  await clientPage.getByLabel('I agree to these terms of engagement').check();
+  await expect(signBtn).toBeEnabled();
+  await signBtn.click();
+
+  await expect(clientPage.getByText('Thank you — these terms are signed')).toBeVisible();
+  await expect(clientPage.getByText(/Signed electronically by Jane Marchmont/)).toBeVisible();
+
+  // and the valuer sees the signature with its evidence
+  await page.reload();
+  await expect(page.getByText('ACCEPTED', { exact: true })).toBeVisible();
+  await expect(page.getByText('Signed electronically')).toBeVisible();
+  await expect(page.getByText(/Jane Marchmont/).first()).toBeVisible();
+  await clientContext.close();
+});
+
+test('a revoked or unknown signing link cannot be used', async ({ page }) => {
+  await page.goto('/terms/' + 'f'.repeat(48));
+  await expect(page.getByText('This signing link is no longer valid')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign and return' })).toHaveCount(0);
 });

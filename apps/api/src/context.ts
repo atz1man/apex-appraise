@@ -46,7 +46,8 @@ export async function createContext({ req }: CreateFastifyContextOptions) {
       principal = null;
     }
   }
-  return { prisma, principal };
+  // request metadata, kept for signature evidence on public signing routes
+  return { prisma, principal, ip: req.ip, userAgent: (req.headers['user-agent'] as string | undefined) ?? null };
 }
 
 export type Context = Awaited<ReturnType<typeof createContext>>;

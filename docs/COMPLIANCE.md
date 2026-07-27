@@ -49,8 +49,31 @@ curl -s "http://localhost:4100/reports/<dealId>/redbook.pdf?t=<token>" -o /tmp/r
 python3 -c "import re;d=open('/tmp/r.pdf','rb').read();print(len(re.findall(rb'/Type\s*/Page[^s]',d)))"
 ```
 
+## Terms of engagement and e-signature
+
+Terms of engagement (VPS 1) are drafted from the deal, issued, and signed by the client.
+Issuing mints a 24-byte random signing token; the client opens `/terms/<token>` with no
+account and signs by typing their name and agreeing explicitly. What makes that defensible
+later is the evidence stored alongside it: `signedName`, `signedAt`, `signedIp`,
+`signedUserAgent`, plus an audit event naming the signatory.
+
+Rules the implementation holds to:
+
+- The token IS the credential. Anyone holding the link can sign, so it is treated like the
+  document itself and `/terms/` is disallowed in robots.txt.
+- Issuing or re-issuing mints a fresh token; withdrawing clears it. A withdrawn or draft
+  record is not signable and its link resolves to "no longer valid".
+- The public endpoint returns the document and nothing else — no ids, no org internals, no
+  IP of a previous signatory.
+- Signing twice is refused; the executed document is shown instead.
+- A signature made on paper can still be recorded manually by the valuer, labelled as such.
+
+The `signToken` column is indexed but deliberately NOT unique: a unique constraint makes the
+boot-time `prisma db push` demand `--accept-data-loss`, and that flag does not belong on a
+production start command.
+
 ## What is not covered yet
 
-- Terms of engagement: the standards also apply at instruction stage. Apex has no
-  terms-of-engagement artefact — the disclosure currently lives in the reports only.
 - No firm-level AI policy statement is stored; the wording above is fixed in code.
+- Signing links do not expire on a timer — they are revoked by withdrawing or re-issuing.
+- No email is sent: the valuer copies the link. SMTP is not configured.

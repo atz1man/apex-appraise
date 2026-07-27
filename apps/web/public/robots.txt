@@ -6,3 +6,4 @@ Disallow: /deal/
 Disallow: /portal/
 Disallow: /settings
 Disallow: /reports/
+Disallow: /terms/

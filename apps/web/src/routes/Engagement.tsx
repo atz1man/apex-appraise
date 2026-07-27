@@ -133,10 +133,12 @@ export default function Engagement() {
   const issue = trpc.engagement.issue.useMutation({
     onSuccess: () => {
       invalidate();
-      toast.success('Terms issued — send the PDF to the client');
+      toast.success('Terms issued — send the client their signing link');
     },
     onError: (e) => toast.error(e.message),
   });
+  const [copied, setCopied] = useState(false);
+  const signUrl = saved?.signToken ? `${window.location.origin}/terms/${saved.signToken}` : null;
   const accept = trpc.engagement.accept.useMutation({
     onSuccess: () => {
       setAcceptedBy('');
@@ -302,8 +304,34 @@ export default function Engagement() {
                     Issue to client
                   </Button>
                 )}
+                {status === 'ISSUED' && signUrl && (
+                  <div className="rounded-[10px] bg-sunken-2 px-3 py-2.5">
+                    <div className="label-mono text-ink-3">Signing link — send this to the client</div>
+                    <div className="fig mt-1 text-[10.5px] text-ink-2 break-all leading-snug">{signUrl}</div>
+                    <div className="mt-2 flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(signUrl);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                      >
+                        {copied ? 'Copied' : 'Copy link'}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => window.open(signUrl, '_blank')}>
+                        Open
+                      </Button>
+                    </div>
+                    <div className="mt-2 text-[11px] text-ink-3 leading-snug">
+                      Anyone with the link can sign, so treat it like the document itself. Withdrawing or reissuing revokes it.
+                    </div>
+                  </div>
+                )}
                 {status === 'ISSUED' && (
                   <>
+                    <div className="label-mono text-ink-3 mt-1">Or record a signature made elsewhere</div>
                     <input
                       className="w-full"
                       aria-label="Accepted by"
@@ -313,6 +341,7 @@ export default function Engagement() {
                     />
                     <Button
                       size="sm"
+                      variant="secondary"
                       loading={accept.isPending}
                       disabled={acceptedBy.trim().length < 2}
                       onClick={() => accept.mutate({ dealId, acceptedBy: acceptedBy.trim() })}
@@ -320,6 +349,15 @@ export default function Engagement() {
                       Record acceptance
                     </Button>
                   </>
+                )}
+                {status === 'ACCEPTED' && saved?.signedAt && (
+                  <div className="rounded-[10px] bg-tint-success px-3 py-2.5">
+                    <div className="label-mono text-brand-700">Signed electronically</div>
+                    <div className="mt-1 text-[12px] text-ink-2 leading-snug">
+                      {saved.signedName} · {fmtDate(saved.signedAt)}
+                      {saved.signedIp ? ` · from ${saved.signedIp}` : ''}
+                    </div>
+                  </div>
                 )}
                 {status !== 'DRAFT' && (
                   <Button size="sm" variant="secondary" loading={withdraw.isPending} onClick={() => withdraw.mutate(dealId)}>

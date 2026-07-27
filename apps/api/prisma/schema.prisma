@@ -354,10 +354,22 @@ model EngagementTerms {
   acceptedAt DateTime?
   acceptedBy String?
 
+  // e-signature: the client opens /terms/<signToken> and signs; the evidence
+  // trail (typed name, time, IP, user agent) is what makes it hold up later
+  signToken       String?
+  signedName      String?
+  signedAt        DateTime?
+  signedIp        String?
+  signedUserAgent String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([orgId, status])
+  // lookup index, deliberately NOT unique: a unique constraint makes the
+  // boot-time `prisma db push` demand --accept-data-loss, and putting that flag
+  // on a production start command is a worse trade than trusting 24 random bytes
+  @@index([signToken])
 }
 
 model ActivityEvent {
