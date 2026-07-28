@@ -8,7 +8,7 @@ import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
-import { internalProcedure, publicProcedure, router } from '../trpc.js';
+import { authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 
 const initialsOf = (name: string) =>
   name
@@ -117,6 +117,18 @@ export const orgRouter = router({
       hasComparable: comparables > 0,
       hasTeammate: members > 1,
     };
+  }),
+
+  /**
+   * Firm identity for anything a client sees — portals included, so this is
+   * open to buyer and investor principals, unlike the rest of org.*.
+   */
+  firm: authedProcedure.query(async ({ ctx }) => {
+    const org = await ctx.prisma.organisation.findUnique({
+      where: { id: ctx.principal.orgId },
+      select: { name: true, logoUrl: true },
+    });
+    return { name: org?.name ?? 'Apex Appraise', logoUrl: org?.logoUrl ?? '' };
   }),
 
   /** Remove the firm mark and fall back to the Apex mark on documents. */

@@ -159,6 +159,7 @@ export default function DevelopmentAppraisal() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
+  const { data: firm } = trpc.org.firm.useQuery();
   const { data: saved, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const save = trpc.appraisal.save.useMutation({
     onSuccess: () => {
@@ -381,7 +382,7 @@ export default function DevelopmentAppraisal() {
               variant="secondary"
               className="hidden sm:inline-flex"
               onClick={() =>
-                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', input, R, jv, monthLabel })
+                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel })
               }
             >
               Export .xlsx

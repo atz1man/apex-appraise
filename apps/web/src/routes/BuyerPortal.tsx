@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { status as statusTokens, brand, neutral, type StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { formatMoneyFull } from '@apex/appraisal-engine';
-import { Avatar, BrandMark, Button, Icon, Skeleton, SkeletonRows, StatusChip } from '../components/ui';
+import { Avatar, Button, FirmMark, Icon, Skeleton, SkeletonRows, StatusChip } from '../components/ui';
 import { StripePaymentModal } from '../components/StripePaymentModal';
 
 const fdate = (d: Date | string | null | undefined) =>
@@ -34,6 +34,8 @@ export default function BuyerPortal() {
   const principal = getPrincipal();
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.buyer.myUnit.useQuery(undefined, { retry: false });
+  // the portal is a client-facing surface: it carries the firm's mark, not ours
+  const { data: firm } = trpc.org.firm.useQuery();
 
   // persisted e-sign — the server stamps signedAt (DocuSign in prod)
   const sign = trpc.buyer.sign.useMutation({ onSuccess: () => utils.buyer.myUnit.invalidate() });
@@ -76,8 +78,8 @@ export default function BuyerPortal() {
       {/* buyer-facing top bar: development branding, no internal navigation */}
       <header className="sticky top-0 z-40 h-14 bg-surface border-b border-border-strong flex items-center gap-3 px-4 sm:px-5">
         <div className="flex items-center gap-2.5 min-w-0">
-          <BrandMark />
-          <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate">{data?.development.name ?? 'Apex Appraise'}</span>
+          <FirmMark logoUrl={firm?.logoUrl} size={32} alt={`${firm?.name ?? 'Firm'} logo`} />
+          <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate">{data?.development.name ?? firm?.name ?? 'Apex Appraise'}</span>
         </div>
         <span className="label-mono rounded-[7px] px-2.5 py-1 bg-tint-success text-brand-700 tracking-[0.4px] whitespace-nowrap shrink-0">Buyer portal</span>
         <div className="ml-auto flex items-center gap-2.5 min-w-0">

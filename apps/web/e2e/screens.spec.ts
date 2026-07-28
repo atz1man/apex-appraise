@@ -810,3 +810,58 @@ test('reversionary rent roll values term and reversion, and switches method', as
   await expect(page.getByText(/Years purchase @/)).toBeVisible();
   await expect(investmentRow).not.toHaveText(reversionaryValue);
 });
+
+/**
+ * Branding reaches the surfaces i61 left behind: the workbook and the portals a
+ * client logs into.
+ */
+test('firm branding reaches the workbook and the portals', async ({ page, request }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+
+  // ensure a logo exists (this suite may run before the branding test)
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAGQAAAAyCAYAAACqNX6+AAAAXklEQVR42u3QMQEAAAgDoC251a3gLwSgOZLKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysoPWx0AAWvpTMkAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await request.post('/uploads/logo', {
+    headers: { authorization: `Bearer ${token}` },
+    multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: png } },
+  });
+
+  // the workbook downloads and is named for the deal — its contents are asserted
+  // in the node-side workbook tests, which can open the file
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  const download = page.waitForEvent('download', { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Export .xlsx' }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
+
+  // a buyer leads with their development, under the firm's mark — never ours
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('buyer@demo.co.uk');
+  await page.getByLabel('Password').fill('demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Harbour Reach').first()).toBeVisible();
+  await expect(page.getByAltText(/logo/i).first()).toBeVisible();
+  await expect(page.getByText('Apex Appraise')).toHaveCount(0);
+
+  // an investor sees the firm's name in the lockup where an internal user sees Apex
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('investor@demo.co.uk');
+  await page.getByLabel('Password').fill('demo');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Investor portal').first()).toBeVisible();
+  await expect(page.getByText('Brookfield Developments').first()).toBeVisible();
+  await expect(page.getByText('Apex Appraise')).toHaveCount(0);
+});

@@ -13,6 +13,8 @@ import type ExcelJSNS from 'exceljs';
 export interface ExportOpts {
   dealName: string;
   address: string;
+  /** whose workbook this is — falls back to Apex when a firm has no branding */
+  firm?: { name: string; logoUrl?: string | null };
   input: AppraisalInput;
   R: AppraisalResult;
   jv: JvResult;
@@ -35,7 +37,7 @@ type Ws = ExcelJSNS.Worksheet;
 
 const thin = { style: 'thin' as const, color: { argb: BORDER } };
 
-function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string, span: number) {
+function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string, span: number, firmName = 'Apex Appraise') {
   ws.mergeCells(1, 1, 1, span);
   const t = ws.getCell(1, 1);
   t.value = dealName;
@@ -47,7 +49,7 @@ function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string,
   a.font = { name: 'Arial', size: 10, color: { argb: INK2 } };
   ws.mergeCells(3, 1, 3, span);
   const s = ws.getCell(3, 1);
-  s.value = `Apex Appraise · exported ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · figures from the shared appraisal engine — projections, verify before reliance`;
+  s.value = `${firmName} · exported ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} · figures from the shared appraisal engine — projections, verify before reliance`;
   s.font = { name: 'Arial', size: 8, italic: true, color: { argb: 'FF9AA09A' } };
   ws.addRow([]);
 }
@@ -81,17 +83,36 @@ const body = (c: ExcelJSNS.Cell) => {
 
 export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSNS.Workbook> {
   const { dealName, address, input, R, jv, monthLabel } = opts;
+  const firmName = opts.firm?.name ?? 'Apex Appraise';
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Apex Appraise';
+  wb.creator = firmName;
   wb.created = new Date();
 
   const isResidual = input.site.mode === 'residual';
 
   // ---- Summary ----
   const s = wb.addWorksheet('Summary', { properties: { tabColor: { argb: BRAND } } });
+  // exceljs embeds png/jpeg only — a WebP logo is skipped rather than corrupting
+  // the workbook, and the firm name carries the branding on its own
+  const logo = opts.firm?.logoUrl;
+  if (logo) {
+    const ext = logo.toLowerCase().endsWith('.png') ? 'png' : /\.jpe?g$/.test(logo.toLowerCase()) ? 'jpeg' : null;
+    if (ext) {
+      try {
+        const res = await fetch(logo);
+        if (res.ok) {
+          const buffer = await res.arrayBuffer();
+          const id = wb.addImage({ buffer, extension: ext });
+          s.addImage(id, { tl: { col: 1.6, row: 0.15 }, ext: { width: 132, height: 40 } });
+        }
+      } catch {
+        // a missing logo must never fail an export
+      }
+    }
+  }
   s.columns = [{ width: 34 }, { width: 18 }];
-  titleBlock(s, dealName, address, 'Development appraisal summary', 2);
+  titleBlock(s, dealName, address, 'Development appraisal summary', 2, firmName);
   headerRow(s, ['Measure', 'Value']);
   const kpis: Array<[string, number, string]> = [
     ['Gross development value (GDV)', Math.round(R.gdv), FMT_MONEY],
@@ -123,7 +144,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Unit schedule (live formulas) ----
   const u = wb.addWorksheet('Unit schedule', { properties: { tabColor: { argb: BRAND } } });
   u.columns = [{ width: 36 }, { width: 9 }, { width: 13 }, { width: 11 }, { width: 16 }];
-  titleBlock(u, dealName, address, 'Accommodation schedule — edit counts/areas/rates, values recompute', 5);
+  titleBlock(u, dealName, address, 'Accommodation schedule — edit counts/areas/rates, values recompute', 5, firmName);
   headerRow(u, ['Unit type', 'No.', 'Area (sq ft)', '£/sq ft', 'Value']);
   const firstUnit = u.rowCount + 1;
   input.units.forEach((unit, i) => {
@@ -162,7 +183,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   if (R.phases?.length) {
     const ph = wb.addWorksheet('Phases', { properties: { tabColor: { argb: 'FF3C7FB5' } } });
     ph.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 13 }, { width: 11 }, { width: 15 }, { width: 14 }, { width: 16 }];
-    titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 10);
+    titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 10, firmName);
     headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', 'NIA (sq ft)', '£/sq ft', 'Construction', 'Phase costs', 'GDV']);
     const firstPhase = ph.rowCount + 1;
     R.phases.forEach((p) => {
@@ -209,7 +230,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     const I = R.income;
     const rr = wb.addWorksheet('Rent roll', { properties: { tabColor: { argb: 'FF1E7A55' } } });
     rr.columns = [{ width: 34 }, { width: 8 }, { width: 12 }, { width: 12 }, { width: 9 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 15 }];
-    titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 9);
+    titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 9, firmName);
     headerRow(rr, ['Tenancy / space', 'No.', 'Area (sq ft)', 'Rent £/sq ft', 'Void %', 'ERV £/sq ft', 'Review (yrs)', 'Yield %', 'Rent (£ pa)']);
     const firstRent = rr.rowCount + 1;
     input.income.lines.forEach((l, i) => {
@@ -307,7 +328,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Residual appraisal ----
   const ra = wb.addWorksheet('Residual appraisal', { properties: { tabColor: { argb: BRAND } } });
   ra.columns = [{ width: 42 }, { width: 18 }];
-  titleBlock(ra, dealName, address, isResidual ? 'Residual land value at target profit' : 'Profit at fixed land price', 2);
+  titleBlock(ra, dealName, address, isResidual ? 'Residual land value at target profit' : 'Profit at fixed land price', 2, firmName);
   headerRow(ra, ['Line', 'Amount']);
   const gdvLabel =
     R.investmentValue > 0
@@ -348,7 +369,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Cashflow ----
   const cf = wb.addWorksheet('Cashflow', { properties: { tabColor: { argb: 'FFC7A95B' } } });
   cf.columns = [{ width: 11 }, { width: 14 }, { width: 13 }, { width: 14 }, { width: 14 }, { width: 15 }];
-  titleBlock(cf, dealName, address, `Monthly ledger — ${input.finance.spendProfile ?? 'scurve'} drawdown, interest compounds on drawn balance`, 6);
+  titleBlock(cf, dealName, address, `Monthly ledger — ${input.finance.spendProfile ?? 'scurve'} drawdown, interest compounds on drawn balance`, 6, firmName);
   headerRow(cf, ['Month', 'Cost', 'Interest', 'Revenue', 'Net', 'Cumulative']);
   (R.cash?.rows ?? []).forEach((row) => {
     const r = cf.addRow([
@@ -404,7 +425,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- JV returns ----
   const jvs = wb.addWorksheet('JV returns', { properties: { tabColor: { argb: 'FF9B79C0' } } });
   jvs.columns = [{ width: 34 }, { width: 16 }, { width: 16 }];
-  titleBlock(jvs, dealName, address, `Equity waterfall — ${input.jv?.prefPct ?? 8}% pref, ${input.jv?.promotePct ?? 20}% promote over ${jv.holdYears.toFixed(1)} yrs`, 3);
+  titleBlock(jvs, dealName, address, `Equity waterfall — ${input.jv?.prefPct ?? 8}% pref, ${input.jv?.promotePct ?? 20}% promote over ${jv.holdYears.toFixed(1)} yrs`, 3, firmName);
   headerRow(jvs, ['Measure', 'LP (investors)', 'GP (developer)']);
   const jvRows: Array<[string, number, number, string]> = [
     ['Equity in', Math.round(jv.lp.equity), Math.round(jv.gp.equity), FMT_MONEY],
@@ -431,7 +452,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Risk & sensitivity ----
   const rs = wb.addWorksheet('Risk & sensitivity', { properties: { tabColor: { argb: 'FF9A6212' } } });
   rs.columns = [{ width: 30 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }];
-  titleBlock(rs, dealName, address, 'Sensitivity matrix & Monte Carlo risk — engine-computed', 6);
+  titleBlock(rs, dealName, address, 'Sensitivity matrix & Monte Carlo risk — engine-computed', 6, firmName);
   headerRow(rs, ['Return on cost — build ↓ / GDV →', '−10%', '−5%', 'Base', '+5%', '+10%']);
   const grid = sensitivityGrid(input, 'roc');
   const baseRoC = R.poc;
@@ -481,7 +502,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   // ---- Assumptions ----
   const a = wb.addWorksheet('Assumptions', { properties: { tabColor: { argb: 'FF9AA09A' } } });
   a.columns = [{ width: 36 }, { width: 40 }];
-  titleBlock(a, dealName, address, 'Key assumptions', 2);
+  titleBlock(a, dealName, address, 'Key assumptions', 2, firmName);
   headerRow(a, ['Assumption', 'Value']);
   const rows: Array<[string, string]> = [
     ['Site mode', isResidual ? 'Residual — solve land at target profit' : 'Profit — fixed land price'],

@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
-import { getPrincipal } from '../lib/trpc';
+import { getPrincipal, trpc } from '../lib/trpc';
 
 // ---------- Brand ----------
 
@@ -27,6 +27,21 @@ export function BrandLockup() {
         Apex <span className="text-brand-500">Appraise</span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * Portals are client-facing, so a buyer or investor sees the FIRM's mark and
+ * name where an internal user sees Apex's. Same rule as the documents: the
+ * product is ours, what the client looks at is theirs.
+ */
+function PortalLockup() {
+  const { data: firm } = trpc.org.firm.useQuery(undefined, { staleTime: 5 * 60_000 });
+  return (
+    <span className="flex items-center gap-2.5">
+      <FirmMark logoUrl={firm?.logoUrl} size={28} alt={`${firm?.name ?? 'Firm'} logo`} />
+      <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate max-w-[260px]">{firm?.name ?? 'Apex Appraise'}</span>
+    </span>
   );
 }
 
@@ -76,7 +91,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
         borderBottom: '1px solid rgb(var(--ink, 22 32 27) / 0.07)',
       }}
     >
-      <BrandLockup />
+      {internal ? <BrandLockup /> : <PortalLockup />}
       {crumb && (
         <>
           <span className="text-ink-3b">/</span>

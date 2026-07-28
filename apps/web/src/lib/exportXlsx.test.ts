@@ -240,3 +240,33 @@ describe('buildAppraisalWorkbook — cashflow period summaries', async () => {
     expect(Math.abs(annualCost - monthly)).toBeLessThan(25);
   });
 });
+
+/** Branding: a firm's workbook carries its name, not the product's. */
+describe('buildAppraisalWorkbook — firm branding', async () => {
+  const R4 = computeAppraisal(referenceCase, { withCash: true });
+  const jv4 = jvWaterfall(R4.equity, R4.profit, R4.holdYears, referenceCase.jv!);
+  const opts = { dealName: 'Golden Fixture Works', address: 'Bournemouth', input: referenceCase, R: R4, jv: jv4, monthLabel };
+
+  it('stamps the firm on every sheet and on the file itself', async () => {
+    const wb = await buildAppraisalWorkbook({ ...opts, firm: { name: 'Marchmont & Co' } });
+    expect(wb.creator).toBe('Marchmont & Co');
+    for (const ws of wb.worksheets) {
+      const strap = String(ws.getCell(3, 1).value ?? '');
+      expect(strap.startsWith('Marchmont & Co ·')).toBe(true);
+      expect(strap).not.toContain('Apex Appraise');
+    }
+  });
+
+  it('falls back to Apex when the firm has no branding', async () => {
+    const wb = await buildAppraisalWorkbook(opts);
+    expect(wb.creator).toBe('Apex Appraise');
+    expect(String(wb.getWorksheet('Summary')!.getCell(3, 1).value)).toContain('Apex Appraise');
+  });
+
+  it('skips an unembeddable logo rather than corrupting the workbook', async () => {
+    // exceljs handles png/jpeg only; a WebP must be ignored, not written
+    const wb = await buildAppraisalWorkbook({ ...opts, firm: { name: 'Marchmont & Co', logoUrl: '/uploads/files/logo.webp' } });
+    expect(wb.model.media ?? []).toHaveLength(0);
+    expect(wb.creator).toBe('Marchmont & Co');
+  });
+});
