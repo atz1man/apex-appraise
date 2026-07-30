@@ -31,6 +31,8 @@
   --status-red: 178 58 46;
   --status-red-bg: 249 234 231;
   --brand-ink: 20 80 59; /* emphasis text/indicators in the brand green */
+  --toggle-track: 237 236 230; /* segmented-control rail */
+  --toggle-pill-ring: 255 255 255; /* invisible on a white pill in light */
   --status-green: 30 122 85;
   --status-green-bg: 228 241 234;
   --status-purple: 107 78 138;
@@ -132,6 +134,8 @@
   /* #14503B is 1.84:1 on the dark panel — unreadable. brand-400 is the brand's
      own lighter green and clears AA on surface (5.06), tint (4.72) and sunken-2 (4.69). */
   --brand-ink: 30 158 106;
+  --toggle-track: 19 23 21;
+  --toggle-pill-ring: 38 45 40;
   --tint-success: 22 36 29;
   --tint-success-2: 24 41 31;
   --border-strong: 38 45 40;

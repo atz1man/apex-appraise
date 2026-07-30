@@ -940,5 +940,43 @@ test('brand emphasis text is legible in both themes', async ({ page }) => {
     )
     .toEqual([]);
 
+  // the segmented-control rail was a hardcoded light grey in both themes: a
+  // white bar on a dark page, with unselected labels failing AA in LIGHT too
+  const rail = await page.evaluate(() => {
+    const track = document.querySelector('[role="tablist"]') as HTMLElement | null;
+    const label = track?.querySelector('button[aria-selected="false"]') as HTMLElement | null;
+    if (!track || !label) return null;
+    const rgb = (s: string) => (s.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => {
+      const f = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+    };
+    const contrast = (a: number[], b: number[]) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    const trackBg = rgb(getComputedStyle(track).backgroundColor);
+    const canvas = rgb(getComputedStyle(document.body).backgroundColor);
+    return { labelOnRail: contrast(rgb(getComputedStyle(label).color), trackBg), railOnCanvas: contrast(trackBg, canvas) };
+  });
+  expect(rail).not.toBeNull();
+  expect(rail!.labelOnRail).toBeGreaterThan(4.5); // was 3.34 in dark, 2.76 in light
+  expect(rail!.railOnCanvas).toBeLessThan(2); // was 15.69 — a light bar on a dark page
+
   await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(243, 244, 241)');
+  // polled for the same reason as the sweep above: `transition-colors` means an
+  // immediate read returns the dark label colour against the light rail
+  const measureRail = () => page.evaluate(() => {
+    const track = document.querySelector('[role="tablist"]') as HTMLElement;
+    const label = track.querySelector('button[aria-selected="false"]') as HTMLElement;
+    const rgb = (s: string) => (s.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => {
+      const f = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+    };
+    const [hi, lo] = [lum(rgb(getComputedStyle(label).color)), lum(rgb(getComputedStyle(track).backgroundColor))].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  });
+  await expect.poll(measureRail, { message: 'unselected toggle label on the light rail' }).toBeGreaterThan(4.5);
 });

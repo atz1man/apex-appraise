@@ -316,7 +316,9 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   return (
     <div
       className="inline-flex rounded-[12px] p-[3px] gap-[2px]"
-      style={{ background: '#EDECE6', boxShadow: 'inset 0 1px 2px rgba(20,30,25,0.06)' }}
+      // the rail was a hardcoded #EDECE6: a light bar glaring at 15.69:1 against
+      // the dark canvas. Tokenised so it recesses under the panel in both themes.
+      style={{ background: 'rgb(var(--toggle-track, 237 236 230))', boxShadow: 'inset 0 1px 2px rgba(20,30,25,0.06)' }}
       role="tablist"
     >
       {options.map(([k, label]) => {
@@ -327,7 +329,19 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
             role="tab"
             aria-selected={on}
             onClick={() => onChange(k)}
-            className={`px-3.5 py-1.5 rounded-[10px] text-[12.5px] ${on ? 'bg-surface text-brand-ink font-semibold shadow-pill' : 'text-inactive font-medium hover:text-ink-2'}`}
+            // unselected was --inactive on the rail: 2.76:1, failing AA in LIGHT
+            // before dark mode was even involved. --ink-2 gives 4.99 / 8.14.
+            className={`px-3.5 py-1.5 rounded-[10px] text-[12.5px] transition-colors ${on ? 'bg-surface text-brand-ink font-semibold' : 'text-ink-2 font-medium hover:text-ink'}`}
+            style={
+              on
+                ? {
+                    // elevation reads in light; the hairline ring is what separates
+                    // the pill from the rail in dark, where a black shadow does nothing
+                    boxShadow:
+                      '0 1px 3px rgba(20,30,25,0.10), 0 1px 1px rgba(20,30,25,0.05), 0 0 0 1px rgb(var(--toggle-pill-ring, 255 255 255))',
+                  }
+                : undefined
+            }
           >
             {label}
           </button>
