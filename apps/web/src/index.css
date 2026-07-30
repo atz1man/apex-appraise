@@ -118,6 +118,16 @@
   --notice-ink: 122 78 14;
   --shadow-ink: 20 30 25;
   --control-border: 20 30 25;
+  --brand-ink: 20 80 59;
+  --toggle-track: 237 236 230;
+  --toggle-pill-ring: 255 255 255;
+
+  /* `body` applies `color` from --ink, and colour INHERITS: restating the
+     variable here does not re-run that declaration, so a light-pinned document
+     kept the dark ink and rendered white-on-white for anyone in dark mode.
+     Re-apply the properties, do not just redefine the vars. */
+  color: rgb(var(--ink));
+  background-color: rgb(var(--canvas));
 }
 
 /* Dark palette — evergreen-tinted charcoal. NOT yet user-reachable: the

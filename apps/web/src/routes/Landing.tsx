@@ -99,8 +99,8 @@ function Cta({
 }) {
   const chrome: Record<string, [string, React.CSSProperties]> = {
     light: [
-      'bg-surface text-brand-800 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-12px_rgba(0,0,0,0.45)]',
-      { boxShadow: '0 8px 24px -10px rgba(0,0,0,0.35)' },
+      'text-brand-800 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-12px_rgba(0,0,0,0.45)]',
+      { background: '#FFFFFF', boxShadow: '0 8px 24px -10px rgba(0,0,0,0.35)' },
     ],
     brand: [
       'text-white hover:[filter:brightness(1.08)] hover:-translate-y-0.5',
@@ -299,7 +299,7 @@ function LiveEngineCard() {
       </div>
       <Link
         to="/register"
-        className="group mt-4 inline-flex w-full items-center justify-center gap-2 h-[42px] rounded-[12px] bg-surface text-brand-800 text-[13.5px] font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] motion-reduce:transition-none"
+        className="group mt-4 inline-flex w-full items-center justify-center gap-2 h-[42px] rounded-[12px] bg-white text-brand-800 text-[13.5px] font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] motion-reduce:transition-none"
       >
         Run a full appraisal
         <span className="transition-transform duration-200 group-hover:translate-x-[3px]" aria-hidden="true">
@@ -576,7 +576,7 @@ function PortalMock() {
         ).map(([label, value]) => (
           <div key={label} className="rounded-[12px] bg-sunken border border-border-strong px-3.5 py-3">
             <div className="label-mono text-ink-2b">{label}</div>
-            <div className="fig mt-1.5 text-[19px] font-semibold tracking-[-1px] text-brand-700">{value}</div>
+            <div className="fig mt-1.5 text-[19px] font-semibold tracking-[-1px] text-brand-ink">{value}</div>
           </div>
         ))}
       </div>
@@ -696,7 +696,7 @@ export default function Landing() {
       {tourAt !== null && <TourModal initial={tourAt} onClose={() => setTourAt(null)} />}
       <StickyMobileCta onTour={() => setTourAt(0)} />
       {/* NAV */}
-      <div className="sticky top-0 z-50 border-b border-border-strong backdrop-blur-md" style={{ background: 'rgba(243,244,241,0.86)' }}>
+      <div className="sticky top-0 z-50 border-b border-border-strong backdrop-blur-md" style={{ background: 'rgb(var(--canvas, 243 244 241) / 0.86)' }}>
         <div className="max-w-[1200px] mx-auto h-16 px-4 sm:px-7 flex items-center gap-3.5">
           <Link to="/welcome" className="flex items-center gap-2.5">
             <BrandMark size={30} />
@@ -710,7 +710,7 @@ export default function Landing() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3.5">
-            <Link to="/login" className="text-[13.5px] font-semibold text-ink hover:text-brand-700">
+            <Link to="/login" className="text-[13.5px] font-semibold text-ink hover:text-brand-ink">
               Sign in
             </Link>
             <a href={DEMO_MAILTO} className="hidden sm:inline-flex items-center text-[13.5px] font-semibold text-ink-2 hover:text-ink transition-colors">
@@ -792,7 +792,7 @@ export default function Landing() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
             {STATS.map(([value, label]) => (
               <div key={value}>
-                <div className="fig text-[44px] font-semibold tracking-[-2px] text-brand-700">
+                <div className="fig text-[44px] font-semibold tracking-[-2px] text-brand-ink">
                   <CountUp text={value} />
                 </div>
                 <div className="mt-1.5 text-[14px] text-ink-2 leading-[1.4]">{label}</div>
@@ -874,8 +874,8 @@ export default function Landing() {
                   </div>
                 )}
                 <div className="flex-1 text-center px-2">
-                  <div className={`font-mono text-[13px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-700' : 'text-ink-2b'}`}>{num}</div>
-                  <div className={`mt-2 text-[16px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-700' : ''}`}>{title}</div>
+                  <div className={`font-mono text-[13px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-ink' : 'text-ink-2b'}`}>{num}</div>
+                  <div className={`mt-2 text-[16px] font-semibold ${i === STAGES.length - 1 ? 'text-brand-ink' : ''}`}>{title}</div>
                   <div className="mt-[5px] text-[12.5px] text-ink-2b leading-[1.4]">{desc}</div>
                 </div>
               </div>
@@ -892,7 +892,7 @@ export default function Landing() {
         <div className="mt-9 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ icon, title, desc }) => (
             <div key={title} className="bg-surface border border-border-strong rounded-card p-[22px] shadow-rest">
-              <span className="inline-flex items-center justify-center w-10 h-10 rounded-[11px] bg-tint-success text-brand-700">
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-[11px] bg-tint-success text-brand-ink">
                 <Icon d={icon} size={20} strokeWidth={1.9} />
               </span>
               <div className="mt-4 text-[17px] font-semibold">{title}</div>
@@ -951,7 +951,7 @@ export default function Landing() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[17px] font-bold">{name}</span>
-                {featured && <span className="label-mono rounded-[7px] bg-tint-success text-brand-700 px-2 py-[3px]">Most popular</span>}
+                {featured && <span className="label-mono rounded-[7px] bg-tint-success text-brand-ink px-2 py-[3px]">Most popular</span>}
               </div>
               <div className="fig mt-3 text-[38px] font-semibold tracking-[-1.5px]">
                 £{price}

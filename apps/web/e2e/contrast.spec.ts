@@ -138,10 +138,20 @@ const setTheme = async (page: Page, theme: 'light' | 'dark') => {
   }, theme);
 };
 
-test('no AA contrast failures on any screen, in either theme', async ({ page }) => {
-  test.setTimeout(300_000);
+/** Sign in as one of the seeded demo principals. */
+const signIn = async (page: Page, email?: string) => {
   await page.goto('/login');
+  if (email) {
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password').fill('demo');
+  }
   await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForLoadState('networkidle').catch(() => {});
+};
+
+test('no AA contrast failures on any screen, in either theme', async ({ page, browser }) => {
+  test.setTimeout(600_000);
+  await signIn(page);
   await expect(page.getByText('Deal tools')).toBeVisible();
 
   const ids = await page.evaluate(async () => {
@@ -149,8 +159,25 @@ test('no AA contrast failures on any screen, in either theme', async ({ page }) 
     const j = await r.json();
     const deals = j.result.data.json.deals as Array<{ id: string; name: string }>;
     const by = (p: string) => deals.find((d) => d.name.startsWith(p))!.id;
-    return { northgate: by('Northgate'), kingsway: by('Kingsway'), harbour: by('Harbour') };
+    return { northgate: by('Northgate'), kingsway: by('Kingsway'), harbour: by('Harbour'), westover: by('Westover') };
   });
+
+  // a live signing link, so the page a client actually sees is audited too
+  const signToken = await page.evaluate(async (dealId) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const terms = {
+      clientName: 'Contrast Sweep Ltd', clientAddress: '', otherUsers: 'None.', purpose: 'Audit.',
+      interest: 'Freehold.', basisOfValue: 'Market Value', valuationDate: null,
+      extentOfInvestigation: 'Inspection.', sourcesOfInformation: 'Client.', assumptions: 'Standard.',
+      specialAssumptions: 'None.', reportFormat: 'PDF.', restrictionsOnUse: 'None.', feeBasis: 'Fixed.',
+      liabilityCap: null, complaintsProcedure: 'RICS.', aiUse: 'May be used.',
+      valuerName: 'Dana Whitlock MRICS', valuerReg: 'RICS Registered Valuer',
+    };
+    await fetch('/trpc/engagement.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, terms } }) });
+    const res = await fetch('/trpc/engagement.issue', { method: 'POST', headers: auth, body: JSON.stringify({ json: dealId }) });
+    const j = await res.json();
+    return j.result.data.json.signToken as string;
+  }, ids.westover);
 
   const routes: Array<[string, string]> = [
     ['hub', '/'],
@@ -176,16 +203,47 @@ test('no AA contrast failures on any screen, in either theme', async ({ page }) 
   ];
 
   const findings: Finding[] = [];
-  for (const theme of ['light', 'dark'] as const) {
-    for (const [name, path] of routes) {
-      await page.goto(path);
-      await page.waitForLoadState('networkidle').catch(() => {});
-      await setTheme(page, theme);
-      // colour transitions must settle or every read is the previous theme's
-      await page.waitForTimeout(400);
-      const hits = (await page.evaluate(AUDIT)) as Omit<Finding, 'route' | 'theme'>[];
-      findings.push(...hits.map((h) => ({ ...h, route: name, theme })));
+  const sweep = async (p: Page, list: Array<[string, string]>) => {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const [name, path] of list) {
+        await p.goto(path);
+        await p.waitForLoadState('networkidle').catch(() => {});
+        await setTheme(p, theme);
+        // colour transitions must settle or every read is the previous theme's
+        await p.waitForTimeout(400);
+        const hits = (await p.evaluate(AUDIT)) as Omit<Finding, 'route' | 'theme'>[];
+        findings.push(...hits.map((h) => ({ ...h, route: name, theme })));
+      }
     }
+  };
+
+  await sweep(page, routes);
+
+  // Everything a client or a stranger sees. Each persona needs its OWN context:
+  // sessions share localStorage within one, so signing in as a buyer would
+  // evict the internal session mid-sweep.
+  const personas: Array<[string | undefined, Array<[string, string]>]> = [
+    ['buyer@demo.co.uk', [['buyer portal', '/portal/buyer']]],
+    ['investor@demo.co.uk', [['investor portal', '/portal/investor']]],
+    [
+      undefined, // no session at all
+      [
+        ['login', '/login'],
+        ['register', '/register'],
+        ['landing', '/welcome'],
+        ['signing page', `/terms/${signToken}`],
+        ['not found', '/no-such-page'],
+      ],
+    ],
+  ];
+  for (const [email, list] of personas) {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    if (email) {
+      await signIn(p, email);
+    }
+    await sweep(p, list);
+    await ctx.close();
   }
 
   if (findings.length) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { status as statusTokens, brand, neutral } from '@apex/ui-tokens';
+import { status as statusTokens, brand, brandInk, neutral } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { formatPct } from '@apex/appraisal-engine';
@@ -11,7 +11,7 @@ const fdate = (d: Date | string | null | undefined) =>
 
 /** Deal stage → LP-facing chip, per the prototype's status map. */
 const STAGE_CHIP: Record<string, { label: string; text: string; bg: string }> = {
-  CONSTRUCTION: { label: 'CONSTRUCTION', text: brand[700], bg: neutral.tintSuccess },
+  CONSTRUCTION: { label: 'CONSTRUCTION', text: brandInk, bg: neutral.tintSuccess },
   SALES_LETTING: { label: 'IN SALES', text: statusTokens.blue.text, bg: statusTokens.blue.bg },
   COMPLETED: { label: 'REALISED', text: statusTokens.green.text, bg: statusTokens.green.bg },
 };
