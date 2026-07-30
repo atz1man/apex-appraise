@@ -195,7 +195,7 @@ export default function DataRoom() {
                 </span>
                 <span className={`flex-1 min-w-0 truncate text-[12.5px] ${on ? 'font-semibold text-brand-ink' : 'font-medium text-ink-2'}`}>{f.label}</span>
                 {data ? (
-                  <span className="fig text-[10px] font-medium text-ink-3b">{folderCount(f.key)}</span>
+                  <span className="fig text-[10px] font-medium text-ink-2b">{folderCount(f.key)}</span>
                 ) : (
                   <Skeleton height={10} width={14} />
                 )}
@@ -424,7 +424,7 @@ export default function DataRoom() {
 
           <div className="mt-6 text-[13px] font-semibold">Recent activity</div>
           <div className="mt-3">
-            {(activity ?? []).length === 0 && <div className="text-[11.5px] text-ink-3b">No activity yet.</div>}
+            {(activity ?? []).length === 0 && <div className="text-[11.5px] text-ink-2b">No activity yet.</div>}
             {(activity ?? []).map((a, i) => (
               <div key={a.id} className="flex gap-2.5 pb-3.5">
                 <div className="flex flex-col items-center">
@@ -435,7 +435,7 @@ export default function DataRoom() {
                   <div className="text-[12px] leading-normal">
                     <b className="font-semibold">{a.actor}</b> {a.action} {a.target}
                   </div>
-                  <div className="fig mt-0.5 text-[10.5px] text-ink-3b">{fmtWhen(a.at)}</div>
+                  <div className="fig mt-0.5 text-[10.5px] text-ink-2b">{fmtWhen(a.at)}</div>
                 </div>
               </div>
             ))}

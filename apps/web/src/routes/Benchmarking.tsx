@@ -311,7 +311,7 @@ export default function Benchmarking() {
                                     style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
                                     title={`${o.dealName ?? 'Your deal'} — £${Math.round(o.value)}/ft²`}
                                   >
-                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-brand-ink whitespace-nowrap">
+                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink whitespace-nowrap">
                                       £{Math.round(o.value)}
                                     </span>
                                   </div>

@@ -56,7 +56,7 @@ function Splash() {
       <div className="flex flex-col items-center gap-3 animate-pulseDot">
         <BrandMark size={40} />
         <span className="text-[13px] font-semibold text-ink-3">
-          Apex <span className="text-brand-500">Appraise</span>
+          Apex <span className="text-brand-ink">Appraise</span>
         </span>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
+import { brand, brandInk, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
@@ -112,7 +112,7 @@ export default function Calendar() {
     return {
       list: [
         { label: 'Overdue', color: statusTokens.red.text, tasks: overdue },
-        { label: 'Today', color: brand[700], tasks: dueToday },
+        { label: 'Today', color: brandInk, tasks: dueToday },
         { label: 'This week', color: brand[500], tasks: thisWeek },
         { label: 'Later', color: neutral.ink2b, tasks: later },
         { label: 'Completed', color: neutral.ink3, tasks: done },
@@ -215,11 +215,11 @@ export default function Calendar() {
                       style={{
                         background: on ? neutral.tintSuccess : neutral.surface,
                         borderColor: on ? 'rgb(var(--border-green-soft, 214 230 221))' : neutral.borderStrong,
-                        color: on ? brand[700] : neutral.ink2b,
+                        color: on ? brandInk : neutral.ink2b,
                       }}
                     >
                       {p.initials === 'all' ? (
-                        <span className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-white text-[8.5px] font-semibold" style={{ background: neutral.ink3 }}>∗</span>
+                        <span className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-white text-[8.5px] font-semibold" style={{ background: brand[700] }}>∗</span>
                       ) : (
                         <Avatar initials={p.initials} size={18} />
                       )}
@@ -252,7 +252,7 @@ export default function Calendar() {
               </div>
               <div className="flex items-center gap-3.5 text-[11px] text-ink-3">
                 <span className="flex items-center gap-1.5"><Dot color={statusTokens.red.dot} size={8} /> Overdue</span>
-                <span className="flex items-center gap-1.5"><Dot color={brand[700]} size={8} /> Due</span>
+                <span className="flex items-center gap-1.5"><Dot color={brandInk} size={8} /> Due</span>
                 <span className="flex items-center gap-1.5"><Dot color={statusTokens.green.dot} size={8} /> Done</span>
               </div>
             </div>
@@ -273,13 +273,13 @@ export default function Calendar() {
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && c.k && (e.preventDefault(), pickDay(c.k))}
                     className={`min-h-[72px] sm:min-h-[96px] rounded-[10px] p-[4px] sm:p-[7px] flex flex-col gap-1 border transition-colors ${c.inMonth ? 'cursor-pointer hover:border-border-strong' : ''}`}
                     style={{
-                      borderColor: c.isToday ? brand[700] : c.inMonth ? 'rgb(var(--border-soft, 238 237 231))' : 'transparent',
+                      borderColor: c.isToday ? brandInk : c.inMonth ? 'rgb(var(--border-soft, 238 237 231))' : 'transparent',
                       background: c.inMonth ? (c.isToday ? 'rgb(var(--tint-green-soft, 243 248 245))' : neutral.surface) : neutral.sunken,
-                      boxShadow: c.isToday ? `0 0 0 1px ${brand[700]}` : undefined,
+                      boxShadow: c.isToday ? `0 0 0 1px ${brandInk}` : undefined,
                     }}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="fig text-[12px] font-semibold" style={{ color: c.inMonth ? (c.isToday ? brand[700] : neutral.ink) : neutral.crumb }}>
+                      <span className="fig text-[12px] font-semibold" style={{ color: c.inMonth ? (c.isToday ? brandInk : neutral.ink) : neutral.crumb }}>
                         {c.inMonth ? c.dayNum : ''}
                       </span>
                       {c.isToday && (
@@ -289,7 +289,7 @@ export default function Calendar() {
                     {c.tasks.slice(0, 2).map((t) => {
                       const over = isOverdue(t);
                       const bg = t.done ? neutral.tintSuccess2 : over ? statusTokens.red.bg : neutral.tintSuccess;
-                      const color = t.done ? statusTokens.green.text : over ? statusTokens.red.text : brand[700];
+                      const color = t.done ? statusTokens.green.text : over ? statusTokens.red.text : brandInk;
                       const dot = t.done ? statusTokens.green.dot : over ? statusTokens.red.dot : (FLAT[t.assignee] ?? brand[500]);
                       return (
                         <button
@@ -436,7 +436,7 @@ export default function Calendar() {
                     <div key={d.id} className="flex items-center gap-2.5">
                       <Dot color={STAGE_ACCENT[d.stage] ?? neutral.ink3} />
                       <span className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{d.name}</span>
-                      <span className="fig text-[11px] font-semibold shrink-0" style={{ color: brand[700] }}>{d.nextMilestone}</span>
+                      <span className="fig text-[11px] font-semibold shrink-0" style={{ color: brandInk }}>{d.nextMilestone}</span>
                       {d.owner && <Avatar initials={d.owner.initials} size={20} />}
                     </div>
                   ))}

@@ -24,7 +24,7 @@ export function BrandLockup() {
     <Link to="/" className="flex items-center gap-2.5">
       <BrandMark />
       <span className="text-[15.5px] font-bold tracking-[-0.3px]">
-        Apex <span className="text-brand-500">Appraise</span>
+        Apex <span className="text-brand-ink">Appraise</span>
       </span>
     </Link>
   );
@@ -94,7 +94,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
       {internal ? <BrandLockup /> : <PortalLockup />}
       {crumb && (
         <>
-          <span className="text-ink-3b">/</span>
+          <span className="text-ink-3b" aria-hidden="true">/</span>
           <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px]">{crumb}</span>
         </>
       )}

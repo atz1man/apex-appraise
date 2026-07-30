@@ -61,7 +61,7 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
           >
             <span
               className={`w-[18px] h-[18px] rounded-full grid place-items-center shrink-0 text-[10px] font-bold ${
-                isDone ? 'bg-tint-success-2 text-brand-500' : 'border border-border-strong text-transparent'
+                isDone ? 'bg-tint-success-2 text-brand-ink' : 'border border-border-strong text-transparent'
               }`}
               aria-hidden="true"
             >
@@ -234,7 +234,7 @@ export default function Hub() {
           </div>
         </section>
 
-        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-500 hover:text-brand-ink transition-colors">
+        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-ink hover:text-brand-600 transition-colors">
           <span aria-hidden="true" className="inline-flex"><Icon d={ICONS.integrations} size={15} /></span>
           Connected data sources — Land Registry, EPC, AVM →
         </Link>

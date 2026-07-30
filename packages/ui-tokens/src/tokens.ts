@@ -63,8 +63,15 @@ export const status: Record<StatusKey, { text: string; bg: string; dot: string }
   purple: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244'), dot: v('status-purple-dot', '155 121 192') },
 };
 
+/**
+ * The brand green as TEXT or a data mark. Theme-aware: #14503B measures 1.84:1
+ * on the dark panel, so dark resolves to the brand's lighter green. Use the
+ * fixed `brand` ramp above only for fills and gradients that carry white.
+ */
+export const brandInk = v('brand-ink', '20 80 59');
+
 export const assetTypeTag: Record<string, { text: string; bg: string }> = {
-  INDUSTRIAL: { text: '#14503B', bg: v('status-green-bg', '228 241 234') },
+  INDUSTRIAL: { text: brandInk, bg: v('status-green-bg', '228 241 234') },
   RESIDENTIAL: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246') },
   COMMERCIAL: { text: v('status-amber', '154 98 18'), bg: v('tag-commercial-bg', '246 236 217') },
   MIXED_USE: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },

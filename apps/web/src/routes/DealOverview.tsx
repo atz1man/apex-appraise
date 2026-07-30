@@ -410,7 +410,7 @@ export default function DealOverview() {
                     />
                   </div>
                 )}
-                <Link to={`/deal/${dealId}/costs`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
+                <Link to={`/deal/${dealId}/costs`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-ink hover:text-brand-600">
                   Open cost monitoring →
                 </Link>
               </Panel>
@@ -458,7 +458,7 @@ export default function DealOverview() {
                     <SalesVelocityChart points={velocityPoints} target={salesRollup.gdvAppraised} />
                   </div>
                 )}
-                <Link to={`/deal/${dealId}/sales`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
+                <Link to={`/deal/${dealId}/sales`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-ink hover:text-brand-600">
                   Open sales & lettings →
                 </Link>
               </Panel>
@@ -497,7 +497,7 @@ export default function DealOverview() {
                   })}
                 </div>
               )}
-              <Link to="/calendar" className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
+              <Link to="/calendar" className="mt-3 inline-block text-[11.5px] font-semibold text-brand-ink hover:text-brand-600">
                 View all in calendar →
               </Link>
             </Panel>
