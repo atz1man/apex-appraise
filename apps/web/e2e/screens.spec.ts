@@ -865,3 +865,80 @@ test('firm branding reaches the workbook and the portals', async ({ page, reques
   await expect(page.getByText('Brookfield Developments').first()).toBeVisible();
   await expect(page.getByText('Apex Appraise')).toHaveCount(0);
 });
+
+/**
+ * Dark-mode legibility of the brand green. #14503B measures 1.84:1 on the dark
+ * panel — this asserts the theme-aware token resolves per theme AND that the
+ * rendered contrast actually clears AA, rather than trusting the token swap.
+ */
+test('brand emphasis text is legible in both themes', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+
+  /** contrast of an element's text against the first opaque background behind it */
+  const measure = (text: string) =>
+    page.evaluate((needle) => {
+      const el = [...document.querySelectorAll('div,span')].find(
+        (n) => n.children.length === 0 && n.textContent?.trim() === needle,
+      );
+      if (!el) return null;
+      const rgb = (s: string) => (s.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+      const opaque = (s: string) => !!s && !s.includes('rgba(0, 0, 0, 0)') && s !== 'transparent';
+      let bgEl: Element | null = el;
+      let bg = '';
+      while (bgEl) {
+        const c = getComputedStyle(bgEl).backgroundColor;
+        if (opaque(c)) { bg = c; break; }
+        bgEl = bgEl.parentElement;
+      }
+      const lum = (c: number[]) => {
+        const f = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+      };
+      const fg = rgb(getComputedStyle(el).color);
+      const b = rgb(bg);
+      const [hi, lo] = [lum(fg), lum(b)].sort((x, y) => y - x);
+      return { color: fg, background: b, ratio: (hi + 0.05) / (lo + 0.05) };
+    }, text);
+
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Investment', exact: true }).click();
+  await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
+
+  // light: the brand green is unchanged and already comfortable
+  const light = await measure('Investment value in GDV');
+  expect(light).not.toBeNull();
+  expect(light!.color).toEqual([20, 80, 59]);
+  expect(light!.ratio).toBeGreaterThan(4.5);
+
+  // dark: the token resolves to the lighter brand green and clears AA
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(16, 20, 18)');
+  const dark = await measure('Investment value in GDV');
+  expect(dark).not.toBeNull();
+  expect(dark!.color).toEqual([30, 158, 106]);
+  expect(dark!.ratio).toBeGreaterThan(4.5);
+
+  // and the old colour survives nowhere on the page. Polled, because
+  // `transition-colors` means a scan fired immediately after the toggle reads
+  // the PRE-transition colour and reports a failure that fixes itself.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll('*')]
+            .filter((n) => getComputedStyle(n).color === 'rgb(20, 80, 59)')
+            .map((n) => `${n.tagName}.${(n.className || '').toString().slice(0, 40)}: ${(n.textContent || '').trim().slice(0, 30)}`),
+        ),
+      { message: 'elements still rendering the light-mode brand green in dark mode' },
+    )
+    .toEqual([]);
+
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+});

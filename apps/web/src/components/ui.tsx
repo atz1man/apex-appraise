@@ -106,7 +106,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
               to={to}
               className="px-2.5 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors"
               style={({ isActive }) => ({
-                color: isActive ? '#14503B' : 'rgb(var(--ink-2b, 110 114 105))',
+                color: isActive ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--ink-2b, 110 114 105))',
                 background: isActive ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent',
                 fontWeight: isActive ? 600 : 500,
               })}
@@ -327,7 +327,7 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
             role="tab"
             aria-selected={on}
             onClick={() => onChange(k)}
-            className={`px-3.5 py-1.5 rounded-[10px] text-[12.5px] ${on ? 'bg-surface text-brand-700 font-semibold shadow-pill' : 'text-inactive font-medium hover:text-ink-2'}`}
+            className={`px-3.5 py-1.5 rounded-[10px] text-[12.5px] ${on ? 'bg-surface text-brand-ink font-semibold shadow-pill' : 'text-inactive font-medium hover:text-ink-2'}`}
           >
             {label}
           </button>

@@ -26,7 +26,7 @@ const STAGE_ACCENT: Record<string, string> = {
   APPRAISAL: 'rgb(var(--stage-accent, 192 138 46))',
   OFFER: 'rgb(var(--status-blue, 45 91 168))',
   ACQUISITION: 'rgb(var(--status-green, 30 122 85))',
-  CONSTRUCTION: '#14503B',
+  CONSTRUCTION: 'rgb(var(--brand-ink, 20 80 59))',
   SALES_LETTING: '#1E9E6A',
   COMPLETED: 'rgb(var(--ink-2b, 110 114 105))',
 };

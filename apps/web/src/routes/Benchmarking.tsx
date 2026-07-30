@@ -89,7 +89,7 @@ function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: Metric
         {m.yours != null && (
           <div
             className="absolute top-[5px] w-3.5 h-3.5 rounded-full border-2 border-surface -translate-x-1/2"
-            style={{ left: `${pos(m.yours)}%`, background: brand[700], boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
+            style={{ left: `${pos(m.yours)}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
             title={`You: ${fmt(m.yours)}`}
           />
         )}
@@ -232,10 +232,10 @@ export default function Benchmarking() {
             <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">How your deals compare to the market</h1>
           </div>
           <div className="flex items-center gap-[7px] px-[11px] py-1.5 rounded-[9px] bg-tint-success">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill={brand[700]}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="rgb(var(--brand-ink, 20 80 59))">
               <path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" />
             </svg>
-            <span className="text-[11.5px] font-semibold text-brand-700">n = {n0(sampleSize)} appraisals</span>
+            <span className="text-[11.5px] font-semibold text-brand-ink">n = {n0(sampleSize)} appraisals</span>
           </div>
         </div>
 
@@ -308,10 +308,10 @@ export default function Benchmarking() {
                                   <div
                                     key={`${o.dealName}-${i}`}
                                     className="absolute left-1/2 w-2.5 h-2.5 rounded-full border-2 border-surface -translate-x-1/2 translate-y-1/2"
-                                    style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: brand[700], boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
+                                    style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
                                     title={`${o.dealName ?? 'Your deal'} — £${Math.round(o.value)}/ft²`}
                                   >
-                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-brand-700 whitespace-nowrap">
+                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-brand-ink whitespace-nowrap">
                                       £{Math.round(o.value)}
                                     </span>
                                   </div>
@@ -334,7 +334,7 @@ export default function Benchmarking() {
                           Market median
                         </span>
                         <span className="flex items-center gap-[5px]">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: brand[700] }} />
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'rgb(var(--brand-ink, 20 80 59))' }} />
                           Your deals
                         </span>
                       </div>
@@ -401,7 +401,7 @@ export default function Benchmarking() {
                 <section className="bg-surface rounded-card shadow-rest p-[18px]">
                   <div className="flex items-center justify-between">
                     <span className="text-[13px] font-semibold">Market index — UK HPI</span>
-                    <span className="label-mono rounded-[6px] bg-tint-success text-brand-700 px-1.5 py-[2px]">REAL DATA</span>
+                    <span className="label-mono rounded-[6px] bg-tint-success text-brand-ink px-1.5 py-[2px]">REAL DATA</span>
                   </div>
                   {hpiQ.isLoading ? (
                     <div className="mt-3 flex justify-center py-4"><Spinner /></div>
@@ -429,7 +429,7 @@ export default function Benchmarking() {
                                 key={pt.month}
                                 className="flex-1 rounded-t-[3px]"
                                 title={`${pt.month}: £${Math.round(pt.averagePrice).toLocaleString('en-GB')}`}
-                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? '#14503B' : '#AECBBC' }}
+                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? 'rgb(var(--brand-ink, 20 80 59))' : '#AECBBC' }}
                               />
                             ))}
                           </div>
@@ -473,7 +473,7 @@ export default function Benchmarking() {
                   <div className="mt-3 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas">
                     {contribQ.data ? (
                       <>
-                        <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-700">{n0(contribQ.data.total)}</span>
+                        <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-ink">{n0(contribQ.data.total)}</span>
                         <span className="text-[11.5px] leading-[1.4] text-ink-2b">
                           anonymised data points · your org contributed {n0(contribQ.data.yours)}
                         </span>
@@ -497,7 +497,7 @@ export default function Benchmarking() {
                     </Button>
                   </div>
                   {contribute.data && (
-                    <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-700">
+                    <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
                       Contributed to {contribute.data.region} · {contribute.data.useClass.toLowerCase()} · {contribute.data.period}.
                     </div>
                   )}

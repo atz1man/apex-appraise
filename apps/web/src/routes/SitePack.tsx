@@ -79,13 +79,13 @@ export default function SitePack() {
       <TopBar
         crumb={
           <span>
-            <Link to={`/deal/${dealId}`} className="text-inactive hover:text-brand-700">{data?.dealName ?? 'Deal'}</Link>
+            <Link to={`/deal/${dealId}`} className="text-inactive hover:text-brand-ink">{data?.dealName ?? 'Deal'}</Link>
             {' / '}Site pack
           </span>
         }
         right={
           ok && (
-            <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+            <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               <Dot color="rgb(var(--status-green, 30 122 85))" /> Live public data · {ok.geo.postcode}
             </span>
           )
@@ -170,7 +170,7 @@ export default function SitePack() {
               <StatCard label="Postcode" value={ok.geo.postcode} />
               <StatCard label="District" value={<span className="text-[15px]">{ok.geo.district}</span>} />
               <StatCard label="Region" value={<span className="text-[15px]">{ok.geo.region}</span>} />
-              <StatCard label="Sold records" value={String(soldItems.length)} tone="#14503B" />
+              <StatCard label="Sold records" value={String(soldItems.length)} tone="rgb(var(--brand-ink, 20 80 59))" />
               <StatCard
                 label="Constraints hit"
                 value={String(ok.constraints.hits.length)}
@@ -441,7 +441,7 @@ export default function SitePack() {
                           <span className={c.status === 'outstanding' ? 'text-status-red font-medium' : ''}>{c.status}</span> · {c.personsEntitled.join(', ') || c.description}
                         </div>
                       ))}
-                      <button className="mt-2 text-[11.5px] font-semibold text-brand-500 hover:text-brand-700" onClick={() => setCompanyNo(null)}>← Back to results</button>
+                      <button className="mt-2 text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink" onClick={() => setCompanyNo(null)}>← Back to results</button>
                     </div>
                   )}
                   <div className="mt-2 text-[10.5px] text-ink-3">Source: Companies House public data.</div>
@@ -449,7 +449,7 @@ export default function SitePack() {
 
                 <div className="text-[11px] text-ink-3 leading-relaxed px-1">
                   Fetched {new Date(ok.fetchedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} ·{' '}
-                  <Link to={`/deal/${dealId}/comparables`} className="text-brand-500 font-semibold hover:text-brand-700">
+                  <Link to={`/deal/${dealId}/comparables`} className="text-brand-500 font-semibold hover:text-brand-ink">
                     Open comparables →
                   </Link>
                 </div>

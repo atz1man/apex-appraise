@@ -9,7 +9,7 @@ type Weights = { salesComparison: number; cost: number; income: number };
 type ApproachKey = 'sales' | 'cost' | 'income';
 
 const APPROACHES: Array<{ key: ApproachKey; wKey: keyof Weights; label: string; dot: string; sub: string }> = [
-  { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: '#14503B', sub: 'Supported £/ft² × subject area' },
+  { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: 'rgb(var(--brand-ink, 20 80 59))', sub: 'Supported £/ft² × subject area' },
   { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + depreciated build cost' },
   { key: 'income', wKey: 'income', label: 'Income approach', dot: 'rgb(var(--ink-3, 154 160 154))', sub: 'Net rent capitalised at market yield' },
 ];
@@ -157,7 +157,7 @@ export default function Workbench() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal.name} / Workbench
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal.name} / Workbench
           </span>
         }
         right={
@@ -181,7 +181,7 @@ export default function Workbench() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
           <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-brand-700">Synced from field inspection · {inspectedOn}</div>
+            <div className="text-[12.5px] font-semibold text-brand-ink">Synced from field inspection · {inspectedOn}</div>
             <div className="mt-px text-[11.5px]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               {ratedRooms.length} of {rooms.length} areas rated · {photoTotal} photos — valuation pre-filled below.
             </div>
@@ -221,7 +221,7 @@ export default function Workbench() {
           <StatCard
             label="Supported £/ft²"
             value={summary && comps.length ? `£${n0(summary.supportedPsf)}` : '—'}
-            tone="#14503B"
+            tone="rgb(var(--brand-ink, 20 80 59))"
             sub={`from ${comps.length} comparable${comps.length === 1 ? '' : 's'}`}
           />
           <StatCard
@@ -284,7 +284,7 @@ export default function Workbench() {
             <Panel
               title="Comparable evidence grid"
               right={
-                <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-700">
+                <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-ink">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="#14503B" aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
                   Auto-adjusted
                 </span>
@@ -331,7 +331,7 @@ export default function Workbench() {
                             <Td right fig style={{ color: adjColor(c.adjDate) }}>{adjFmt(c.adjDate)}</Td>
                             <Td right fig style={{ color: adjColor(c.adjLocation) }}>{adjFmt(c.adjLocation)}</Td>
                             <Td right fig className="font-semibold" style={{ color: adjColor(r.netAdjustment) }}>{adjFmt(r.netAdjustment)}</Td>
-                            <Td right fig className="font-semibold" style={{ color: '#14503B' }}>£{n0(r.adjustedPsf)}</Td>
+                            <Td right fig className="font-semibold" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>£{n0(r.adjustedPsf)}</Td>
                             <Td right>
                               <span className="inline-flex items-center gap-2 justify-end">
                                 <span className="w-14 h-1.5 rounded-[3px] bg-border-std overflow-hidden inline-block">
@@ -349,8 +349,8 @@ export default function Workbench() {
               )}
               {summary && comps.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border-std flex gap-6 flex-wrap text-[12px] text-ink-2">
-                  <span>Supported <b className="fig text-brand-700">£{n0(summary.supportedPsf)}/ft²</b></span>
-                  {nia > 0 && <span>× {n0(nia)} ft² NIA → <b className="fig text-brand-700">{formatMoneyFull(Math.round(summary.supportedPsf * nia))}</b></span>}
+                  <span>Supported <b className="fig text-brand-ink">£{n0(summary.supportedPsf)}/ft²</b></span>
+                  {nia > 0 && <span>× {n0(nia)} ft² NIA → <b className="fig text-brand-ink">{formatMoneyFull(Math.round(summary.supportedPsf * nia))}</b></span>}
                   <span>Avg gross adjustment <b className="fig" style={{ color: conf.color }}>{avgGross.toFixed(1)}pts</b></span>
                 </div>
               )}
@@ -386,7 +386,7 @@ export default function Workbench() {
                   <div key={a.key}>
                     <div className="flex justify-between text-[12px]">
                       <span className="font-medium">{a.label}</span>
-                      <span className="fig font-semibold text-brand-700">{wSum > 0 ? Math.round((weights[a.wKey] / wSum) * 100) : 0}%</span>
+                      <span className="fig font-semibold text-brand-ink">{wSum > 0 ? Math.round((weights[a.wKey] / wSum) * 100) : 0}%</span>
                     </div>
                     <div className="mt-1 h-1.5 rounded-[3px] bg-border-std overflow-hidden">
                       <div className="h-full rounded-[3px] transition-all" style={{ width: `${wSum > 0 ? (weights[a.wKey] / wSum) * 100 : 0}%`, background: a.dot }} />
@@ -440,7 +440,7 @@ export default function Workbench() {
                       <span className="flex-1 text-[12.5px] font-medium">{r.name}</span>
                       <span className="flex gap-[3px]">
                         {[1, 2, 3, 4, 5].map((n) => (
-                          <span key={n} className="w-[7px] h-[7px] rounded-full" style={{ background: r.condition >= n ? '#14503B' : 'rgb(var(--border-std, 236 235 229))' }} />
+                          <span key={n} className="w-[7px] h-[7px] rounded-full" style={{ background: r.condition >= n ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--border-std, 236 235 229))' }} />
                         ))}
                       </span>
                       <span className="fig w-14 text-right text-[11px] text-ink-2">

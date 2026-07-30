@@ -27,7 +27,7 @@ export default function EngagementDocument() {
       <style>{TERMS_PRINT_CSS}</style>
 
       <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5">
-        <Link to={`/deal/${dealId}/engagement`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-700">
+        <Link to={`/deal/${dealId}/engagement`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-ink">
           ‹ Back to terms
         </Link>
         <span className="text-[13px] font-semibold">Terms of engagement</span>

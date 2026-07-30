@@ -10,7 +10,7 @@ const STAGES: Array<{ key: string; label: string; accent: string }> = [
   { key: 'APPRAISAL', label: 'Appraisal', accent: 'rgb(var(--stage-accent, 192 138 46))' },
   { key: 'OFFER', label: 'Offer / Bid', accent: 'rgb(var(--status-blue, 45 91 168))' },
   { key: 'ACQUISITION', label: 'Acquisition', accent: 'rgb(var(--status-green, 30 122 85))' },
-  { key: 'CONSTRUCTION', label: 'Construction', accent: '#14503B' },
+  { key: 'CONSTRUCTION', label: 'Construction', accent: 'rgb(var(--brand-ink, 20 80 59))' },
   { key: 'SALES_LETTING', label: 'Sales / Letting', accent: '#1E9E6A' },
   { key: 'COMPLETED', label: 'Completed', accent: 'rgb(var(--ink-2b, 110 114 105))' },
 ];
@@ -205,7 +205,7 @@ export default function Board() {
                           </div>
                           {st.key !== 'COMPLETED' && (
                             <button
-                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-700 text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
                               disabled={setStage.isPending}
                               onClick={(e) => {
                                 e.preventDefault();

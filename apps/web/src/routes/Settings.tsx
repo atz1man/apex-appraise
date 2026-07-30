@@ -696,7 +696,7 @@ function AboutPanel() {
             href="https://github.com/atz1man/apex-appraise"
             target="_blank"
             rel="noreferrer"
-            className="font-semibold text-brand-500 hover:text-brand-700"
+            className="font-semibold text-brand-500 hover:text-brand-ink"
           >
             github.com/atz1man/apex-appraise →
           </a>
@@ -783,7 +783,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                 <div
                   key={p.key}
                   className="rounded-card border p-4 flex flex-col"
-                  style={{ borderColor: current ? '#14503B' : 'rgb(var(--border-strong, 230 229 222))', background: current ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}
+                  style={{ borderColor: current ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--border-strong, 230 229 222))', background: current ? 'rgb(var(--sunken, 251 252 251))' : 'rgb(var(--surface, 255 255 255))' }}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-semibold">{p.name}</span>

@@ -140,13 +140,13 @@ export default function Comparables() {
       <TopBar
         crumb={
           <span>
-            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-700">{deal?.name ?? 'Deal'}</Link>
+            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-ink">{deal?.name ?? 'Deal'}</Link>
             {' / '}Comparable evidence
           </span>
         }
         right={
           comps.length > 0 && (
-            <span className="inline-flex items-center rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+            <span className="inline-flex items-center rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               Derived: £{supported}/ft²
             </span>
           )
@@ -221,7 +221,7 @@ export default function Comparables() {
                             </div>
                           ))}
                           <div className="px-2.5 text-right" style={{ flex: 1.2 }}>
-                            <div className="fig text-[14px] font-semibold text-brand-700">£{r.adjustedPsf}</div>
+                            <div className="fig text-[14px] font-semibold text-brand-ink">£{r.adjustedPsf}</div>
                             <div className="fig text-[10px]" style={{ color: adjColor(r.netAdjustment) }}>{netFmt}</div>
                           </div>
                         </div>
@@ -230,9 +230,9 @@ export default function Comparables() {
 
                     {/* derived */}
                     <div className="mt-2.5 flex items-center rounded-[10px] bg-tint-success py-3">
-                      <div className="px-2.5 text-[13.5px] font-bold text-brand-700" style={{ flex: 2 }}>Weighted supported value</div>
+                      <div className="px-2.5 text-[13.5px] font-bold text-brand-ink" style={{ flex: 2 }}>Weighted supported value</div>
                       <div style={{ flex: 1.1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} />
-                      <div className="fig px-2.5 text-right text-[16px] font-bold text-brand-700" style={{ flex: 1.2 }}>£{supported}</div>
+                      <div className="fig px-2.5 text-right text-[16px] font-bold text-brand-ink" style={{ flex: 1.2 }}>£{supported}</div>
                     </div>
                     <div className="mt-2 text-[11px] text-ink-3">
                       Adjustments are % to the subject — positive uplifts the comp toward the subject. Weighted by inverse gross adjustment (closest comps weigh most).
@@ -256,13 +256,13 @@ export default function Comparables() {
                     ]}
                   />
                   <div className="mt-2 flex items-center gap-4 text-[11px] text-ink-2">
-                    <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#14503B' }} /> Subject</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'rgb(var(--brand-ink, 20 80 59))' }} /> Subject</span>
                     <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: PIN }} /> Comparables ({comps.filter((c) => c.lat != null).length} of {comps.length} geolocated)</span>
                   </div>
                 </>
               ) : (
                 <div className="text-[12px] text-ink-3 py-6 text-center">
-                  Add the site postcode on the <Link to={`/deal/${dealId}/sitepack`} className="text-brand-500 font-semibold hover:text-brand-700">Site pack</Link> to place the evidence on a live map.
+                  Add the site postcode on the <Link to={`/deal/${dealId}/sitepack`} className="text-brand-500 font-semibold hover:text-brand-ink">Site pack</Link> to place the evidence on a live map.
                 </div>
               )}
             </Panel>

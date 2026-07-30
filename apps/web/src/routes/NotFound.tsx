@@ -8,7 +8,7 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="text-center max-w-[420px]">
         <div className="flex justify-center"><BrandMark size={44} /></div>
-        <div className="fig mt-6 text-[64px] font-semibold tracking-[-3px] leading-none text-brand-700">404</div>
+        <div className="fig mt-6 text-[64px] font-semibold tracking-[-3px] leading-none text-brand-ink">404</div>
         <h1 className="mt-3 text-[22px] font-bold tracking-[-0.6px]">This page isn&rsquo;t in the workfile</h1>
         <p className="mt-2 text-[13.5px] text-ink-2 leading-relaxed">
           The link may be old, or the deal it pointed at has moved. Everything you own is still on the

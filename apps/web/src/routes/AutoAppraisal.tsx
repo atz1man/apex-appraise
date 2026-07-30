@@ -181,7 +181,7 @@ function RateBox({ prefix, value, onChange }: { prefix: string; value: number; o
       <input
         type="number"
         aria-label={`${prefix} per ft²`}
-        className="w-[54px] text-right fig text-[13px] font-semibold text-brand-700"
+        className="w-[54px] text-right fig text-[13px] font-semibold text-brand-ink"
         style={{ border: 'none', boxShadow: 'none', padding: 0, background: 'transparent' }}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
@@ -426,12 +426,12 @@ export default function AutoAppraisal() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / New deal from documents
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / New deal from documents
             {deal ? ` · ${deal.name}` : ''}
           </span>
         }
         right={
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-[9px] bg-tint-success px-2.5 py-1.5 text-[11.5px] font-semibold text-brand-700">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-[9px] bg-tint-success px-2.5 py-1.5 text-[11.5px] font-semibold text-brand-ink">
             <Sparkle size={14} color="#14503B" /> AI Development Director
           </span>
         }
@@ -470,7 +470,7 @@ export default function AutoAppraisal() {
                       aria-pressed={on}
                       onClick={() => setDocsOn((d) => (on ? d.filter((k) => k !== i) : [...d, i]))}
                       className="rounded-[12px] p-3.5 flex items-center gap-2.5 text-left transition-colors"
-                      style={{ border: on ? '1.5px solid #14503B' : '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
+                      style={{ border: on ? '1.5px solid rgb(var(--brand-ink, 20 80 59))' : '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
                     >
                       <span className="w-[30px] h-[30px] rounded-chip bg-tint-success inline-flex items-center justify-center shrink-0">{t.icon}</span>
                       <span>
@@ -681,7 +681,7 @@ export default function AutoAppraisal() {
           {phase === 'loading' && (
             <Panel>
               <div className="flex items-center gap-3.5 py-2">
-                <div aria-hidden="true" className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid rgb(var(--border-std, 236 235 229))', borderTopColor: '#14503B' }} />
+                <div aria-hidden="true" className="w-8 h-8 rounded-full animate-spin shrink-0" style={{ border: '3px solid rgb(var(--border-std, 236 235 229))', borderTopColor: 'rgb(var(--brand-ink, 20 80 59))' }} />
                 <div className="text-[16px] font-semibold">AI Development Director analysing…</div>
               </div>
               <div className="mt-4 mb-2 flex flex-col gap-3">
@@ -756,7 +756,7 @@ export default function AutoAppraisal() {
                         <Td right fig>{u.count}</Td>
                         <Td right fig>{n0(u.area)}</Td>
                         <Td right fig>£{u.value}</Td>
-                        <Td right fig className="font-semibold" style={{ color: '#14503B' }}>{fM(u.count * u.area * u.value)}</Td>
+                        <Td right fig className="font-semibold" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>{fM(u.count * u.area * u.value)}</Td>
                       </tr>
                     ))}
                   </tbody>
@@ -804,7 +804,7 @@ export default function AutoAppraisal() {
                   <span className="w-6 h-6 rounded-[7px] bg-brand-700 inline-flex items-center justify-center shrink-0">
                     <Sparkle size={14} />
                   </span>
-                  <span className="text-[14px] font-semibold text-brand-700">Investment recommendation</span>
+                  <span className="text-[14px] font-semibold text-brand-ink">Investment recommendation</span>
                 </div>
                 <p className="mt-2.5 text-[13px] leading-relaxed" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>{x.recommendation}</p>
               </section>

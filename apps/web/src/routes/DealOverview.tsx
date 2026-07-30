@@ -145,7 +145,7 @@ export default function DealOverview() {
   if (dealError || !deal) {
     return (
       <div className="min-h-screen">
-        <TopBar crumb={<span><Link to="/board" className="hover:text-brand-700">Pipeline</Link> / Deal overview</span>} />
+        <TopBar crumb={<span><Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / Deal overview</span>} />
         <main className="max-w-[720px] mx-auto px-4 sm:px-6 py-16">
           <EmptyState cta={<Link to="/board"><Button variant="secondary">Back to pipeline</Button></Link>}>
             This deal could not be loaded — it may have been removed or you may not have access.
@@ -191,7 +191,7 @@ export default function DealOverview() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal.name}
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal.name}
           </span>
         }
         right={
@@ -354,7 +354,7 @@ export default function DealOverview() {
                   className="group bg-surface border border-border-strong rounded-panel shadow-rest p-4 transition-all hover:-translate-y-1 hover:shadow-float"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] bg-tint-success text-brand-700" aria-hidden="true">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] bg-tint-success text-brand-ink" aria-hidden="true">
                       <Icon d={t.icon} size={16} strokeWidth={1.9} />
                     </span>
                     {t.count && <span className="fig text-[10.5px] text-ink-3 mt-0.5 whitespace-nowrap">{t.count}</span>}
@@ -410,7 +410,7 @@ export default function DealOverview() {
                     />
                   </div>
                 )}
-                <Link to={`/deal/${dealId}/costs`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
+                <Link to={`/deal/${dealId}/costs`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
                   Open cost monitoring →
                 </Link>
               </Panel>
@@ -426,7 +426,7 @@ export default function DealOverview() {
                 <div className="flex items-end justify-between">
                   <div>
                     <div className="label-mono text-ink-3">GDV realised</div>
-                    <div className="fig mt-1 text-[19px] font-semibold tracking-[-0.8px] text-brand-700">{fM(salesRollup.gdvRealised)}</div>
+                    <div className="fig mt-1 text-[19px] font-semibold tracking-[-0.8px] text-brand-ink">{fM(salesRollup.gdvRealised)}</div>
                   </div>
                   <div className="text-right">
                     <div className="label-mono text-ink-3">Sales rate</div>
@@ -458,7 +458,7 @@ export default function DealOverview() {
                     <SalesVelocityChart points={velocityPoints} target={salesRollup.gdvAppraised} />
                   </div>
                 )}
-                <Link to={`/deal/${dealId}/sales`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
+                <Link to={`/deal/${dealId}/sales`} className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
                   Open sales & lettings →
                 </Link>
               </Panel>
@@ -497,7 +497,7 @@ export default function DealOverview() {
                   })}
                 </div>
               )}
-              <Link to="/calendar" className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-700">
+              <Link to="/calendar" className="mt-3 inline-block text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink">
                 View all in calendar →
               </Link>
             </Panel>

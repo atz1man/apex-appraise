@@ -129,7 +129,7 @@ function TimingFields({ timing, buildMonths, onChange }: { timing?: CostTiming; 
       />
       <button
         type="button"
-        className="text-[11px] text-ink-3 hover:text-brand-700 px-1 disabled:opacity-40"
+        className="text-[11px] text-ink-3 hover:text-brand-ink px-1 disabled:opacity-40"
         title="Follow the scheme profile across the build"
         disabled={!custom}
         onClick={() => onChange(undefined)}
@@ -304,7 +304,7 @@ export default function DevelopmentAppraisal() {
   const colLabel = (d: number) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d * 100) + '%';
   const cellStyle = (v: number, ratio: number) => {
     if (v <= 0) return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
-    if (ratio >= 1.12) return { color: '#14503B', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
+    if (ratio >= 1.12) return { color: 'rgb(var(--brand-ink, 20 80 59))', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
     if (ratio >= 1.02) return { color: 'rgb(var(--status-green, 30 122 85))', background: 'rgb(var(--tint-success, 236 243 239))' };
     if (ratio > 0.98) return { color: 'rgb(var(--ink-2, 95 102 95))', background: '#F4F4F0' };
     if (ratio > 0.85) return { color: 'rgb(var(--status-amber, 154 98 18))', background: 'rgb(var(--status-amber-bg, 248 240 222))' };
@@ -367,7 +367,7 @@ export default function DevelopmentAppraisal() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal?.name ?? 'Development appraisal'}
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal?.name ?? 'Development appraisal'}
           </span>
         }
         right={
@@ -398,8 +398,8 @@ export default function DevelopmentAppraisal() {
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         {/* metrics rail */}
         <div className="mt-5 flex gap-3 flex-wrap">
-          <StatCard label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr)} tone="#14503B" />
-          <StatCard label="Equity IRR" value={cash.eqIrr == null ? 'N/A' : formatPct(cash.eqIrr)} tone="#14503B" />
+          <StatCard label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr)} tone="rgb(var(--brand-ink, 20 80 59))" />
+          <StatCard label="Equity IRR" value={cash.eqIrr == null ? 'N/A' : formatPct(cash.eqIrr)} tone="rgb(var(--brand-ink, 20 80 59))" />
           <StatCard label="Return on cost" value={formatPct(R.poc)} tone={viab.tone} />
           <StatCard label="Return on GDV" value={formatPct(R.rogdv)} />
           <StatCard label={isResidual ? 'Residual land' : 'Profit'} value={fM(isResidual ? R.residualNet : R.profit)} tone="rgb(var(--status-green, 30 122 85))" />
@@ -417,7 +417,7 @@ export default function DevelopmentAppraisal() {
                   onClick={() => setTab(k)}
                   className="px-3.5 py-2.5 text-[13.5px] whitespace-nowrap transition-colors"
                   style={{
-                    borderBottom: `2px solid ${tab === k ? '#14503B' : 'transparent'}`,
+                    borderBottom: `2px solid ${tab === k ? 'rgb(var(--brand-ink, 20 80 59))' : 'transparent'}`,
                     color: tab === k ? 'rgb(var(--ink, 22 32 27))' : 'rgb(var(--inactive, 138 144 138))',
                     fontWeight: tab === k ? 600 : 500,
                   }}
@@ -494,7 +494,7 @@ export default function DevelopmentAppraisal() {
                     <div className="mt-3 flex gap-6 border-t border-border-std pt-3">
                       <Kv k="NIA" v={`${n0(R.nia)} ft²`} />
                       <Kv k="GIA (via efficiency)" v={`${n0(R.gia)} ft²`} />
-                      <Kv k="GDV" v={fM(R.gdv)} tone="#14503B" />
+                      <Kv k="GDV" v={fM(R.gdv)} tone="rgb(var(--brand-ink, 20 80 59))" />
                     </div>
                   </Panel>
                   <Panel title="Efficiency & disposal">
@@ -526,7 +526,7 @@ export default function DevelopmentAppraisal() {
                               <div className="relative flex-1 h-[22px] rounded-[7px] bg-sunken-2 overflow-hidden">
                                 <div
                                   className="absolute inset-y-0 rounded-[6px]"
-                                  style={{ left: `${pct(p.start - 1)}%`, width: `${pct(p.buildMonths)}%`, background: '#14503B' }}
+                                  style={{ left: `${pct(p.start - 1)}%`, width: `${pct(p.buildMonths)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }}
                                   title={`Build — months ${p.start}–${p.practicalCompletion}`}
                                 />
                                 <div
@@ -543,7 +543,7 @@ export default function DevelopmentAppraisal() {
                       <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
                         <Kv k="Programme" v={`${R.period + R.salesMonths} months`} />
                         <Kv k="On site until" v={monthLabel(R.period)} />
-                        <Kv k="Peak debt" v={fM(R.facility)} tone="#14503B" />
+                        <Kv k="Peak debt" v={fM(R.facility)} tone="rgb(var(--brand-ink, 20 80 59))" />
                       </div>
                       <div className="mt-2.5 text-[11px] text-ink-3 leading-snug">
                         Phases share one facility. Receipts from a completed phase repay it while a later phase is still
@@ -896,7 +896,7 @@ export default function DevelopmentAppraisal() {
                             key={label}
                             className={`flex justify-between py-[7px] border-t first:border-t-0 ${kind === 'final' || kind === 'sub' ? 'border-border-std' : 'border-border-faint'}`}
                           >
-                            <span className={kind === 'final' ? 'text-[13px] font-bold text-brand-700' : kind === 'sub' ? 'text-[12.5px] font-semibold' : 'text-[12px] text-ink-2'}>
+                            <span className={kind === 'final' ? 'text-[13px] font-bold text-brand-ink' : kind === 'sub' ? 'text-[12.5px] font-semibold' : 'text-[12px] text-ink-2'}>
                               {label}
                               {kind === 'mult' && <span className="fig text-ink-3"> · YP {R.income!.yearsPurchase.toFixed(2)}</span>}
                             </span>
@@ -905,7 +905,7 @@ export default function DevelopmentAppraisal() {
                               style={{
                                 fontWeight: kind === 'final' ? 700 : kind === 'sub' ? 600 : 500,
                                 fontSize: kind === 'final' ? 14 : 12,
-                                color: kind === 'final' ? '#14503B' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))',
+                                color: kind === 'final' ? 'rgb(var(--brand-ink, 20 80 59))' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))',
                               }}
                             >
                               {formatSigned(val)}
@@ -915,7 +915,7 @@ export default function DevelopmentAppraisal() {
                       </div>
 
                       <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
-                        <Kv k="Net initial yield" v={formatPct(R.income.netInitialYield, 2)} tone="#14503B" />
+                        <Kv k="Net initial yield" v={formatPct(R.income.netInitialYield, 2)} tone="rgb(var(--brand-ink, 20 80 59))" />
                         {R.income.lines.some((l) => l.isReversionary) && (
                           <>
                             <Kv k="Reversionary yield" v={formatPct(R.income.reversionaryYield, 2)} />
@@ -984,7 +984,7 @@ export default function DevelopmentAppraisal() {
                     <NumField label="Contingency" suffix="%" value={input.contingencyPct} onChange={(v) => set({ contingencyPct: v })} />
                   </div>
                   <div className="mt-3 flex gap-6">
-                    <Kv k="Build rate" v={`£${Math.round(R.buildRate)}/ft²`} tone="#14503B" />
+                    <Kv k="Build rate" v={`£${Math.round(R.buildRate)}/ft²`} tone="rgb(var(--brand-ink, 20 80 59))" />
                     <Kv k="All-in construction" v={fM(R.build + R.fees + R.cont)} />
                   </div>
                 </Panel>
@@ -1018,7 +1018,7 @@ export default function DevelopmentAppraisal() {
                     profile across the build; set 1 month for a lump such as an S106 payment on implementation.
                   </div>
                   <div className="mt-3 border-t border-border-std pt-3">
-                    <Kv k="Other costs total" v={fM(R.otherTotal)} tone="#14503B" />
+                    <Kv k="Other costs total" v={fM(R.otherTotal)} tone="rgb(var(--brand-ink, 20 80 59))" />
                   </div>
                 </Panel>
               )}
@@ -1058,14 +1058,14 @@ export default function DevelopmentAppraisal() {
                     <div className="mt-3.5 flex gap-6 border-t border-border-std pt-3 flex-wrap">
                       <Kv k="Facility (peak)" v={fM(R.facility)} />
                       <Kv k="Rolled-up interest" v={fM(R.interest)} />
-                      <Kv k="Finance total" v={fM(R.finance)} tone="#14503B" />
+                      <Kv k="Finance total" v={fM(R.finance)} tone="rgb(var(--brand-ink, 20 80 59))" />
                       <Kv k="Equity" v={fM(R.equity)} />
                     </div>
                     <p className="mt-2 text-[11px] text-ink-3">Interest compounds monthly on the drawn balance; only the LTC share of each month's spend is drawn.</p>
                   </Panel>
                   <Panel title="Capital stack">
                     <div className="flex h-9 rounded-[9px] overflow-hidden border border-border-std">
-                      <div style={{ width: `${(stack.senior / stack.total) * 100}%`, background: '#14503B' }} title="Senior" />
+                      <div style={{ width: `${(stack.senior / stack.total) * 100}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} title="Senior" />
                       <div style={{ width: `${(stack.mezzAmt / stack.total) * 100}%`, background: '#C79A4B' }} title="Mezzanine" />
                       <div style={{ width: `${(stack.equity / stack.total) * 100}%`, background: '#AECBBC' }} title="Equity + land" />
                     </div>
@@ -1098,7 +1098,7 @@ export default function DevelopmentAppraisal() {
                     {isResidual && <NumField label="Target profit on GDV" suffix="%" value={input.targetProfitOnGdvPct} onChange={(v) => set({ targetProfitOnGdvPct: v })} />}
                   </div>
                   <div className="mt-4 flex gap-6 flex-wrap border-t border-border-std pt-3">
-                    <Kv k={isResidual ? 'Residual site value' : 'Land value (input)'} v={formatSigned(R.residualNet)} tone="#14503B" />
+                    <Kv k={isResidual ? 'Residual site value' : 'Land value (input)'} v={formatSigned(R.residualNet)} tone="rgb(var(--brand-ink, 20 80 59))" />
                     <Kv k="Land incl. acquisition" v={fM(R.landGross)} />
                     <Kv k="Land % of GDV" v={R.gdv > 0 ? formatPct(R.landGross / R.gdv) : '—'} />
                     <Kv k="Developer profit" v={fM(R.profit)} tone="rgb(var(--status-green, 30 122 85))" />
@@ -1224,15 +1224,15 @@ export default function DevelopmentAppraisal() {
               title={
                 <div>
                   <div className="label-mono text-ink-3">{isResidual ? 'Residual land value' : 'Fixed land price → profit'}</div>
-                  <div className="fig text-[24px] font-semibold tracking-[-1px] text-brand-700">{formatSigned(isResidual ? R.residualNet : R.profit)}</div>
+                  <div className="fig text-[24px] font-semibold tracking-[-1px] text-brand-ink">{formatSigned(isResidual ? R.residualNet : R.profit)}</div>
                 </div>
               }
               right={<Dot color={viab.dot} size={10} />}
             >
               {breakdown.map(([label, val, final]) => (
                 <div key={label} className={`flex justify-between py-[7px] border-t ${final ? 'border-border-std' : 'border-[#F4F4F0]'} first:border-t-0`}>
-                  <span className={final ? 'text-[13px] font-bold text-brand-700' : 'text-[12px] text-ink-2'}>{label}</span>
-                  <span className="fig" style={{ fontWeight: final ? 700 : 500, fontSize: final ? 14 : 12, color: final ? '#14503B' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}>
+                  <span className={final ? 'text-[13px] font-bold text-brand-ink' : 'text-[12px] text-ink-2'}>{label}</span>
+                  <span className="fig" style={{ fontWeight: final ? 700 : 500, fontSize: final ? 14 : 12, color: final ? 'rgb(var(--brand-ink, 20 80 59))' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}>
                     {formatSigned(val)}
                   </span>
                 </div>
@@ -1270,7 +1270,7 @@ export default function DevelopmentAppraisal() {
                         <td key={ci} className="p-[2px]">
                           <div
                             className="fig rounded-[5px] px-1 py-[5px] text-right text-[10.5px] font-medium"
-                            style={{ ...cellStyle(cell.value, cell.ratio), outline: cell.isBase ? '2px solid #14503B' : 'none' }}
+                            style={{ ...cellStyle(cell.value, cell.ratio), outline: cell.isBase ? '2px solid rgb(var(--brand-ink, 20 80 59))' : 'none' }}
                           >
                             {fmtMetric(cell.value)}
                           </div>
@@ -1298,12 +1298,12 @@ export default function DevelopmentAppraisal() {
                         className="absolute top-0 bottom-0"
                         style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: 'rgb(var(--tint-green-deep, 223 239 231))' }}
                       />
-                      <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: '#14503B' }} />
+                      <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} />
                       {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />}
                     </div>
                     <div className="mt-1.5 flex justify-between text-[10.5px] fig text-ink-3">
                       <span>P10 {fM(risk.profit.p10)}</span>
-                      <span className="font-semibold text-brand-700">P50 {fM(risk.profit.p50)}</span>
+                      <span className="font-semibold text-brand-ink">P50 {fM(risk.profit.p50)}</span>
                       <span>P90 {fM(risk.profit.p90)}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2.5">
@@ -1362,7 +1362,7 @@ export default function DevelopmentAppraisal() {
                   }}
                 />
                 {['AO', 'DW', 'MV', 'PA'].map((w) => (
-                  <button key={w} aria-label={`Assign new task to ${w}`} aria-pressed={newWho === w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid #14503B' : 'none', outlineOffset: 1 }}>
+                  <button key={w} aria-label={`Assign new task to ${w}`} aria-pressed={newWho === w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid rgb(var(--brand-ink, 20 80 59))' : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>
                 ))}
@@ -1397,10 +1397,10 @@ export default function DevelopmentAppraisal() {
             const cur = versions?.find((x) => x.isCurrent)?.headline;
             const d = v.headline && cur && !v.isCurrent ? v.headline.residualNet - cur.residualNet : null;
             return (
-              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: '#14503B', background: 'rgb(var(--sunken, 251 252 251))' } : undefined}>
+              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: 'rgb(var(--brand-ink, 20 80 59))', background: 'rgb(var(--sunken, 251 252 251))' } : undefined}>
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold">{v.label}</span>
-                  {v.isCurrent && <span className="label-mono rounded-[6px] bg-tint-success text-brand-700 px-1.5 py-[2px]">CURRENT</span>}
+                  {v.isCurrent && <span className="label-mono rounded-[6px] bg-tint-success text-brand-ink px-1.5 py-[2px]">CURRENT</span>}
                   <span className="label-mono text-ink-3">{v.source}</span>
                   <span className="fig ml-auto text-[10.5px] text-ink-3">
                     {new Date(v.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}

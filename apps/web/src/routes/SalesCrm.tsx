@@ -230,7 +230,7 @@ export default function SalesCrm() {
         { label: 'Enquiries', count: enquiries, dot: statusTokens.neutral.dot },
         { label: 'Viewings', count: viewings, dot: statusTokens.amber.dot },
         { label: 'Offers', count: offers, dot: statusTokens.blue.dot },
-        { label: 'Reservations', count: reservations, dot: brand[700] },
+        { label: 'Reservations', count: reservations, dot: 'rgb(var(--brand-ink, 20 80 59))' },
       ];
     }
     const tenancies = rows.filter((r) => r.status === 'OCCUPIED').length;
@@ -241,7 +241,7 @@ export default function SalesCrm() {
       { label: 'Enquiries', count: enquiries, dot: statusTokens.neutral.dot },
       { label: 'Viewings', count: viewings, dot: statusTokens.amber.dot },
       { label: 'Applications', count: applications, dot: statusTokens.blue.dot },
-      { label: 'Tenancies', count: tenancies, dot: brand[700] },
+      { label: 'Tenancies', count: tenancies, dot: 'rgb(var(--brand-ink, 20 80 59))' },
     ];
   }, [isRent, rows, secured]);
   const funnelMax = Math.max(1, ...funnel.map((f) => f.count));
@@ -384,14 +384,14 @@ export default function SalesCrm() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal?.name ?? '…'} / Sales & lettings
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal?.name ?? '…'} / Sales & lettings
           </span>
         }
         right={
           <>
             <SegmentedToggle options={[['sales', 'Sales'], ['lettings', 'Lettings']]} value={mode} onChange={switchMode} />
             {headline && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-pill bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
                 <Dot color={brand[500]} /> {headline}
               </span>
             )}
@@ -433,7 +433,7 @@ export default function SalesCrm() {
             <div className="mt-5 flex gap-3 flex-wrap">
               {isRent ? (
                 <>
-                  <StatCard label="Annual rent roll" value={LR ? fM(LR.rentRollAnnual) : '—'} tone={brand[700]} sub={LR ? `of ${fM(LR.ervAnnual)} ERV` : undefined} />
+                  <StatCard label="Annual rent roll" value={LR ? fM(LR.rentRollAnnual) : '—'} tone="rgb(var(--brand-ink, 20 80 59))" sub={LR ? `of ${fM(LR.ervAnnual)} ERV` : undefined} />
                   <StatCard label="Occupancy" value={LR && LR.total > 0 ? formatPct(LR.occupied / LR.total, 0) : '—'} />
                   <StatCard label="Void rate" value={LR ? formatPct(LR.voidRate, 0) : '—'} />
                   <StatCard label="Arrears" value={LR ? formatMoneyFull(LR.arrears) : '—'} tone={LR && LR.arrears > 0 ? statusTokens.red.text : statusTokens.green.text} />
@@ -441,7 +441,7 @@ export default function SalesCrm() {
                 </>
               ) : (
                 <>
-                  <StatCard label="GDV realised" value={SR ? fM(SR.gdvRealised) : '—'} tone={brand[700]} sub={SR ? `of ${fM(SR.gdvAppraised)} appraised` : undefined} />
+                  <StatCard label="GDV realised" value={SR ? fM(SR.gdvRealised) : '—'} tone="rgb(var(--brand-ink, 20 80 59))" sub={SR ? `of ${fM(SR.gdvAppraised)} appraised` : undefined} />
                   <StatCard label="GDV appraised" value={SR ? fM(SR.gdvAppraised) : '—'} />
                   <StatCard label="Deposits held" value={SR ? fM(SR.depositsHeld) : '—'} />
                   <StatCard label="Sales rate" value={SR ? formatPct(SR.salesRate, 0) : '—'} sub="exchanged or beyond" />
@@ -633,7 +633,7 @@ export default function SalesCrm() {
                       <div className="flex items-end gap-2 h-[90px]">
                         {forecast.bars.map((v, i) => (
                           <div key={i} className="flex-1 h-full flex flex-col items-center justify-end gap-1">
-                            <span className="fig text-[8px] font-semibold text-brand-700">{v > 0 ? fM(v) : ''}</span>
+                            <span className="fig text-[8px] font-semibold text-brand-ink">{v > 0 ? fM(v) : ''}</span>
                             <div
                               className="w-[70%] rounded-t-[3px]"
                               style={{ height: `${(v / fcMax) * 72}%`, background: forecast.cumulative || i < 2 ? brand[700] : '#AECBBC' }}
@@ -772,7 +772,7 @@ export default function SalesCrm() {
                     ).map(([l, v, isFig]) => (
                       <div key={l}>
                         <div className="text-[11px] text-ink-3">{l}</div>
-                        <div className={`mt-0.5 text-[13.5px] font-semibold ${isFig ? 'fig text-brand-700' : ''}`}>{v}</div>
+                        <div className={`mt-0.5 text-[13.5px] font-semibold ${isFig ? 'fig text-brand-ink' : ''}`}>{v}</div>
                       </div>
                     ))}
                     {isRent && (

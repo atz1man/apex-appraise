@@ -90,7 +90,7 @@ export default function Hub() {
   const flagship = data?.deals.find((d) => d.name.startsWith('Northgate')) ?? data?.deals[0];
   // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
   const TOOL_TINTS: Record<string, string> = {
-    appraise: 'bg-tint-success text-brand-700',
+    appraise: 'bg-tint-success text-brand-ink',
     site: 'bg-status-amber-bg text-status-amber',
     sell: 'bg-status-blue-bg text-status-blue',
     records: 'bg-status-purple-bg text-status-purple',
@@ -234,7 +234,7 @@ export default function Hub() {
           </div>
         </section>
 
-        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-500 hover:text-brand-700 transition-colors">
+        <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-500 hover:text-brand-ink transition-colors">
           <span aria-hidden="true" className="inline-flex"><Icon d={ICONS.integrations} size={15} /></span>
           Connected data sources — Land Registry, EPC, AVM →
         </Link>

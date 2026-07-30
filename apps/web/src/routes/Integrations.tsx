@@ -52,7 +52,7 @@ const STATUS_STYLE: Record<Status, { label: string; dot: string; bg: string; col
     color: 'rgb(var(--status-green, 30 122 85))',
     border: '#BFE0CD',
     iconBg: 'rgb(var(--tint-success, 236 243 239))',
-    iconColor: '#14503B',
+    iconColor: 'rgb(var(--brand-ink, 20 80 59))',
   },
   ATTENTION: {
     label: 'Attention',
@@ -131,13 +131,13 @@ export default function Integrations() {
       <TopBar
         crumb={
           <span>
-            <Link to="/" className="text-inactive hover:text-brand-700">Hub</Link>
+            <Link to="/" className="text-inactive hover:text-brand-ink">Hub</Link>
             {' / '}Data &amp; integrations
           </span>
         }
         right={
           total > 0 && (
-            <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+            <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               <Dot color="rgb(var(--status-green, 30 122 85))" /> {connected} of {total} connected
             </span>
           )
@@ -206,7 +206,7 @@ export default function Integrations() {
                       <div className="mt-3.5 text-[15px] font-semibold">{item.name}</div>
                       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed flex-1">{item.desc}</div>
                       {syncResult[item.provider] && (
-                        <div className="mt-2.5 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-700">
+                        <div className="mt-2.5 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
                           Pulled {syncResult[item.provider]} onto the selected deal.
                         </div>
                       )}
@@ -270,7 +270,7 @@ export default function Integrations() {
             <div className="flex flex-col gap-4">
               <p className="text-[12.5px] text-ink-2 leading-relaxed">
                 {credProvider} uses your workspace&rsquo;s own free API key. Get one at{' '}
-                <a href={spec.signupUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-500 hover:text-brand-700">
+                <a href={spec.signupUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-500 hover:text-brand-ink">
                   {spec.signupUrl.replace('https://', '')}
                 </a>
                 {' '}— the key is checked against the live API before it&rsquo;s saved, stored server-side only, and never shown again.

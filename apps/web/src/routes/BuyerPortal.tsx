@@ -81,7 +81,7 @@ export default function BuyerPortal() {
           <FirmMark logoUrl={firm?.logoUrl} size={32} alt={`${firm?.name ?? 'Firm'} logo`} />
           <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate">{data?.development.name ?? firm?.name ?? 'Apex Appraise'}</span>
         </div>
-        <span className="label-mono rounded-[7px] px-2.5 py-1 bg-tint-success text-brand-700 tracking-[0.4px] whitespace-nowrap shrink-0">Buyer portal</span>
+        <span className="label-mono rounded-[7px] px-2.5 py-1 bg-tint-success text-brand-ink tracking-[0.4px] whitespace-nowrap shrink-0">Buyer portal</span>
         <div className="ml-auto flex items-center gap-2.5 min-w-0">
           {principal && (
             <>
@@ -332,7 +332,7 @@ export default function BuyerPortal() {
                     <span className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center" style={{ background: brand[700] }}>
                       <Icon d="M12 16v-4|M12 8h.01" size={15} color="#fff" strokeWidth={2.2} />
                     </span>
-                    <span className="text-[13.5px] font-semibold text-brand-700">What happens next</span>
+                    <span className="text-[13.5px] font-semibold text-brand-ink">What happens next</span>
                   </div>
                   {currentMilestone ? (
                     <>

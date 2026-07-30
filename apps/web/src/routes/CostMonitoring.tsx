@@ -206,7 +206,7 @@ export default function CostMonitoring() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal?.name ?? '…'} / Cost monitoring
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal?.name ?? '…'} / Cost monitoring
           </span>
         }
         right={
@@ -483,7 +483,7 @@ export default function CostMonitoring() {
                         <div className="mt-3 pt-3 border-t border-border-faint flex items-center justify-between">
                           <span className="label-mono text-ink-3">Timesheets</span>
                           <span className="text-[11px] text-ink-3">
-                            {ops} {ops === 1 ? 'operative' : 'operatives'} × £{Math.round(rate)}/day → <b className="fig font-semibold text-brand-700">{fM(weeklyLabour)}/wk</b>
+                            {ops} {ops === 1 ? 'operative' : 'operatives'} × £{Math.round(rate)}/day → <b className="fig font-semibold text-brand-ink">{fM(weeklyLabour)}/wk</b>
                           </span>
                         </div>
                         <div className="mt-2.5 flex items-center gap-3.5">
@@ -627,7 +627,7 @@ export default function CostMonitoring() {
           {photoGroups.map((g) => (
             <div key={g.wc.getTime()} className="mb-5">
               <div className="flex items-center gap-2.5 mb-2.5">
-                <span className="label-mono text-brand-700" style={{ letterSpacing: '0.5px' }}>Week commencing {fmtDate(g.wc)}</span>
+                <span className="label-mono text-brand-ink" style={{ letterSpacing: '0.5px' }}>Week commencing {fmtDate(g.wc)}</span>
                 <span className="h-px flex-1 bg-border-strong" />
                 <span className="fig text-[10.5px] text-ink-3">{g.items.length} {g.items.length === 1 ? 'photo' : 'photos'}</span>
               </div>

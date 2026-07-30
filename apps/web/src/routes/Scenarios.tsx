@@ -27,7 +27,7 @@ const ASSUMPTIONS = {
   acqPct: 6.8,
 } as const;
 
-const ACCENTS = ['#14503B', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
+const ACCENTS = ['rgb(var(--brand-ink, 20 80 59))', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
 const AMBER = 'rgb(var(--status-amber, 154 98 18))';
 const RED = 'rgb(var(--status-red, 178 58 46))';
@@ -195,13 +195,13 @@ export default function Scenarios() {
       <TopBar
         crumb={
           <span>
-            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-700">{deal?.name ?? 'Deal'}</Link>
+            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-ink">{deal?.name ?? 'Deal'}</Link>
             {' / '}Scenario comparison
           </span>
         }
         right={
           best && (
-            <span className="inline-flex items-center rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-700">
+            <span className="inline-flex items-center rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               Best RoC: {best.name} · {Math.round(best.poc * 100)}%
             </span>
           )
@@ -320,7 +320,7 @@ export default function Scenarios() {
                         style={{
                           fontWeight: row.big ? 700 : 600,
                           fontSize: row.big ? 14 : 13.5,
-                          color: isWin ? '#14503B' : 'rgb(var(--ink, 22 32 27))',
+                          color: isWin ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--ink, 22 32 27))',
                         }}
                       >
                         {row.fmt(vals[slot.i])}

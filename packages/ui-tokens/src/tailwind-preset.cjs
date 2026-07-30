@@ -23,6 +23,9 @@ module.exports = {
         // Semantic tokens resolve through CSS variables (RGB triplets defined in
         // apps/web/src/index.css — :root = light, .dark = dark). The fallbacks
         // keep the light values so nothing changes if the vars are absent.
+        // brand green as TEXT/indicator: theme-aware, unlike the fixed brand ramp
+        // above, which stays put because white-on-brand fills depend on it
+        'brand-ink': 'rgb(var(--brand-ink, 20 80 59) / <alpha-value>)',
         canvas: 'rgb(var(--canvas, 243 244 241) / <alpha-value>)',
         frame: 'rgb(var(--frame, 231 229 223) / <alpha-value>)',
         surface: 'rgb(var(--surface, 255 255 255) / <alpha-value>)',

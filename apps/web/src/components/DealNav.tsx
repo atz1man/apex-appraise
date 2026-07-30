@@ -54,7 +54,7 @@ export function DealNav({ dealId, active }: { dealId: string; active: DealTool }
           to={`/deal/${dealId}${path}`}
           className="px-2.5 py-2 text-[12px] whitespace-nowrap transition-colors"
           style={{
-            borderBottom: `2px solid ${active === key ? '#14503B' : 'transparent'}`,
+            borderBottom: `2px solid ${active === key ? 'rgb(var(--brand-ink, 20 80 59))' : 'transparent'}`,
             color: active === key ? 'rgb(var(--ink, 22 32 27))' : 'rgb(var(--inactive, 138 144 138))',
             fontWeight: active === key ? 600 : 500,
           }}

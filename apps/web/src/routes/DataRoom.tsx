@@ -51,7 +51,7 @@ const ACCESS = [
   { initials: 'BF', name: 'Brookfield', role: 'Investor', perm: 'View', dot: 'linear-gradient(135deg,#9B79C0,#5E3F86)' },
 ];
 
-const ACTIVITY_DOTS = ['#14503B', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
+const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
 function fmtBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -166,7 +166,7 @@ export default function DataRoom() {
       <TopBar
         crumb={
           <span>
-            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-700">{deal?.name ?? 'Deal'}</Link>
+            <Link to={`/deal/${dealId}/appraisal`} className="text-inactive hover:text-brand-ink">{deal?.name ?? 'Deal'}</Link>
             {' / '}Data room
           </span>
         }
@@ -191,9 +191,9 @@ export default function DataRoom() {
                 className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[9px] mb-0.5 text-left transition-colors ${on ? 'bg-tint-success' : 'hover:bg-sunken'}`}
               >
                 <span className="inline-flex shrink-0" aria-hidden="true">
-                  <Icon d={FOLDER_ICON} size={16} color={on ? '#14503B' : 'rgb(var(--ink-3, 154 160 154))'} strokeWidth={1.9} />
+                  <Icon d={FOLDER_ICON} size={16} color={on ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--ink-3, 154 160 154))'} strokeWidth={1.9} />
                 </span>
-                <span className={`flex-1 min-w-0 truncate text-[12.5px] ${on ? 'font-semibold text-brand-700' : 'font-medium text-ink-2'}`}>{f.label}</span>
+                <span className={`flex-1 min-w-0 truncate text-[12.5px] ${on ? 'font-semibold text-brand-ink' : 'font-medium text-ink-2'}`}>{f.label}</span>
                 {data ? (
                   <span className="fig text-[10px] font-medium text-ink-3b">{folderCount(f.key)}</span>
                 ) : (
@@ -255,7 +255,7 @@ export default function DataRoom() {
                 <div className="mt-0.5 text-[12px] text-ink-3">
                   PDF, DWG, XLSX · up to 100 MB. Documents feed the AI extraction.{' '}
                   <button
-                    className="text-brand-500 font-semibold hover:text-brand-700"
+                    className="text-brand-500 font-semibold hover:text-brand-ink"
                     onClick={(e) => {
                       e.stopPropagation();
                       openForm();
@@ -322,7 +322,7 @@ export default function DataRoom() {
                       </div>
                       <div className="min-w-0">
                         {d.url ? (
-                          <a href={d.url} target="_blank" rel="noreferrer" className="text-[13px] font-medium truncate block hover:text-brand-700">
+                          <a href={d.url} target="_blank" rel="noreferrer" className="text-[13px] font-medium truncate block hover:text-brand-ink">
                             {d.name}
                           </a>
                         ) : (

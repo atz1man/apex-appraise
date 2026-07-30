@@ -90,7 +90,7 @@ function TabBar({ active, onGo }: { active: Screen; onGo: (s: Screen) => void })
         {tabs.map(([key, label]) => {
           const on = active === key;
           return (
-            <button key={key} onClick={() => onGo(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: on ? '#14503B' : 'rgb(var(--ink-3, 154 160 154))' }}>
+            <button key={key} onClick={() => onGo(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: on ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--ink-3, 154 160 154))' }}>
               {TAB_ICONS[key]}
               <span className="text-[10px]" style={{ fontWeight: on ? 600 : 500 }}>{label}</span>
             </button>
@@ -307,7 +307,7 @@ export default function FieldApp() {
                   ? { t: 'IN PROGRESS', c: 'rgb(var(--status-amber, 154 98 18))', bg: 'rgb(var(--tint-amber-soft, 246 236 217))' }
                   : { t: 'TO INSPECT', c: 'rgb(var(--ink-2b, 110 114 105))', bg: 'rgb(var(--sunken-2, 240 239 233))' };
             const p = insp?.progressPct ?? 0;
-            const barColor = insp?.status === 'submitted' ? 'rgb(var(--status-green, 30 122 85))' : p > 0 ? '#14503B' : 'rgb(var(--border-std, 236 235 229))';
+            const barColor = insp?.status === 'submitted' ? 'rgb(var(--status-green, 30 122 85))' : p > 0 ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--border-std, 236 235 229))';
             return (
               <button
                 key={d.id}
@@ -351,7 +351,7 @@ export default function FieldApp() {
             <BackBtn light onClick={() => setScreen('appraisals')} />
           </div>
           <div className="absolute left-5 bottom-[18px] right-5">
-            <span className="inline-flex px-[9px] py-1 rounded-[7px] bg-white/85 label-mono" style={{ color: '#14503B' }}>
+            <span className="inline-flex px-[9px] py-1 rounded-[7px] bg-white/85 label-mono" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>
               FILE #{deal.id.slice(-6).toUpperCase()}
             </span>
             <div className="mt-2 text-[22px] font-bold tracking-[-0.5px] text-white">{deal.name}</div>
@@ -431,7 +431,7 @@ export default function FieldApp() {
           <button
             onClick={() => setScreen('comps')}
             aria-label="Comparable sales"
-            className={`flex-none w-[52px] h-[52px] rounded-[15px] border border-border-strong bg-surface flex items-center justify-center text-brand-700 ${PRESS}`}
+            className={`flex-none w-[52px] h-[52px] rounded-[15px] border border-border-strong bg-surface flex items-center justify-center text-brand-ink ${PRESS}`}
           >
             {TAB_ICONS.comps}
           </button>
@@ -452,7 +452,7 @@ export default function FieldApp() {
               <div className="text-[11.5px] text-ink-3">{deal.name}</div>
             </div>
           </div>
-          <button onClick={saveDraft} disabled={save.isPending} className={`min-h-[44px] px-2 rounded-[10px] text-[13px] font-semibold text-brand-700 disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}>
+          <button onClick={saveDraft} disabled={save.isPending} className={`min-h-[44px] px-2 rounded-[10px] text-[13px] font-semibold text-brand-ink disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}>
             {save.isPending ? <Spinner /> : 'Save'}
           </button>
         </div>
@@ -550,7 +550,7 @@ export default function FieldApp() {
               key={r.name}
               onClick={() => setCurrent(i)}
               className={`flex items-center gap-[11px] bg-surface rounded-[13px] px-[15px] py-[13px] min-h-[48px] text-left cursor-pointer hover:bg-sunken ${PRESS}`}
-              style={{ border: i === current ? '1.5px solid #14503B' : '1px solid rgb(var(--border-std, 236 235 229))' }}
+              style={{ border: i === current ? '1.5px solid rgb(var(--brand-ink, 20 80 59))' : '1px solid rgb(var(--border-std, 236 235 229))' }}
             >
               {r.condition > 0 ? (
                 <span className="flex-none w-5 h-5 rounded-[6px] bg-tint-success-2 flex items-center justify-center text-status-green">{CHECK}</span>
@@ -599,7 +599,7 @@ export default function FieldApp() {
           {comps.slice(0, PIN_POS.length).map((c, i) => (
             <div key={c.id} className="absolute w-[18px] h-[18px] rounded-full bg-brand-400" style={{ ...PIN_POS[i], border: '2.5px solid #fff', boxShadow: '0 3px 7px rgba(20,30,25,0.25)' }} />
           ))}
-          <div className="absolute bottom-3 left-3 px-2.5 py-[5px] rounded-[8px] fig text-[10px] font-medium bg-white/90 text-brand-700">
+          <div className="absolute bottom-3 left-3 px-2.5 py-[5px] rounded-[8px] fig text-[10px] font-medium bg-white/90 text-brand-ink">
             {comps.length} comp{comps.length === 1 ? '' : 's'} · local evidence
           </div>
         </div>
@@ -640,7 +640,7 @@ export default function FieldApp() {
                   </div>
                   <div className="text-right">
                     <div className="label-mono text-ink-3 font-normal">ADJUSTED</div>
-                    <div className="fig text-[16px] font-semibold text-brand-700">£{n0(adj?.adjustedPsf ?? c.basePsf)}<span className="text-[11px] text-ink-3">/ft²</span></div>
+                    <div className="fig text-[16px] font-semibold text-brand-ink">£{n0(adj?.adjustedPsf ?? c.basePsf)}<span className="text-[11px] text-ink-3">/ft²</span></div>
                   </div>
                 </div>
               </div>
@@ -655,7 +655,7 @@ export default function FieldApp() {
           <span className="text-[12px] text-ink-2b">{comps.length} comps · supported £{n0(supported)}/ft²</span>
           <span className="flex items-baseline gap-[7px]">
             <span className="text-[11px] text-ink-3">Indicated</span>
-            <span className="fig text-[16px] font-semibold text-brand-700">{indicated > 0 ? formatMoneyFull(indicated) : '—'}</span>
+            <span className="fig text-[16px] font-semibold text-brand-ink">{indicated > 0 ? formatMoneyFull(indicated) : '—'}</span>
           </span>
         </div>
         <div className="px-3.5 pt-2.5">
@@ -668,7 +668,7 @@ export default function FieldApp() {
                 ['valuation', 'Valuation'],
               ] as Array<[Screen, string]>
             ).map(([key, label]) => (
-              <button key={key} onClick={() => go(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: key === 'comps' ? '#14503B' : 'rgb(var(--ink-3, 154 160 154))' }}>
+              <button key={key} onClick={() => go(key)} className={`flex-1 min-h-[44px] flex flex-col items-center gap-1 ${PRESS}`} style={{ color: key === 'comps' ? 'rgb(var(--brand-ink, 20 80 59))' : 'rgb(var(--ink-3, 154 160 154))' }}>
                 {TAB_ICONS[key]}
                 <span className="text-[10px]" style={{ fontWeight: key === 'comps' ? 600 : 500 }}>{label}</span>
               </button>
@@ -735,7 +735,7 @@ export default function FieldApp() {
         <div className="mt-2.5 bg-surface border border-border-std rounded-card p-[15px] flex flex-col gap-3.5">
           {(
             [
-              ['salesComparison', 'Sales comparison', '#14503B'],
+              ['salesComparison', 'Sales comparison', 'rgb(var(--brand-ink, 20 80 59))'],
               ['cost', 'Cost approach', '#1E9E6A'],
               ['income', 'Income approach', 'rgb(var(--ink-3, 154 160 154))'],
             ] as Array<[keyof Weights, string, string]>
@@ -743,7 +743,7 @@ export default function FieldApp() {
             <div key={key}>
               <div className="flex justify-between items-baseline">
                 <span className="text-[13px] font-medium">{label}</span>
-                <span className="fig text-[12px] font-semibold text-brand-700">{Math.round((weights[key] / wSum) * 100)}%</span>
+                <span className="fig text-[12px] font-semibold text-brand-ink">{Math.round((weights[key] / wSum) * 100)}%</span>
               </div>
               <div className="mt-1.5 flex items-center gap-2.5">
                 <input

@@ -55,7 +55,7 @@ export default function SignTerms() {
         </div>
         <div className="ml-auto">
           {signed ? (
-            <span className="label-mono rounded-pill bg-tint-success text-brand-700 px-3 py-1.5">SIGNED</span>
+            <span className="label-mono rounded-pill bg-tint-success text-brand-ink px-3 py-1.5">SIGNED</span>
           ) : (
             <Button onClick={() => document.getElementById('sign-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
               Go to signature

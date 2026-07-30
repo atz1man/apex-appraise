@@ -187,7 +187,7 @@ export default function Engagement() {
       <TopBar
         crumb={
           <span>
-            <Link to="/board" className="hover:text-brand-700">Pipeline</Link> / {deal?.name ?? 'Terms of engagement'}
+            <Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / {deal?.name ?? 'Terms of engagement'}
           </span>
         }
         right={
@@ -352,7 +352,7 @@ export default function Engagement() {
                 )}
                 {status === 'ACCEPTED' && saved?.signedAt && (
                   <div className="rounded-[10px] bg-tint-success px-3 py-2.5">
-                    <div className="label-mono text-brand-700">Signed electronically</div>
+                    <div className="label-mono text-brand-ink">Signed electronically</div>
                     <div className="mt-1 text-[12px] text-ink-2 leading-snug">
                       {saved.signedName} · {fmtDate(saved.signedAt)}
                       {saved.signedIp ? ` · from ${saved.signedIp}` : ''}
