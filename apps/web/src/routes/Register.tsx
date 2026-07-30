@@ -91,7 +91,7 @@ export default function Register() {
           </Button>
           <div className="mt-3 text-center text-[12px] text-ink-2">
             Already have an account?{' '}
-            <a href="/login" className="font-semibold text-brand-500 hover:text-brand-ink">
+            <a href="/login" className="font-semibold text-brand-ink hover:text-brand-ink">
               Sign in →
             </a>
           </div>

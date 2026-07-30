@@ -306,7 +306,7 @@ export default function DevelopmentAppraisal() {
     if (v <= 0) return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
     if (ratio >= 1.12) return { color: 'rgb(var(--brand-ink, 20 80 59))', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
     if (ratio >= 1.02) return { color: 'rgb(var(--status-green, 30 122 85))', background: 'rgb(var(--tint-success, 236 243 239))' };
-    if (ratio > 0.98) return { color: 'rgb(var(--ink-2, 95 102 95))', background: '#F4F4F0' };
+    if (ratio > 0.98) return { color: 'rgb(var(--ink-2, 95 102 95))', background: 'rgb(var(--sunken-2, 240 239 233))' };
     if (ratio > 0.85) return { color: 'rgb(var(--status-amber, 154 98 18))', background: 'rgb(var(--status-amber-bg, 248 240 222))' };
     return { color: 'rgb(var(--status-red, 178 58 46))', background: 'rgb(var(--status-red-bg, 249 234 231))' };
   };
@@ -1309,7 +1309,7 @@ export default function DevelopmentAppraisal() {
                     <div className="mt-3 grid grid-cols-2 gap-2.5">
                       <div className="rounded-[10px] bg-tint-success px-3 py-2.5">
                         <div className="label-mono text-ink-3">Prob ≥ target profit</div>
-                        <div className="fig text-[16px] font-semibold text-brand-500">{Math.round(risk.probAtTarget * 100)}%</div>
+                        <div className="fig text-[16px] font-semibold text-brand-ink">{Math.round(risk.probAtTarget * 100)}%</div>
                       </div>
                       <div className="rounded-[10px] px-3 py-2.5" style={{ background: risk.probLoss > 0.1 ? 'rgb(var(--status-red-bg, 249 234 231))' : 'rgb(var(--sunken-2, 240 239 233))' }}>
                         <div className="label-mono text-ink-3">Prob of loss</div>

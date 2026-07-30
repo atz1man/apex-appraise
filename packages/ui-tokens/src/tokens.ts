@@ -42,12 +42,12 @@ export const neutral = {
   borderFaint: v('border-faint', '240 239 233'),
   borderFaint2: v('border-faint-2', '244 244 240'),
   ink: v('ink', '22 32 27'),
-  ink2: v('ink-2', '95 102 95'),
-  ink2b: v('ink-2b', '110 114 105'),
-  ink3: v('ink-3', '154 160 154'),
-  ink3b: v('ink-3b', '182 181 173'),
+  ink2: v('ink-2', '75 81 75'),
+  ink2b: v('ink-2b', '87 90 83'),
+  ink3: v('ink-3', '95 98 95'),
+  ink3b: v('ink-3b', '107 107 102'),
   crumb: v('crumb', '201 205 200'),
-  inactive: v('inactive', '138 144 138'),
+  inactive: v('inactive', '99 103 99'),
   dashed: v('dashed', '218 217 210'),
 } as const;
 
@@ -55,8 +55,8 @@ export type StatusKey = 'neutral' | 'amber' | 'blue' | 'green' | 'red' | 'purple
 
 /** One status system everywhere — chips, dots, bars, deltas. */
 export const status: Record<StatusKey, { text: string; bg: string; dot: string }> = {
-  neutral: { text: v('ink-2b', '110 114 105'), bg: v('sunken-2', '240 239 233'), dot: v('ink-3', '154 160 154') },
-  amber: { text: v('status-amber', '154 98 18'), bg: v('status-amber-bg', '248 240 222'), dot: v('status-amber-dot', '199 169 91') },
+  neutral: { text: v('ink-2b', '87 90 83'), bg: v('sunken-2', '240 239 233'), dot: v('ink-3', '95 98 95') },
+  amber: { text: v('status-amber', '149 95 17'), bg: v('status-amber-bg', '248 240 222'), dot: v('status-amber-dot', '199 169 91') },
   blue: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246'), dot: v('status-blue', '45 91 168') },
   green: { text: v('status-green', '30 122 85'), bg: v('status-green-bg', '228 241 234'), dot: v('status-green', '30 122 85') },
   red: { text: v('status-red', '178 58 46'), bg: v('status-red-bg', '249 234 231'), dot: v('status-red', '178 58 46') },
@@ -73,7 +73,7 @@ export const brandInk = v('brand-ink', '20 80 59');
 export const assetTypeTag: Record<string, { text: string; bg: string }> = {
   INDUSTRIAL: { text: brandInk, bg: v('status-green-bg', '228 241 234') },
   RESIDENTIAL: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246') },
-  COMMERCIAL: { text: v('status-amber', '154 98 18'), bg: v('tag-commercial-bg', '246 236 217') },
+  COMMERCIAL: { text: v('status-amber', '149 95 17'), bg: v('tag-commercial-bg', '246 236 217') },
   MIXED_USE: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },
 };
 

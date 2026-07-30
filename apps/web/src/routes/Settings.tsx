@@ -696,7 +696,7 @@ function AboutPanel() {
             href="https://github.com/atz1man/apex-appraise"
             target="_blank"
             rel="noreferrer"
-            className="font-semibold text-brand-500 hover:text-brand-ink"
+            className="font-semibold text-brand-ink hover:text-brand-ink"
           >
             github.com/atz1man/apex-appraise →
           </a>
@@ -796,7 +796,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                   <ul className="mt-2.5 flex flex-col gap-1 flex-1">
                     {p.features.map((f) => (
                       <li key={f} className="text-[11.5px] text-ink-2 flex gap-1.5">
-                        <span className="text-brand-500">✓</span> {f}
+                        <span className="text-brand-ink">✓</span> {f}
                       </li>
                     ))}
                   </ul>

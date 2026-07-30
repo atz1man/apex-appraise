@@ -262,7 +262,7 @@ export default function Comparables() {
                 </>
               ) : (
                 <div className="text-[12px] text-ink-3 py-6 text-center">
-                  Add the site postcode on the <Link to={`/deal/${dealId}/sitepack`} className="text-brand-500 font-semibold hover:text-brand-ink">Site pack</Link> to place the evidence on a live map.
+                  Add the site postcode on the <Link to={`/deal/${dealId}/sitepack`} className="text-brand-ink font-semibold hover:text-brand-ink">Site pack</Link> to place the evidence on a live map.
                 </div>
               )}
             </Panel>

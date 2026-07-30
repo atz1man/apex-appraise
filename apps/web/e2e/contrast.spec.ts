@@ -225,19 +225,10 @@ test('no AA contrast failures on any screen, in either theme', async ({ page }) 
   // QUARANTINED WITH A CEILING here rather than silenced — the counts may not
   // grow, and anything outside these tones fails immediately.
   //   → see the loop log (i66) for the numbers and the options.
-  const RAMP_CEILING = new Map<string, number>([
-    ['light rgb(154, 160, 154)', 430], // --ink-3
-    ['dark rgb(110, 118, 112)', 430], // --ink-3 dark
-    ['light rgb(138, 144, 138)', 160], // --inactive
-    ['dark rgb(122, 130, 123)', 142], // --inactive dark
-    ['light rgb(182, 181, 173)', 18], // --ink-3b
-    ['dark rgb(87, 94, 88)', 18], // --ink-3b dark
-    ['light rgb(110, 114, 105)', 25], // --ink-2b
-    ['dark rgb(152, 160, 153)', 10], // --ink-2b dark
-    ['dark rgb(168, 176, 169)', 8], // --ink-2 dark on tinted chips
-    ['light rgb(154, 98, 18)', 12], // --status-amber
-    ['dark rgb(30, 122, 85)', 10], // brand-500 glyphs
-  ]);
+  // The grey ramp was raised to AA in i67 (every tier ≥4.5:1 on the worst
+  // background it lands on, hierarchy preserved), so the quarantine is gone.
+  // What remains here is a short list of genuine exceptions, each with a reason.
+  const RAMP_CEILING = new Map<string, number>([]);
 
   const counts = new Map<string, number>();
   for (const f of findings) {

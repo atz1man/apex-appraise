@@ -255,7 +255,7 @@ export default function DataRoom() {
                 <div className="mt-0.5 text-[12px] text-ink-3">
                   PDF, DWG, XLSX · up to 100 MB. Documents feed the AI extraction.{' '}
                   <button
-                    className="text-brand-500 font-semibold hover:text-brand-ink"
+                    className="text-brand-ink font-semibold hover:text-brand-ink"
                     onClick={(e) => {
                       e.stopPropagation();
                       openForm();

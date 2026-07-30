@@ -922,7 +922,10 @@ test('brand emphasis text is legible in both themes', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(16, 20, 18)');
   const dark = await measure('Investment value in GDV');
   expect(dark).not.toBeNull();
-  expect(dark!.color).toEqual([30, 158, 106]);
+  // assert the guarantee, not the constant: the token must resolve to something
+  // OTHER than the light value and must clear AA. Pinning the exact triplet made
+  // this fail the moment the value was tuned, which is not a regression.
+  expect(dark!.color).not.toEqual([20, 80, 59]);
   expect(dark!.ratio).toBeGreaterThan(4.5);
 
   // and the old colour survives nowhere on the page. Polled, because

@@ -161,7 +161,7 @@ export default function InvestorPortal() {
                 </div>
                 <div className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <div className="label-mono text-ink-3">Distributed</div>
-                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px] text-brand-500">{fM(pos.distributed)}</div>
+                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px] text-brand-ink">{fM(pos.distributed)}</div>
                 </div>
                 <div className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <div className="label-mono text-ink-3">Net IRR</div>

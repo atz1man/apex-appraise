@@ -52,7 +52,7 @@ export default function Login() {
           </Button>
           <div className="mt-3 text-center text-[12px] text-ink-2">
             New here?{' '}
-            <a href="/register" className="font-semibold text-brand-500 hover:text-brand-ink">
+            <a href="/register" className="font-semibold text-brand-ink hover:text-brand-ink">
               Create your organisation →
             </a>
           </div>

@@ -270,7 +270,7 @@ export default function Integrations() {
             <div className="flex flex-col gap-4">
               <p className="text-[12.5px] text-ink-2 leading-relaxed">
                 {credProvider} uses your workspace&rsquo;s own free API key. Get one at{' '}
-                <a href={spec.signupUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-500 hover:text-brand-ink">
+                <a href={spec.signupUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-ink hover:text-brand-ink">
                   {spec.signupUrl.replace('https://', '')}
                 </a>
                 {' '}— the key is checked against the live API before it&rsquo;s saved, stored server-side only, and never shown again.

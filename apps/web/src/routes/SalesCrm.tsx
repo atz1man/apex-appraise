@@ -464,7 +464,7 @@ export default function SalesCrm() {
                           key={f.id}
                           onClick={() => setFilter(f.id)}
                           className="inline-flex items-center gap-1.5 rounded-[9px] border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors"
-                          style={on ? { background: neutral.tintSuccess, borderColor: 'rgb(var(--border-green-soft, 214 230 221))', color: brandInk } : { background: '#fff', borderColor: neutral.borderStrong, color: neutral.ink2b }}
+                          style={on ? { background: neutral.tintSuccess, borderColor: 'rgb(var(--border-green-soft, 214 230 221))', color: brandInk } : { background: 'rgb(var(--surface, 255 255 255))', borderColor: neutral.borderStrong, color: neutral.ink2b }}
                         >
                           <Dot color={f.id === 'all' ? brand[700] : statusTokens[f.key].dot} /> {f.label} · <span className="fig">{count}</span>
                         </button>
@@ -808,7 +808,7 @@ export default function SalesCrm() {
                             <span
                               className="w-[22px] h-[22px] rounded-full inline-flex items-center justify-center"
                               style={{
-                                background: done ? brand[700] : '#fff',
+                                background: done ? brand[700] : 'rgb(var(--surface, 255 255 255))',
                                 border: `2px solid ${done ? brand[700] : current ? statusTokens.amber.dot : neutral.dashed}`,
                               }}
                             >

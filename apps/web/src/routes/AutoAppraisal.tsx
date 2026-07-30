@@ -509,7 +509,7 @@ export default function AutoAppraisal() {
                             <span className="block text-[12px] font-medium truncate">{d.name}</span>
                             <span className="block text-[10px] text-ink-3">{d.category} · {d.ext.toUpperCase()}</span>
                           </span>
-                          {d.extraction === 'EXTRACTED' && <span className="label-mono text-brand-500 shrink-0">READ</span>}
+                          {d.extraction === 'EXTRACTED' && <span className="label-mono text-brand-ink shrink-0">READ</span>}
                         </button>
                       );
                     })}

@@ -243,7 +243,7 @@ export default function BuyerPortal() {
                     {data.unit.incentive && data.unit.incentive !== 'None' && (
                       <div className="flex justify-between gap-3">
                         <span className="text-ink-3">Incentive</span>
-                        <span className="font-medium text-brand-500">{data.unit.incentive}</span>
+                        <span className="font-medium text-brand-ink">{data.unit.incentive}</span>
                       </div>
                     )}
                   </div>

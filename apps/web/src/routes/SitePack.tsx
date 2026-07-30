@@ -288,7 +288,7 @@ export default function SitePack() {
                   {ok.constraints.status !== 'ok' ? (
                     <EmptyState>planning.data.gov.uk is unreachable right now.</EmptyState>
                   ) : ok.constraints.hits.length === 0 ? (
-                    <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-500 font-medium">
+                    <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-ink font-medium">
                       Clean screen — none of the {ok.constraints.checked.length} constraint layers intersect this point.
                     </div>
                   ) : (
@@ -324,7 +324,7 @@ export default function SitePack() {
                       <div className="flex flex-col max-h-[260px] overflow-y-auto">
                         {ok.epc.records.slice(0, 12).map((r, i) => (
                           <div key={i} className="flex items-center gap-2.5 py-1.5 border-t border-border-faint first:border-t-0">
-                            <span className="fig w-6 h-6 rounded-[6px] bg-tint-success-2 text-brand-500 text-[11px] font-semibold inline-flex items-center justify-center">
+                            <span className="fig w-6 h-6 rounded-[6px] bg-tint-success-2 text-brand-ink text-[11px] font-semibold inline-flex items-center justify-center">
                               {r.rating || '—'}
                             </span>
                             <span className="flex-1 min-w-0 truncate text-[11.5px] leading-tight">{r.address}</span>
@@ -347,7 +347,7 @@ export default function SitePack() {
                   {ok.floodWarnings.status !== 'ok' ? (
                     <div className="text-[11.5px] text-ink-3">Environment Agency feed unreachable right now.</div>
                   ) : ok.floodWarnings.items.length === 0 ? (
-                    <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-500 font-medium">
+                    <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-ink font-medium">
                       No live flood warnings within 10km of the site.
                     </div>
                   ) : (
@@ -441,7 +441,7 @@ export default function SitePack() {
                           <span className={c.status === 'outstanding' ? 'text-status-red font-medium' : ''}>{c.status}</span> · {c.personsEntitled.join(', ') || c.description}
                         </div>
                       ))}
-                      <button className="mt-2 text-[11.5px] font-semibold text-brand-500 hover:text-brand-ink" onClick={() => setCompanyNo(null)}>← Back to results</button>
+                      <button className="mt-2 text-[11.5px] font-semibold text-brand-ink hover:text-brand-ink" onClick={() => setCompanyNo(null)}>← Back to results</button>
                     </div>
                   )}
                   <div className="mt-2 text-[10.5px] text-ink-3">Source: Companies House public data.</div>
@@ -449,7 +449,7 @@ export default function SitePack() {
 
                 <div className="text-[11px] text-ink-3 leading-relaxed px-1">
                   Fetched {new Date(ok.fetchedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} ·{' '}
-                  <Link to={`/deal/${dealId}/comparables`} className="text-brand-500 font-semibold hover:text-brand-ink">
+                  <Link to={`/deal/${dealId}/comparables`} className="text-brand-ink font-semibold hover:text-brand-ink">
                     Open comparables →
                   </Link>
                 </div>

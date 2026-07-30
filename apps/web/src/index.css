@@ -19,12 +19,12 @@
   --border-std: 236 235 229;
   --border-faint: 240 239 233;
   --ink: 22 32 27;
-  --ink-2: 95 102 95;
-  --ink-2b: 110 114 105;
-  --ink-3: 154 160 154;
-  --ink-3b: 182 181 173;
-  --inactive: 138 144 138;
-  --status-amber: 154 98 18;
+  --ink-2: 75 81 75;
+  --ink-2b: 87 90 83;
+  --ink-3: 95 98 95;
+  --ink-3b: 107 107 102;
+  --inactive: 99 103 99;
+  --status-amber: 149 95 17;
   --status-amber-bg: 248 240 222;
   --status-blue: 45 91 168;
   --status-blue-bg: 229 234 246;
@@ -79,12 +79,12 @@
   --border-std: 236 235 229;
   --border-faint: 240 239 233;
   --ink: 22 32 27;
-  --ink-2: 95 102 95;
-  --ink-2b: 110 114 105;
-  --ink-3: 154 160 154;
-  --ink-3b: 182 181 173;
-  --inactive: 138 144 138;
-  --status-amber: 154 98 18;
+  --ink-2: 75 81 75;
+  --ink-2b: 87 90 83;
+  --ink-3: 95 98 95;
+  --ink-3b: 107 107 102;
+  --inactive: 99 103 99;
+  --status-amber: 149 95 17;
   --status-amber-bg: 248 240 222;
   --status-blue: 45 91 168;
   --status-blue-bg: 229 234 246;
@@ -133,7 +133,7 @@
   --sunken-2: 29 35 32;
   /* #14503B is 1.84:1 on the dark panel — unreadable. brand-400 is the brand's
      own lighter green and clears AA on surface (5.06), tint (4.72) and sunken-2 (4.69). */
-  --brand-ink: 30 158 106;
+  --brand-ink: 37 161 110;
   --toggle-track: 19 23 21;
   --toggle-pill-ring: 38 45 40;
   --tint-success: 22 36 29;
@@ -143,10 +143,10 @@
   --border-faint: 28 33 30;
   --ink: 232 236 233;
   --ink-2: 168 176 169;
-  --ink-2b: 152 160 153;
-  --ink-3: 110 118 112;
-  --ink-3b: 87 94 88;
-  --inactive: 122 130 123;
+  --ink-2b: 153 161 154;
+  --ink-3: 144 150 146;
+  --ink-3b: 134 139 134;
+  --inactive: 138 145 138;
   --status-amber: 217 169 79;
   --status-amber-bg: 42 34 19;
   --status-blue: 127 163 224;
