@@ -633,7 +633,7 @@ export default function CostMonitoring() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5">
                 {g.items.map((ph, i) => (
-                  <button key={ph.id} className="bg-surface border border-border-strong rounded-card overflow-hidden text-left shadow-rest transition-all hover:-translate-y-0.5 hover:shadow-float" onClick={() => setLightbox(ph)}>
+                  <button key={ph.id} className="bg-surface border border-[rgb(var(--control-border))] rounded-card overflow-hidden text-left shadow-rest transition-all hover:-translate-y-0.5 hover:shadow-float" onClick={() => setLightbox(ph)}>
                     {ph.url ? (
                       <img src={ph.url} alt={ph.caption} className="h-[130px] w-full object-cover" />
                     ) : (

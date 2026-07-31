@@ -67,7 +67,7 @@ export default function Login() {
                     setEmail(mail);
                     setPassword('demo');
                   }}
-                  className="text-left rounded-[9px] border border-border-faint px-3 py-2 hover:bg-sunken transition-colors"
+                  className="text-left rounded-[9px] border border-[rgb(var(--control-border))] px-3 py-2 hover:bg-sunken transition-colors"
                 >
                   <div className="text-[12.5px] font-semibold">{label}</div>
                   <div className="text-[11px] text-ink-3">{desc}</div>

@@ -241,9 +241,9 @@ const BTN_CHROME: Record<ButtonVariant, React.CSSProperties> = {
     background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
   },
-  secondary: { border: '1px solid rgba(20,30,25,0.12)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
+  secondary: { border: '1px solid rgb(var(--control-border))', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
   ghost: {},
-  danger: { border: '1px solid rgba(178,58,46,0.4)', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
+  danger: { border: '1px solid rgb(var(--status-red))', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
 };
 const BTN_SIZES: Record<ButtonSize, string> = {
   sm: 'px-3 h-[31px] text-[12px] rounded-[10px] gap-1',
@@ -437,7 +437,7 @@ export function Listbox({
         title={current?.label}
         onClick={() => (open ? setOpen(false) : openMenu())}
         className="h-8 max-w-full inline-flex items-center gap-1.5 rounded-[10px] px-2.5 text-[11.5px] font-medium bg-surface text-ink hover:bg-sunken transition-colors"
-        style={{ border: '1px solid rgb(var(--control-border, 20 30 25) / 0.14)' }}
+        style={{ border: '1px solid rgb(var(--control-border))' }}
       >
         <span className="truncate">{current?.label ?? '—'}</span>
         <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-ink-3">

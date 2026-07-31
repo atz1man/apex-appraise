@@ -60,7 +60,7 @@
   --notice-border: 235 220 188;
   --notice-ink: 122 78 14;
   --shadow-ink: 20 30 25;
-  --control-border: 20 30 25;
+  --control-border: 139 147 141;
 }
 
 
@@ -117,7 +117,7 @@
   --notice-border: 235 220 188;
   --notice-ink: 122 78 14;
   --shadow-ink: 20 30 25;
-  --control-border: 20 30 25;
+  --control-border: 139 147 141;
   --brand-ink: 20 80 59;
   --toggle-track: 237 236 230;
   --toggle-pill-ring: 255 255 255;
@@ -190,7 +190,7 @@
   --notice-border: 66 54 30;
   --notice-ink: 217 169 79;
   --shadow-ink: 0 0 0;
-  --control-border: 232 236 233;
+  --control-border: 100 107 101;
 }
 
 html,
@@ -258,7 +258,9 @@ input,
 select,
 textarea {
   @apply bg-surface rounded-[12px] px-3.5 py-2.5 text-[13px] text-ink outline-none;
-  border: 1px solid rgb(var(--control-border, 20 30 25) / 0.12);
+  /* a control's edge is what identifies it as a control (WCAG 1.4.11, 3:1).
+     This was a 12% wash of the ink colour: 1.27:1 in light, 1.38:1 in dark. */
+  border: 1px solid rgb(var(--control-border));
   box-shadow: 0 1px 2px rgb(var(--shadow-ink, 20 30 25) / 0.03) inset;
   transition:
     border-color 0.18s ease,
@@ -267,20 +269,20 @@ textarea {
 input:hover,
 select:hover,
 textarea:hover {
-  border-color: rgb(var(--control-border, 20 30 25) / 0.24);
+  border-color: rgb(var(--ink-3));
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #1e7a55;
-  box-shadow: 0 0 0 4px rgb(30 122 85 / 0.14);
+  border-color: rgb(var(--brand-ink));
+  box-shadow: 0 0 0 4px rgb(var(--brand-ink) / 0.18);
 }
 
 /* keyboard navigation: visible focus everywhere, without mouse-click rings */
 button:focus-visible,
 a:focus-visible,
 [role='button']:focus-visible {
-  outline: 2px solid #14503b;
+  outline: 2px solid rgb(var(--brand-ink));
   outline-offset: 2px;
   border-radius: 6px;
 }

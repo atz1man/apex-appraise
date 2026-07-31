@@ -209,7 +209,7 @@ export default function Comparables() {
                               <input
                                 type="number"
                                 aria-label={`${c.address} ${label} adjustment %`}
-                                className="fig w-[52px] h-[30px] p-0 text-center rounded-[7px] border-border-strong text-[11.5px] font-medium"
+                                className="fig w-[52px] h-[30px] p-0 text-center rounded-[7px] text-[11.5px] font-medium"
                                 style={{ color: adjColor(c[k]) }}
                                 value={c[k]}
                                 onChange={(e) => setAdj(c.id, k, parseFloat(e.target.value) || 0)}

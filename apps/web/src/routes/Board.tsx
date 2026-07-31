@@ -112,7 +112,7 @@ export default function Board() {
                 key={k}
                 onClick={() => setFilter(k)}
                 className="inline-flex items-center rounded-pill border px-3.5 py-1.5 min-h-[40px] sm:min-h-0 text-[12.5px] font-semibold transition-colors"
-                style={on ? { background: '#14503B', color: '#fff', borderColor: '#14503B' } : { background: 'rgb(var(--surface, 255 255 255))', color: 'rgb(var(--ink-2, 75 81 75))', borderColor: 'rgb(var(--border-strong, 230 229 222))' }}
+                style={on ? { background: '#14503B', color: '#fff', borderColor: 'rgb(var(--brand-ink))' } : { background: 'rgb(var(--surface, 255 255 255))', color: 'rgb(var(--ink-2, 75 81 75))', borderColor: 'rgb(var(--control-border, 139 147 141))' }}
               >
                 {label}
               </button>

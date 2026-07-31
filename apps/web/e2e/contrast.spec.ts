@@ -209,8 +209,12 @@ test('no AA contrast failures on any screen, in either theme', async ({ page, br
         await p.goto(path);
         await p.waitForLoadState('networkidle').catch(() => {});
         await setTheme(p, theme);
-        // colour transitions must settle or every read is the previous theme's
-        await p.waitForTimeout(400);
+        // Freeze animation rather than waiting a fixed interval for it: colour
+        // transitions are what make a read return the PREVIOUS theme's value,
+        // and on a loaded machine 400ms is not always enough — that is a flaky
+        // gate, which for accessibility is worse than no gate.
+        await p.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
+        await p.waitForTimeout(150);
         const hits = (await p.evaluate(AUDIT)) as Omit<Finding, 'route' | 'theme'>[];
         findings.push(...hits.map((h) => ({ ...h, route: name, theme })));
       }
