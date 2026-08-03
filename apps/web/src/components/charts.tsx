@@ -330,8 +330,8 @@ export function CompsLadder({
               </text>
               <line x1={LABEL_W} x2={W - 56} y1={y} y2={y} stroke={GRID} strokeWidth="1" data-decorative />
               <line x1={xb} x2={xa} y1={y} y2={y} stroke={MUTED} strokeWidth="1.5" />
-              <circle data-series="base" cx={xb} cy={y} r="4" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
-              <circle data-series="adjusted" cx={xa} cy={y} r="4.5" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
+              <circle data-series="base" data-series-encoding="hollow fill + legend" cx={xb} cy={y} r="4" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
+              <circle data-series="adjusted" data-series-encoding="solid fill + legend" cx={xa} cy={y} r="4.5" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
               <text x={W - 50} y={y + 3} fontSize={narrow ? 9 : 10.5} className="fig" fontWeight="600" fill={INK}>
                 £{Math.round(c.adjustedPsf)}
               </text>

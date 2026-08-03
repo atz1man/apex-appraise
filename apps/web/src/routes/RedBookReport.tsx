@@ -516,7 +516,7 @@ export default function RedBookReport() {
                   <span className="text-[12.5px] font-semibold">{a.name}</span>
                 </div>
                 <div className="fig mt-2.5 text-[20px] font-semibold" style={{ letterSpacing: '-0.8px' }}>{formatMoneyFull(a.value)}</div>
-                <div className="mt-2 text-[11px]" style={{ color: '#7A807A' }}>{a.note}</div>
+                <div className="mt-2 text-[11px]" style={{ color: 'rgb(var(--ink-3))' }}>{a.note}</div>
                 <div className="mt-2.5 h-[5px] rounded-[3px] overflow-hidden" style={{ background: neutral.sunken2 }}>
                   <div className="h-full" style={{ width: `${a.weight}%`, background: a.dot }} />
                 </div>

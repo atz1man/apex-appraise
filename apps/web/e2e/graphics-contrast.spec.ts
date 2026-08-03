@@ -147,7 +147,13 @@ const AUDIT = `(() => {
         const perChart = series.get(chart);
         const name = el.getAttribute('data-series');
         if (!perChart.has(name)) {
-          perChart.set(name, { colour: best.colour, name, chart: chart.getAttribute('data-chart') || 'svg' });
+          perChart.set(name, {
+            colour: best.colour,
+            name,
+            chart: chart.getAttribute('data-chart') || 'svg',
+            // a series may state that colour is NOT its identity channel
+            encoding: el.getAttribute('data-series-encoding') || '',
+          });
         }
       }
     }
@@ -182,6 +188,14 @@ const AUDIT = `(() => {
     const chart = list.length ? list[0].chart : 'svg';
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
+        /**
+         * Colour separability only binds when colour IS the identity channel.
+         * The comps ladder separates base from adjusted by hollow vs solid fill
+         * (plus size, position and a legend), so its dots declare that and are
+         * compared on nothing. Recorded on the marks themselves, so the reason
+         * sits where the next person would add a series.
+         */
+        if (list[i].encoding || list[j].encoding) continue;
         const a = parse(list[i].colour);
         const b = parse(list[j].colour);
         if (!a || !b) continue;
@@ -289,5 +303,81 @@ test('chart marks are distinguishable from their background and each other', asy
 
   expect(
     findings.map((f) => `${f.theme} ${f.route} ${f.kind}: ${f.colour} vs ${f.against} ${f.kind === 'series-vs-series' ? 'ΔE ' + f.ratio : f.ratio + ':1'}`),
+  ).toEqual([]);
+});
+
+/**
+ * The report surfaces — the client deliverable.
+ *
+ * They render the SAME chart components but under two conditions the screen
+ * sweep never exercises: a `.light` pin that must hold whatever theme the
+ * viewer has set (i68's white-on-white bug was exactly that pin failing), and
+ * print media, which is what the PDF renderer actually rasterises.
+ */
+test('report graphics hold up light-pinned and in print media', async ({ page }) => {
+  test.setTimeout(600_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const ids = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    const deals = j.result.data.json.deals as Array<{ id: string; name: string }>;
+    const by = (p: string) => deals.find((d) => d.name.startsWith(p))!.id;
+    return { northgate: by('Northgate'), kingsway: by('Kingsway') };
+  });
+
+  const routes: Array<[string, string]> = [
+    ['appraisal report', `/deal/${ids.kingsway}/report`],
+    ['red book', `/deal/${ids.northgate}/redbook`],
+    ['terms document', `/deal/${ids.northgate}/engagement/document`],
+  ];
+
+  const findings: Finding[] = [];
+  let measured = 0;
+  // 'dark' is the interesting case: the document must stay light-pinned, and its
+  // marks must be measured against the light surfaces it pins itself to
+  for (const [themeName, theme, media] of [
+    ['screen/light', 'light', 'screen'],
+    ['screen/dark-pinned', 'dark', 'screen'],
+    ['print', 'light', 'print'],
+  ] as Array<[string, 'light' | 'dark', 'screen' | 'print']>) {
+    for (const [name, path] of routes) {
+      await page.emulateMedia({ media: 'screen' });
+      await page.goto(path);
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await setTheme(page, theme);
+      await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
+      await page.emulateMedia({ media });
+      await page.waitForSelector('.a4-page', { timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      const res = (await page.evaluate(AUDIT)) as { findings: Omit<Finding, 'route' | 'theme'>[]; measured: number; seriesFound: number };
+      measured += res.measured;
+      findings.push(...res.findings.map((h) => ({ ...h, route: name, theme: themeName })));
+    }
+  }
+  await page.emulateMedia({ media: 'screen' });
+
+  if (findings.length) {
+    const groups = new Map<string, { n: number; f: Finding }>();
+    for (const f of findings) {
+      const k = `${f.theme}|${f.colour}|${f.against}`;
+      const g = groups.get(k);
+      if (g) g.n++;
+      else groups.set(k, { n: 1, f });
+    }
+    console.log(
+      '\nREPORT GRAPHICS below 3:1:\n' +
+        [...groups.values()]
+          .sort((a, b) => a.f.ratio - b.f.ratio)
+          .map(({ n, f }) => `  ${f.kind === 'series-vs-series' ? 'ΔE ' + f.ratio.toFixed(1) : f.ratio.toFixed(2) + ':1'}  [${f.theme}] ${f.colour} on ${f.against}  ×${n}\n      e.g. ${f.route} — ${f.where}`)
+          .join('\n'),
+    );
+  }
+  console.log(`\nreport sweep measured ${measured} marks`);
+  expect(measured).toBeGreaterThan(60);
+  expect(
+    findings.map((f) => `${f.theme} ${f.route}: ${f.colour} vs ${f.against} ${f.kind === 'series-vs-series' ? 'ΔE ' + f.ratio : f.ratio + ':1'}`),
   ).toEqual([]);
 });

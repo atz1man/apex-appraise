@@ -200,6 +200,10 @@ test('no AA contrast failures on any screen, in either theme', async ({ page, br
     ['terms', `/deal/${ids.northgate}/engagement`],
     ['phases', `/deal/${ids.harbour}/appraisal`],
     ['field app', '/field'],
+    // the client deliverable: light-pinned, and never previously swept
+    ['appraisal report', `/deal/${ids.kingsway}/report`],
+    ['red book', `/deal/${ids.northgate}/redbook`],
+    ['terms document', `/deal/${ids.northgate}/engagement/document`],
   ];
 
   const findings: Finding[] = [];
