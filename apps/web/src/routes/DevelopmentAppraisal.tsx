@@ -526,12 +526,19 @@ export default function DevelopmentAppraisal() {
                               <div className="relative flex-1 h-[22px] rounded-[7px] bg-sunken-2 overflow-hidden">
                                 <div
                                   className="absolute inset-y-0 rounded-[6px]"
+                                  data-mark="phase-build"
                                   style={{ left: `${pct(p.start - 1)}%`, width: `${pct(p.buildMonths)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }}
                                   title={`Build — months ${p.start}–${p.practicalCompletion}`}
                                 />
                                 <div
+                                  data-mark="phase-sales"
                                   className="absolute inset-y-0 rounded-[6px]"
-                                  style={{ left: `${pct(p.practicalCompletion)}%`, width: `${pct(p.salesMonths)}%`, background: 'rgb(var(--tint-green-deep, 223 239 231))' }}
+                                  style={{
+                                    left: `${pct(p.practicalCompletion)}%`,
+                                    width: `${pct(p.salesMonths)}%`,
+                                    background: 'rgb(var(--tint-green-deep, 223 239 231))',
+                                    boxShadow: 'inset 0 0 0 1px rgb(var(--band-edge))',
+                                  }}
                                   title={`Sales — months ${p.practicalCompletion + 1}–${p.end}`}
                                 />
                               </div>
@@ -1296,9 +1303,15 @@ export default function DevelopmentAppraisal() {
                     <div className="relative h-[26px] rounded-[7px] bg-sunken-2 overflow-hidden">
                       <div
                         className="absolute top-0 bottom-0"
-                        style={{ left: `${posOf(risk.profit.p10)}%`, width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`, background: 'rgb(var(--tint-green-deep, 223 239 231))' }}
+                        data-mark="mc-range"
+                        style={{
+                          left: `${posOf(risk.profit.p10)}%`,
+                          width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`,
+                          background: 'rgb(var(--tint-green-deep, 223 239 231))',
+                          boxShadow: 'inset 0 0 0 1px rgb(var(--band-edge))',
+                        }}
                       />
-                      <div className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} />
+                      <div data-mark="mc-median" className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} />
                       {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />}
                     </div>
                     <div className="mt-1.5 flex justify-between text-[10.5px] fig text-ink-3">

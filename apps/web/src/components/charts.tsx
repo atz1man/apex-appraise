@@ -20,8 +20,8 @@ function useNarrow(): boolean {
    profit #1E9E6A; the cumulative J-curve is a single ink line.
    ================================================================ */
 
-const REV = 'rgb(var(--status-green, 30 122 85))';
-const COST = 'rgb(var(--status-amber, 154 98 18))';
+const REV = 'rgb(var(--series-rev, 31 126 88))';
+const COST = 'rgb(var(--series-cost, 127 68 0))';
 const PROFIT = '#1E9E6A';
 const INK = 'rgb(var(--ink, 22 32 27))';
 const GRID = 'rgb(var(--border-std, 236 235 229))';
@@ -82,7 +82,7 @@ export function CashflowChart({
 
   return (
     <div data-testid="cashflow-chart">
-      <svg
+      <svg data-chart="cashflow"
         viewBox={`0 0 ${W} ${H}`}
         className="w-full select-none"
         role="img"
@@ -97,26 +97,26 @@ export function CashflowChart({
       >
         {/* flows panel grid + baseline */}
         {[0.5, 1].map((f) => (
-          <line key={f} x1={PAD_L} x2={W - PAD_R} y1={flowY(maxFlow * f)} y2={flowY(maxFlow * f)} stroke={GRID} strokeWidth="1" />
+          <line key={f} x1={PAD_L} x2={W - PAD_R} y1={flowY(maxFlow * f)} y2={flowY(maxFlow * f)} stroke={GRID} strokeWidth="1" data-decorative />
         ))}
-        <line x1={PAD_L} x2={W - PAD_R} y1={FLOW_H} y2={FLOW_H} stroke={MUTED} strokeWidth="1" />
+        <line x1={PAD_L} x2={W - PAD_R} y1={FLOW_H} y2={FLOW_H} stroke={MUTED} strokeWidth="1" data-decorative />
         {/* practical-completion divider */}
         {pcMonth > 0 && pcMonth <= n && (
-          <line x1={xOf(pcMonth - 1)} x2={xOf(pcMonth - 1)} y1={8} y2={cumTop + CUM_H} stroke={GRID} strokeWidth="1" strokeDasharray="3 4" />
+          <line x1={xOf(pcMonth - 1)} x2={xOf(pcMonth - 1)} y1={8} y2={cumTop + CUM_H} stroke={GRID} strokeWidth="1" strokeDasharray="3 4" data-decorative />
         )}
         {/* paired bars */}
         {rows.map((r, i) => (
           <g key={r.m} opacity={hover == null || hover === i ? 1 : 0.45}>
             {r.cost > 0 && (
-              <rect x={xOf(i) - barW - 1} y={flowY(r.cost)} width={barW} height={FLOW_H - flowY(r.cost)} rx="2" fill={COST} />
+              <rect data-series="cost" x={xOf(i) - barW - 1} y={flowY(r.cost)} width={barW} height={FLOW_H - flowY(r.cost)} rx="2" fill={COST} />
             )}
-            {r.rev > 0 && <rect x={xOf(i) + 1} y={flowY(r.rev)} width={barW} height={FLOW_H - flowY(r.rev)} rx="2" fill={REV} />}
+            {r.rev > 0 && <rect data-series="revenue" x={xOf(i) + 1} y={flowY(r.rev)} width={barW} height={FLOW_H - flowY(r.rev)} rx="2" fill={REV} />}
           </g>
         ))}
         {/* cumulative panel */}
-        <line x1={PAD_L} x2={W - PAD_R} y1={zeroY} y2={zeroY} stroke={MUTED} strokeWidth="1" />
-        <path d={`${cumPath} L${xOf(n - 1)},${zeroY} L${xOf(0)},${zeroY} Z`} fill={INK} opacity="0.06" />
-        <path d={cumPath} fill="none" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+        <line x1={PAD_L} x2={W - PAD_R} y1={zeroY} y2={zeroY} stroke={MUTED} strokeWidth="1" data-decorative />
+        <path d={`${cumPath} L${xOf(n - 1)},${zeroY} L${xOf(0)},${zeroY} Z`} fill={INK} opacity="0.06" data-decorative />
+        <path data-series="net-position" d={cumPath} fill="none" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
         {/* peak-debt marker */}
         <circle cx={xOf(peakIdx)} cy={cumY(rows[peakIdx]!.cum)} r="4" fill={INK} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="2" />
         <text
@@ -131,7 +131,7 @@ export function CashflowChart({
         </text>
         {/* hover crosshair */}
         {hover != null && (
-          <line x1={xOf(hover)} x2={xOf(hover)} y1={8} y2={cumTop + CUM_H} stroke={INK} strokeWidth="1" opacity="0.35" />
+          <line x1={xOf(hover)} x2={xOf(hover)} y1={8} y2={cumTop + CUM_H} stroke={INK} strokeWidth="1" opacity="0.35" data-decorative />
         )}
         {/* x ticks — quarterly, or twice-yearly on phones */}
         {rows.map((r, i) =>
@@ -145,6 +145,15 @@ export function CashflowChart({
         <text x={PAD_L} y={12} fontSize="10" fill={MUTED} className="label-mono" letterSpacing="0.5">
           MONTHLY FLOWS
         </text>
+        {/* Legend. Two series separated by hue need a non-colour channel too:
+            the palette's CVD separation is validated but not large, and position
+            alone (cost left of the tick, revenue right) is not self-explaining. */}
+        <g transform={`translate(${W - PAD_R - 132}, 12)`}>
+          <rect x={0} y={-7} width={9} height={9} rx="2" fill={COST} />
+          <text x={13} y={1} fontSize="9.5" fill={MUTED} className="fig">Cost out</text>
+          <rect x={62} y={-7} width={9} height={9} rx="2" fill={REV} />
+          <text x={75} y={1} fontSize="9.5" fill={MUTED} className="fig">Revenue in</text>
+        </g>
         <text x={PAD_L} y={cumTop - 6} fontSize="10" fill={MUTED} className="label-mono" letterSpacing="0.5">
           NET POSITION (CUMULATIVE)
         </text>
@@ -217,7 +226,7 @@ export function SalesVelocityChart({
 
   return (
     <div data-testid="sales-velocity">
-      <svg
+      <svg data-chart="sales-velocity"
         viewBox={`0 0 ${W} ${H}`}
         className="w-full select-none"
         role="img"
@@ -240,12 +249,12 @@ export function SalesVelocityChart({
           Appraised {fM(target)}
         </text>
         {/* baseline */}
-        <line x1={10} x2={W - 10} y1={yOf(0)} y2={yOf(0)} stroke={GRID} strokeWidth="1" />
+        <line x1={10} x2={W - 10} y1={yOf(0)} y2={yOf(0)} stroke={GRID} strokeWidth="1" data-decorative />
         {/* secured area + step line */}
         {cum.length > 0 && (
           <>
-            <path d={`${path} L${lastX.toFixed(1)},${yOf(0).toFixed(1)} Z`} fill={REV} opacity="0.1" />
-            <path d={path} fill="none" stroke={REV} strokeWidth="2" strokeLinejoin="round" />
+            <path d={`${path} L${lastX.toFixed(1)},${yOf(0).toFixed(1)} Z`} fill={REV} opacity="0.1" data-decorative />
+            <path data-series="secured" d={path} fill="none" stroke={REV} strokeWidth="2" strokeLinejoin="round" />
             {cum.map((p, i) => (
               <circle key={i} cx={xOf(p.t)} cy={yOf(p.cum)} r={hover === i ? 4 : 2.5} fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
             ))}
@@ -303,7 +312,7 @@ export function CompsLadder({
 
   return (
     <div data-testid="comps-ladder">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Comparable evidence: base and adjusted pounds per square foot per comparable, with the supported rate marked">
+      <svg data-chart="comps-ladder" viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Comparable evidence: base and adjusted pounds per square foot per comparable, with the supported rate marked">
         {/* supported reference */}
         <line x1={xOf(supported)} x2={xOf(supported)} y1={TOP - 12} y2={H - 18} stroke={INK} strokeWidth="1.2" strokeDasharray="4 4" />
         <text x={Math.min(xOf(supported) + 6, W - 108)} y={TOP - 12} fontSize="10" className="fig" fontWeight="600" fill={INK}>
@@ -319,10 +328,10 @@ export function CompsLadder({
               <text x={0} y={y + 3} fontSize={narrow ? 9 : 10.5} fill="rgb(var(--ink-2, 95 102 95))">
                 {c.address.length > nameLen ? `${c.address.slice(0, nameLen - 1)}…` : c.address}
               </text>
-              <line x1={LABEL_W} x2={W - 56} y1={y} y2={y} stroke={GRID} strokeWidth="1" />
+              <line x1={LABEL_W} x2={W - 56} y1={y} y2={y} stroke={GRID} strokeWidth="1" data-decorative />
               <line x1={xb} x2={xa} y1={y} y2={y} stroke={MUTED} strokeWidth="1.5" />
-              <circle cx={xb} cy={y} r="4" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
-              <circle cx={xa} cy={y} r="4.5" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
+              <circle data-series="base" cx={xb} cy={y} r="4" fill="rgb(var(--surface, 255 255 255))" stroke={MUTED} strokeWidth="1.5" />
+              <circle data-series="adjusted" cx={xa} cy={y} r="4.5" fill={REV} stroke="rgb(var(--surface, 255 255 255))" strokeWidth="1.5" />
               <text x={W - 50} y={y + 3} fontSize={narrow ? 9 : 10.5} className="fig" fontWeight="600" fill={INK}>
                 £{Math.round(c.adjustedPsf)}
               </text>
@@ -377,9 +386,9 @@ export function CostVarianceStrip({
             <div className="mt-1 relative h-[7px] rounded-[4px] bg-sunken-2 overflow-hidden">
               {/* budget mark */}
               <div className="absolute top-0 bottom-0 w-[2px] bg-surface z-10" style={{ left: `${budgetPct}%` }} />
-              <div className="absolute top-0 bottom-0 left-0 rounded-l-[4px]" style={{ width: `${withinPct}%`, background: REV }} />
+              <div data-mark="within-budget" className="absolute top-0 bottom-0 left-0 rounded-l-[4px]" style={{ width: `${withinPct}%`, background: REV }} />
               {over && (
-                <div className="absolute top-0 bottom-0" style={{ left: `${budgetPct}%`, width: `${overPct}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />
+                <div data-mark="over-budget" className="absolute top-0 bottom-0" style={{ left: `${budgetPct}%`, width: `${overPct}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />
               )}
             </div>
           </div>
@@ -418,11 +427,11 @@ export function ProfitBridge({
   let running = gdv;
   return (
     <div data-testid="profit-bridge">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Profit bridge from gross development value to developer profit" onMouseLeave={() => setHover(null)}>
+      <svg data-chart="profit-bridge" viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Profit bridge from gross development value to developer profit" onMouseLeave={() => setHover(null)}>
         {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1={0} x2={W} y1={yOf(gdv * f)} y2={yOf(gdv * f)} stroke={GRID} strokeWidth="1" />
+          <line key={f} x1={0} x2={W} y1={yOf(gdv * f)} y2={yOf(gdv * f)} stroke={GRID} strokeWidth="1" data-decorative />
         ))}
-        <line x1={0} x2={W} y1={yOf(0)} y2={yOf(0)} stroke={MUTED} strokeWidth="1" />
+        <line x1={0} x2={W} y1={yOf(0)} y2={yOf(0)} stroke={MUTED} strokeWidth="1" data-decorative />
         {bars.map(([label, value, kind], i) => {
           const x = i * slotW + (slotW - barW) / 2;
           let top: number;

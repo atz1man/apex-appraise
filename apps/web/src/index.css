@@ -31,6 +31,17 @@
   --status-red: 178 58 46;
   --status-red-bg: 249 234 231;
   --brand-ink: 20 80 59; /* emphasis text/indicators in the brand green */
+  /* Chart series. Deliberately NOT the status colours: those are tuned for text
+     contrast, these for separability from each other. Validated with the dataviz
+     skill's palette script — CVD ΔE 9.8 (deutan), normal-vision 18.3, both ≥3:1
+     on the surface. Re-run that script before changing either value. */
+  /* A soft band (Monte Carlo range, a phase's sales window) sits on the sunken
+     track at ~1.03:1 — invisible. Keeping the fill soft so the median marker
+     drawn ON it still reads, and carrying the extent with an outline that
+     clears 3:1 against BOTH the track and the fill. */
+  --band-edge: 129 136 131;
+  --series-rev: 31 126 88;
+  --series-cost: 127 68 0;
   --toggle-track: 237 236 230; /* segmented-control rail */
   --toggle-pill-ring: 255 255 255; /* invisible on a white pill in light */
   --status-green: 30 122 85;
@@ -121,6 +132,8 @@
   --brand-ink: 20 80 59;
   --toggle-track: 237 236 230;
   --toggle-pill-ring: 255 255 255;
+  --series-rev: 31 126 88;
+  --series-cost: 127 68 0;
 
   /* `body` applies `color` from --ink, and colour INHERITS: restating the
      variable here does not re-run that declaration, so a light-pinned document
@@ -128,6 +141,7 @@
      Re-apply the properties, do not just redefine the vars. */
   color: rgb(var(--ink));
   background-color: rgb(var(--canvas));
+  --band-edge: 129 136 131;
 }
 
 /* Dark palette — evergreen-tinted charcoal. NOT yet user-reachable: the
@@ -144,6 +158,9 @@
   /* #14503B is 1.84:1 on the dark panel — unreadable. brand-400 is the brand's
      own lighter green and clears AA on surface (5.06), tint (4.72) and sunken-2 (4.69). */
   --brand-ink: 37 161 110;
+  --band-edge: 107 113 107;
+  --series-rev: 67 169 121;
+  --series-cost: 193 135 25;
   --toggle-track: 19 23 21;
   --toggle-pill-ring: 38 45 40;
   --tint-success: 22 36 29;

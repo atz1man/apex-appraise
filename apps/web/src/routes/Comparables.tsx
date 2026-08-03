@@ -169,7 +169,7 @@ export default function Comparables() {
               }
               right={
                 <Button variant="secondary" onClick={addComp} disabled={upsert.isPending}>
-                  <Icon d="M12 5v14|M5 12h14" size={14} color="#14503B" /> Add comp
+                  <Icon d="M12 5v14|M5 12h14" size={14} color="rgb(var(--brand-ink))" /> Add comp
                 </Button>
               }
             >

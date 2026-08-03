@@ -28,6 +28,14 @@ const AUDIT = `(() => {
     const n = (s.match(/[\\d.]+/g) || []).map(Number);
     return n.length >= 3 ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
   };
+  /** first colour token in a value — a box-shadow's offsets must not be read as alpha */
+  const parseColour = (s) => {
+    if (!s || s === 'none') return null;
+    const m = String(s).match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return null;
+    const n = m[1].split(',').map((v) => Number(v.trim().replace('/', '')));
+    return n.length >= 3 ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
+  };
   const blend = (fg, bg) => ({
     r: fg.r * fg.a + bg.r * (1 - fg.a),
     g: fg.g * fg.a + bg.g * (1 - fg.a),
@@ -140,6 +148,14 @@ const FOCUS_AUDIT = `(() => {
     const n = (s.match(/[\\d.]+/g) || []).map(Number);
     return n.length >= 3 ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
   };
+  /** first colour token in a value — a box-shadow's offsets must not be read as alpha */
+  const parseColour = (s) => {
+    if (!s || s === 'none') return null;
+    const m = String(s).match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return null;
+    const n = m[1].split(',').map((v) => Number(v.trim().replace('/', '')));
+    return n.length >= 3 ? { r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1 } : null;
+  };
   const blend = (fg, bg) => ({ r: fg.r*fg.a+bg.r*(1-fg.a), g: fg.g*fg.a+bg.g*(1-fg.a), b: fg.b*fg.a+bg.b*(1-fg.a), a: 1 });
   const lum = (c) => { const f=[c.r,c.g,c.b].map((v)=>{const x=v/255; return x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4;}); return 0.2126*f[0]+0.7152*f[1]+0.0722*f[2]; };
   const contrast = (a,b) => { const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x); return (hi+0.05)/(lo+0.05); };
@@ -173,7 +189,7 @@ const FOCUS_AUDIT = `(() => {
     }
     const sh = cs.boxShadow || '';
     if (sh && sh !== 'none') {
-      const c = parse(sh);
+      const c = parseColour(sh);
       if (c && c.a > 0) list.push({ c, how: 'box-shadow ' + sh.slice(0, 46) });
     }
     const bc = parse(cs.borderTopColor);
