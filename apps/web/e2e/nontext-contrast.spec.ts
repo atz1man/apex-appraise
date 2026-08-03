@@ -244,8 +244,7 @@ const setTheme = async (page: Page, theme: 'light' | 'dark') => {
   }, theme);
 };
 
-test('controls and focus indicators meet the 3:1 non-text rule', async ({ page }) => {
-  test.setTimeout(600_000);
+async function runNonTextSweep(page: Page) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -309,4 +308,18 @@ test('controls and focus indicators meet the 3:1 non-text rule', async ({ page }
   }
 
   expect(findings.map((f) => `${f.theme} ${f.route} ${f.kind}: ${f.detail} ${f.ratio}:1`)).toEqual([]);
+}
+
+test('controls and focus indicators meet the 3:1 non-text rule', async ({ page }) => {
+  test.setTimeout(600_000);
+  await runNonTextSweep(page);
+});
+
+/** Controls reflow, stack and gain tap targets on a phone. */
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test('controls and focus indicators meet 3:1 at 390px', async ({ page }) => {
+    test.setTimeout(600_000);
+    await runNonTextSweep(page);
+  });
 });

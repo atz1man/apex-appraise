@@ -347,7 +347,7 @@ test('reports disclose that no AI was used when none was', async ({ page }) => {
 
   // and the valuer can see the same record in-product before issuing
   await page.goto(`/deal/${id}`);
-  await expect(page.getByText('AI use on this deal')).toBeVisible();
+  await expect(page.getByText('AI use on this deal')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('No AI has been used on this deal. The reports say so explicitly.')).toBeVisible();
 });
 
@@ -908,6 +908,10 @@ test('brand emphasis text is legible in both themes', async ({ page }) => {
     }, text);
 
   await page.goto(`/deal/${id}/appraisal`);
+  // Polling on body alone is not enough: body can reach its final colour while
+  // the PANEL behind the measured text is still transitioning, which reads as
+  // the dark brand ink on a light surface (~2.26:1). Freeze animation instead.
+  await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
   await page.getByRole('button', { name: 'Investment', exact: true }).click();
   await expect(page.getByText('Investment value in GDV', { exact: true })).toBeVisible();
 

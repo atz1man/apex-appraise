@@ -226,8 +226,7 @@ const setTheme = async (page: Page, theme: 'light' | 'dark') => {
   }, theme);
 };
 
-test('chart marks are distinguishable from their background and each other', async ({ page }) => {
-  test.setTimeout(600_000);
+async function runGraphicsSweep(page: Page, minMarks: number) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -293,17 +292,37 @@ test('chart marks are distinguishable from their background and each other', asy
   }
 
   // a sweep that measured nothing would pass silently — prove it saw the charts
-  console.log(`\nmeasured ${totalMeasured} marks, ${totalSeries} declared series across the sweep`);
+  // state the viewport the sweep actually ran at: a "mobile" run that silently
+  // used the desktop width would be green for the wrong reason
+  const env = await page.evaluate(() => ({ width: window.innerWidth, narrow: window.matchMedia('(max-width: 640px)').matches }));
+  console.log(`\nmeasured ${totalMeasured} marks, ${totalSeries} declared series at ${env.width}px (narrow chart variant: ${env.narrow})`);
   console.log('  ' + perRoute.join('\n  '));
   // Floors set from what the sweep actually measures (146 marks / 8 series), not
   // a guess: they exist to catch a chart that stopped rendering, which would
   // otherwise turn this suite silently green.
-  expect(totalMeasured).toBeGreaterThan(120);
+  expect(totalMeasured).toBeGreaterThan(minMarks);
   expect(totalSeries).toBeGreaterThanOrEqual(8);
 
   expect(
     findings.map((f) => `${f.theme} ${f.route} ${f.kind}: ${f.colour} vs ${f.against} ${f.kind === 'series-vs-series' ? 'ΔE ' + f.ratio : f.ratio + ':1'}`),
   ).toEqual([]);
+}
+
+test('chart marks are distinguishable from their background and each other', async ({ page }) => {
+  test.setTimeout(600_000);
+  await runGraphicsSweep(page, 120);
+});
+
+/**
+ * The charts swap to a NARROW variant below 640px — a different viewBox, tick
+ * density and bar geometry. That code path had never been measured.
+ */
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test('chart marks hold up at 390px', async ({ page }) => {
+    test.setTimeout(600_000);
+    await runGraphicsSweep(page, 60);
+  });
 });
 
 /**

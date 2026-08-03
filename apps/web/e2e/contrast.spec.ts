@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 
 /**
  * Both-theme contrast audit.
@@ -149,8 +149,8 @@ const signIn = async (page: Page, email?: string) => {
   await page.waitForLoadState('networkidle').catch(() => {});
 };
 
-test('no AA contrast failures on any screen, in either theme', async ({ page, browser }) => {
-  test.setTimeout(600_000);
+/** The whole sweep, so it can be run at more than one viewport. */
+async function runTextSweep(page: Page, browser: Browser, viewport: { width: number; height: number } | null) {
   await signIn(page);
   await expect(page.getByText('Deal tools')).toBeVisible();
 
@@ -245,7 +245,7 @@ test('no AA contrast failures on any screen, in either theme', async ({ page, br
     ],
   ];
   for (const [email, list] of personas) {
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext(viewport ? { viewport } : {});
     const p = await ctx.newPage();
     if (email) {
       await signIn(p, email);
@@ -310,4 +310,23 @@ test('no AA contrast failures on any screen, in either theme', async ({ page, br
     unexpected.map((f) => `${f.theme} ${f.route}: "${f.text}" ${f.ratio}:1 ${f.color} on ${f.background}`),
   ).toEqual([]);
   expect(grown).toEqual([]);
+}
+
+test('no AA contrast failures on any screen, in either theme', async ({ page, browser }) => {
+  test.setTimeout(600_000);
+  await runTextSweep(page, browser, null);
+});
+
+/**
+ * A phone is not a narrow desktop: panels stack, sticky bars appear, labels
+ * wrap and truncate, and the charts swap to a narrow variant entirely. Colour
+ * pairings that never meet at 1280px can meet here.
+ */
+test.describe('on a phone', () => {
+  const PHONE = { width: 390, height: 844 };
+  test.use({ viewport: PHONE });
+  test('no AA contrast failures at 390px, in either theme', async ({ page, browser }) => {
+    test.setTimeout(600_000);
+    await runTextSweep(page, browser, PHONE);
+  });
 });

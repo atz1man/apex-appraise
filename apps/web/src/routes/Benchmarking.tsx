@@ -299,7 +299,9 @@ export default function Benchmarking() {
                               <div key={t.period} className="flex-1 h-full relative flex items-end justify-center">
                                 {/* market median bar with value label */}
                                 <div className="relative w-[46%] rounded-t-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))', height: `${hOf(t.marketMedian)}%` }}>
-                                  <span className="absolute -top-[13px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink-3 whitespace-nowrap">
+                                  {/* same as the deal label below: it sits over the muted bar
+                                      at phone widths (3.11:1 dark, 4.12:1 light) */}
+                                  <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink-2 whitespace-nowrap bg-surface rounded-[4px] px-1 leading-[1.35]">
                                     £{Math.round(t.marketMedian)}
                                   </span>
                                 </div>
@@ -311,7 +313,10 @@ export default function Benchmarking() {
                                     style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
                                     title={`${o.dealName ?? 'Your deal'} — £${Math.round(o.value)}/ft²`}
                                   >
-                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink whitespace-nowrap">
+                                    {/* a floating value label lands wherever the dot is: over the
+                                        panel at desktop widths, over the dot's own fill at 390px
+                                        (1.78:1). Its own surface chip makes it legible either way. */}
+                                    <span className="absolute -top-[15px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink whitespace-nowrap bg-surface rounded-[4px] px-1 leading-[1.35]">
                                       £{Math.round(o.value)}
                                     </span>
                                   </div>
