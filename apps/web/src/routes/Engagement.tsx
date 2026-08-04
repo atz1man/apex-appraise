@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { trpc, getToken } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { useToast } from '../components/Toast';
-import { Button, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
+import { Button, Listbox, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
 /**
@@ -137,7 +137,15 @@ export default function Engagement() {
     },
     onError: (e) => toast.error(e.message),
   });
+  const revokeLink = trpc.engagement.revokeLink.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success('Link revoked — the client can no longer sign it');
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const [copied, setCopied] = useState(false);
+  const [expiryDays, setExpiryDays] = useState(30);
   const signUrl = saved?.signToken ? `${window.location.origin}/terms/${saved.signToken}` : null;
   const accept = trpc.engagement.accept.useMutation({
     onSuccess: () => {
@@ -289,24 +297,54 @@ export default function Engagement() {
               <div className="flex flex-col gap-2.5 text-[12.5px]">
                 <Row k="State" v={status === 'DRAFT' ? 'Draft — not yet with the client' : status === 'ISSUED' ? 'Issued, awaiting acceptance' : 'Accepted by the client'} />
                 <Row k="Issued" v={saved?.issuedAt ? fmtDate(saved.issuedAt) : '—'} />
+                {status === 'ISSUED' && (
+                  <Row
+                    k="Link"
+                    v={
+                      saved?.linkExpired
+                        ? `Expired ${saved.signTokenExpiresAt ? fmtDate(saved.signTokenExpiresAt) : ''}`.trim()
+                        : saved?.signTokenExpiresAt
+                          ? `Valid until ${fmtDate(saved.signTokenExpiresAt)}`
+                          : '—'
+                    }
+                  />
+                )}
                 <Row k="Accepted" v={saved?.acceptedAt ? `${fmtDate(saved.acceptedAt)} · ${saved.acceptedBy}` : '—'} />
                 <Row k="Liability cap" v={terms.liabilityCap ? fM(terms.liabilityCap) : 'None stated'} />
               </div>
 
               <div className="mt-3.5 border-t border-border-std pt-3.5 flex flex-col gap-2.5">
                 {status === 'DRAFT' && (
-                  <Button
-                    size="sm"
-                    loading={issue.isPending}
-                    disabled={dirty || !saved?.saved}
-                    onClick={() => issue.mutate(dealId)}
-                  >
-                    Issue to client
-                  </Button>
+                  <>
+                    <label className="block">
+                      <span className="label-mono text-ink-3 block mb-1">Link valid for</span>
+                      <Listbox
+                        ariaLabel="Link valid for"
+                        value={String(expiryDays)}
+                        onChange={(v: string) => setExpiryDays(Number(v))}
+                        options={[
+                          { value: '7', label: '7 days' },
+                          { value: '14', label: '14 days' },
+                          { value: '30', label: '30 days' },
+                          { value: '90', label: '90 days' },
+                        ]}
+                      />
+                    </label>
+                    <Button
+                      size="sm"
+                      loading={issue.isPending}
+                      disabled={dirty || !saved?.saved}
+                      onClick={() => issue.mutate({ dealId, expiryDays })}
+                    >
+                      Issue to client
+                    </Button>
+                  </>
                 )}
                 {status === 'ISSUED' && signUrl && (
                   <div className="rounded-[10px] bg-sunken-2 px-3 py-2.5">
-                    <div className="label-mono text-ink-3">Signing link — send this to the client</div>
+                    <div className="label-mono text-ink-3">
+                      {saved?.linkExpired ? 'Signing link — EXPIRED, the client cannot sign' : 'Signing link — send this to the client'}
+                    </div>
                     <div className="fig mt-1 text-[10.5px] text-ink-2 break-all leading-snug">{signUrl}</div>
                     <div className="mt-2 flex gap-1.5">
                       <Button
@@ -326,6 +364,20 @@ export default function Engagement() {
                     </div>
                     <div className="mt-2 text-[11px] text-ink-3 leading-snug">
                       Anyone with the link can sign, so treat it like the document itself. Withdrawing or reissuing revokes it.
+                      {saved?.signTokenExpiresAt && !saved.linkExpired && (
+                        <> It stops working on <b className="font-semibold">{fmtDate(saved.signTokenExpiresAt)}</b>.</>
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-1.5">
+                      {saved?.linkExpired ? (
+                        <Button size="sm" loading={issue.isPending} onClick={() => issue.mutate({ dealId, expiryDays })}>
+                          Reissue link
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="secondary" loading={revokeLink.isPending} onClick={() => revokeLink.mutate(dealId)}>
+                          Revoke link
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}

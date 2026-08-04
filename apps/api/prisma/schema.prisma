@@ -387,6 +387,8 @@ model EngagementTerms {
   // e-signature: the client opens /terms/<signToken> and signs; the evidence
   // trail (typed name, time, IP, user agent) is what makes it hold up later
   signToken       String?
+  // a signing link is a bearer credential: it stops working on its own
+  signTokenExpiresAt DateTime?
   signedName      String?
   signedAt        DateTime?
   signedIp        String?

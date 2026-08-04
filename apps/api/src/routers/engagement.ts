@@ -5,6 +5,13 @@ import { internalProcedure, publicProcedure, router } from '../trpc.js';
 import { AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { toPence, P } from '../mappers.js';
 
+/** How long a signing link stays live unless the valuer chooses otherwise. */
+const DEFAULT_LINK_DAYS = 30;
+
+/** A link is dead once it has expired — but a SIGNED document stays readable. */
+const linkExpired = (row: { signTokenExpiresAt: Date | null }) =>
+  !!row.signTokenExpiresAt && row.signTokenExpiresAt.getTime() <= Date.now();
+
 /**
  * Terms of engagement — RICS Red Book VPS 1. The written agreement that has to
  * be settled with the client BEFORE a valuation is reported, covering the
@@ -138,7 +145,14 @@ export const engagementRouter = router({
       ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
     ]);
     const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
-    if (row) return { saved: true, ...shape(row, org?.name ?? 'Apex Appraise'), orgLogoUrl: org?.logoUrl ?? '' };
+    if (row)
+      return {
+        saved: true,
+        ...shape(row, org?.name ?? 'Apex Appraise'),
+        orgLogoUrl: org?.logoUrl ?? '',
+        signTokenExpiresAt: row.signTokenExpiresAt,
+        linkExpired: linkExpired(row),
+      };
     return {
       saved: false,
       id: null,
@@ -179,9 +193,18 @@ export const engagementRouter = router({
     }),
 
   /** Freeze and date the terms — this is the version the client sees. */
-  issue: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const deal = await assertDeal(ctx, input);
-    const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
+  issue: internalProcedure
+    .input(
+      z.union([
+        z.string(),
+        z.object({ dealId: z.string(), expiryDays: z.number().int().min(1).max(180).optional() }),
+      ]),
+    )
+    .mutation(async ({ ctx, input }) => {
+    const dealId = typeof input === 'string' ? input : input.dealId;
+    const expiryDays = typeof input === 'string' ? DEFAULT_LINK_DAYS : input.expiryDays ?? DEFAULT_LINK_DAYS;
+    const deal = await assertDeal(ctx, dealId);
+    const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId, orgId: ctx.principal.orgId } });
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save the terms before issuing them.' });
     if (!row.clientName.trim())
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Name the client before issuing — terms of engagement are addressed to someone.' });
@@ -194,6 +217,7 @@ export const engagementRouter = router({
         acceptedAt: null,
         acceptedBy: null,
         signToken: randomBytes(24).toString('hex'),
+        signTokenExpiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000),
         signedName: null,
         signedAt: null,
         signedIp: null,
@@ -203,13 +227,43 @@ export const engagementRouter = router({
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
-        dealId: input,
+        dealId,
         actor: ctx.principal.name,
         action: 'issued terms of engagement for',
+        target: `${deal.name} — ${row.clientName} · link valid ${expiryDays} days`,
+      },
+    });
+    return {
+      status: updated.status,
+      issuedAt: updated.issuedAt,
+      signToken: updated.signToken,
+      signTokenExpiresAt: updated.signTokenExpiresAt,
+    };
+  }),
+
+  /**
+   * Kill an outstanding link without unpicking the terms. Withdrawing returns
+   * the whole set to draft; this only stops the link a client was sent — the
+   * right action when a link goes astray or the wrong address was used.
+   */
+  revokeLink: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const deal = await assertDeal(ctx, input);
+    const row = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    if (!row?.signToken) throw new TRPCError({ code: 'BAD_REQUEST', message: 'There is no live link to revoke.' });
+    await ctx.prisma.engagementTerms.update({
+      where: { id: row.id },
+      data: { signTokenExpiresAt: new Date() },
+    });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input,
+        actor: ctx.principal.name,
+        action: 'revoked the signing link for',
         target: `${deal.name} — ${row.clientName}`,
       },
     });
-    return { status: updated.status, issuedAt: updated.issuedAt, signToken: updated.signToken };
+    return { ok: true };
   }),
 
   /** Record the client's written acceptance (name + date), audited. */
@@ -246,6 +300,15 @@ export const engagementRouter = router({
   publicGet: publicProcedure.input(z.object({ token: z.string().min(16).max(96) })).query(async ({ ctx, input }) => {
     const row = await ctx.prisma.engagementTerms.findFirst({ where: { signToken: input.token } });
     if (!row || row.status === 'DRAFT') throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is no longer valid.' });
+    /**
+     * An expired link cannot be signed, but someone who ALREADY signed keeps
+     * access to their own executed copy — they are entitled to it, and the
+     * token they hold proves it. Saying "expired" rather than "invalid" leaks
+     * nothing an unguessable 24-byte token has not already established.
+     */
+    if (linkExpired(row) && row.status !== 'ACCEPTED') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link has expired. Ask the sender for a new one.' });
+    }
     const [deal, org] = await Promise.all([
       ctx.prisma.deal.findUnique({ where: { id: row.dealId } }),
       ctx.prisma.organisation.findUnique({ where: { id: row.orgId } }),
@@ -276,6 +339,9 @@ export const engagementRouter = router({
     .mutation(async ({ ctx, input }) => {
       const row = await ctx.prisma.engagementTerms.findFirst({ where: { signToken: input.token } });
       if (!row || row.status === 'DRAFT') throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is no longer valid.' });
+      if (linkExpired(row)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This signing link has expired. Ask the sender for a new one.' });
+      }
       if (row.status === 'ACCEPTED') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'These terms have already been signed.' });
       }
@@ -319,6 +385,7 @@ export const engagementRouter = router({
         acceptedBy: null,
         // revoke the signing link — a withdrawn set of terms must not stay signable
         signToken: null,
+        signTokenExpiresAt: null,
         signedName: null,
         signedAt: null,
         signedIp: null,

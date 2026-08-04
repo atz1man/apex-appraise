@@ -675,6 +675,11 @@ test('a revoked or unknown signing link cannot be used', async ({ page }) => {
  * Firm-level policy: the AI note the reports carry, and the house style new
  * terms of engagement draft from.
  */
+/**
+ * DEPENDS ON A PRISTINE DEAL: it asserts that a FRESH draft inherits the firm's
+ * defaults, which only happens while Clovelly has no saved terms row. Any test
+ * (or hand-poke) that saves terms there breaks this until the next reseed.
+ */
 test('firm policy sets the AI note and the terms house style', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
@@ -1079,4 +1084,116 @@ test('the DCF cross-checks the capitalisation without moving GDV', async ({ page
   await page.getByLabel('Rental growth (% pa)').fill('0');
   await expect.poll(yieldAt).not.toBe(withGrowth);
   expect(await yieldAt()).toBeLessThan(withGrowth);
+});
+
+/**
+ * Signing links expire. A link is a bearer credential — one sitting in an old
+ * email must stop working on its own, not only when someone remembers to
+ * withdraw it.
+ */
+test('a signing link expires, and an expired one cannot sign', async ({ page, browser }) => {
+  test.setTimeout(90_000); // two browser contexts and a full issue → sign → revoke walk
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  /**
+   * This test SAVES terms, so it needs a deal no other test reads as a fresh
+   * draft. Currently claimed: Northgate, Kingsway, Harbour (appraisals),
+   * Westover (contrast sweep), Clovelly (firm-policy defaults), Southbourne
+   * (signing walk), Elm Grove. Stour Valley is this test's.
+   */
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Stour')).id;
+  });
+
+  const issue = async (dealId: string) =>
+    page.evaluate(async (deal) => {
+      const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+      const terms = {
+        clientName: 'Expiry Test Ltd', clientAddress: '', otherUsers: 'None.', purpose: 'Loan security.',
+        interest: 'Freehold.', basisOfValue: 'Market Value', valuationDate: null,
+        extentOfInvestigation: 'Inspection.', sourcesOfInformation: 'Client.', assumptions: 'Standard.',
+        specialAssumptions: 'None.', reportFormat: 'PDF.', restrictionsOnUse: 'None.', feeBasis: 'Fixed.',
+        liabilityCap: null, complaintsProcedure: 'RICS.', aiUse: 'May be used.',
+        valuerName: 'Dana Whitlock MRICS', valuerReg: 'RICS Registered Valuer',
+      };
+      await fetch('/trpc/engagement.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId: deal, terms } }) });
+      const res = await fetch('/trpc/engagement.issue', {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ json: { dealId: deal, expiryDays: 7 } }),
+      });
+      const j = await res.json();
+      return j.result.data.json as { signToken: string; signTokenExpiresAt: string };
+    }, dealId);
+
+  const first = await issue(id);
+  expect(first.signToken).toBeTruthy();
+  // the window is recorded, roughly seven days out
+  const days = (new Date(first.signTokenExpiresAt).getTime() - Date.now()) / 86_400_000;
+  expect(days).toBeGreaterThan(6.9);
+  expect(days).toBeLessThan(7.1);
+
+  // the valuer sees when it dies
+  await page.goto(`/deal/${id}/engagement`);
+  await expect(page.getByText('Valid until', { exact: false })).toBeVisible();
+  await expect(page.getByText(/It stops working on/)).toBeVisible();
+
+  // a live link signs fine
+  const client = await browser.newContext();
+  const clientPage = await client.newPage();
+  await clientPage.goto(`/terms/${first.signToken}`);
+  await expect(clientPage.getByText('Sign these terms')).toBeVisible();
+
+  // revoking expires it immediately — the valuer's own kill switch
+  await page.getByRole('button', { name: 'Revoke link' }).click();
+  await expect(page.getByText(/EXPIRED, the client cannot sign/)).toBeVisible();
+
+  // the client's page now says so, and signing is refused
+  await clientPage.goto(`/terms/${first.signToken}`);
+  await expect(clientPage.getByText('This signing link has expired')).toBeVisible();
+  const refused = await clientPage.evaluate(async (token) => {
+    const res = await fetch('/trpc/engagement.sign', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ json: { token, name: 'Someone Late', agreed: true } }),
+    });
+    return (await res.json()).error?.json?.message ?? 'no error';
+  }, first.signToken);
+  expect(refused).toMatch(/expired/i);
+
+  // reissuing mints a NEW link and the old token stays dead
+  const second = await issue(id);
+  expect(second.signToken).not.toBe(first.signToken);
+  await clientPage.goto(`/terms/${second.signToken}`);
+  await expect(clientPage.getByText('Sign these terms')).toBeVisible();
+  await clientPage.goto(`/terms/${first.signToken}`);
+  await expect(clientPage.getByText(/no longer valid|has expired/)).toBeVisible();
+
+  /**
+   * A signed document survives its link expiring. Expiry stops SIGNING, not a
+   * client reading the copy they already executed — they are entitled to it,
+   * and holding the token proves they were the signatory.
+   */
+  await clientPage.goto(`/terms/${second.signToken}`);
+  await clientPage.getByLabel('Full name').fill('Jane Marchmont');
+  await clientPage.getByLabel('I agree to these terms of engagement').check();
+  await clientPage.getByRole('button', { name: 'Sign and return' }).click();
+  await expect(clientPage.getByText('Thank you — these terms are signed')).toBeVisible();
+
+  // revoke through the API: once the terms are ACCEPTED the button is gone from
+  // the screen, which is correct — there is nothing left to sign
+  await page.evaluate(async (dealId) => {
+    await fetch('/trpc/engagement.revokeLink', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ json: dealId }),
+    });
+  }, id);
+  await clientPage.goto(`/terms/${second.signToken}`);
+  await expect(clientPage.getByText('Thank you — these terms are signed')).toBeVisible();
+  await client.close();
 });

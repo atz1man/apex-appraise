@@ -27,13 +27,21 @@ export default function SignTerms() {
   }
 
   if (error || !t) {
+    // the API distinguishes an expired link from an unknown one: only someone
+    // holding a real (unguessable) token can see the expiry message, so it
+    // gives the client something actionable without telling a stranger anything
+    const expired = /expired/i.test(error?.message ?? '');
     return (
       <div className="light min-h-screen bg-frame flex items-center justify-center px-5">
         <div className="bg-surface border border-border-strong rounded-card shadow-rest max-w-[440px] w-full p-8 text-center">
           <BrandMark size={34} />
-          <div className="mt-4 text-[17px] font-semibold tracking-[-0.3px]">This signing link is no longer valid</div>
+          <div className="mt-4 text-[17px] font-semibold tracking-[-0.3px]">
+            {expired ? 'This signing link has expired' : 'This signing link is no longer valid'}
+          </div>
           <p className="mt-2 text-[13px] text-ink-2 leading-relaxed">
-            The terms may have been withdrawn or reissued. Please ask the sender for a current link.
+            {expired
+              ? 'Signing links stop working after a set period. Ask the sender to issue a new one — nothing you have already signed is affected.'
+              : 'The terms may have been withdrawn or reissued. Please ask the sender for a current link.'}
           </p>
         </div>
       </div>
