@@ -539,12 +539,14 @@ test('phases price independently and carry their own costs', async ({ page }) =>
   await page.goto(`/deal/${id}/appraisal`);
   await page.getByRole('button', { name: 'Phases', exact: true }).click();
 
-  // phase A overrides the rate and the contingency; phase B inherits both
-  await expect(page.getByLabel('Phase A — quayside block build rate')).toHaveValue('206');
+  // phase A prices off the scheme and overrides the contingency; phase B inherits.
+  // The single blended-rate input this used to assert on became a read-only rate
+  // plus a full trade breakdown, so the same intent is checked on the new UI.
+  await expect(page.getByText('£206').first()).toBeVisible();
+  await expect(page.getByText('phase rates').first()).toBeVisible();
   await expect(page.getByLabel('Phase A — quayside block contingency')).toHaveValue('7');
-  const inherited = page.getByLabel('Phase B — courtyard block build rate');
-  await expect(inherited).toHaveValue('');
-  await expect(inherited).toHaveAttribute('placeholder', /scheme/);
+  await expect(page.getByText('scheme rates').first()).toBeVisible();
+  await expect(page.getByText('Trades — inherited from the scheme')).toBeVisible();
 
   // the remediation is booked to phase A, timed from the phase's own month 1
   await expect(page.getByLabel('Phase A — quayside block cost 1 label')).toHaveValue('Quayside remediation');
@@ -986,4 +988,39 @@ test('brand emphasis text is legible in both themes', async ({ page }) => {
     return (hi + 0.05) / (lo + 0.05);
   });
   await expect.poll(measureRail, { message: 'unselected toggle label on the light rail' }).toBeGreaterThan(4.5);
+});
+
+/**
+ * Per-phase trade breakdown — a phase inherits the scheme's trades until it
+ * needs its own, and each of its trades can carry a window timed from the
+ * phase's first month on site.
+ */
+test('a phase breaks down by trade, or inherits the scheme', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+  await page.getByRole('button', { name: 'Phases', exact: true }).click();
+
+  // phase A prices off the scheme and states so
+  await expect(page.getByText('Trades — this phase')).toBeVisible();
+  await expect(page.getByLabel('Phase A — quayside block trade 1 label')).toHaveValue('Piling & basement');
+  await expect(page.getByLabel('Phase A — quayside block Piling & basement rate per sq ft')).toHaveValue('38');
+  // phase B inherits, so its trades are shown but not editable
+  await expect(page.getByText('Trades — inherited from the scheme')).toBeVisible();
+  await expect(page.getByLabel('Phase B — courtyard block trade 1 label')).toHaveCount(0);
+
+  // breaking phase B down seeds a copy of the scheme's trades to edit
+  await page.getByRole('button', { name: 'Break down by trade' }).click();
+  await expect(page.getByLabel('Phase B — courtyard block trade 1 label')).toHaveValue('Groundworks & substructure');
+  await expect(page.getByText('Trades — inherited from the scheme')).toHaveCount(0);
+
+  // and reverting hands it back to the scheme
+  await page.getByRole('button', { name: 'Use scheme trades' }).last().click();
+  await expect(page.getByText('Trades — inherited from the scheme')).toBeVisible();
 });

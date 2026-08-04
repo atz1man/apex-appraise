@@ -367,6 +367,10 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
           nia: pNia,
           gia: pGia,
           gdv: p.units.reduce((a, u) => a + u.count * u.area * u.cap, 0) * salesMult,
+          trades: p.trades?.length ? p.trades : input.trades,
+          ownTrades: !!p.trades?.length,
+          feePct: p.profFeePct ?? input.profFeePct,
+          contPct: p.contingencyPct ?? input.contingencyPct,
           buildRate: pRate,
           build: pBuild,
           fees: pFees,
@@ -436,7 +440,23 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
       for (let i = 0; i < span; i++) constrSeries[start + i] += amount * w[i];
     };
     for (const p of phaseCalc) {
-      spreadPhase(p.cost, p.start, p.buildMonths);
+      // A phase's trades may carry their own windows, timed RELATIVE TO THE
+      // PHASE. Without timing the phase's construction spreads as one profile
+      // across its window — the original arithmetic, kept exactly.
+      if (p.trades.some((t) => t.timing)) {
+        const onCosts = 1 + (p.feePct + p.contPct) / 100;
+        for (const t of p.trades) {
+          const amount = t.rate * buildMult * p.gia * onCosts;
+          spreadFrom(
+            amount,
+            p.start + (Math.round(t.timing?.start ?? 1) - 1),
+            t.timing?.months ?? p.buildMonths,
+            t.timing?.profile,
+          );
+        }
+      } else {
+        spreadPhase(p.cost, p.start, p.buildMonths);
+      }
       // a phase's own costs are timed RELATIVE TO THE PHASE — start 1 is the
       // phase's first month on site, not the project's
       for (const o of p.otherCosts) {
@@ -547,7 +567,7 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     ...(income ? { income } : {}),
     ...(phaseCalc
       ? {
-          phases: phaseCalc.map(({ share: _share, otherCosts: _oc, ...p }) => p),
+          phases: phaseCalc.map(({ share: _s, otherCosts: _oc, feePct: _f, contPct: _c, ...p }) => p),
         }
       : {}),
     buildRate,

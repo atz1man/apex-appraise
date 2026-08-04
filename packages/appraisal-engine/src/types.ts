@@ -207,6 +207,10 @@ export interface PhaseResult {
   gdv: number;
   /** £/ft² applied to this phase (its own trades, or the scheme's) */
   buildRate: number;
+  /** the trade list actually used — the phase's own, or the scheme's */
+  trades: BuildTrade[];
+  /** true when the phase overrides the scheme's trade list */
+  ownTrades: boolean;
   build: number;
   fees: number;
   cont: number;

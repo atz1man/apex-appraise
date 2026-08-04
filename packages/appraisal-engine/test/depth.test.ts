@@ -752,3 +752,68 @@ describe('deductions across a reversionary rent roll', () => {
     expect(r.netErv).toBeGreaterThan(r.netRent);
   });
 });
+
+describe('per-phase trade timing', () => {
+  const twoPhases = (t1: AppraisalInput['trades']) => ({
+    ...phasedBase,
+    otherCosts: [],
+    phases: [
+      { ...phaseOf('Phase 1', 1, [twoPhaseUnits[0]]), trades: t1 },
+      phaseOf('Phase 2', 14, [twoPhaseUnits[1]]),
+    ],
+  });
+
+  it('spreads a phase trade across its own window when it carries no timing', () => {
+    const R = computeAppraisal(twoPhases([{ label: 'Build', rate: 180 }]), { withCash: true });
+    const rows = R.cash!.rows;
+    const perMonth = R.phases![0].cost / 10; // 'even' profile over a 10-month phase
+    for (let m = 0; m < 10; m++) expect(rows[m].cost - (m === 0 ? R.landGross : 0)).toBeCloseTo(perMonth, 6);
+  });
+
+  it('times a trade RELATIVE TO THE PHASE, not the project', () => {
+    // phase 1 starts at month 1, so its month 3 is project month 3
+    const R = computeAppraisal(
+      twoPhases([
+        { label: 'Substructure', rate: 60, timing: { start: 1, months: 2, profile: 'even' } },
+        { label: 'Fit-out', rate: 120, timing: { start: 3, months: 2, profile: 'even' } },
+      ]),
+      { withCash: true },
+    );
+    const rows = R.cash!.rows;
+    const on = 1 + (base.profFeePct + base.contingencyPct) / 100;
+    const gia = R.phases![0].gia;
+    expect(rows[0].cost - R.landGross).toBeCloseTo((60 * gia * on) / 2, 6); // months 1-2
+    expect(rows[2].cost).toBeCloseTo((120 * gia * on) / 2, 6); // months 3-4
+    expect(rows[4].cost).toBeCloseTo(0, 6); // nothing left in phase 1
+    // the phase still costs exactly what its trades add up to
+    expect(R.phases![0].cost).toBeCloseTo((60 + 120) * gia * on, 6);
+  });
+
+  it('offsets phase-2 trade timing by that phase start', () => {
+    const R = computeAppraisal(
+      {
+        ...phasedBase,
+        otherCosts: [],
+        phases: [
+          phaseOf('Phase 1', 1, [twoPhaseUnits[0]]),
+          {
+            ...phaseOf('Phase 2', 14, [twoPhaseUnits[1]]),
+            trades: [{ label: 'Enabling', rate: 180, timing: { start: 1, months: 1 } }],
+          },
+        ],
+      },
+      { withCash: true },
+    );
+    // phase 2's "month 1" is project month 14, and it is a single lump there
+    const rows = R.cash!.rows;
+    expect(rows[13].cost).toBeCloseTo(R.phases![1].cost, 6);
+    expect(rows[14].cost).toBeCloseTo(0, 6);
+  });
+
+  it('spending later inside a phase costs less interest', () => {
+    const early = computeAppraisal(twoPhases([{ label: 'Build', rate: 180, timing: { start: 1, months: 2 } }]));
+    const late = computeAppraisal(twoPhases([{ label: 'Build', rate: 180, timing: { start: 9, months: 2 } }]));
+    expect(late.interest).toBeLessThan(early.interest);
+    expect(late.residualNet).toBeGreaterThan(early.residualNet);
+  });
+});

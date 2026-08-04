@@ -218,6 +218,35 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     }
     totalRow(pt, 10);
     ph.addRow([]);
+
+    /**
+     * Trade breakdown for any phase that prices differently from the scheme —
+     * a single blended rate hides WHY one phase costs what it does.
+     * Deliberately BELOW the totals: these rows carry money in the same columns
+     * the total row SUMs over, so inside the range they would silently double
+     * every itemised trade into the construction total.
+     */
+    if (R.phases.some((p) => p.ownTrades)) {
+      headerRow(ph, ['Trade breakdown (phases pricing off the scheme)', '', '', '', '', '', '£/sq ft', 'Cost', '', '']);
+      R.phases.forEach((p) => {
+        if (!p.ownTrades) return;
+        const head = ph.addRow([p.name, null, null, null, null, null, p.buildRate, Math.round(p.build), null, null]);
+        head.eachCell((c) => body(c));
+        head.getCell(1).font = { name: 'Arial', size: 10, bold: true };
+        head.getCell(7).numFmt = FMT_MONEY_PSF;
+        head.getCell(8).numFmt = FMT_MONEY;
+        for (let c = 7; c <= 8; c++) head.getCell(c).alignment = { horizontal: 'right' };
+        p.trades.forEach((t) => {
+          const r = ph.addRow([`    ${t.label}`, null, null, null, null, null, t.rate, Math.round(t.rate * p.gia), null, null]);
+          r.getCell(1).font = { name: 'Arial', size: 9, color: { argb: INK2 } };
+          r.getCell(7).numFmt = FMT_MONEY_PSF;
+          r.getCell(8).numFmt = FMT_MONEY;
+          for (let c = 7; c <= 8; c++) r.getCell(c).alignment = { horizontal: 'right' };
+        });
+      });
+      ph.addRow([]);
+    }
+
     const note = ph.addRow([
       `Phases share one facility: peak debt ${Math.round(R.facility).toLocaleString('en-GB')} against a ${R.period + R.salesMonths}-month programme. Receipts from a completed phase repay the facility while a later phase is still drawing.`,
     ]);

@@ -270,3 +270,76 @@ describe('buildAppraisalWorkbook — firm branding', async () => {
     expect(wb.creator).toBe('Marchmont & Co');
   });
 });
+
+/**
+ * Phased schemes: the Phases sheet totals with SUM over a range, so anything
+ * else written into those columns inside the range is added to the totals.
+ */
+describe('buildAppraisalWorkbook — phased with per-phase trades', async () => {
+  const phased: AppraisalInput = {
+    ...referenceCase,
+    units: [],
+    phases: [
+      {
+        name: 'Phase 1 — podium',
+        start: 1,
+        buildMonths: 10,
+        salesMonths: 3,
+        units: [{ label: 'Trade counter units', count: 6, area: 2600, cap: 225 }],
+        trades: [
+          { label: 'Piling & basement', rate: 44 },
+          { label: 'Frame', rate: 61 },
+        ],
+      },
+      {
+        name: 'Phase 2 — terrace',
+        start: 12,
+        buildMonths: 10,
+        salesMonths: 3,
+        units: [{ label: 'Mezzanine offices', count: 1, area: 3200, cap: 240 }],
+      },
+    ],
+  };
+  const R3 = computeAppraisal(phased, { withCash: true });
+  const jv3 = jvWaterfall(R3.equity, R3.profit, R3.holdYears, phased.jv!);
+  const wb3 = await buildAppraisalWorkbook({
+    dealName: 'Golden Fixture Works',
+    address: 'Bournemouth',
+    input: phased,
+    R: R3,
+    jv: jv3,
+    monthLabel,
+  });
+
+  it('itemises the trades of a phase that prices off the scheme', () => {
+    const ph = wb3.getWorksheet('Phases')!;
+    const labels: string[] = [];
+    ph.eachRow((row) => labels.push(String(row.getCell(1).value ?? '')));
+    expect(labels).toContain('    Piling & basement');
+    expect(labels).toContain('    Frame');
+    // phase 2 inherits, so it gets no breakdown block
+    expect(labels.filter((l) => l.startsWith('Phase 2'))).toHaveLength(1);
+  });
+
+  it('keeps the breakdown OUT of the summed range', () => {
+    const ph = wb3.getWorksheet('Phases')!;
+    let totalFormula = '';
+    let firstBreakdownRow = Infinity;
+    let totalRowNumber = 0;
+    ph.eachRow((row, n) => {
+      const label = String(row.getCell(1).value ?? '');
+      if (label === 'Total') {
+        totalFormula = String((row.getCell(8).value as { formula?: string })?.formula ?? '');
+        totalRowNumber = n;
+      }
+      if (label.startsWith('    ') && n < firstBreakdownRow) firstBreakdownRow = n;
+    });
+    expect(totalFormula).toMatch(/^SUM\(H\d+:H\d+\)$/);
+    // every itemised trade row sits after the total, so none is summed into it
+    expect(firstBreakdownRow).toBeGreaterThan(totalRowNumber);
+    const [, from, to] = totalFormula.match(/SUM\(H(\d+):H(\d+)\)/)!.map(Number);
+    expect(to).toBeLessThan(firstBreakdownRow);
+    // and the range covers exactly the two phase rows
+    expect(to - from + 1).toBe(2);
+  });
+});

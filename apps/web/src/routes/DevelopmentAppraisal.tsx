@@ -658,20 +658,13 @@ export default function DevelopmentAppraisal() {
                           <div className="mt-4 border-t border-border-std pt-3">
                             <div className="label-mono text-ink-3 mb-2">Cost overrides — blank inherits the scheme</div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <label className="block">
+                              <div className="block">
                                 <span className="label-mono text-ink-3 block mb-1">Build rate (£/ft²)</span>
-                                <input
-                                  type="number"
-                                  className="w-full fig"
-                                  aria-label={`${ph.name} build rate`}
-                                  placeholder={`${Math.round(schemeBuildRate)} (scheme)`}
-                                  value={ph.trades?.length ? ph.trades.reduce((a, t) => a + t.rate, 0) : ''}
-                                  onChange={(e) => {
-                                    const v = parseFloat(e.target.value);
-                                    setPhase(i, { trades: e.target.value === '' || !Number.isFinite(v) ? undefined : [{ label: `${ph.name} build`, rate: v }] });
-                                  }}
-                                />
-                              </label>
+                                <div className="fig text-[15px] font-semibold h-[38px] flex items-center">
+                                  £{Math.round(calc.buildRate)}
+                                  <span className="ml-2 label-mono text-ink-3">{ph.trades?.length ? 'phase rates' : 'scheme rates'}</span>
+                                </div>
+                              </div>
                               <label className="block">
                                 <span className="label-mono text-ink-3 block mb-1">Professional fees (%)</span>
                                 <input
@@ -694,6 +687,96 @@ export default function DevelopmentAppraisal() {
                                   onChange={(e) => setPhase(i, { contingencyPct: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
                                 />
                               </label>
+                            </div>
+
+                            {/* Trade breakdown. A phase inherits the scheme's trades until it
+                                needs its own — a podium is not a terrace — and each trade can
+                                carry its own window, timed from the PHASE's first month. */}
+                            <div className="mt-4 border-t border-border-faint pt-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="label-mono text-ink-3">
+                                  Trades — {ph.trades?.length ? 'this phase' : 'inherited from the scheme'}
+                                </span>
+                                {ph.trades?.length ? (
+                                  <Button variant="secondary" size="sm" onClick={() => setPhase(i, { trades: undefined })}>
+                                    Use scheme trades
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setPhase(i, { trades: input.trades.map((t) => ({ label: t.label, rate: t.rate })) })}
+                                  >
+                                    Break down by trade
+                                  </Button>
+                                )}
+                              </div>
+
+                              {(ph.trades?.length ? ph.trades : input.trades).map((t, ti) => {
+                                const own = !!ph.trades?.length;
+                                return (
+                                  <div key={ti} className="flex items-center gap-2.5 py-1.5 border-t border-border-faint first:border-t-0">
+                                    {own ? (
+                                      <input
+                                        className="flex-1 min-w-0"
+                                        aria-label={`${ph.name} trade ${ti + 1} label`}
+                                        value={t.label}
+                                        onChange={(e) => setPhase(i, { trades: ph.trades!.map((x, j) => (j === ti ? { ...x, label: e.target.value } : x)) })}
+                                      />
+                                    ) : (
+                                      <span className="flex-1 min-w-0 truncate text-[12.5px] text-ink-2">{t.label}</span>
+                                    )}
+                                    {own ? (
+                                      <input
+                                        type="number"
+                                        className="w-20 text-right fig"
+                                        aria-label={`${ph.name} ${t.label} rate per sq ft`}
+                                        value={t.rate}
+                                        onChange={(e) => setPhase(i, { trades: ph.trades!.map((x, j) => (j === ti ? { ...x, rate: parseFloat(e.target.value) || 0 } : x)) })}
+                                      />
+                                    ) : (
+                                      <span className="fig w-20 text-right text-[12.5px] text-ink-2">£{t.rate}</span>
+                                    )}
+                                    {own && (
+                                      <TimingFields
+                                        timing={t.timing}
+                                        buildMonths={ph.buildMonths}
+                                        onChange={(timing) => setPhase(i, { trades: ph.trades!.map((x, j) => (j === ti ? { ...x, timing } : x)) })}
+                                      />
+                                    )}
+                                    <span className="fig w-24 text-right text-[12px] text-ink-2">{fM(t.rate * calc.gia)}</span>
+                                    {own && (
+                                      <button
+                                        aria-label={`Remove ${t.label} from ${ph.name}`}
+                                        className="text-ink-3 hover:text-status-red px-1"
+                                        onClick={() => setPhase(i, { trades: ph.trades!.filter((_, j) => j !== ti) })}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+
+                              {ph.trades?.length ? (
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setPhase(i, { trades: [...ph.trades!, { label: 'New trade', rate: 0 }] })}
+                                  >
+                                    + Add trade
+                                  </Button>
+                                  <span className="fig text-[11.5px] text-ink-2">
+                                    £{Math.round(calc.buildRate)}/ft² · construction {fM(calc.build)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="mt-2 text-[11px] text-ink-3 leading-snug">
+                                  Timing runs from this phase's first month on site. Break the phase down to give a
+                                  trade its own rate or its own window.
+                                </div>
+                              )}
                             </div>
 
                             <div className="mt-3 flex items-center justify-between gap-3">

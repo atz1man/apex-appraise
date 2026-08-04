@@ -110,13 +110,15 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
           absorptionUnitsPerMonth: 4,
           // waterfront block: piled basement and a marine-grade envelope, and it
           // carries the remediation — priced and costed on the phase, not the scheme
+          // trades timed within the phase: piling first, fit-out last — the
+          // engine spreads each across its own window from the phase's month 1
           trades: [
-            { label: 'Piling & basement', rate: 38 },
-            { label: 'Frame & superstructure', rate: 52 },
-            { label: 'Envelope — marine grade', rate: 41 },
-            { label: 'M&E services', rate: 30 },
-            { label: 'Internal fit-out', rate: 33 },
-            { label: 'Externals & quay edge', rate: 12 },
+            { label: 'Piling & basement', rate: 38, timing: { start: 1, months: 4, profile: 'front' } },
+            { label: 'Frame & superstructure', rate: 52, timing: { start: 3, months: 6 } },
+            { label: 'Envelope — marine grade', rate: 41, timing: { start: 6, months: 5 } },
+            { label: 'M&E services', rate: 30, timing: { start: 7, months: 6 } },
+            { label: 'Internal fit-out', rate: 33, timing: { start: 9, months: 6, profile: 'back' } },
+            { label: 'Externals & quay edge', rate: 12, timing: { start: 12, months: 3 } },
           ],
           contingencyPct: 7,
           otherCosts: [{ label: 'Quayside remediation', amount: 180000, timing: { start: 1, months: 4 } }],
