@@ -124,6 +124,7 @@ model Appraisal {
   startYear  Int?
   startMonth Int?
   phases     String? // JSON Phase[] — phased programme; when set it owns the accommodation
+  dcf        String? // JSON DcfInput — growth-explicit cross-check on the capitalisation
   income     String? // JSON IncomeInput — held-and-let element valued by the investment method (rent in £/ft²/yr)
   resultCache String?
   narrative  String? // JSON {marketCommentary, valuationRationale, riskCommentary, generatedAt, model}

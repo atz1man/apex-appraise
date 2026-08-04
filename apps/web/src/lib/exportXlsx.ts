@@ -1,4 +1,4 @@
-import { monteCarlo, rollUpCashflow, sensitivityGrid } from '@apex/appraisal-engine';
+import { discountedCashflow, monteCarlo, rollUpCashflow, sensitivityGrid } from '@apex/appraisal-engine';
 import type { AppraisalInput, AppraisalResult, JvResult } from '@apex/appraisal-engine';
 import type ExcelJSNS from 'exceljs';
 
@@ -350,6 +350,47 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     const rrNote = rr.addRow(['Net rent is capitalised in perpetuity at the all-risks yield. The let-up void is a capital deduction, so the net initial yield sits above the capitalisation yield. Lettable area is included in GIA and carries its share of build cost.']);
     rrNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
     rrNote.getCell(1).alignment = { wrapText: true };
+    /**
+     * Growth-explicit DCF, when one is set. A CROSS-CHECK: the workbook's GDV
+     * stays on the capitalisation above, exactly as the screen and report do.
+     */
+    if (input.dcf) {
+      const d = discountedCashflow(input.income, input.dcf);
+      rr.addRow([]);
+      headerRow(rr, [
+        `Growth-explicit DCF — ${input.dcf.rentalGrowthPct}% growth, discounted at ${input.dcf.discountRatePct}%`,
+        '', '', '', '', '', 'Year', 'PV factor', 'Present value',
+      ]);
+      d.years.forEach((y) => {
+        const r = rr.addRow([
+          y.reviewed ? `    Year ${y.year} — review` : `    Year ${y.year}`,
+          null, null, null, null, Math.round(y.rent), y.year, y.discountFactor, Math.round(y.presentValue),
+        ]);
+        r.getCell(1).font = { name: 'Arial', size: 9, color: { argb: INK2 } };
+        r.getCell(6).numFmt = FMT_MONEY;
+        r.getCell(8).numFmt = '0.0000';
+        r.getCell(9).numFmt = FMT_MONEY;
+        for (let c = 6; c <= 9; c++) r.getCell(c).alignment = { horizontal: 'right' };
+      });
+      const dcfRows: Array<[string, number, string]> = [
+        ['PV of income over the hold', Math.round(d.incomePv), FMT_MONEY],
+        [`Exit at ${input.dcf.exitYieldPct}% on ${Math.round(d.exitRent).toLocaleString('en-GB')} pa`, Math.round(d.exitValueGross), FMT_MONEY],
+        ['Sale costs', -Math.round(d.exitCosts), FMT_MONEY],
+        ['PV of the sale', Math.round(d.exitPv), FMT_MONEY],
+        ['Net present value (cross-check only)', Math.round(d.netPresentValue), FMT_MONEY],
+        ['Equated yield', d.equatedYield, FMT_PCT],
+      ];
+      for (const [label, value, fmt] of dcfRows) {
+        const r = rr.addRow([label, null, null, null, null, null, null, null, value]);
+        body(r.getCell(1));
+        r.getCell(9).numFmt = fmt;
+        r.getCell(9).alignment = { horizontal: 'right' };
+        if (label.startsWith('Net present value')) totalRow(r, 9);
+      }
+      const dcfNote = rr.addRow(['The reported value remains the capitalisation above. A DCF states rental growth openly where the all-risks yield prices it implicitly; the equated yield is the discount rate at which the two agree.']);
+      dcfNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+    }
+
     rr.views = [{ state: 'frozen', ySplit: 5 }];
     rr.pageSetup = { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   }

@@ -1024,3 +1024,59 @@ test('a phase breaks down by trade, or inherits the scheme', async ({ page }) =>
   await page.getByRole('button', { name: 'Use scheme trades' }).last().click();
   await expect(page.getByText('Trades — inherited from the scheme')).toBeVisible();
 });
+
+/**
+ * Growth-explicit DCF — the cross-check on the capitalisation. It must never
+ * move GDV: the reported value stays on the all-risks capitalisation.
+ */
+test('the DCF cross-checks the capitalisation without moving GDV', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+  await page.goto(`/deal/${id}/appraisal`);
+
+  const gdvBefore = await page.getByText('Gross development value').locator('..').innerText();
+
+  await page.getByRole('button', { name: 'Investment', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Growth-explicit DCF' })).toBeVisible();
+  await expect(page.getByLabel('Hold (years)')).toHaveValue('10');
+  await expect(page.getByLabel('Rental growth (% pa)')).toHaveValue('2.5');
+  await expect(page.getByText('Net present value')).toBeVisible();
+  await expect(page.getByText('Equated yield', { exact: true })).toBeVisible();
+  // Reviews are marked where they land. Two lines on different cycles: the
+  // retail units review at 3 then 8 (they carry yearsToReview 3), the offices
+  // have none stated so they take the 5-year cycle — 5 then 10.
+  // exact: the containing cell also matches a substring search, double-counting
+  await expect(page.getByText('REVIEW', { exact: true })).toHaveCount(4);
+  await expect(page.getByText(/GDV stays on the capitalisation/)).toBeVisible();
+
+  // changing a DCF input moves the NPV but NOT the reported GDV
+  const npvAt2point5 = await page.getByText('Net present value', { exact: true }).locator('..').innerText();
+  await page.getByLabel('Rental growth (% pa)').fill('5');
+  await expect
+    .poll(() => page.getByText('Net present value', { exact: true }).locator('..').innerText())
+    .not.toBe(npvAt2point5); // the DCF moved
+  // ...and the reported value did not (innerText both sides: toHaveText normalises differently)
+  expect(await page.getByText('Gross development value').locator('..').innerText()).toBe(gdvBefore);
+
+  /**
+   * Growth is what separates the two methods, so removing it must pull the
+   * equated yield down toward the all-risks yield. The exact identity between
+   * DCF and capitalisation is an engine property — proven there on a single-rate
+   * roll; this roll carries per-line yields, its own reversion yield and a
+   * let-up deduction, so a single-rate DCF is NOT expected to match it.
+   */
+  const yieldAt = async () => {
+    const t = await page.getByText('Equated yield', { exact: true }).locator('..').innerText();
+    return Number(t.replace(/[^\d.]/g, ''));
+  };
+  const withGrowth = await yieldAt();
+  await page.getByLabel('Rental growth (% pa)').fill('0');
+  await expect.poll(yieldAt).not.toBe(withGrowth);
+  expect(await yieldAt()).toBeLessThan(withGrowth);
+});

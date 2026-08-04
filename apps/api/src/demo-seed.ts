@@ -234,6 +234,15 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
         { label: 'Planning & professional', amount: 2500000, timing: { start: 1, months: 2 } },
         { label: 'Marketing & letting fees', amount: 3500000, timing: { start: 13, months: 4 } },
       ]),
+      // growth-explicit cross-check on the capitalisation above
+      dcf: JSON.stringify({
+        holdYears: 10,
+        rentalGrowthPct: 2.5,
+        discountRatePct: 8,
+        exitYieldPct: 7.5,
+        exitCostsPct: 1.75,
+        reviewCycleYears: 5,
+      }),
       profFeePct: 11, contingencyPct: 5,
       ltcPct: 60, ratePct: 7.5, periodMonths: 12, salesMonths: 4, arrangementFeePct: 1.5,
       drawFactorPct: 55, spendProfile: 'SCURVE',

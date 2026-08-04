@@ -7,6 +7,9 @@ import type {
   ComparableInput,
   ComparablesSummary,
   CostTiming,
+  DcfInput,
+  DcfResult,
+  DcfYear,
   IncomeInput,
   IncomeLineResult,
   IncomeMethod,
@@ -288,6 +291,103 @@ export function capitaliseIncome(input: IncomeInput): IncomeResult {
     equivalentYield,
     capitalValuePsf: totalArea > 0 ? netCapitalValue / totalArea : 0,
     blendedRentPsf: totalArea > 0 ? grossRent / totalArea : 0,
+  };
+}
+
+/**
+ * Growth-explicit DCF over a held investment.
+ *
+ * Rent runs at the passing level until a review, steps to the ERV grown to that
+ * review date, and steps again every review cycle. At the end of the hold the
+ * running rent is capitalised at the exit yield, sale costs come off, and every
+ * flow is discounted at the target rate.
+ *
+ * Rent is treated as received annually in arrear — the convention UK valuers
+ * quote against, and the same convention the years-purchase figures assume, so
+ * the two methods reconcile.
+ */
+export function discountedCashflow(income: IncomeInput, dcf: DcfInput): DcfResult {
+  const cap = capitaliseIncome(income);
+  const years = Math.max(1, Math.round(dcf.holdYears));
+  const g = dcf.rentalGrowthPct / 100;
+  const d = dcf.discountRatePct / 100;
+  const cycle = Math.max(1, Math.round(dcf.reviewCycleYears ?? 5));
+
+  /**
+   * Net rent receivable in year t, and whether a review lands that year.
+   * Per line: the passing rent until its first review, then the ERV grown to
+   * the most recent review date. Line-level deductions are already netted by
+   * capitaliseIncome, so the DCF inherits exactly the same net figures.
+   */
+  const rentIn = (t: number, growth: number) => {
+    let rent = 0;
+    let reviewed = false;
+    for (const l of cap.lines) {
+      const first = l.yearsToReview > 0 ? l.yearsToReview : cycle;
+      if (t < first) {
+        rent += l.netPassing;
+        continue;
+      }
+      const reviewsPassed = Math.floor((t - first) / cycle) + 1;
+      const lastReviewYear = first + (reviewsPassed - 1) * cycle;
+      if (t === lastReviewYear) reviewed = true;
+      rent += l.netErv * Math.pow(1 + growth, lastReviewYear);
+    }
+    return { rent, reviewed };
+  };
+
+  const build = (growth: number, discount: number) => {
+    const rows: DcfYear[] = [];
+    let incomePv = 0;
+    for (let t = 1; t <= years; t++) {
+      const { rent, reviewed } = rentIn(t, growth);
+      const df = Math.pow(1 + discount, -t);
+      const pv = rent * df;
+      incomePv += pv;
+      rows.push({ year: t, rent, reviewed, discountFactor: df, presentValue: pv });
+    }
+    // the buyer at exit capitalises the rent running THEN — the year after the
+    // last one we collect, since rent is received in arrear
+    const exitRent = rentIn(years + 1, growth).rent;
+    const exitYield = dcf.exitYieldPct / 100;
+    const exitValueGross = exitYield > 0 ? exitRent / exitYield : 0;
+    const exitCosts = (exitValueGross * (dcf.exitCostsPct ?? 0)) / 100;
+    const exitValueNet = exitValueGross - exitCosts;
+    const exitPv = exitValueNet * Math.pow(1 + discount, -years);
+    return { rows, incomePv, exitRent, exitValueGross, exitCosts, exitValueNet, exitPv, npv: incomePv + exitPv };
+  };
+
+  const at = build(g, d);
+
+  /**
+   * Equated yield: the discount rate at which this cashflow reproduces the
+   * capitalised value. Solved by bisection — value falls as the rate rises.
+   */
+  let equatedYield = 0;
+  const target = cap.netCapitalValue;
+  if (target > 0) {
+    let lo = 0.0005;
+    let hi = 0.6;
+    for (let k = 0; k < 90; k++) {
+      const mid = (lo + hi) / 2;
+      if (build(g, mid).npv > target) lo = mid;
+      else hi = mid;
+    }
+    equatedYield = (lo + hi) / 2;
+  }
+
+  return {
+    years: at.rows,
+    incomePv: at.incomePv,
+    exitRent: at.exitRent,
+    exitValueGross: at.exitValueGross,
+    exitCosts: at.exitCosts,
+    exitValueNet: at.exitValueNet,
+    exitPv: at.exitPv,
+    netPresentValue: at.npv,
+    pvFromIncome: at.npv > 0 ? at.incomePv / at.npv : 0,
+    pvFromExit: at.npv > 0 ? at.exitPv / at.npv : 0,
+    equatedYield,
   };
 }
 

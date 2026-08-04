@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   capitaliseIncome,
   computeAppraisal,
+  discountedCashflow,
   monteCarlo,
   pvOfPound,
   rollUpCashflow,
@@ -815,5 +816,114 @@ describe('per-phase trade timing', () => {
     const late = computeAppraisal(twoPhases([{ label: 'Build', rate: 180, timing: { start: 9, months: 2 } }]));
     expect(late.interest).toBeLessThan(early.interest);
     expect(late.residualNet).toBeGreaterThan(early.residualNet);
+  });
+});
+
+// ---- Growth-explicit DCF ----
+// A rack-rented shed: £120,000 net, no reversion, so the arithmetic below is
+// checkable by hand and the method identities are exact.
+const rack: IncomeInput = {
+  lines: [{ label: 'Warehouse', count: 1, area: 10_000, rentPsf: 12 }],
+  nonRecoverablePct: 0,
+  yieldPct: 6,
+  purchaserCostsPct: 0,
+};
+
+describe('discountedCashflow', () => {
+  it('reproduces the capitalised value when growth is nil and every rate agrees', () => {
+    /**
+     * THE identity between the two methods: with no growth, an exit yield equal
+     * to the all-risks yield and a discount rate to match, a DCF over any hold
+     * must return the perpetuity value. If this drifts, one of the methods is
+     * wrong.
+     */
+    const cap = capitaliseIncome(rack);
+    for (const holdYears of [1, 5, 10, 25]) {
+      const d = discountedCashflow(rack, { holdYears, rentalGrowthPct: 0, discountRatePct: 6, exitYieldPct: 6 });
+      expect(d.netPresentValue).toBeCloseTo(cap.netCapitalValue, 4);
+      expect(d.netPresentValue).toBeCloseTo(120_000 / 0.06, 4); // £2,000,000
+    }
+  });
+
+  it('equated yield collapses to the all-risks yield without growth', () => {
+    const d = discountedCashflow(rack, { holdYears: 10, rentalGrowthPct: 0, discountRatePct: 9, exitYieldPct: 6 });
+    expect(d.equatedYield).toBeCloseTo(0.06, 5);
+  });
+
+  it('growth lifts the equated yield above the all-risks yield', () => {
+    // the ARY prices growth implicitly; stating it explicitly means a higher
+    // return is needed to arrive at the same price
+    const d = discountedCashflow(rack, { holdYears: 10, rentalGrowthPct: 3, discountRatePct: 9, exitYieldPct: 6 });
+    expect(d.equatedYield).toBeGreaterThan(0.06);
+    expect(d.equatedYield).toBeLessThan(0.12);
+  });
+
+  it('discounts the rent in arrear and splits value between income and exit', () => {
+    const d = discountedCashflow(rack, { holdYears: 5, rentalGrowthPct: 0, discountRatePct: 8, exitYieldPct: 6 });
+    expect(d.years).toHaveLength(5);
+    expect(d.years[0].rent).toBe(120_000);
+    expect(d.years[0].discountFactor).toBeCloseTo(1 / 1.08, 10); // arrear: year 1 is discounted once
+    expect(d.years[4].discountFactor).toBeCloseTo(Math.pow(1.08, -5), 10);
+    // YP 5 years @ 8% = 3.99271
+    expect(d.incomePv).toBeCloseTo(120_000 * ypYears(5, 0.08), 4);
+    expect(d.exitValueGross).toBeCloseTo(2_000_000, 4); // £120k capitalised at 6%
+    expect(d.exitPv).toBeCloseTo(2_000_000 * Math.pow(1.08, -5), 4);
+    expect(d.netPresentValue).toBeCloseTo(d.incomePv + d.exitPv, 6);
+    expect(d.pvFromIncome + d.pvFromExit).toBeCloseTo(1, 10);
+    // a five-year hold is mostly the sale, which is what makes the exit yield matter
+    expect(d.pvFromExit).toBeGreaterThan(0.6);
+  });
+
+  it('steps the rent at each review and grows it to that date', () => {
+    const d = discountedCashflow(rack, {
+      holdYears: 12,
+      rentalGrowthPct: 3,
+      discountRatePct: 8,
+      exitYieldPct: 6,
+      reviewCycleYears: 5,
+    });
+    // years 1-4 at the passing rent, a step at 5, flat to 9, another step at 10
+    expect(d.years[0].rent).toBeCloseTo(120_000, 6);
+    expect(d.years[3].rent).toBeCloseTo(120_000, 6);
+    expect(d.years[4].rent).toBeCloseTo(120_000 * Math.pow(1.03, 5), 6);
+    expect(d.years[4].reviewed).toBe(true);
+    expect(d.years[8].rent).toBeCloseTo(d.years[4].rent, 6); // flat between reviews
+    expect(d.years[9].rent).toBeCloseTo(120_000 * Math.pow(1.03, 10), 6);
+    expect(d.years[9].reviewed).toBe(true);
+  });
+
+  it('sells on the rent running at exit, and sale costs come off the proceeds', () => {
+    const clean = discountedCashflow(rack, { holdYears: 5, rentalGrowthPct: 0, discountRatePct: 8, exitYieldPct: 6 });
+    const costed = discountedCashflow(rack, {
+      holdYears: 5,
+      rentalGrowthPct: 0,
+      discountRatePct: 8,
+      exitYieldPct: 6,
+      exitCostsPct: 1.75,
+    });
+    expect(costed.exitCosts).toBeCloseTo(2_000_000 * 0.0175, 4);
+    expect(costed.exitValueNet).toBeCloseTo(2_000_000 - 35_000, 4);
+    expect(costed.netPresentValue).toBeLessThan(clean.netPresentValue);
+  });
+
+  it('a softer exit yield takes value off the sale', () => {
+    const firm = discountedCashflow(rack, { holdYears: 5, rentalGrowthPct: 2, discountRatePct: 8, exitYieldPct: 5.5 });
+    const soft = discountedCashflow(rack, { holdYears: 5, rentalGrowthPct: 2, discountRatePct: 8, exitYieldPct: 7 });
+    expect(soft.exitValueGross).toBeLessThan(firm.exitValueGross);
+    expect(soft.netPresentValue).toBeLessThan(firm.netPresentValue);
+  });
+
+  it('carries a reversionary roll through: the DCF sees the same net figures', () => {
+    const d = discountedCashflow({ ...shop, method: 'termReversion' }, {
+      holdYears: 6,
+      rentalGrowthPct: 0,
+      discountRatePct: 7,
+      exitYieldPct: 5,
+    });
+    // passing £20k until the year-5 review, then the ERV of £30k
+    expect(d.years[0].rent).toBeCloseTo(20_000, 6);
+    expect(d.years[4].rent).toBeCloseTo(30_000, 6);
+    expect(d.years[5].rent).toBeCloseTo(30_000, 6);
+    expect(d.exitRent).toBeCloseTo(30_000, 6);
   });
 });

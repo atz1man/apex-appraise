@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   computeAppraisal,
+  discountedCashflow,
   jvWaterfall,
   monteCarlo,
   sensitivityGrid,
@@ -10,6 +11,7 @@ import {
   formatSigned,
   type AppraisalInput,
   type CostTiming,
+  type DcfInput,
   type IncomeInput,
   type Periodicity,
   type Phase,
@@ -259,6 +261,16 @@ export default function DevelopmentAppraisal() {
   const [newTask, setNewTask] = useState('');
   const [newWho, setNewWho] = useState('AO');
 
+  /** A DCF is a cross-check, so it starts from conventional UK settings. */
+  const DEFAULT_DCF: DcfInput = {
+    holdYears: 10,
+    rentalGrowthPct: 2.5,
+    discountRatePct: 8,
+    exitYieldPct: (input.income?.yieldPct ?? 7) + 0.25,
+    exitCostsPct: 1.75,
+    reviewCycleYears: 5,
+  };
+
   // rent-roll editing helpers — the income block is optional, so every patch guards it
   const inc = input.income;
   const setIncome = (patch: Partial<IncomeInput>) => set({ income: { ...(inc ?? DEFAULT_INCOME), ...patch } });
@@ -283,6 +295,11 @@ export default function DevelopmentAppraisal() {
         units: [{ label: 'New unit type', count: 10, area: 900, cap: 350 }],
       },
     ]);
+
+  const dcfIn = input.dcf;
+  const setDcf = (patch: Partial<DcfInput>) => set({ dcf: { ...(dcfIn ?? DEFAULT_DCF), ...patch } });
+  // the DCF never feeds GDV — the capitalisation is what the report states
+  const dcf = useMemo(() => (inc && dcfIn ? discountedCashflow(inc, dcfIn) : null), [inc, dcfIn]);
 
   const breakdown: Array<[string, number, boolean?]> = [
     ['Gross development value', R.gdv],
@@ -1024,6 +1041,102 @@ export default function DevelopmentAppraisal() {
                         The lettable area counts towards GIA, so the held space carries its share of build cost.
                       </div>
                     </Panel>
+                    {dcf && dcfIn ? (
+                      <Panel
+                        title="Growth-explicit DCF"
+                        right={
+                          <Button variant="secondary" size="sm" onClick={() => set({ dcf: undefined })}>
+                            Remove
+                          </Button>
+                        }
+                      >
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                          <NumField label="Hold" suffix="years" step={1} value={dcfIn.holdYears} onChange={(v) => setDcf({ holdYears: Math.max(1, Math.round(v)) })} />
+                          <NumField label="Rental growth" suffix="% pa" step={0.25} value={dcfIn.rentalGrowthPct} onChange={(v) => setDcf({ rentalGrowthPct: v })} />
+                          <NumField label="Discount rate" suffix="%" step={0.25} value={dcfIn.discountRatePct} onChange={(v) => setDcf({ discountRatePct: v })} />
+                          <NumField label="Exit yield" suffix="%" step={0.05} value={dcfIn.exitYieldPct} onChange={(v) => setDcf({ exitYieldPct: v })} />
+                          <NumField label="Sale costs" suffix="%" step={0.05} value={dcfIn.exitCostsPct ?? 0} onChange={(v) => setDcf({ exitCostsPct: v })} />
+                          <NumField label="Review cycle" suffix="years" step={1} value={dcfIn.reviewCycleYears ?? 5} onChange={(v) => setDcf({ reviewCycleYears: Math.max(1, Math.round(v)) })} />
+                        </div>
+
+                        <div className="mt-4 overflow-x-auto">
+                          <table className="w-full min-w-[520px]">
+                            <thead>
+                              <tr>
+                                <th className="label-mono text-ink-3 text-left pb-2 w-16">Year</th>
+                                <th className="label-mono text-ink-3 text-right pb-2">Net rent</th>
+                                <th className="label-mono text-ink-3 text-right pb-2 w-28">PV factor</th>
+                                <th className="label-mono text-ink-3 text-right pb-2">Present value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dcf.years.map((y) => (
+                                <tr key={y.year} className="hover:bg-sunken transition-colors">
+                                  <td className="py-1.5 text-[12px] fig border-t border-border-faint">
+                                    {y.year}
+                                    {y.reviewed && <span className="ml-1.5 label-mono text-brand-ink">REVIEW</span>}
+                                  </td>
+                                  <td className="py-1.5 text-right fig text-[12px] border-t border-border-faint">{formatSigned(y.rent)}</td>
+                                  <td className="py-1.5 text-right fig text-[12px] text-ink-2 border-t border-border-faint">{y.discountFactor.toFixed(4)}</td>
+                                  <td className="py-1.5 text-right fig text-[12px] border-t border-border-faint">{formatSigned(y.presentValue)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="mt-3 border-t border-border-std pt-3">
+                          {([
+                            ['PV of income over the hold', dcf.incomePv],
+                            [`Exit — ${formatSigned(dcf.exitRent)} pa at ${dcfIn.exitYieldPct}%`, dcf.exitValueGross],
+                            ['Sale costs', -dcf.exitCosts],
+                            [`PV of the sale (year ${dcfIn.holdYears})`, dcf.exitPv, 'sub'],
+                            ['Net present value', dcf.netPresentValue, 'final'],
+                          ] as Array<[string, number, string?]>).map(([label, val, kind]) => (
+                            <div key={label} className={`flex justify-between py-[7px] border-t first:border-t-0 ${kind ? 'border-border-std' : 'border-border-faint'}`}>
+                              <span className={kind === 'final' ? 'text-[13px] font-bold text-brand-ink' : kind ? 'text-[12.5px] font-semibold' : 'text-[12px] text-ink-2'}>{label}</span>
+                              <span
+                                className="fig"
+                                style={{
+                                  fontWeight: kind === 'final' ? 700 : kind ? 600 : 500,
+                                  fontSize: kind === 'final' ? 14 : 12,
+                                  color: kind === 'final' ? 'rgb(var(--brand-ink))' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))',
+                                }}
+                              >
+                                {formatSigned(val)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
+                          <Kv k="Equated yield" v={formatPct(dcf.equatedYield, 2)} tone="rgb(var(--brand-ink))" />
+                          <Kv k="Capitalised value" v={fM(R.income.netCapitalValue)} />
+                          <Kv
+                            k="DCF vs capitalised"
+                            v={`${dcf.netPresentValue >= R.income.netCapitalValue ? '+' : '−'}${fM(Math.abs(dcf.netPresentValue - R.income.netCapitalValue))}`}
+                            tone={dcf.netPresentValue >= R.income.netCapitalValue ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--status-red, 178 58 46))'}
+                          />
+                          <Kv k="Value from the sale" v={formatPct(dcf.pvFromExit, 0)} />
+                        </div>
+                        <div className="mt-3 text-[11px] text-ink-3 leading-snug">
+                          A cross-check, not the reported value: <b className="font-semibold">GDV stays on the capitalisation</b>.
+                          The all-risks yield prices growth implicitly; this states it. The equated yield is the discount rate at
+                          which the two agree — with nil growth it equals the all-risks yield.
+                        </div>
+                      </Panel>
+                    ) : (
+                      <Panel title="Growth-explicit DCF">
+                        <EmptyState
+                          title="Value implicitly, or state the growth"
+                          cta={<Button size="sm" onClick={() => set({ dcf: DEFAULT_DCF })}>Run a DCF</Button>}
+                        >
+                          The capitalisation above prices rental growth implicitly, inside the yield. A DCF states it: project the
+                          rent through its reviews, sell at the end, and discount at a target rate. It cross-checks the
+                          capitalisation — it never replaces it.
+                        </EmptyState>
+                      </Panel>
+                    )}
                   </>
                 ) : (
                   <Panel title="Investment value">

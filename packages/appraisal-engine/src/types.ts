@@ -165,6 +165,63 @@ export interface IncomeResult {
 }
 
 /**
+ * Growth-explicit DCF inputs.
+ *
+ * The investment method capitalises today's rent at an all-risks yield, so
+ * growth is IMPLICIT in that yield. A DCF states growth openly instead:
+ * project the rent forward, step it at each review, sell at the end, and
+ * discount everything at a target rate. The two are reconciled by the equated
+ * yield — the discount rate at which the DCF reproduces the capitalised value.
+ */
+export interface DcfInput {
+  /** years held before sale */
+  holdYears: number;
+  /** rental growth per annum, % */
+  rentalGrowthPct: number;
+  /** target rate the cashflow is discounted at, % */
+  discountRatePct: number;
+  /** yield the rent is capitalised at on exit, % */
+  exitYieldPct: number;
+  /** sale costs at exit, % of the gross exit value */
+  exitCostsPct?: number;
+  /** rent-review cycle in years — UK standard is 5 */
+  reviewCycleYears?: number;
+}
+
+export interface DcfYear {
+  year: number;
+  /** net rent receivable in this year, after reviews and growth */
+  rent: number;
+  /** true when a review lands in this year */
+  reviewed: boolean;
+  discountFactor: number;
+  presentValue: number;
+}
+
+export interface DcfResult {
+  years: DcfYear[];
+  /** present value of the rent over the hold */
+  incomePv: number;
+  /** rent running at the moment of sale — what the buyer capitalises */
+  exitRent: number;
+  exitValueGross: number;
+  exitCosts: number;
+  exitValueNet: number;
+  exitPv: number;
+  /** incomePv + exitPv */
+  netPresentValue: number;
+  /** share of value from income vs from the sale — a hold's honesty check */
+  pvFromIncome: number;
+  pvFromExit: number;
+  /**
+   * The discount rate at which this DCF equals the capitalised (all-risks)
+   * value. Equal to the all-risks yield when growth is nil — that identity is
+   * the cross-check between the two methods.
+   */
+  equatedYield: number;
+}
+
+/**
  * One phase of a phased scheme: its own accommodation, its own place in the
  * programme, its own sales window. Phases share one facility — that is the
  * point of phasing, since receipts from an early phase fund a later one and
@@ -241,6 +298,11 @@ export interface AppraisalInput {
   jv?: JvInput;
   /** Held-and-let element valued by the investment method; adds to GDV. Omit for a pure sales scheme. */
   income?: IncomeInput;
+  /**
+   * Growth-explicit DCF settings. A CROSS-CHECK only: GDV stays driven by the
+   * capitalisation, which is what the report states as Market Value.
+   */
+  dcf?: DcfInput;
   startYear?: number;
   startMonth?: number; // 0-based
 }

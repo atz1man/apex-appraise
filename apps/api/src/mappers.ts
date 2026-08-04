@@ -1,5 +1,5 @@
 import type { Appraisal } from '@prisma/client';
-import type { AppraisalInput, CostTiming, IncomeInput, Phase, SpendProfileKey } from '@apex/appraisal-engine';
+import type { AppraisalInput, CostTiming, DcfInput, IncomeInput, Phase, SpendProfileKey } from '@apex/appraisal-engine';
 
 /** BigInt pence → £ number (engine-internal unit). */
 export const P = (pence: bigint | null | undefined): number => (pence == null ? 0 : Number(pence) / 100);
@@ -54,6 +54,7 @@ export function appraisalRowToEngineInput(a: Appraisal): AppraisalInput {
     jv: { gpCoinvestPct: a.jvGpCoinvestPct, prefPct: a.jvPrefPct, promotePct: a.jvPromotePct },
     // rent roll stored as JSON (rents in £/yr per ft², not pence — no unit conversion)
     income: J<IncomeInput | undefined>(a.income, undefined),
+    dcf: J<DcfInput | undefined>(a.dcf, undefined),
     phases: J<Phase[] | undefined>(a.phases, undefined),
     startYear: a.startYear ?? undefined,
     startMonth: a.startMonth ?? undefined,

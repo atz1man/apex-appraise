@@ -103,6 +103,17 @@ export const zPhase = z.object({
   otherCosts: z.array(z.object({ label: z.string(), amount: z.number(), timing: zCostTiming.optional() })).optional(),
 });
 
+/** Growth-explicit DCF over the held element — a cross-check on the capitalisation. */
+export const zDcfInput = z.object({
+  holdYears: z.number().min(1).max(50),
+  rentalGrowthPct: z.number().min(-20).max(20),
+  discountRatePct: z.number().min(0).max(40),
+  exitYieldPct: z.number().min(0).max(30),
+  exitCostsPct: z.number().min(0).max(20).optional(),
+  reviewCycleYears: z.number().min(1).max(25).optional(),
+});
+export type DcfInputDto = z.infer<typeof zDcfInput>;
+
 export const zAppraisalInput = z.object({
   units: z.array(zAppraisalUnit),
   phases: z.array(zPhase).max(12).optional(),
@@ -135,6 +146,7 @@ export const zAppraisalInput = z.object({
     })
     .optional(),
   income: zIncomeInput.optional(),
+  dcf: zDcfInput.optional(),
   startYear: z.number().int().min(2000).max(2100).optional(),
   startMonth: z.number().int().min(0).max(11).optional(),
 });

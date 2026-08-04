@@ -343,3 +343,50 @@ describe('buildAppraisalWorkbook — phased with per-phase trades', async () => 
     expect(to - from + 1).toBe(2);
   });
 });
+
+/** The DCF is a cross-check: it must never alter the workbook's GDV. */
+describe('buildAppraisalWorkbook — with a growth-explicit DCF', async () => {
+  const dcfCase: AppraisalInput = {
+    ...referenceCase,
+    income: {
+      lines: [{ label: 'Retail parade', count: 4, area: 1500, rentPsf: 18 }],
+      nonRecoverablePct: 0,
+      yieldPct: 7,
+      purchaserCostsPct: 6.8,
+    },
+    dcf: { holdYears: 5, rentalGrowthPct: 2, discountRatePct: 8, exitYieldPct: 7.25, exitCostsPct: 1.75 },
+  };
+  const R4 = computeAppraisal(dcfCase, { withCash: true });
+  const wb4 = await buildAppraisalWorkbook({
+    dealName: 'Golden Fixture Works',
+    address: 'Bournemouth',
+    input: dcfCase,
+    R: R4,
+    jv: jvWaterfall(R4.equity, R4.profit, R4.holdYears, dcfCase.jv!),
+    monthLabel,
+  });
+
+  it('adds the DCF under the rent roll with a year per row', () => {
+    const rr = wb4.getWorksheet('Rent roll')!;
+    const labels: string[] = [];
+    rr.eachRow((row) => labels.push(String(row.getCell(1).value ?? '')));
+    expect(labels.some((l) => l.startsWith('Growth-explicit DCF'))).toBe(true);
+    expect(labels.filter((l) => /^ {4}Year \d+/.test(l))).toHaveLength(5);
+    expect(labels).toContain('Equated yield');
+  });
+
+  it('does not touch GDV — the capitalisation remains the reported value', () => {
+    const u = wb4.getWorksheet('Unit schedule')!;
+    let capitalised: number | null = null;
+    u.eachRow((row) => {
+      if (String(row.getCell(1).value ?? '').startsWith('Capitalised investment value')) {
+        capitalised = row.getCell(5).value as number;
+      }
+    });
+    expect(capitalised).toBe(Math.round(R4.investmentValue));
+    // and the engine's GDV ignores the DCF entirely
+    const withoutDcf = computeAppraisal({ ...dcfCase, dcf: undefined }, { withCash: true });
+    expect(withoutDcf.gdv).toBeCloseTo(R4.gdv, 6);
+    expect(withoutDcf.investmentValue).toBeCloseTo(R4.investmentValue, 6);
+  });
+});

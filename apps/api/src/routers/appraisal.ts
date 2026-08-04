@@ -60,6 +60,7 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     targetProfitOnGdvPct: input.targetProfitOnGdvPct,
     phases: input.phases?.length ? JSON.stringify(input.phases) : null,
     income: input.income ? JSON.stringify(input.income) : null,
+    dcf: input.dcf ? JSON.stringify(input.dcf) : null,
     jvGpCoinvestPct: input.jv?.gpCoinvestPct ?? 10,
     jvPrefPct: input.jv?.prefPct ?? 8,
     jvPromotePct: input.jv?.promotePct ?? 20,
