@@ -171,11 +171,22 @@ export default function AppraisalReport() {
    * remainder is STATED rather than silently dropped.
    *
    * Sized by MEASUREMENT, not arithmetic: four cards of twenty rows rendered at
-   * 1140px against A4's 1122, so the budget is eighteen rows — 1088px measured,
-   * with the "not printed here" note already on the page.
+   * 1140px against A4's 1122, so the sheet holds eighteen trade rows (1088px
+   * measured) with the "not printed here" note already placed.
+   *
+   * The reconciliation below the cards is not optional — a sheet that shows some
+   * phases priced their own way has to tie back to the scheme's construction
+   * total — so its height is RESERVED out of that budget rather than hoped for.
    */
-  const PHASE_TRADE_ROWS = 18;
+  const PAGE_TRADE_ROWS = 18;
+  const ROW_PX = 26;
   const MAX_PHASE_CARDS = 4;
+  const PHASE_TRADE_ROWS = Math.max(
+    4,
+    // heading, caption, total row and a possible unphased-balance row, plus a
+    // row per phase — measured at 118px of fixed height before the phase rows
+    PAGE_TRADE_ROWS - Math.ceil((118 + ROW_PX * (R?.phases?.length ?? 0)) / ROW_PX),
+  );
   const phaseOverrides = useMemo(() => {
     const over = (R?.phases ?? []).filter((ph) => ph.ownTrades);
     const shown: Array<{ phase: (typeof over)[number]; trades: (typeof over)[number]['trades']; hidden: number }> = [];
@@ -198,6 +209,15 @@ export default function AppraisalReport() {
       over.filter((ph) => !shown.some((s) => s.phase === ph)).reduce((a, ph) => a + ph.trades.length, 0);
     return { shown, hiddenTotal, hiddenPhases };
   }, [R]);
+
+  /**
+   * The phases' construction against the scheme's. `build`/`fees`/`cont` sum the
+   * phases PLUS any GIA priced outside them, so the difference is a real line,
+   * not a rounding fudge — print it rather than let the column fail to add up.
+   */
+  const unphasedConstruction = R
+    ? R.build + R.fees + R.cont - (R.phases ?? []).reduce((a, ph) => a + ph.cost, 0)
+    : 0;
 
   const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
@@ -599,8 +619,11 @@ export default function AppraisalReport() {
             <PageHead title="2 · Phase cost overrides" scheme={scheme} />
             <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
               These phases are priced on their own trades rather than the scheme's — a podium block is not a terrace, and the
-              appraisal treats them separately. Every other phase inherits the scheme rate of £{n0(R.buildRate)}/ft² and the
-              scheme's {input.profFeePct}% fees and {input.contingencyPct}% contingency.
+              appraisal treats them separately.{' '}
+              {(R.phases ?? []).some((p) => !p.ownTrades)
+                ? // only claim there is an inheriting phase when there is one
+                  `Every other phase inherits the scheme's ${input.profFeePct}% fees and ${input.contingencyPct}% contingency at £${n0(input.trades.reduce((a, t) => a + t.rate, 0))}/ft².`
+                : 'Every phase in this scheme prices its own trades, so no phase carries the scheme rate.'}
             </p>
             {phaseOverrides.shown.map(({ phase, trades }, pi) => {
               const feePct = phase.build > 0 ? (phase.fees / phase.build) * 100 : input.profFeePct;
@@ -640,6 +663,49 @@ export default function AppraisalReport() {
                 </div>
               );
             })}
+            {/* the point of the sheet: overriding and inheriting phases still add
+                up to the construction line carried into the residual appraisal */}
+            <SectionTitle>Construction reconciliation</SectionTitle>
+            <p className="mt-1.5 text-[11px] text-ink-3 leading-snug">
+              Phase costs below include professional fees and contingency; the trade cards above are construction only.
+            </p>
+            <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 8 }}>
+              {(R.phases ?? []).map((p, pi) => (
+                <div
+                  key={pi}
+                  className="flex fig text-[11.5px]"
+                  style={{ borderTop: pi === 0 ? 'none' : '1px solid #ECEBE5', padding: '7px 14px' }}
+                >
+                  <div className="font-ui" style={{ flex: 2.6 }}>{p.name}</div>
+                  <div className="font-ui text-ink-3 text-[11px]" style={{ flex: 1.6 }}>
+                    {p.ownTrades ? 'own trades' : 'scheme rate'}
+                  </div>
+                  <div className="text-right" style={{ flex: 1 }}>£{n0(p.buildRate)}/ft²</div>
+                  <div className="text-right" style={{ flex: 1.4 }}>{formatMoneyFull(p.cost)}</div>
+                </div>
+              ))}
+              {/* phase GIA need not exhaust the scheme's — anything priced outside
+                  the phase schedule is named, so the column genuinely adds up */}
+              {Math.abs(unphasedConstruction) >= 1 && (
+                <div className="flex fig text-[11.5px]" style={{ borderTop: '1px solid #ECEBE5', padding: '7px 14px' }}>
+                  <div className="font-ui" style={{ flex: 2.6 }}>Outside the phase schedule</div>
+                  <div className="font-ui text-ink-3 text-[11px]" style={{ flex: 1.6 }}>scheme rate</div>
+                  <div className="text-right" style={{ flex: 1 }} />
+                  <div className="text-right" style={{ flex: 1.4 }}>{formatMoneyFull(unphasedConstruction)}</div>
+                </div>
+              )}
+              <div
+                className="flex fig text-[11.5px] font-semibold bg-sunken"
+                style={{ borderTop: `2px solid ${neutral.border}`, padding: '8px 14px' }}
+              >
+                {/* no comma: the figure face spaces punctuation oddly at this size */}
+                <div className="font-ui" style={{ flex: 4.2 }}>Construction with fees and contingency</div>
+                <div className="text-right" style={{ flex: 1 }}>£{n0(R.buildRate)}/ft²</div>
+                <div className="text-right" style={{ flex: 1.4, color: brand[700] }}>
+                  {formatMoneyFull(R.build + R.fees + R.cont)}
+                </div>
+              </div>
+            </div>
             {phaseOverrides.hiddenTotal > 0 && (
               <p className="mt-3 text-[11px] text-ink-3 leading-snug">
                 {phaseOverrides.hiddenTotal} further trade line{phaseOverrides.hiddenTotal === 1 ? '' : 's'}

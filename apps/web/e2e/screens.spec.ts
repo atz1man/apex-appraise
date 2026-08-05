@@ -1341,6 +1341,39 @@ test('the report prints phase cost overrides and states what it could not fit', 
   await expect(page.getByText(/contingency 7\.0% \(scheme 5%\) — set on this phase/)).toBeVisible();
   await expect(page.getByText(/professional fees .* — set on this phase/)).toHaveCount(0);
   await expect(page.getByText(/further trade line/)).toHaveCount(0); // nothing dropped
+  // phase B inherits, so the sheet may say so
+  await expect(page.getByText(/Every other phase inherits the scheme's 12% fees/)).toBeVisible();
+
+  /**
+   * The reconciliation has to TIE: every phase, plus anything priced outside the
+   * phase schedule, adding to the construction line the residual appraisal uses.
+   * A column of plausible figures that does not add up is worse than no column.
+   */
+  await expect(page.getByText('Construction reconciliation')).toBeVisible();
+  const reconcile = () =>
+    page.evaluate(() => {
+      const head = [...document.querySelectorAll('*')].find((e) => e.textContent?.trim() === 'Construction reconciliation');
+      // walk to the table rather than assuming it is the next sibling — a caption
+      // sits between them, and a positional probe silently reads the wrong node
+      let el = head?.nextElementSibling ?? null;
+      while (el && !(el.children.length > 1 && (el.textContent ?? '').includes('£'))) el = el.nextElementSibling;
+      const rows = [...(el?.children ?? [])];
+      const money = (el: Element) => Number((el.textContent ?? '').replace(/[^0-9.]/g, '')) || 0;
+      const cell = (r: Element) => money(r.children[r.children.length - 1]);
+      const last = rows[rows.length - 1];
+      return {
+        parts: rows.slice(0, -1).map(cell),
+        names: rows.slice(0, -1).map((r) => (r.children[0].textContent ?? '').trim()),
+        total: cell(last),
+        label: last.textContent ?? '',
+      };
+    });
+  const recon = await reconcile();
+  expect(recon.parts.length).toBeGreaterThan(1);
+  expect(recon.label).toContain('Construction with fees and contingency');
+  // rounded to the pound on both sides — the printed figures are what must agree
+  expect(Math.round(recon.parts.reduce((a, b) => a + b, 0))).toBe(Math.round(recon.total));
+
   // it is a continuation sheet of section 2, so the footers must still run clean
   const seeded = await measure();
   expect(seeded.overflowing).toBe(0);
@@ -1395,11 +1428,24 @@ test('the report prints phase cost overrides and states what it could not fit', 
   await page.goto(`/deal/${own.dealId}/report`);
   await page.waitForSelector('.a4-page');
   await expect(page.getByText('2 · Phase cost overrides')).toBeVisible();
-  // 32 lines over 4 phases; 18 printed across 3 cards (8 + 8 + 2), so 14 lines
-  // remain and phase 4 gets no card at all — all of it stated, none of it silent
-  await expect(page.getByText('P3 trade 2')).toBeVisible();
-  await expect(page.getByText('P3 trade 3')).toHaveCount(0);
-  await expect(page.getByText(/14 further trade lines across 1 further phase are not printed/)).toBeVisible();
+  // 32 lines over 4 phases. The reconciliation reserves its height first, leaving
+  // 9 trade rows: 8 + 1 across two cards, so 23 lines and two whole phases go
+  // unprinted — all of it stated, none of it silent.
+  await expect(page.getByText('P2 trade 1')).toBeVisible();
+  await expect(page.getByText('P2 trade 2')).toHaveCount(0);
+  await expect(page.getByText(/23 further trade lines across 2 further phases are not printed/)).toBeVisible();
+  // every phase here prices its own trades — the sheet must not promise otherwise
+  await expect(page.getByText(/no phase carries the scheme rate/)).toBeVisible();
+  await expect(page.getByText(/Every other phase inherits/)).toHaveCount(0);
+  // the reconciliation still names every phase, printed card or not, and still ties
+  const worstRecon = await reconcile();
+  expect(worstRecon.names.slice(0, 4)).toEqual([
+    'Phase 1 — podium',
+    'Phase 2 — terrace',
+    'Phase 3 — mews',
+    'Phase 4 — wharf',
+  ]);
+  expect(Math.round(worstRecon.parts.reduce((a, b) => a + b, 0))).toBe(Math.round(worstRecon.total));
   const worst = await measure();
   expect(worst.overflowing).toBe(0);
   expect(worst.feet).toEqual(Array.from({ length: worst.count - 1 }, (_, i) => `${i + 2}/${worst.count}`));
