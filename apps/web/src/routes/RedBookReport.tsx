@@ -565,9 +565,11 @@ export default function RedBookReport() {
             )}
             {invDcf && (
               <>
-                {' '}The investment figure is stated on a growth-explicit basis — {input.dcf!.rentalGrowthPct}% rental growth over{' '}
-                {input.dcf!.holdYears} years, discounted at {input.dcf!.discountRatePct}% — which implies an equated yield of{' '}
+                {' '}The investment figure values the WHOLE property at the analysed net rate, so that it compares like for like
+                with the other approaches, and is stated on a growth-explicit basis — {input.dcf!.rentalGrowthPct}% rental growth
+                over {input.dcf!.holdYears} years, discounted at {input.dcf!.discountRatePct}% — implying an equated yield of{' '}
                 <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against an all-risks yield of {invYieldPct}%.
+                The appraisal report states the same cross-check on the let element alone, so its equated yield differs.
               </>
             )}
           </div>

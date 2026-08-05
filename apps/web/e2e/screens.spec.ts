@@ -1238,3 +1238,57 @@ test('the approaches panel weights the investment method by how income-led the s
   await expect(page.getByText(/afforded limited weight/)).toBeVisible();
   await expect(page.getByText(/equated yield of/)).toHaveCount(0);
 });
+
+/**
+ * The appraisal PDF gains an Investment section when the scheme holds space —
+ * and the page numbering is derived, so inserting it must not desync the
+ * "Page n of N" footers the PDF is printed from.
+ */
+test('the appraisal report prints an investment section without desyncing pagination', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const ids = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    const deals = j.result.data.json.deals as Array<{ id: string; name: string }>;
+    const by = (p: string) => deals.find((d) => d.name.startsWith(p))!.id;
+    return { income: by('Kingsway'), sales: by('Northgate') };
+  });
+
+  /** page count, any page whose content overflows A4, and the footer sequence */
+  const measure = () =>
+    page.evaluate(() => {
+      const pages = [...document.querySelectorAll('.a4-page')];
+      return {
+        count: pages.length,
+        overflowing: pages.filter((p) => p.scrollHeight - p.clientHeight > 1).length,
+        feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
+      };
+    });
+
+  // a scheme that holds space: the section appears, and it fits on one page
+  await page.goto(`/deal/${ids.income}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('4 · Investment valuation')).toBeVisible();
+  await expect(page.getByText('Growth-explicit cross-check')).toBeVisible();
+  await expect(page.getByText('Equated yield')).toBeVisible();
+  // the reported value stays the capitalisation, and the page says so
+  await expect(page.getByText(/the reported value remains the capitalisation/)).toBeVisible();
+  const withInv = await measure();
+  expect(withInv.overflowing).toBe(0);
+  // footers run 2..N contiguously and agree with the number of pages rendered
+  expect(withInv.feet).toEqual(
+    Array.from({ length: withInv.count - 1 }, (_, i) => `${i + 2}/${withInv.count}`),
+  );
+
+  // a pure sales scheme has no such section, and everything shifts back
+  await page.goto(`/deal/${ids.sales}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('Investment valuation')).toHaveCount(0);
+  await expect(page.getByText('4 · Sensitivity — profit on cost')).toBeVisible();
+  const noInv = await measure();
+  expect(noInv.overflowing).toBe(0);
+  expect(noInv.count).toBe(withInv.count - 1);
+  expect(noInv.feet).toEqual(Array.from({ length: noInv.count - 1 }, (_, i) => `${i + 2}/${noInv.count}`));
+});

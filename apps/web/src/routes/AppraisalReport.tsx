@@ -1,6 +1,6 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { computeAppraisal, sensitivityGrid, formatMoneyFull, formatPct } from '@apex/appraisal-engine';
+import { computeAppraisal, discountedCashflow, sensitivityGrid, formatMoneyFull, formatPct } from '@apex/appraisal-engine';
 import { accent, brand, neutral } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -132,6 +132,11 @@ export default function AppraisalReport() {
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
   const sens = useMemo(() => (input ? sensitivityGrid(input, 'roc') : null), [input]);
+  // the growth-explicit cross-check, when the appraisal carries one
+  const dcf = useMemo(
+    () => (input?.income && input.dcf ? discountedCashflow(input.income, input.dcf) : null),
+    [input],
+  );
 
   // Latest photo per week-commencing, most-recent week first (photos arrive takenAt desc).
   const monitoring = useMemo(() => {
@@ -307,8 +312,25 @@ export default function AppraisalReport() {
       : []),
   ];
 
-  // Page numbering: 1 cover · 2 summary · 3 accommodation · 4 appraisal · 5 sensitivity · 6.. cashflow · assumptions · monitoring.
-  const assumptionsPageNo = 5 + cashChunks.length + 1;
+  /**
+   * Page and section numbering, DERIVED. A scheme that holds space gains an
+   * investment section after the residual appraisal, and everything downstream
+   * shifts by one. Hand-written numbers would have desynced the moment the
+   * section became conditional — the footers say "Page n of N" and the PDF is
+   * printed from exactly these pages.
+   */
+  const hasInvestment = !!R.income;
+  const inv = hasInvestment ? 1 : 0;
+  const secInvestment = 4;
+  const secSensitivity = 4 + inv;
+  const secCashflow = 5 + inv;
+  const secAssumptions = 6 + inv;
+  const secAi = 7 + inv;
+  const secMonitoring = 8 + inv;
+  const investmentPageNo = 5;
+  const sensitivityPageNo = 5 + inv;
+  const cashStartPageNo = 6 + inv;
+  const assumptionsPageNo = cashStartPageNo + cashChunks.length;
   const monitoringPageNo = assumptionsPageNo + 1;
   const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
 
@@ -591,9 +613,118 @@ export default function AppraisalReport() {
           <PageFoot no={4} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
+        {/* ===== INVESTMENT — only when the scheme holds and lets space ===== */}
+        {hasInvestment && R.income && input.income && (
+          <A4Page>
+            <PageHead title={`${secInvestment} · Investment valuation`} scheme={scheme} />
+
+            <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
+              Part of the scheme is retained and let rather than sold on. Its value is the net rent capitalised at the
+              all-risks yield, net of purchaser's costs, and that figure is the one carried into gross development value
+              on the preceding page.
+            </p>
+
+            <SectionTitle>Rent roll</SectionTitle>
+            <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 10 }}>
+              <div className="flex text-[10px] font-semibold uppercase" style={{ background: brand[700], color: '#fff' }}>
+                <div style={{ flex: 2.4, padding: '9px 14px' }}>Tenancy</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Area ft²</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Rent £/ft²</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>ERV £/ft²</div>
+                <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>Net rent</div>
+              </div>
+              {R.income.lines.map((l, i) => (
+                <div key={i} className="flex text-[12px]" style={{ borderTop: '1px solid #ECEBE5' }}>
+                  <div style={{ flex: 2.4, padding: '9px 14px' }}>{l.label}</div>
+                  <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>{n0(l.totalArea)}</div>
+                  <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>
+                    £{(l.totalArea > 0 ? l.grossRent / l.totalArea : 0).toFixed(2)}
+                  </div>
+                  <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>
+                    £{(l.totalArea > 0 ? l.grossErv / l.totalArea : 0).toFixed(2)}
+                  </div>
+                  <div className="fig text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px' }}>
+                    {formatMoneyFull(l.netPassing)}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <SectionTitle>Capitalisation</SectionTitle>
+            <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 10 }}>
+              {([
+                ['Gross rent', formatMoneyFull(R.income.grossRent)],
+                ['Less: voids and non-recoverables', `(${formatMoneyFull(R.income.voidAllowance + R.income.nonRecoverable + R.income.deductions)})`],
+                ['Net rent (NOI)', formatMoneyFull(R.income.netRent), 'sub'],
+                ...(R.income.lines.some((l) => l.isReversionary)
+                  ? ([
+                      ['Term — passing rent capitalised', formatMoneyFull(R.income.lines.reduce((a, l) => a + l.termValue, 0))],
+                      [
+                        R.income.method === 'hardcore' ? 'Top slice — uplift deferred' : 'Reversion — ERV deferred to review',
+                        formatMoneyFull(R.income.lines.reduce((a, l) => a + l.reversionValue, 0)),
+                      ],
+                    ] as Array<[string, string, string?]>)
+                  : ([[`Years purchase @ ${input.income.yieldPct}% — YP ${R.income.yearsPurchase.toFixed(2)}`, formatMoneyFull(R.income.grossCapitalValue)]] as Array<[string, string, string?]>)),
+                [`Let-up void — ${input.income.letUpMonths ?? 0} months`, `(${formatMoneyFull(R.income.letUpDeduction)})`],
+                [`Purchaser's costs (${input.income.purchaserCostsPct ?? 6.8}%)`, `(${formatMoneyFull(R.income.purchaserCosts)})`],
+                ['Investment value in GDV', formatMoneyFull(R.income.netCapitalValue), 'final'],
+              ] as Array<[string, string, string?]>).map(([label, value, kind]) => (
+                <div
+                  key={label}
+                  className="flex justify-between text-[12.5px]"
+                  style={{
+                    borderTop: '1px solid #ECEBE5',
+                    background: kind === 'final' ? '#ECF3EF' : undefined,
+                    fontWeight: kind ? 700 : 400,
+                  }}
+                >
+                  <div style={{ padding: '9px 14px', color: kind === 'final' ? brand[700] : undefined }}>{label}</div>
+                  <div className="fig text-right" style={{ padding: '9px 14px', color: kind === 'final' ? brand[700] : undefined }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-4 gap-3">
+              <Kpi label="Net initial yield" value={formatPct(R.income.netInitialYield, 2)} tone={brand[700]} />
+              <Kpi label="Reversionary" value={formatPct(R.income.reversionaryYield, 2)} />
+              <Kpi label="Equivalent yield" value={formatPct(R.income.equivalentYield, 2)} />
+              <Kpi label="Capital value" value={`£${n0(R.income.capitalValuePsf)}/ft²`} />
+            </div>
+
+            {dcf && input.dcf && (
+              <>
+                <SectionTitle>Growth-explicit cross-check</SectionTitle>
+                <p className="mt-2 text-[12px] text-ink-2b leading-[1.6]">
+                  The capitalisation above prices rental growth implicitly, within the yield. Stating it explicitly —{' '}
+                  {input.dcf.rentalGrowthPct}% per annum over a {input.dcf.holdYears}-year hold, rent reviewed every{' '}
+                  {input.dcf.reviewCycleYears ?? 5} years, sold at {input.dcf.exitYieldPct}% and discounted at{' '}
+                  {input.dcf.discountRatePct}% — gives the figures below. This is a cross-check: the reported value remains
+                  the capitalisation.
+                </p>
+                <div className="mt-2.5 grid grid-cols-2 gap-x-8">
+                  {([
+                    ['PV of income over the hold', formatMoneyFull(dcf.incomePv)],
+                    [`Rent at exit (year ${input.dcf.holdYears + 1})`, `${formatMoneyFull(dcf.exitRent)} pa`],
+                    ['PV of the sale', formatMoneyFull(dcf.exitPv)],
+                    ['Value arising from the sale', formatPct(dcf.pvFromExit, 0)],
+                    ['Net present value', formatMoneyFull(dcf.netPresentValue)],
+                    ['Equated yield', formatPct(dcf.equatedYield, 2)],
+                  ] as Array<[string, string]>).map(([k, v]) => (
+                    <KvRow key={k} k={k} v={v} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            <PageFoot no={investmentPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          </A4Page>
+        )}
+
         {/* ===== PAGE 5 — SENSITIVITY ===== */}
         <A4Page>
-          <PageHead title="4 · Sensitivity — profit on cost" scheme={scheme} />
+          <PageHead title={`${secSensitivity} · Sensitivity — profit on cost`} scheme={scheme} />
           <p className="text-[13px] leading-[1.6]" style={{ marginTop: 18, color: '#3F463F' }}>
             Return on cost re-computed across simultaneous movements in gross development value (columns) and construction cost (rows).
             The base case is outlined.
@@ -629,14 +760,14 @@ export default function AppraisalReport() {
             price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
             A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in GDV moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
           </p>
-          <PageFoot no={5} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={sensitivityPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== PAGES 6.. — CASHFLOW & RETURNS PROFILE ===== */}
         {cashChunks.map((chunk, pi) => (
           <A4Page key={pi}>
             <PageHead
-              title={pi === 0 ? '5 · Cashflow & returns profile' : `5 · Cashflow ledger (${pi} of ${cashChunks.length - 1})`}
+              title={pi === 0 ? `${secCashflow} · Cashflow & returns profile` : `${secCashflow} · Cashflow ledger (${pi} of ${cashChunks.length - 1})`}
               scheme={scheme}
             />
             {pi === 0 && (
@@ -685,13 +816,13 @@ export default function AppraisalReport() {
               ))}
             </div>
             )}
-            <PageFoot no={6 + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={cashStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
           </A4Page>
         ))}
 
         {/* ===== PAGE — KEY ASSUMPTIONS, NOTICE & SIGNATURE ===== */}
         <A4Page>
-          <PageHead title="6 · Key assumptions" scheme={scheme} />
+          <PageHead title={`${secAssumptions} · Key assumptions`} scheme={scheme} />
           <div className="grid grid-cols-2" style={{ marginTop: 18, gap: '0 40px' }}>
             {assumptions.map(([k, v]) => (
               <KvRow key={k} k={k} v={v} />
@@ -700,7 +831,7 @@ export default function AppraisalReport() {
 
           {/* AI-use disclosure — RICS professional standards require transparency
               about whether and how AI was used; the register comes from the audit trail. */}
-          <SectionTitle>7 · Use of artificial intelligence</SectionTitle>
+          <SectionTitle>{secAi} · Use of artificial intelligence</SectionTitle>
           {ai?.used ? (
             <>
               <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
@@ -746,7 +877,7 @@ export default function AppraisalReport() {
         {/* ===== PAGE — CONSTRUCTION MONITORING (only when photos exist) ===== */}
         {monitoring.length > 0 && (
           <A4Page>
-            <PageHead title="8 · Construction monitoring" scheme={scheme} />
+            <PageHead title={`${secMonitoring} · Construction monitoring`} scheme={scheme} />
             <p className="text-[13px] leading-[1.6]" style={{ marginTop: 18, color: '#3F463F' }}>
               Progress record from the live construction log — the latest site photograph for each recent week, evidencing build progress
               against the appraised programme.
