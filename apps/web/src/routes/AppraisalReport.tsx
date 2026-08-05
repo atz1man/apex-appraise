@@ -165,6 +165,40 @@ export default function AppraisalReport() {
     return out;
   }, [R]);
 
+  /**
+   * Trade breakdown for phases that price off the scheme. The workbook prints
+   * every line; this page has a fixed height, so the budget is explicit and any
+   * remainder is STATED rather than silently dropped.
+   *
+   * Sized by MEASUREMENT, not arithmetic: four cards of twenty rows rendered at
+   * 1140px against A4's 1122, so the budget is eighteen rows — 1088px measured,
+   * with the "not printed here" note already on the page.
+   */
+  const PHASE_TRADE_ROWS = 18;
+  const MAX_PHASE_CARDS = 4;
+  const phaseOverrides = useMemo(() => {
+    const over = (R?.phases ?? []).filter((ph) => ph.ownTrades);
+    const shown: Array<{ phase: (typeof over)[number]; trades: (typeof over)[number]['trades']; hidden: number }> = [];
+    let budget = PHASE_TRADE_ROWS;
+    let hiddenPhases = 0;
+    for (const ph of over) {
+      const take = shown.length >= MAX_PHASE_CARDS ? 0 : Math.min(ph.trades.length, budget);
+      // a card with no room left for a single trade line is not a breakdown —
+      // count the whole phase as unprinted rather than printing an empty box
+      if (take === 0) {
+        hiddenPhases += 1;
+        continue;
+      }
+      budget -= take;
+      shown.push({ phase: ph, trades: ph.trades.slice(0, take), hidden: ph.trades.length - take });
+    }
+    const hiddenTotal =
+      // part-printed cards plus every line of the phases that got no card at all
+      shown.reduce((a, x) => a + x.hidden, 0) +
+      over.filter((ph) => !shown.some((s) => s.phase === ph)).reduce((a, ph) => a + ph.trades.length, 0);
+    return { shown, hiddenTotal, hiddenPhases };
+  }, [R]);
+
   const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const today = fmtLong(new Date());
@@ -321,15 +355,23 @@ export default function AppraisalReport() {
    */
   const hasInvestment = !!R.income;
   const inv = hasInvestment ? 1 : 0;
+  // a phase that prices its own trades earns a continuation sheet after the
+  // accommodation schedule — it stays inside section 2, so only pages shift
+  const ovr = phaseOverrides.shown.length > 0 ? 1 : 0;
   const secInvestment = 4;
   const secSensitivity = 4 + inv;
   const secCashflow = 5 + inv;
   const secAssumptions = 6 + inv;
   const secAi = 7 + inv;
-  const secMonitoring = 8 + inv;
-  const investmentPageNo = 5;
-  const sensitivityPageNo = 5 + inv;
-  const cashStartPageNo = 6 + inv;
+  // the notice was hardcoded "8": it collided with monitoring on every scheme
+  // and with the AI subsection as soon as an investment section appeared
+  const secNotice = 8 + inv;
+  const secMonitoring = 9 + inv;
+  const overridesPageNo = 4;
+  const residualPageNo = 4 + ovr;
+  const investmentPageNo = 5 + ovr;
+  const sensitivityPageNo = 5 + inv + ovr;
+  const cashStartPageNo = 6 + inv + ovr;
   const assumptionsPageNo = cashStartPageNo + cashChunks.length;
   const monitoringPageNo = assumptionsPageNo + 1;
   const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
@@ -551,7 +593,67 @@ export default function AppraisalReport() {
           <PageFoot no={3} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
-        {/* ===== PAGE 4 — RESIDUAL APPRAISAL ===== */}
+        {/* ===== PHASE COST OVERRIDES — continuation of section 2, only when a phase prices its own trades ===== */}
+        {phaseOverrides.shown.length > 0 && (
+          <A4Page>
+            <PageHead title="2 · Phase cost overrides" scheme={scheme} />
+            <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
+              These phases are priced on their own trades rather than the scheme's — a podium block is not a terrace, and the
+              appraisal treats them separately. Every other phase inherits the scheme rate of £{n0(R.buildRate)}/ft² and the
+              scheme's {input.profFeePct}% fees and {input.contingencyPct}% contingency.
+            </p>
+            {phaseOverrides.shown.map(({ phase, trades }, pi) => {
+              const feePct = phase.build > 0 ? (phase.fees / phase.build) * 100 : input.profFeePct;
+              const contPct = phase.build > 0 ? (phase.cont / phase.build) * 100 : input.contingencyPct;
+              const differs = Math.abs(feePct - input.profFeePct) > 0.05 || Math.abs(contPct - input.contingencyPct) > 0.05;
+              return (
+                <div key={pi} className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 14 }}>
+                  <div className="flex text-[11.5px] font-semibold" style={{ background: '#F4F6F4', padding: '8px 14px' }}>
+                    <div style={{ flex: 3 }}>{phase.name}</div>
+                    <div className="fig text-right" style={{ flex: 1 }}>£{n0(phase.buildRate)}/ft²</div>
+                    <div className="fig text-right" style={{ flex: 1.4 }}>{formatMoneyFull(phase.build)}</div>
+                  </div>
+                  {trades.map((t, ti) => (
+                    <div key={ti} className="flex text-[11.5px]" style={{ borderTop: '1px solid #ECEBE5' }}>
+                      <div className="text-ink-2b" style={{ flex: 3, padding: '6px 14px 6px 24px' }}>{t.label}</div>
+                      <div className="fig text-right" style={{ flex: 1, padding: '6px 0' }}>£{t.rate}</div>
+                      <div className="fig text-right" style={{ flex: 1.4, padding: '6px 14px' }}>{formatMoneyFull(t.rate * phase.gia)}</div>
+                    </div>
+                  ))}
+                  {differs && (
+                    <div className="flex text-[11px] text-ink-2b" style={{ borderTop: '1px solid #ECEBE5', padding: '6px 14px 6px 24px' }}>
+                      {/* name only what actually differs — calling an inherited
+                          rate "this phase's own" would be misleading */}
+                      {[
+                        Math.abs(feePct - input.profFeePct) > 0.05
+                          ? `professional fees ${feePct.toFixed(1)}% (scheme ${input.profFeePct}%)`
+                          : null,
+                        Math.abs(contPct - input.contingencyPct) > 0.05
+                          ? `contingency ${contPct.toFixed(1)}% (scheme ${input.contingencyPct}%)`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      {' '}— set on this phase
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {phaseOverrides.hiddenTotal > 0 && (
+              <p className="mt-3 text-[11px] text-ink-3 leading-snug">
+                {phaseOverrides.hiddenTotal} further trade line{phaseOverrides.hiddenTotal === 1 ? '' : 's'}
+                {phaseOverrides.hiddenPhases > 0
+                  ? ` across ${phaseOverrides.hiddenPhases} further phase${phaseOverrides.hiddenPhases === 1 ? '' : 's'}`
+                  : ''}{' '}
+                are not printed here for space; the complete breakdown is in the .xlsx export.
+              </p>
+            )}
+            <PageFoot no={overridesPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          </A4Page>
+        )}
+
+        {/* ===== RESIDUAL APPRAISAL ===== */}
         <A4Page>
           <PageHead title="3 · Residual appraisal" scheme={scheme} />
           <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 18 }}>
@@ -610,7 +712,7 @@ export default function AppraisalReport() {
               ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of GDV after acquisition costs of ${input.site.acqPct}%.`
               : `Developer profit is the amount remaining after all costs including the fixed land price plus ${input.site.acqPct}% acquisition costs.`}
           </p>
-          <PageFoot no={4} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={residualPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
         {/* ===== INVESTMENT — only when the scheme holds and lets space ===== */}
@@ -856,7 +958,7 @@ export default function AppraisalReport() {
             </>
           )}
 
-          <SectionTitle>8 · Important notice</SectionTitle>
+          <SectionTitle>{secNotice} · Important notice</SectionTitle>
           <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">{DISCLAIMER}</p>
 
           <div className="mt-8 flex gap-10">

@@ -592,8 +592,8 @@ test('appraisal report schedules a phased scheme by phase', async ({ page }) => 
 
   // the phasing table states each phase's own rate
   await expect(accommodation.getByText('Phasing')).toBeVisible();
-  await expect(accommodation.getByText('£206')).toBeVisible();
-  await expect(accommodation.getByText('£170')).toBeVisible();
+  await expect(accommodation.getByText('£206', { exact: true })).toBeVisible();
+  await expect(accommodation.getByText('£170', { exact: true })).toBeVisible();
   await expect(accommodation.getByText(/delivered in 2 phases over 32 months/)).toBeVisible();
 
   // page numbering still matches what prints
@@ -1256,13 +1256,19 @@ test('the appraisal report prints an investment section without desyncing pagina
     return { income: by('Kingsway'), sales: by('Northgate') };
   });
 
-  /** page count, any page whose content overflows A4, and the footer sequence */
+  /**
+   * page count, any page that will not print on one A4 sheet, and the footers.
+   *
+   * The page box is min-height 1122, so content that does not fit GROWS the box
+   * instead of clipping it: scrollHeight === clientHeight and an overflow probe
+   * reads clean while chromium quietly prints a second sheet. Measure the box.
+   */
   const measure = () =>
     page.evaluate(() => {
       const pages = [...document.querySelectorAll('.a4-page')];
       return {
         count: pages.length,
-        overflowing: pages.filter((p) => p.scrollHeight - p.clientHeight > 1).length,
+        overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
         feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
       };
     });
@@ -1291,4 +1297,110 @@ test('the appraisal report prints an investment section without desyncing pagina
   expect(noInv.overflowing).toBe(0);
   expect(noInv.count).toBe(withInv.count - 1);
   expect(noInv.feet).toEqual(Array.from({ length: noInv.count - 1 }, (_, i) => `${i + 2}/${noInv.count}`));
+});
+
+/**
+ * Phase cost overrides in the report. They get their own continuation sheet —
+ * the accommodation page had ~200px spare, nothing like enough. The workbook
+ * prints every trade line; a fixed-height page cannot, so the budget is explicit
+ * and the WORST case (more phases AND more lines than fit) must still print a
+ * sheet that fits A4 and says what it left out.
+ *
+ * OWNS 'Morgan Furniture Factory'. It writes a phased appraisal, so it must not
+ * touch Harbour Reach, which three other tests read (programme, trade
+ * breakdown, graphics sweep). A saved mutation outlives the test.
+ */
+test('the report prints phase cost overrides and states what it could not fit', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  // height, not scrollHeight: an over-full page grows past A4 rather than clipping
+  const measure = () =>
+    page.evaluate(() => {
+      const pages = [...document.querySelectorAll('.a4-page')];
+      return {
+        count: pages.length,
+        overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
+        feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
+      };
+    });
+
+  // the seeded phased scheme: one phase prices off the scheme, trades itemised
+  const harbour = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+  await page.goto(`/deal/${harbour}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('2 · Phase cost overrides')).toBeVisible();
+  await expect(page.getByText('Piling & basement')).toBeVisible();
+  await expect(page.getByText('Envelope — marine grade')).toBeVisible();
+  // only the differing rate is named — phase A overrides contingency, not fees
+  await expect(page.getByText(/contingency 7\.0% \(scheme 5%\) — set on this phase/)).toBeVisible();
+  await expect(page.getByText(/professional fees .* — set on this phase/)).toHaveCount(0);
+  await expect(page.getByText(/further trade line/)).toHaveCount(0); // nothing dropped
+  // it is a continuation sheet of section 2, so the footers must still run clean
+  const seeded = await measure();
+  expect(seeded.overflowing).toBe(0);
+  expect(seeded.feet).toEqual(Array.from({ length: seeded.count - 1 }, (_, i) => `${i + 2}/${seeded.count}`));
+
+  /**
+   * The worst case, on this test's OWN deal: four phases of eight trades each —
+   * past the 18-line budget, so a card is part-printed and a whole phase gets no
+   * card at all. Both limits bite; the page must SAY what it left out and still
+   * fit on one sheet. (Four phases, not five: at five the ACCOMMODATION schedule
+   * runs 6px past A4 on its own — a separate capacity limit of that page.)
+   */
+  const own = await page.evaluate(async () => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const dealId = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Morgan')).id;
+    const many = (n: number, tag: string) => Array.from({ length: n }, (_, i) => ({ label: `${tag} trade ${i + 1}`, rate: 12 }));
+    const phase = (name: string, start: number, tag: string) => ({
+      name,
+      start,
+      buildMonths: 10,
+      salesMonths: 4,
+      units: [{ label: 'Apartments', count: 10, area: 800, cap: 420 }],
+      trades: many(8, tag),
+      contingencyPct: 8,
+    });
+    const input = {
+      units: [],
+      phases: [
+        phase('Phase 1 — podium', 1, 'P1'),
+        phase('Phase 2 — terrace', 12, 'P2'),
+        phase('Phase 3 — mews', 23, 'P3'),
+        phase('Phase 4 — wharf', 34, 'P4'),
+      ],
+      efficiency: 85,
+      trades: [{ label: 'Build', rate: 150 }],
+      profFeePct: 11,
+      contingencyPct: 5,
+      otherCosts: [{ label: 'Planning', amount: 120000 }],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 20, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+      disposal: { agentPct: 1.5, legalPct: 0.5 },
+      targetProfitOnGdvPct: 20,
+      jv: { gpCoinvestPct: 10, prefPct: 8, promotePct: 20 },
+    };
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    const body = await out.json();
+    return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
+  });
+  expect(own, `worst-case save failed: ${own.err}`).toMatchObject({ ok: true });
+
+  await page.goto(`/deal/${own.dealId}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('2 · Phase cost overrides')).toBeVisible();
+  // 32 lines over 4 phases; 18 printed across 3 cards (8 + 8 + 2), so 14 lines
+  // remain and phase 4 gets no card at all — all of it stated, none of it silent
+  await expect(page.getByText('P3 trade 2')).toBeVisible();
+  await expect(page.getByText('P3 trade 3')).toHaveCount(0);
+  await expect(page.getByText(/14 further trade lines across 1 further phase are not printed/)).toBeVisible();
+  const worst = await measure();
+  expect(worst.overflowing).toBe(0);
+  expect(worst.feet).toEqual(Array.from({ length: worst.count - 1 }, (_, i) => `${i + 2}/${worst.count}`));
 });
