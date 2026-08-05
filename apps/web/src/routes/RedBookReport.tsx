@@ -1,6 +1,15 @@
 import { useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { computeAppraisal, formatMoneyFull, formatPct, formatRent } from '@apex/appraisal-engine';
+import {
+  DEFAULT_PURCHASER_COSTS_PCT,
+  capitaliseIncome,
+  computeAppraisal,
+  discountedCashflow,
+  formatMoneyFull,
+  formatPct,
+  formatRent,
+  type IncomeInput,
+} from '@apex/appraisal-engine';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
@@ -262,15 +271,43 @@ export default function RedBookReport() {
   const mv = round1k(R.gdv); // Market Value — appraisal GDV, reported to the nearest £1,000
   const compApproach = hasComps && nia > 0 ? round1k(summary.supportedPsf * nia) : mv;
   const drcApproach = round1k(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
-  // Investment cross-check. With a real rent roll the analysed net rate and the
-  // valuer's own yield drive it; without one it falls back to the 4.2% net-yield
-  // convention applied to the reported Market Value.
+  /**
+   * Investment cross-check, run THROUGH THE ENGINE.
+   *
+   * This used to capitalise inline — a fourth place money maths lived, with its
+   * own purchaser's-costs handling. It now builds the basis and calls
+   * capitaliseIncome, so the deductions, the years-purchase and the costs
+   * convention are the ones the appraisal itself used.
+   *
+   * The basis is the WHOLE property let at the analysed net rate: this panel
+   * compares whole-property values, while a rent roll usually covers only the
+   * held part. Without a rent roll it falls back to the 4.2% net-yield
+   * convention applied to the reported Market Value.
+   */
   const inv = R.income;
   const invYieldPct = input.income?.yieldPct ?? 4.2;
-  const rentPcm = inv && inv.totalArea > 0
-    ? Math.round((inv.netRent / inv.totalArea) * nia / 12 / 25) * 25
-    : Math.round((mv * 0.042) / 12 / 25) * 25;
-  const invApproach = round1k(((rentPcm * 12) / (invYieldPct / 100)) / (1 + (input.income?.purchaserCostsPct ?? 0) / 100));
+  const investmentBasis: IncomeInput = {
+    lines: [
+      {
+        label: 'Whole property',
+        count: 1,
+        area: nia,
+        rentPsf: inv && inv.totalArea > 0 && nia > 0 ? inv.netRent / inv.totalArea : nia > 0 ? (mv * 0.042) / nia : 0,
+      },
+    ],
+    // the rate above is already NET, so no further deductions are taken
+    nonRecoverablePct: 0,
+    yieldPct: invYieldPct,
+    purchaserCostsPct: input.income?.purchaserCostsPct ?? DEFAULT_PURCHASER_COSTS_PCT,
+  };
+  const invCap = capitaliseIncome(investmentBasis);
+  const rentPcm = Math.round(invCap.netRent / 12 / 25) * 25;
+  /**
+   * With a DCF on the appraisal the cross-check becomes growth-explicit and
+   * reports the equated yield — the rate at which the two methods agree.
+   */
+  const invDcf = input.dcf ? discountedCashflow(investmentBasis, input.dcf) : null;
+  const invApproach = round1k(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
   const reinstatement = Math.round((R.build + R.fees) / 5000) * 5000;
   const range = hasComps && nia > 0
     ? { lo: round1k(summary.range.lo * nia), hi: round1k(summary.range.hi * nia) }
@@ -300,14 +337,27 @@ export default function RedBookReport() {
   };
   const assetType = deal?.assetType ?? 'RESIDENTIAL';
 
+  /**
+   * Weights follow the scheme. A held-and-let element carrying most of the GDV
+   * cannot sensibly be a 10% afterthought, and a pure sales scheme should not
+   * pretend the investment method matters. They always total 100.
+   */
+  const incomeShare = R.gdv > 0 ? R.investmentValue / R.gdv : 0;
+  const investmentWeight = Math.round(10 + incomeShare * 45);
+  const drcWeight = 20 - Math.round(incomeShare * 10);
+  const comparableWeight = 100 - investmentWeight - drcWeight;
   const approaches = [
-    { name: 'Comparable', value: compApproach, note: hasComps ? `${comps.length} adjusted comparable${comps.length === 1 ? '' : 's'}` : 'No comparables logged', weight: 70, dot: brand[700] },
-    { name: 'DRC', value: drcApproach, note: 'Land + depreciated build', weight: 20, dot: brand[400] },
+    { name: 'Comparable', value: compApproach, note: hasComps ? `${comps.length} adjusted comparable${comps.length === 1 ? '' : 's'}` : 'No comparables logged', weight: comparableWeight, dot: brand[700] },
+    { name: 'DRC', value: drcApproach, note: 'Land + depreciated build', weight: drcWeight, dot: brand[400] },
     {
       name: 'Investment',
       value: invApproach,
-      note: inv ? `Rent roll ${formatMoneyFull(inv.netRent)} pa net @ ${invYieldPct}%` : 'Net rent × YP (4.2%)',
-      weight: 10,
+      note: invDcf
+        ? `DCF at ${input.dcf!.rentalGrowthPct}% growth · equated ${formatPct(invDcf.equatedYield, 2)}`
+        : inv
+          ? `Rent roll ${formatMoneyFull(inv.netRent)} pa net @ ${invYieldPct}%`
+          : 'Net rent × YP (4.2%)',
+      weight: investmentWeight,
       dot: neutral.ink3,
     },
   ];
@@ -504,8 +554,22 @@ export default function RedBookReport() {
 
           <div className="text-[13px] leading-[1.62]" style={{ marginTop: 18, color: '#2C342E' }}>
             Primary reliance has been placed on the <b className="font-semibold">comparable method</b>, being the most reliable evidence
-            of value for property of this class. The depreciated replacement cost and investment methods have been prepared as
-            cross-checks and are afforded limited weight.
+            of value for property of this class.{' '}
+            {investmentWeight >= 30 ? (
+              <>
+                A substantial part of the scheme is held and let, so the <b className="font-semibold">investment method</b> is
+                afforded material weight alongside it; depreciated replacement cost is a cross-check only.
+              </>
+            ) : (
+              <>The depreciated replacement cost and investment methods have been prepared as cross-checks and are afforded limited weight.</>
+            )}
+            {invDcf && (
+              <>
+                {' '}The investment figure is stated on a growth-explicit basis — {input.dcf!.rentalGrowthPct}% rental growth over{' '}
+                {input.dcf!.holdYears} years, discounted at {input.dcf!.discountRatePct}% — which implies an equated yield of{' '}
+                <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against an all-risks yield of {invYieldPct}%.
+              </>
+            )}
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3">

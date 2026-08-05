@@ -1197,3 +1197,44 @@ test('a signing link expires, and an expired one cannot sign', async ({ page, br
   await expect(clientPage.getByText('Thank you — these terms are signed')).toBeVisible();
   await client.close();
 });
+
+/**
+ * Red Book approaches panel — it runs the shared engine now, and its weights
+ * follow the scheme rather than sitting at a fixed 70/20/10.
+ */
+test('the approaches panel weights the investment method by how income-led the scheme is', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const ids = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    const deals = j.result.data.json.deals as Array<{ id: string; name: string }>;
+    const by = (p: string) => deals.find((d) => d.name.startsWith(p))!.id;
+    return { income: by('Kingsway'), sales: by('Northgate') };
+  });
+
+  const weights = async () => {
+    const txt = await page.locator('.a4-page').filter({ hasText: 'Valuation methodology' }).innerText();
+    return [...txt.matchAll(/Weight (\d+)%/g)].map((m) => Number(m[1]));
+  };
+
+  // an income-led scheme: most of its GDV is a held-and-let element
+  await page.goto(`/deal/${ids.income}/redbook`);
+  await page.waitForSelector('.a4-page');
+  const led = await weights();
+  expect(led).toHaveLength(3);
+  expect(led.reduce((a, b) => a + b, 0)).toBe(100);
+  expect(led[2]).toBeGreaterThanOrEqual(30); // investment carries material weight
+  await expect(page.getByText(/investment method.*afforded material weight|A substantial part of the scheme is held and let/)).toBeVisible();
+  // stated growth-explicitly, with the equated yield the two methods agree at
+  await expect(page.getByText(/equated yield of/)).toBeVisible();
+  await expect(page.getByText(/DCF at 2\.5% growth · equated/)).toBeVisible();
+
+  // a pure sales scheme reverts to the conventional split and prose
+  await page.goto(`/deal/${ids.sales}/redbook`);
+  await page.waitForSelector('.a4-page');
+  expect(await weights()).toEqual([70, 20, 10]);
+  await expect(page.getByText(/afforded limited weight/)).toBeVisible();
+  await expect(page.getByText(/equated yield of/)).toHaveCount(0);
+});
