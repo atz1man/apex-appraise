@@ -6,7 +6,7 @@ import { computeAppraisal, jvWaterfall, type AppraisalInput } from '@apex/apprai
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
-import { APP_URL, inviteEmail, sendMail, welcomeEmail } from '../email.js';
+import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
 import { authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 
@@ -38,6 +38,16 @@ const DEFAULT_INTEGRATIONS = [
 ];
 
 export const orgRouter = router({
+  /**
+   * The demo mailbox: what would have been emailed, when no SMTP is configured.
+   *
+   * Returns nothing at all the moment SMTP_URL is set, so a production instance
+   * cannot serve messages even if this were called. It exists because on a demo
+   * instance an invite or a reset link otherwise goes to a console nobody reads,
+   * which makes those flows impossible to try — and impossible to test.
+   */
+  demoMailbox: internalProcedure.query(() => ({ enabled: mailboxEnabled(), messages: readMailbox() })),
+
   /** Self-serve tenant onboarding: new organisation + its first (admin) user. */
   register: publicProcedure
     .input(

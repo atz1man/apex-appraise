@@ -14,6 +14,8 @@ export default function Login() {
   const [email, setEmail] = useState('arthur@apexappraise.co.uk');
   const [password, setPassword] = useState('demo');
   const [error, setError] = useState('');
+  // arriving from a completed reset — say so, or the redirect looks like a failure
+  const justReset = new URLSearchParams(window.location.search).get('reset') === '1';
   const login = trpc.auth.login.useMutation({
     onSuccess: (res) => {
       setSession(res.token, res.principal as StoredPrincipal);
@@ -44,8 +46,16 @@ export default function Login() {
           <h1 className="text-[19px] font-bold tracking-[-0.4px] mb-4">One connected workfile</h1>
           <label className="label-mono text-ink-3 block mb-1">Email</label>
           <input className="w-full mb-3" aria-label="Email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-          <label className="label-mono text-ink-3 block mb-1">Password</label>
+          <div className="flex items-baseline justify-between mb-1">
+            <label className="label-mono text-ink-3">Password</label>
+            <a href="/forgot" className="text-[11.5px] font-semibold text-brand-ink">
+              Forgot?
+            </a>
+          </div>
           <input className="w-full mb-4" type="password" aria-label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {justReset && !error && (
+            <div className="text-[12px] text-status-green mb-3">Password updated — sign in with it below.</div>
+          )}
           {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
           <Button type="submit" className="w-full" loading={login.isPending}>
             Sign in

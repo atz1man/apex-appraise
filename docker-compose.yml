@@ -14,6 +14,11 @@ services:
       # subdirectory so pg_upgrade --link can work across the mount boundary.
       # Mounting the old .../data path makes 18 refuse to start.
       - pgdata:/var/lib/postgresql
+    ports:
+      # published so `prisma migrate diff --from-migrations` has a reachable shadow
+      # database — without one the documented schema-change procedure cannot run.
+      # 55432, not 5432, so it never fights a postgres already on the host.
+      - '55432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U apex']
       interval: 5s

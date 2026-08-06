@@ -238,6 +238,8 @@ async function runTextSweep(page: Page, browser: Browser, viewport: { width: num
       [
         ['login', '/login'],
         ['register', '/register'],
+        ['forgot password', '/forgot'],
+        ['reset password', '/reset?token=sweep'],
         ['landing', '/welcome'],
         ['signing page', `/terms/${signToken}`],
         ['not found', '/no-such-page'],

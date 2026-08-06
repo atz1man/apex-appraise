@@ -46,6 +46,8 @@ const DealOverview = lazy(() => import('./routes/DealOverview'));
 const Calendar = lazy(() => import('./routes/Calendar'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Register = lazy(() => import('./routes/Register'));
+const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
+const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const SitePack = lazy(() => import('./routes/SitePack'));
 const WhatsNew = lazy(() => import('./routes/WhatsNew'));
 
@@ -103,6 +105,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot" element={<ForgotPassword />} />
+          <Route path="/reset" element={<ResetPassword />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
           <Route path="/" element={<Protected><Hub /></Protected>} />

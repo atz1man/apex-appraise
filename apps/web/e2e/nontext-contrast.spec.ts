@@ -259,6 +259,9 @@ async function runNonTextSweep(page: Page) {
 
   const routes: Array<[string, string]> = [
     ['login', '/login'],
+    // password reset is a public, unauthenticated surface — its inputs and focus
+    // rings need the same 1.4.11 treatment as everything else
+    ['reset password', '/reset?token=sweep'],
     ['hub', '/'],
     ['board', '/board'],
     ['settings', '/settings'],

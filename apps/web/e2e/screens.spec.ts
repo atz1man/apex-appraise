@@ -1640,3 +1640,73 @@ test('the report prints phase cost overrides and states what it could not fit', 
   expect(worst.overflowing).toBe(0);
   expect(worst.feet).toEqual(Array.from({ length: worst.count - 1 }, (_, i) => `${i + 2}/${worst.count}`));
 });
+
+/**
+ * Password reset, end to end.
+ *
+ * OWNS 'reset-drill@apexappraise.co.uk' — a user it creates and resets. It must
+ * not touch the seeded demo accounts: four other tests sign in as arthur@, and a
+ * changed password there would fail every one of them.
+ */
+test('a locked-out user can reset their password, once, without being enumerated', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  const base = process.env.E2E_BASE_URL ?? 'http://localhost:5273';
+  const call = async (proc: string, json: unknown, headers: Record<string, string> = {}) => {
+    const r = await request.post(`${base}/trpc/${proc}`, { data: { json }, headers: { 'content-type': 'application/json', ...headers } });
+    return { status: r.status(), body: await r.json() };
+  };
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+  const auth = { authorization: `Bearer ${token}` };
+
+  // a user of this test's own, invited into the demo org
+  const email = 'reset-drill@apexappraise.co.uk';
+  await call('org.invite', { name: 'Reset Drill', email, role: 'ANALYST' }, auth);
+
+  /**
+   * An unknown address must be indistinguishable from a known one. "No account
+   * with that email" is an enumeration oracle — and for named surveyors at named
+   * firms, confirming who holds an account is itself a disclosure.
+   */
+  const known = await call('auth.requestPasswordReset', { email });
+  const unknown = await call('auth.requestPasswordReset', { email: 'nobody-at-all@apexappraise.co.uk' });
+  expect(known.status).toBe(unknown.status);
+  expect(JSON.stringify(known.body)).toBe(JSON.stringify(unknown.body));
+
+  /**
+   * The token is stored hashed, so it cannot be read back from the database — the
+   * test has to get it the way the user does: out of the email. On a demo
+   * instance that is the in-memory mailbox. No test-only backdoor exists on the
+   * API, because an endpoint that hands out reset tokens is a vulnerability
+   * whatever it is called.
+   */
+  const box = await request.get(`${base}/trpc/org.demoMailbox`, { headers: auth });
+  const messages = (await box.json()).result.data.json.messages as Array<{ to: string; subject: string; text: string }>;
+  const mail = messages.find((m) => m.to === email && m.subject.includes('Reset'));
+  expect(mail, 'a reset email should have been sent').toBeTruthy();
+  const rawToken = mail!.text.match(/\/reset\?token=([\w-]+)/)?.[1];
+  expect(rawToken, 'the email should carry a usable link').toBeTruthy();
+
+  // and the raw token is NOT what the database holds
+  const hashedInDb = await call('auth.resetPassword', { token: 'x'.repeat(43), password: 'nope-nope-nope' });
+  expect(hashedInDb.body.error, 'a random token of the right shape must not work').toBeTruthy();
+
+  // a wrong token is refused
+  const bad = await call('auth.resetPassword', { token: 'not-a-real-token', password: 'brand-new-pw-1' });
+  expect(bad.body.error).toBeTruthy();
+
+  // the real one works
+  const ok = await call('auth.resetPassword', { token: rawToken, password: 'brand-new-pw-1' });
+  expect(ok.body.error, JSON.stringify(ok.body).slice(0, 200)).toBeFalsy();
+
+  // and works exactly once — the token is cleared in the same write that sets the password
+  const replay = await call('auth.resetPassword', { token: rawToken, password: 'another-attempt-2' });
+  expect(replay.body.error).toBeTruthy();
+
+  // the new password is the one that signs in
+  const signedIn = await call('auth.login', { email, password: 'brand-new-pw-1' });
+  expect(signedIn.body.result?.data?.json?.token, 'new password should sign in').toBeTruthy();
+});

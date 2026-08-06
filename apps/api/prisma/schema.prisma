@@ -40,6 +40,10 @@ model User {
   initials  String
   investorId String? // set when principalType=investor
   buyerUnitId String? // set when principalType=buyer
+  // Password reset. The token is stored HASHED: a leaked database row must not be
+  // a working reset link, and this table is exactly what leaks.
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
   deals     Deal[]
   createdAt DateTime @default(now())
 }

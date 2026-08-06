@@ -51,3 +51,37 @@ export function recordFailure(email: string) {
 export function recordSuccess(email: string) {
   failures.delete(email);
 }
+
+/**
+ * Password-reset tokens.
+ *
+ * The token is random, single-use and short-lived, and only its SHA-256 digest
+ * is stored. A leaked database row must not be a working reset link — and the
+ * user table is precisely what leaks. Digest, not scrypt: the token already has
+ * 256 bits of entropy, so there is nothing to brute-force and no reason to make
+ * every verification expensive.
+ */
+export const RESET_TTL_MS = 60 * 60 * 1000;
+
+export function newResetToken(): { token: string; hash: string; expiresAt: Date } {
+  const token = randomBytes(32).toString('base64url');
+  return { token, hash: hashResetToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MS) };
+}
+
+export const hashResetToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+/**
+ * Reset requests are throttled per email so the endpoint cannot be used to mail-bomb
+ * someone, or to farm timing differences between known and unknown addresses.
+ */
+const resetRequests = new Map<string, number[]>();
+const RESET_MAX = 3;
+const RESET_WINDOW_MS = 15 * 60 * 1000;
+
+export function tooManyResetRequests(email: string): boolean {
+  const now = Date.now();
+  const recent = (resetRequests.get(email) ?? []).filter((t) => now - t < RESET_WINDOW_MS);
+  recent.push(now);
+  resetRequests.set(email, recent);
+  return recent.length > RESET_MAX;
+}
