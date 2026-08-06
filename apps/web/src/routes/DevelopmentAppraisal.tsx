@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   computeAppraisal,
+  dcfSensitivity,
   discountedCashflow,
   jvWaterfall,
   monteCarlo,
@@ -300,6 +301,8 @@ export default function DevelopmentAppraisal() {
   const setDcf = (patch: Partial<DcfInput>) => set({ dcf: { ...(dcfIn ?? DEFAULT_DCF), ...patch } });
   // the DCF never feeds GDV — the capitalisation is what the report states
   const dcf = useMemo(() => (inc && dcfIn ? discountedCashflow(inc, dcfIn) : null), [inc, dcfIn]);
+  const dcfGrid = useMemo(() => (inc && dcfIn ? dcfSensitivity(inc, dcfIn) : null), [inc, dcfIn]);
+  const dcfSubCap = dcfGrid?.flat().filter((c) => c.vsCapitalisation < 1).length ?? 0;
 
   const breakdown: Array<[string, number, boolean?]> = [
     ['Gross development value', R.gdv],
@@ -1124,6 +1127,66 @@ export default function DevelopmentAppraisal() {
                           The all-risks yield prices growth implicitly; this states it. The equated yield is the discount rate at
                           which the two agree — with nil growth it equals the all-risks yield.
                         </div>
+
+                        {/* growth × exit yield: the two assumptions a DCF is least
+                            sure of. Steps are percentage POINTS — the units a yield
+                            is argued in — and every cell runs the same engine. */}
+                        {dcfGrid && (
+                          <div className="mt-4 border-t border-border-std pt-3">
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-[12px] font-semibold">Sensitivity — growth × exit yield</span>
+                              <span className="text-[11px] text-ink-3">
+                                {dcfSubCap > 0
+                                  ? `† ${dcfSubCap} of ${dcfGrid.flat().length} below the capitalisation`
+                                  : 'all above the capitalisation'}
+                              </span>
+                            </div>
+                            <div className="mt-2 overflow-x-auto">
+                              <table className="w-full border-collapse text-[11px]">
+                                <thead>
+                                  <tr>
+                                    <th className="text-left font-semibold text-ink-3 py-1 pr-2">growth ↓ / exit →</th>
+                                    {dcfGrid[0].map((c, ci) => (
+                                      <th key={ci} className="fig text-right font-semibold text-ink-3 py-1 px-2">
+                                        {c.exitYieldPct.toFixed(2)}%
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dcfGrid.map((row, ri) => (
+                                    <tr key={ri}>
+                                      <td className="fig text-ink-2 py-1 pr-2 whitespace-nowrap">
+                                        {row[0].rentalGrowthPct < 0 ? '−' : ''}
+                                        {Math.abs(row[0].rentalGrowthPct)}% pa
+                                      </td>
+                                      {row.map((c, ci) => (
+                                        <td
+                                          key={ci}
+                                          className="fig text-right py-1 px-2 whitespace-nowrap"
+                                          style={{
+                                            fontWeight: c.isBase ? 700 : 500,
+                                            outline: c.isBase ? '2px solid rgb(var(--brand-ink))' : 'none',
+                                            outlineOffset: -2,
+                                            color:
+                                              c.vsCapitalisation < 1
+                                                ? 'rgb(var(--status-red, 178 58 46))'
+                                                : c.ratio >= 1.02
+                                                  ? 'rgb(var(--status-green, 30 122 85))'
+                                                  : 'rgb(var(--ink, 22 32 27))',
+                                          }}
+                                        >
+                                          {fM(c.netPresentValue)}
+                                          {c.vsCapitalisation < 1 && ' †'}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </Panel>
                     ) : (
                       <Panel title="Growth-explicit DCF">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAppraisal, jvWaterfall, cilCharge, type AppraisalInput } from '@apex/appraisal-engine';
+import { computeAppraisal, dcfSensitivity, jvWaterfall, cilCharge, type AppraisalInput } from '@apex/appraisal-engine';
 import { buildAppraisalWorkbook } from './exportXlsx';
 
 /**
@@ -373,6 +373,31 @@ describe('buildAppraisalWorkbook — with a growth-explicit DCF', async () => {
     expect(labels.some((l) => l.startsWith('Growth-explicit DCF'))).toBe(true);
     expect(labels.filter((l) => /^ {4}Year \d+/.test(l))).toHaveLength(5);
     expect(labels).toContain('Equated yield');
+  });
+
+  it('writes the sensitivity matrix as re-run values, agreeing cell for cell with the engine', () => {
+    const rr = wb4.getWorksheet('Rent roll')!;
+    const rows: Array<{ label: string; cells: number[] }> = [];
+    let inGrid = false;
+    rr.eachRow((row) => {
+      const label = String(row.getCell(1).value ?? '');
+      if (label.startsWith('Sensitivity — NPV by growth')) {
+        inGrid = true;
+        return;
+      }
+      if (inGrid && /% pa growth/.test(label)) {
+        rows.push({ label, cells: [5, 6, 7, 8, 9].map((c) => row.getCell(c).value as number) });
+      }
+    });
+    const grid = dcfSensitivity(dcfCase.income!, dcfCase.dcf!);
+    expect(rows).toHaveLength(grid.length);
+    rows.forEach((r, ri) => {
+      // no formula stands in for the model: each cell is the engine's own figure
+      expect(r.cells).toEqual(grid[ri].map((c) => Math.round(c.netPresentValue)));
+    });
+    // and the axis reads the way it is labelled — growth descending
+    expect(rows[0].label).toContain(`${grid[0][0].rentalGrowthPct}% pa growth`);
+    expect(grid[0][0].rentalGrowthPct).toBeGreaterThan(grid[grid.length - 1][0].rentalGrowthPct);
   });
 
   it('does not touch GDV — the capitalisation remains the reported value', () => {

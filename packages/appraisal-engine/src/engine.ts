@@ -9,6 +9,7 @@ import type {
   CostTiming,
   DcfInput,
   DcfResult,
+  DcfSensitivityCell,
   DcfYear,
   IncomeInput,
   IncomeLineResult,
@@ -389,6 +390,55 @@ export function discountedCashflow(income: IncomeInput, dcf: DcfInput): DcfResul
     pvFromExit: at.npv > 0 ? at.exitPv / at.npv : 0,
     equatedYield,
   };
+}
+
+/**
+ * Growth × exit-yield matrix over the held element — the two assumptions a DCF
+ * is least certain about and most sensitive to.
+ *
+ * Steps are percentage POINTS applied to the stated assumptions, so the grid
+ * speaks the way a valuer does (±50bp on the yield, ±1pp on growth) rather than
+ * scaling a rate by a percentage of itself.
+ *
+ * Rows run from the highest growth down and columns from the sharpest yield out,
+ * so value falls from the top-left — the same reading order as the profit grid.
+ *
+ * Every cell runs the real `discountedCashflow`; there is no second, lighter
+ * model of the same maths that could drift from it.
+ */
+export function dcfSensitivity(
+  income: IncomeInput,
+  dcf: DcfInput,
+  growthSteps: number[] = [-2, -1, 0, 1, 2],
+  yieldSteps: number[] = [-1, -0.5, 0, 0.5, 1],
+): DcfSensitivityCell[][] {
+  const base = discountedCashflow(income, dcf).netPresentValue;
+  const capitalised = capitaliseIncome(income).netCapitalValue;
+  return growthSteps
+    .slice()
+    .sort((a, b) => b - a)
+    .map((gd) =>
+      yieldSteps
+        .slice()
+        .sort((a, b) => a - b)
+        .map((yd) => {
+          // a nil or negative exit yield capitalises to infinity; hold the cell at
+          // a nominal 10bp instead of printing a number that means nothing
+          const exitYieldPct = Math.max(0.1, dcf.exitYieldPct + yd);
+          const rentalGrowthPct = dcf.rentalGrowthPct + gd;
+          const npv = discountedCashflow(income, { ...dcf, exitYieldPct, rentalGrowthPct }).netPresentValue;
+          return {
+            rentalGrowthPct,
+            exitYieldPct,
+            growthDelta: gd,
+            yieldDelta: yd,
+            netPresentValue: npv,
+            isBase: gd === 0 && yd === 0,
+            ratio: base > 0 ? npv / base : 1,
+            vsCapitalisation: capitalised > 0 ? npv / capitalised : 1,
+          };
+        }),
+    );
 }
 
 export interface ComputeOpts {

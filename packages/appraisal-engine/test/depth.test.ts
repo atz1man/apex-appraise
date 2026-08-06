@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dcfSensitivity,
   capitaliseIncome,
   computeAppraisal,
   discountedCashflow,
@@ -925,5 +926,65 @@ describe('discountedCashflow', () => {
     expect(d.years[4].rent).toBeCloseTo(30_000, 6);
     expect(d.years[5].rent).toBeCloseTo(30_000, 6);
     expect(d.exitRent).toBeCloseTo(30_000, 6);
+  });
+});
+
+// ---- Growth × exit-yield matrix ----
+
+describe('dcfSensitivity', () => {
+  const dcf = { holdYears: 10, rentalGrowthPct: 2, discountRatePct: 8, exitYieldPct: 6 };
+
+  it('centres on the DCF it was given', () => {
+    const grid = dcfSensitivity(rack, dcf);
+    const base = grid.flat().filter((c) => c.isBase);
+    expect(base).toHaveLength(1);
+    // the centre cell IS the stated appraisal, not an approximation of it
+    expect(base[0].netPresentValue).toBeCloseTo(discountedCashflow(rack, dcf).netPresentValue, 6);
+    expect(base[0].ratio).toBeCloseTo(1, 10);
+    expect(base[0].rentalGrowthPct).toBe(2);
+    expect(base[0].exitYieldPct).toBe(6);
+  });
+
+  it('reads high to low from the top-left, like the profit grid', () => {
+    const grid = dcfSensitivity(rack, dcf);
+    // rows: growth descends, so value descends down the grid
+    for (const col of [0, 2, 4]) {
+      for (let r = 1; r < grid.length; r++) {
+        expect(grid[r][col].netPresentValue).toBeLessThan(grid[r - 1][col].netPresentValue);
+      }
+    }
+    // columns: the exit yield softens rightwards, so value descends across
+    for (const row of [0, 2, 4]) {
+      for (let c = 1; c < grid[row].length; c++) {
+        expect(grid[row][c].netPresentValue).toBeLessThan(grid[row][c - 1].netPresentValue);
+      }
+    }
+    expect(grid[0][0].netPresentValue).toBeGreaterThan(grid[4][4].netPresentValue);
+  });
+
+  it('steps in percentage points, not multiples of the rate', () => {
+    const grid = dcfSensitivity(rack, dcf, [-1, 0, 1], [-0.5, 0, 0.5]);
+    expect(grid.map((r) => r[0].rentalGrowthPct)).toEqual([3, 2, 1]);
+    expect(grid[0].map((c) => c.exitYieldPct)).toEqual([5.5, 6, 6.5]);
+  });
+
+  it('holds a nil or negative exit yield at a nominal 10bp instead of capitalising to infinity', () => {
+    const grid = dcfSensitivity(rack, { ...dcf, exitYieldPct: 0.5 }, [0], [-2, 0]);
+    expect(grid[0][0].exitYieldPct).toBe(0.1);
+    expect(Number.isFinite(grid[0][0].netPresentValue)).toBe(true);
+    expect(grid[0][0].netPresentValue).toBeGreaterThan(grid[0][1].netPresentValue);
+  });
+
+  it('measures each cell against the capitalisation, which is the reported value', () => {
+    const grid = dcfSensitivity(rack, { holdYears: 10, rentalGrowthPct: 0, discountRatePct: 6, exitYieldPct: 6 }, [0], [0]);
+    // no growth, discount and exit both at the all-risks yield: the identity case,
+    // so the DCF exactly supports the capitalisation
+    expect(grid[0][0].vsCapitalisation).toBeCloseTo(1, 6);
+  });
+
+  it('costs a fraction of a second — it runs on every keystroke of the appraisal screen', () => {
+    const t0 = performance.now();
+    dcfSensitivity(rack, dcf);
+    expect(performance.now() - t0).toBeLessThan(250);
   });
 });

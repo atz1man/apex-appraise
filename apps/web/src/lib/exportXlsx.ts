@@ -1,4 +1,11 @@
-import { discountedCashflow, monteCarlo, rollUpCashflow, sensitivityGrid } from '@apex/appraisal-engine';
+import {
+  capitaliseIncome,
+  dcfSensitivity,
+  discountedCashflow,
+  monteCarlo,
+  rollUpCashflow,
+  sensitivityGrid,
+} from '@apex/appraisal-engine';
 import type { AppraisalInput, AppraisalResult, JvResult } from '@apex/appraisal-engine';
 import type ExcelJSNS from 'exceljs';
 
@@ -389,6 +396,37 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
       }
       const dcfNote = rr.addRow(['The reported value remains the capitalisation above. A DCF states rental growth openly where the all-risks yield prices it implicitly; the equated yield is the discount rate at which the two agree.']);
       dcfNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
+
+      /**
+       * Growth × exit-yield matrix. Written as VALUES, not formulas: every cell is
+       * a full re-run of the discounted cashflow, which a spreadsheet formula
+       * cannot reproduce — a formula here would be a different, weaker model
+       * wearing the same label.
+       */
+      const grid = dcfSensitivity(input.income, input.dcf);
+      rr.addRow([]);
+      headerRow(rr, ['Sensitivity — NPV by growth (rows) and exit yield (columns)', '', '', '', ...grid[0].map((c) => `${c.exitYieldPct.toFixed(2)}%`)]);
+      for (const row of grid) {
+        const r = rr.addRow([
+          `    ${row[0].rentalGrowthPct < 0 ? '−' : ''}${Math.abs(row[0].rentalGrowthPct)}% pa growth`,
+          null, null, null,
+          ...row.map((c) => Math.round(c.netPresentValue)),
+        ]);
+        body(r.getCell(1));
+        row.forEach((c, ci) => {
+          const cell = r.getCell(5 + ci);
+          cell.numFmt = FMT_MONEY;
+          cell.alignment = { horizontal: 'right' };
+          if (c.isBase) cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: BRAND } };
+          // a cell the capitalisation is NOT supported at is the one a reader must
+          // not skim past, so it is marked in the workbook as it is in the report
+          else if (c.vsCapitalisation < 1) cell.font = { name: 'Arial', size: 10, color: { argb: 'FFB23A2E' } };
+        });
+      }
+      const gridNote = rr.addRow([
+        `Bold is the stated case. Figures in red fall below the capitalised ${Math.round(capitaliseIncome(input.income).netCapitalValue).toLocaleString('en-GB')} this appraisal reports. Steps are percentage points on each rate, not proportions of it.`,
+      ]);
+      gridNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
     }
 
     rr.views = [{ state: 'frozen', ySplit: 5 }];

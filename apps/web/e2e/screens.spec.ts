@@ -1295,8 +1295,117 @@ test('the appraisal report prints an investment section without desyncing pagina
   await expect(page.getByText('4 · Sensitivity — profit on cost')).toBeVisible();
   const noInv = await measure();
   expect(noInv.overflowing).toBe(0);
-  expect(noInv.count).toBe(withInv.count - 1);
+  // TWO sheets separate them now: the investment valuation and, since the scheme
+  // carries a DCF, its growth × exit-yield grid
+  await expect(page.getByText('DCF sensitivity')).toHaveCount(0);
+  expect(noInv.count).toBe(withInv.count - 2);
   expect(noInv.feet).toEqual(Array.from({ length: noInv.count - 1 }, (_, i) => `${i + 2}/${noInv.count}`));
+});
+
+/**
+ * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
+ * a hold is least certain about, so the report prints a grid over both — on its
+ * own sheet, because the investment page has about 46px spare.
+ *
+ * OWNS 'Parkstone Mews'. It writes an appraisal whose DCF deliberately FAILS to
+ * support the capitalisation, which is the case the dagger exists for and which
+ * no seeded deal produces.
+ */
+test('the report grids the DCF over growth and exit yield, and marks what it does not support', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  // the seeded income scheme: a grid, on its own sheet, without desyncing anything
+  const kingsway = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Kingsway')).id;
+  });
+  await page.goto(`/deal/${kingsway}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('4 · DCF sensitivity')).toBeVisible();
+  const seeded = await page.evaluate(() => {
+    const pages = [...document.querySelectorAll('.a4-page')];
+    const grid = pages.find((p) => (p.querySelector('span')?.textContent ?? '').includes('DCF sensitivity'))!;
+    const rows = [...(grid.querySelectorAll('.border-border-faint') ?? [])];
+    return {
+      count: pages.length,
+      overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
+      feet: pages.map((p) => (p.textContent ?? '').match(/Page (\d+) of (\d+)/)?.slice(1).join('/')).filter(Boolean),
+      // 5 growth rows, each of 5 exit yields, plus the base cell outlined once.
+      // Counted by CONTENT, not css class: a class-name count is a test of the
+      // stylesheet, and it broke the moment the header shared a class.
+      rowCount: rows.length,
+      money: [...grid.querySelectorAll('div')].filter((d) => !d.children.length && /^£[\d,]+/.test((d.textContent ?? '').trim())).length,
+      yields: [...grid.querySelectorAll('div')].filter((d) => !d.children.length && /^\d+\.\d{2}%$/.test((d.textContent ?? '').trim())).length,
+      // computed, not the inline style string: the browser normalises the shorthand
+      outlined: [...grid.querySelectorAll('div')].filter((d) => {
+        const cs = getComputedStyle(d);
+        return cs.outlineStyle === 'solid' && parseFloat(cs.outlineWidth) >= 2;
+      }).length,
+    };
+  });
+  expect(seeded.overflowing).toBe(0);
+  expect(seeded.feet).toEqual(Array.from({ length: seeded.count - 1 }, (_, i) => `${i + 2}/${seeded.count}`));
+  expect(seeded.rowCount).toBe(5);
+  expect(seeded.money).toBe(25);
+  expect(seeded.yields).toBe(5);
+  expect(seeded.outlined).toBe(1);
+
+  /**
+   * A hold whose DCF does NOT support the capitalisation: a 4% all-risks yield
+   * capitalises high, while nil growth and a 7% exit price it far lower.
+   */
+  const own = await page.evaluate(async () => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const dealId = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Parkstone')).id;
+    const input = {
+      units: [{ label: 'Houses', count: 6, area: 1100, cap: 420 }],
+      efficiency: 85,
+      trades: [{ label: 'Build', rate: 165 }],
+      profFeePct: 11,
+      contingencyPct: 5,
+      otherCosts: [],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 14, salesMonths: 5, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+      disposal: { agentPct: 1.5, legalPct: 0.5 },
+      targetProfitOnGdvPct: 20,
+      income: {
+        lines: [{ label: 'Parade shops', count: 4, area: 1200, rentPsf: 18 }],
+        nonRecoverablePct: 3,
+        yieldPct: 4,
+        purchaserCostsPct: 6.8,
+      },
+      dcf: { holdYears: 10, rentalGrowthPct: 0, discountRatePct: 8, exitYieldPct: 7 },
+    };
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    const body = await out.json();
+    return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
+  });
+  expect(own, `save failed: ${own.err}`).toMatchObject({ ok: true });
+
+  await page.goto(`/deal/${own.dealId}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('4 · DCF sensitivity')).toBeVisible();
+  // the shortfall is stated in words, not left to the colour of a cell
+  await expect(page.getByText(/below the capitalised/)).toBeVisible();
+  await expect(page.getByText(/† marks the \d+ cells? where the growth-explicit view does not support/)).toBeVisible();
+  const failing = await page.evaluate(() => {
+    const grid = [...document.querySelectorAll('.a4-page')].find((p) => (p.querySelector('span')?.textContent ?? '').includes('DCF sensitivity'))!;
+    const cells = [...grid.querySelectorAll('.fig.text-center')].filter((c) => (c.textContent ?? '').includes('£'));
+    return {
+      daggered: cells.filter((c) => (c.textContent ?? '').includes('†')).length,
+      stated: Number((grid.textContent ?? '').match(/† marks the (\d+) cell/)?.[1] ?? -1),
+      overflowing: [...document.querySelectorAll('.a4-page')].filter((p) => p.getBoundingClientRect().height > 1123).length,
+    };
+  });
+  expect(failing.daggered).toBeGreaterThan(0);
+  // the count in the prose is the count on the grid — not two independent claims
+  expect(failing.stated).toBe(failing.daggered);
+  expect(failing.overflowing).toBe(0);
 });
 
 /**

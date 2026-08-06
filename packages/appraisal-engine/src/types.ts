@@ -393,6 +393,30 @@ export interface SensitivityCell {
   ratio: number;
 }
 
+/**
+ * One cell of the growth × exit-yield matrix over a held element.
+ *
+ * The deltas are percentage POINTS, not multipliers: a valuer sensitises an exit
+ * yield by 25 or 50 basis points, and "10% off a 5.5% yield" is not a sentence
+ * anyone says. Growth moves in whole points for the same reason.
+ */
+export interface DcfSensitivityCell {
+  /** the assumptions this cell was actually run at */
+  rentalGrowthPct: number;
+  exitYieldPct: number;
+  growthDelta: number;
+  yieldDelta: number;
+  netPresentValue: number;
+  isBase: boolean;
+  /** NPV relative to the centre cell — drives colouring */
+  ratio: number;
+  /**
+   * NPV against the capitalisation, which is the REPORTED value. Below 1 means
+   * the growth-explicit view does not support the figure being reported.
+   */
+  vsCapitalisation: number;
+}
+
 /** Auto-Appraisal (indicative) — lighter finance approximation for instant results. */
 export interface AutoAppraisalInput {
   units: AppraisalUnit[];

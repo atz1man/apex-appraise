@@ -1,6 +1,13 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { computeAppraisal, discountedCashflow, sensitivityGrid, formatMoneyFull, formatPct } from '@apex/appraisal-engine';
+import {
+  computeAppraisal,
+  dcfSensitivity,
+  discountedCashflow,
+  sensitivityGrid,
+  formatMoneyFull,
+  formatPct,
+} from '@apex/appraisal-engine';
 import { accent, brand, neutral } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -135,6 +142,12 @@ export default function AppraisalReport() {
   // the growth-explicit cross-check, when the appraisal carries one
   const dcf = useMemo(
     () => (input?.income && input.dcf ? discountedCashflow(input.income, input.dcf) : null),
+    [input],
+  );
+  // growth × exit yield over the held element — its own sheet, because the
+  // investment page has about 46px spare and a grid is not 46px
+  const dcfGrid = useMemo(
+    () => (input?.income && input.dcf ? dcfSensitivity(input.income, input.dcf) : null),
     [input],
   );
 
@@ -335,7 +348,9 @@ export default function AppraisalReport() {
     if (ratio >= 1.12) return { color: '#14503B', background: 'rgb(var(--tint-green-deep, 223 239 231))' };
     if (ratio >= 1.02) return { color: '#1E7A55', background: '#ECF3EF' };
     if (ratio > 0.98) return { color: '#5F665F', background: '#F4F4F0' };
-    if (ratio > 0.85) return { color: '#9A6212', background: '#F8F0DE' };
+    // #9A6212 on this tint is 4.48:1 — under AA. It went unseen because no
+    // seeded scheme put a cell in the amber band until the DCF grid did.
+    if (ratio > 0.85) return { color: '#85520E', background: '#F8F0DE' };
     return { color: '#B23A2E', background: '#F9EAE7' };
   };
   const steps = [-0.1, -0.05, 0, 0.05, 0.1];
@@ -491,11 +506,16 @@ export default function AppraisalReport() {
   const secNotice = 8 + inv;
   const secMonitoring = 9 + inv;
   const scheduleStartPageNo = 3;
+  // the DCF matrix earns a continuation sheet of section 4 when there is a DCF
+  const dsn = dcfGrid ? 1 : 0;
+  const dcfBase = dcfGrid?.flat().find((c) => c.isBase) ?? null;
+  const dcfSubCap = dcfGrid?.flat().filter((c) => c.vsCapitalisation < 1).length ?? 0;
   const overridesPageNo = 4 + sched;
   const residualPageNo = 4 + sched + ovr;
   const investmentPageNo = 5 + sched + ovr;
-  const sensitivityPageNo = 5 + sched + inv + ovr;
-  const cashStartPageNo = 6 + sched + inv + ovr;
+  const dcfGridPageNo = 6 + sched + ovr;
+  const sensitivityPageNo = 5 + sched + inv + dsn + ovr;
+  const cashStartPageNo = 6 + sched + inv + dsn + ovr;
   const assumptionsPageNo = cashStartPageNo + cashChunks.length;
   const monitoringPageNo = assumptionsPageNo + 1;
   const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
@@ -1036,6 +1056,83 @@ export default function AppraisalReport() {
             )}
 
             <PageFoot no={investmentPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          </A4Page>
+        )}
+
+        {/* ===== DCF SENSITIVITY — continuation of section 4, only when a DCF exists ===== */}
+        {dcfGrid && dcfBase && input.dcf && dcf && (
+          <A4Page>
+            <PageHead title={`${secInvestment} · DCF sensitivity`} scheme={scheme} />
+            <p className="text-[13px] leading-[1.6]" style={{ marginTop: 18, color: '#3F463F' }}>
+              Net present value re-computed across the two assumptions the DCF is least certain about: rental growth (rows)
+              and the yield the investment is sold at (columns). Steps are percentage points — the units a yield is argued in
+              — not proportions of the rate. The base case is outlined.
+            </p>
+            <div className="mt-5 border border-border-std rounded-[12px] overflow-hidden">
+              <div className="flex bg-canvas fig text-[10px] font-semibold text-ink-2b">
+                <div style={{ flex: 1.6, padding: '10px 14px' }}>Growth ↓ / exit yield →</div>
+                {dcfGrid[0].map((c, ci) => (
+                  <div key={ci} className="text-center" style={{ flex: 1, padding: '10px 6px' }}>
+                    {c.exitYieldPct.toFixed(2)}%
+                  </div>
+                ))}
+              </div>
+              {dcfGrid.map((row, ri) => (
+                <div key={ri} className="flex border-t border-border-faint">
+                  {/* the rate itself, not a delta: a "+" here would read as
+                      "4.5 points more growth" rather than "growth of 4.5%" */}
+                  <div className="fig bg-sunken text-[11px] font-semibold text-ink-2b" style={{ flex: 1.6, padding: '12px 14px' }}>
+                    {row[0].rentalGrowthPct < 0 ? '−' : ''}
+                    {Math.abs(row[0].rentalGrowthPct)}% pa
+                  </div>
+                  {row.map((cell, ci) => (
+                    <div
+                      key={ci}
+                      className="fig text-center text-[11px] font-semibold"
+                      style={{
+                        flex: 1,
+                        padding: '12px 6px',
+                        // shaded against the CENTRE cell, so the grid shows movement.
+                        // Shading against the capitalisation instead made every cell
+                        // identical on any scheme where the DCF clears it throughout —
+                        // true, and useless to look at.
+                        ...cellStyle(cell.netPresentValue, cell.ratio),
+                        outline: cell.isBase ? `2px solid ${brand[700]}` : 'none',
+                        outlineOffset: -2,
+                        ...(cell.vsCapitalisation < 1 ? { color: '#B23A2E' } : null),
+                      }}
+                    >
+                      {formatMoneyFull(cell.netPresentValue)}
+                      {/* not colour alone: the dagger carries the same fact */}
+                      {cell.vsCapitalisation < 1 && <span> †</span>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <SectionTitle>Reading the grid</SectionTitle>
+            <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
+              Shading is relative to the base case, so the grid shows how far the value moves. At the stated{' '}
+              {input.dcf.rentalGrowthPct}% growth and a {input.dcf.exitYieldPct}% exit the DCF returns{' '}
+              {formatMoneyFull(dcf.netPresentValue)} — {formatPct(Math.abs(dcfBase.vsCapitalisation - 1), 1)}{' '}
+              {dcfBase.vsCapitalisation >= 1 ? 'above' : 'below'} the capitalised {formatMoneyFull(R.investmentValue)} this
+              appraisal reports. Softening the exit by {Math.abs(dcfGrid[0][dcfGrid[0].length - 1].yieldDelta)}{' '}
+              {Math.abs(dcfGrid[0][dcfGrid[0].length - 1].yieldDelta) === 1 ? 'point' : 'points'} costs{' '}
+              {formatMoneyFull(dcfBase.netPresentValue - dcfGrid[2][dcfGrid[2].length - 1].netPresentValue)}; losing{' '}
+              {Math.abs(dcfGrid[dcfGrid.length - 1][0].growthDelta)}{' '}
+              {Math.abs(dcfGrid[dcfGrid.length - 1][0].growthDelta) === 1 ? 'point' : 'points'} of growth costs{' '}
+              {formatMoneyFull(dcfBase.netPresentValue - dcfGrid[dcfGrid.length - 1][2].netPresentValue)}.{' '}
+              {dcfSubCap > 0
+                ? `† marks the ${dcfSubCap} cell${dcfSubCap === 1 ? '' : 's'} where the growth-explicit view does not support the reported value.`
+                : 'No cell in this range falls below the reported value.'}
+            </p>
+            <p className="mt-2 text-[11px] text-ink-3 leading-snug">
+              Every cell runs the same discounted cashflow as the valuation itself, at the stated hold of{' '}
+              {input.dcf.holdYears} years, {input.dcf.reviewCycleYears ?? 5}-yearly reviews and a{' '}
+              {input.dcf.discountRatePct}% discount rate; only growth and the exit yield move.
+            </p>
+            <PageFoot no={dcfGridPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
           </A4Page>
         )}
 
