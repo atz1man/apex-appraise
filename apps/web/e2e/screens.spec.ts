@@ -1300,6 +1300,87 @@ test('the appraisal report prints an investment section without desyncing pagina
 });
 
 /**
+ * Accommodation schedule pagination. A scheme with more units than one sheet
+ * holds used to run silently past A4 — and because the page box grows rather
+ * than clips, nothing on screen said so; it printed sheets the footers denied.
+ *
+ * OWNS 'Westover Yard'. It writes an eight-phase appraisal, so it must not touch
+ * Harbour Reach (the small case, which four other tests read).
+ */
+test('the accommodation schedule paginates instead of running off the sheet', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const own = await page.evaluate(async () => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const dealId = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Westover')).id;
+    const units = [
+      { label: '1-bed apartments', count: 8, area: 520, cap: 400 },
+      { label: '2-bed apartments', count: 6, area: 760, cap: 385 },
+      { label: '3-bed houses', count: 4, area: 1150, cap: 360 },
+    ];
+    const input = {
+      units: [],
+      // eight phases of three unit types: 32 schedule rows, more than one sheet
+      phases: Array.from({ length: 8 }, (_, i) => ({
+        name: `Phase ${i + 1} — block ${String.fromCharCode(65 + i)}`,
+        start: 1 + i * 3,
+        buildMonths: 8,
+        salesMonths: 4,
+        units,
+      })),
+      efficiency: 85,
+      trades: [{ label: 'Build', rate: 150 }],
+      profFeePct: 11,
+      contingencyPct: 5,
+      otherCosts: [],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 30, salesMonths: 6, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+      disposal: { agentPct: 1.5, legalPct: 0.5 },
+      targetProfitOnGdvPct: 20,
+    };
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    const body = await out.json();
+    return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
+  });
+  expect(own, `save failed: ${own.err}`).toMatchObject({ ok: true });
+
+  await page.goto(`/deal/${own.dealId}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('2 · Accommodation schedule (2 of 2)')).toBeVisible();
+  // the phasing block cannot share the last schedule sheet at this size
+  await expect(page.getByText('2 · Phasing')).toBeVisible();
+
+  const audit = await page.evaluate(() => {
+    const pages = [...document.querySelectorAll('.a4-page')];
+    return {
+      count: pages.length,
+      // height, not scrollHeight: an over-full page grows past A4 rather than clipping
+      overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
+      feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
+      // the sheet the first schedule page points the reader at
+      note: pages.find((p) => (p.textContent ?? '').includes('Schedule continues on page'))?.textContent?.match(/continues on page (\d+)/)?.[1],
+      // scoped to the schedule's own sheets: the residual appraisal opens with a
+      // "Gross development value" line too, and counting that is not the same test
+      totals: pages
+        .filter((p) => (p.querySelector('span')?.textContent ?? '').startsWith('2 · Accommodation schedule'))
+        .filter((p) => (p.textContent ?? '').includes('Gross development value')).length,
+    };
+  });
+  expect(audit.overflowing).toBe(0);
+  expect(audit.feet).toEqual(Array.from({ length: audit.count - 1 }, (_, i) => `${i + 2}/${audit.count}`));
+  // the schedule totals ONCE — a running total on each sheet would be wrong on all but one
+  expect(audit.totals).toBe(1);
+  // and the "continues on" note names the sheet the reader will actually turn to
+  expect(audit.note).toBe('4');
+  // a phase split across sheets says so, rather than leaving orphaned rows unattributed
+  await expect(page.getByText('(continued)')).toBeVisible();
+});
+
+/**
  * Phase cost overrides in the report. They get their own continuation sheet —
  * the accommodation page had ~200px spare, nothing like enough. The workbook
  * prints every trade line; a fixed-height page cannot, so the budget is explicit

@@ -366,36 +366,6 @@ export default function AppraisalReport() {
       : []),
   ];
 
-  /**
-   * Page and section numbering, DERIVED. A scheme that holds space gains an
-   * investment section after the residual appraisal, and everything downstream
-   * shifts by one. Hand-written numbers would have desynced the moment the
-   * section became conditional — the footers say "Page n of N" and the PDF is
-   * printed from exactly these pages.
-   */
-  const hasInvestment = !!R.income;
-  const inv = hasInvestment ? 1 : 0;
-  // a phase that prices its own trades earns a continuation sheet after the
-  // accommodation schedule — it stays inside section 2, so only pages shift
-  const ovr = phaseOverrides.shown.length > 0 ? 1 : 0;
-  const secInvestment = 4;
-  const secSensitivity = 4 + inv;
-  const secCashflow = 5 + inv;
-  const secAssumptions = 6 + inv;
-  const secAi = 7 + inv;
-  // the notice was hardcoded "8": it collided with monitoring on every scheme
-  // and with the AI subsection as soon as an investment section appeared
-  const secNotice = 8 + inv;
-  const secMonitoring = 9 + inv;
-  const overridesPageNo = 4;
-  const residualPageNo = 4 + ovr;
-  const investmentPageNo = 5 + ovr;
-  const sensitivityPageNo = 5 + inv + ovr;
-  const cashStartPageNo = 6 + inv + ovr;
-  const assumptionsPageNo = cashStartPageNo + cashChunks.length;
-  const monitoringPageNo = assumptionsPageNo + 1;
-  const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
-
   // A phased scheme's accommodation lives on the phases — reading input.units
   // here would print an empty schedule for exactly the schemes that need one.
   const toRow = (u: { label: string; count: number; area: number; cap: number }) => ({
@@ -410,6 +380,173 @@ export default function AppraisalReport() {
       ? R.phases.map((p, i) => ({ phase: p, rows: (input.phases![i]?.units ?? []).map(toRow) }))
       : null;
   const unitRows = phaseGroups ? phaseGroups.flatMap((g) => g.rows) : input.units.map(toRow);
+
+  /**
+   * Accommodation schedule pagination — MEASURED, not guessed. An A4 page holds
+   * 924px of content (1122 less 112 padding, 37 head, 49 foot). The table repeats
+   * its header on every page (37px after an 18px margin); a phase group header
+   * costs 34, a unit row 40, the closing GDV row 43 and the KPI strip 96. The
+   * phasing block is a heading and caption (30), its own header (33), 42 a phase
+   * and the closing narrative (110).
+   *
+   * A twelve-phase scheme has more schedule than one sheet holds. It used to run
+   * silently past the page — and because the box grows rather than clips, nothing
+   * on screen said so; it simply printed an extra sheet the footers denied.
+   */
+  const PAGE_PX = 924;
+  const TABLE_HEAD_PX = 55;
+  const GROUP_PX = 34;
+  const UNIT_PX = 40;
+  const TOTAL_PX = 43;
+  const KPI_PX = 96;
+  const phasingPx = R?.phases?.length ? 173 + 42 * R.phases.length : 0;
+
+  type SchedRow = ReturnType<typeof toRow>;
+  type SchedItem =
+    | { kind: 'group'; phase: NonNullable<typeof R.phases>[number]; continued?: boolean }
+    | { kind: 'unit'; row: SchedRow };
+
+  // NOT a hook: this sits below the loading/empty guards, and a useMemo here
+  // renders a different number of hooks on the first pass than on later ones
+  const schedule = (() => {
+    const items: SchedItem[] = phaseGroups
+      ? phaseGroups.flatMap((g) => [
+          ...(g.phase ? [{ kind: 'group' as const, phase: g.phase }] : []),
+          ...g.rows.map((row) => ({ kind: 'unit' as const, row })),
+        ])
+      : unitRows.map((row) => ({ kind: 'unit' as const, row }));
+
+    const cap = PAGE_PX - TABLE_HEAD_PX;
+    const pages: SchedItem[][] = [[]];
+    let used = 0;
+    let group: NonNullable<typeof R.phases>[number] | null = null;
+    for (const it of items) {
+      if (it.kind === 'group') group = it.phase;
+      const px = it.kind === 'group' ? GROUP_PX : UNIT_PX;
+      // a group header stranded at the foot of a page is a widow: it needs room
+      // for at least one of its own rows or it breaks to the next page with them
+      const need = it.kind === 'group' ? px + UNIT_PX : px;
+      if (used + need > cap && pages[pages.length - 1].length > 0) {
+        pages.push([]);
+        used = 0;
+        // a phase split across sheets repeats its header, marked as carried over:
+        // otherwise the rows opening the next sheet belong to no visible phase
+        if (it.kind === 'unit' && group) {
+          pages[pages.length - 1].push({ kind: 'group', phase: group, continued: true });
+          used += GROUP_PX;
+        }
+      }
+      pages[pages.length - 1].push(it);
+      used += px;
+    }
+    // the closing row and the KPI strip live under the last page's table
+    if (used + TOTAL_PX + KPI_PX > cap) {
+      pages.push([]);
+      used = 0;
+    }
+    const phasingShares = phasingPx > 0 && used + TOTAL_PX + KPI_PX + phasingPx <= cap;
+    return { pages, phasingShares };
+  })();
+
+  /**
+   * Phasing on its own sheet when it cannot share: 924 less the heading block
+   * (30), the table header (33) and the narrative (110) leaves 751px — seventeen
+   * phase rows. Past that the phasing table paginates too, rather than running
+   * off a sheet no one measured.
+   */
+  const phasingChunks = (() => {
+    const phases = R?.phases ?? [];
+    if (!phases.length || schedule.phasingShares) return [];
+    const perPage = Math.max(1, Math.floor((PAGE_PX - 30 - 33 - 110) / 42));
+    const out: (typeof phases)[] = [];
+    for (let i = 0; i < phases.length; i += perPage) out.push(phases.slice(i, i + perPage));
+    return out;
+  })();
+
+  /** every sheet section 2 occupies: the schedule, plus any phasing overflow */
+  const schedulePageCount = schedule.pages.length + phasingChunks.length;
+
+  /**
+   * Page and section numbering, DERIVED. A scheme that holds space gains an
+   * investment section after the residual appraisal, and everything downstream
+   * shifts by one. Hand-written numbers would have desynced the moment the
+   * section became conditional — the footers say "Page n of N" and the PDF is
+   * printed from exactly these pages.
+   */
+  const hasInvestment = !!R.income;
+  const inv = hasInvestment ? 1 : 0;
+  // a phase that prices its own trades earns a continuation sheet after the
+  // accommodation schedule — it stays inside section 2, so only pages shift
+  const ovr = phaseOverrides.shown.length > 0 ? 1 : 0;
+  // section 2 is no longer one sheet: the schedule paginates, and the phasing
+  // block takes its own sheets when it cannot share the schedule's last one
+  const sched = schedulePageCount - 1;
+  const secInvestment = 4;
+  const secSensitivity = 4 + inv;
+  const secCashflow = 5 + inv;
+  const secAssumptions = 6 + inv;
+  const secAi = 7 + inv;
+  // the notice was hardcoded "8": it collided with monitoring on every scheme
+  // and with the AI subsection as soon as an investment section appeared
+  const secNotice = 8 + inv;
+  const secMonitoring = 9 + inv;
+  const scheduleStartPageNo = 3;
+  const overridesPageNo = 4 + sched;
+  const residualPageNo = 4 + sched + ovr;
+  const investmentPageNo = 5 + sched + ovr;
+  const sensitivityPageNo = 5 + sched + inv + ovr;
+  const cashStartPageNo = 6 + sched + inv + ovr;
+  const assumptionsPageNo = cashStartPageNo + cashChunks.length;
+  const monitoringPageNo = assumptionsPageNo + 1;
+  const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
+
+  /**
+   * The phasing table, wherever it lands. `first` prints the heading (a
+   * continuation sheet already says "Phasing" in its page head) and `last` prints
+   * the closing narrative, so a split table does not repeat either.
+   */
+  const PhasingBlock = ({
+    phases,
+    first = false,
+    last = true,
+  }: {
+    phases: NonNullable<typeof R.phases>;
+    first?: boolean;
+    last?: boolean;
+  }) => (
+    <>
+      {first && <SectionTitle>Phasing</SectionTitle>}
+      <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: first ? 10 : 18 }}>
+        <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
+          <div style={{ flex: 2.2, padding: '9px 14px' }}>Phase</div>
+          <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>On site</div>
+          <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>Units</div>
+          <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£/ft²</div>
+          <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>Construction</div>
+          <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>GDV</div>
+        </div>
+        {phases.map((p, i) => (
+          <div key={i} className="flex border-t border-border-faint fig text-[11.5px] font-medium">
+            <div className="font-ui text-[12px]" style={{ flex: 2.2, padding: '9px 14px' }}>{p.name}</div>
+            <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{p.buildMonths} mo</div>
+            <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>{p.unitCount}</div>
+            <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£{n0(p.buildRate)}</div>
+            <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{formatMoneyFull(p.cost + p.otherTotal)}</div>
+            <div className="text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px', color: brand[700] }}>{formatMoneyFull(p.gdv)}</div>
+          </div>
+        ))}
+      </div>
+      {last && (
+        <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
+          The scheme is delivered in {R.phases!.length} phases over {R.period + R.salesMonths} months, sharing one facility;
+          receipts from a completed phase repay it while a later phase is still drawing, holding peak debt to{' '}
+          {formatMoneyFull(R.facility)}. Construction is stated at each phase's own rate — a blended £{n0(R.buildRate)}/ft² of GIA
+          across the scheme — and includes fees, contingency and any costs booked to that phase. Areas are net internal (NIA);
+          gross internal area is derived at the stated {input.efficiency}% efficiency.
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="light min-h-screen bg-frame">
@@ -518,100 +655,112 @@ export default function AppraisalReport() {
           <PageFoot no={2} total={pageTotal} refCode={refCode} firmName={firmName} />
         </A4Page>
 
-        {/* ===== PAGE 3 — ACCOMMODATION SCHEDULE ===== */}
-        <A4Page>
-          <PageHead title="2 · Accommodation schedule" scheme={scheme} />
-          <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 18 }}>
-            <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
-              <div style={{ flex: 2.4, padding: '11px 14px' }}>Use / unit</div>
-              <div className="text-right" style={{ flex: 0.8, padding: '11px 14px' }}>No.</div>
-              <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>Area ft²</div>
-              <div className="text-right" style={{ flex: 1, padding: '11px 14px' }}>£/ft²</div>
-              <div className="text-right" style={{ flex: 1.3, padding: '11px 14px' }}>Value</div>
-            </div>
-            {(phaseGroups ?? [{ phase: null, rows: unitRows }]).map((group, gi) => (
-              <Fragment key={gi}>
-                {group.phase && (
-                  <div
-                    className="flex border-t border-border-faint fig text-[11px] font-semibold uppercase"
-                    style={{ background: 'rgb(243 248 245)', letterSpacing: '0.4px', color: brand[700] }}
-                  >
-                    <div className="font-ui text-[11.5px]" style={{ flex: 2.4, padding: '8px 14px' }}>{group.phase.name}</div>
-                    <div className="text-right normal-case" style={{ flex: 4.2, padding: '8px 14px', color: neutral.ink2 }}>
-                      on site {monthLabel(group.phase.start)}–{monthLabel(group.phase.practicalCompletion)} · sells to{' '}
-                      {monthLabel(group.phase.end)}
+        {/* ===== SECTION 2 — ACCOMMODATION SCHEDULE, paginated ===== */}
+        {schedule.pages.map((items, pi) => {
+          const isLast = pi === schedule.pages.length - 1;
+          return (
+            <A4Page key={`sched-${pi}`}>
+              <PageHead
+                title={pi === 0 ? '2 · Accommodation schedule' : `2 · Accommodation schedule (${pi + 1} of ${schedule.pages.length})`}
+                scheme={scheme}
+              />
+              <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 18 }}>
+                <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
+                  <div style={{ flex: 2.4, padding: '11px 14px' }}>Use / unit</div>
+                  <div className="text-right" style={{ flex: 0.8, padding: '11px 14px' }}>No.</div>
+                  <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>Area ft²</div>
+                  <div className="text-right" style={{ flex: 1, padding: '11px 14px' }}>£/ft²</div>
+                  <div className="text-right" style={{ flex: 1.3, padding: '11px 14px' }}>Value</div>
+                </div>
+                {items.map((it, ii) =>
+                  it.kind === 'group' ? (
+                    <div
+                      key={ii}
+                      className="flex border-t border-border-faint fig text-[11px] font-semibold uppercase"
+                      style={{ background: 'rgb(243 248 245)', letterSpacing: '0.4px', color: brand[700] }}
+                    >
+                      <div className="font-ui text-[11.5px]" style={{ flex: 2.4, padding: '8px 14px' }}>
+                        {it.phase.name}
+                        {it.continued && <span className="normal-case font-normal text-ink-3"> (continued)</span>}
+                      </div>
+                      <div className="text-right normal-case" style={{ flex: 4.2, padding: '8px 14px', color: neutral.ink2 }}>
+                        on site {monthLabel(it.phase.start)}–{monthLabel(it.phase.practicalCompletion)} · sells to{' '}
+                        {monthLabel(it.phase.end)}
+                      </div>
                     </div>
+                  ) : (
+                    <div key={ii} className="flex border-t border-border-faint fig text-[12px] font-medium">
+                      <div className="font-ui text-[12.5px]" style={{ flex: 2.4, padding: '10px 14px' }}>{it.row.label}</div>
+                      <div className="text-right" style={{ flex: 0.8, padding: '10px 14px' }}>{it.row.count}</div>
+                      <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{n0(it.row.area)}</div>
+                      <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{n0(it.row.rate)}</div>
+                      <div className="text-right font-semibold" style={{ flex: 1.3, padding: '10px 14px', color: brand[700] }}>
+                        {formatMoneyFull(it.row.value)}
+                      </div>
+                    </div>
+                  ),
+                )}
+                {/* the schedule totals ONCE, on its last sheet — a running total on
+                    every sheet would read as the scheme's and be wrong on all but one */}
+                {isLast && (
+                  <div className="flex bg-sunken fig text-[12.5px] font-semibold" style={{ borderTop: `2px solid ${neutral.border}` }}>
+                    <div className="font-ui" style={{ flex: 2.4, padding: '11px 14px' }}>Gross development value</div>
+                    <div style={{ flex: 0.8 }} />
+                    <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>{n0(R.nia)}</div>
+                    <div style={{ flex: 1 }} />
+                    <div className="text-right" style={{ flex: 1.3, padding: '11px 14px', color: brand[700] }}>{formatMoneyFull(R.gdv)}</div>
                   </div>
                 )}
-                {group.rows.map((u, i) => (
-                  <div key={i} className="flex border-t border-border-faint fig text-[12px] font-medium">
-                    <div className="font-ui text-[12.5px]" style={{ flex: 2.4, padding: '10px 14px' }}>{u.label}</div>
-                    <div className="text-right" style={{ flex: 0.8, padding: '10px 14px' }}>{u.count}</div>
-                    <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{n0(u.area)}</div>
-                    <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{n0(u.rate)}</div>
-                    <div className="text-right font-semibold" style={{ flex: 1.3, padding: '10px 14px', color: brand[700] }}>{formatMoneyFull(u.value)}</div>
-                  </div>
-                ))}
-              </Fragment>
-            ))}
-            <div className="flex bg-sunken fig text-[12.5px] font-semibold" style={{ borderTop: `2px solid ${neutral.border}` }}>
-              <div className="font-ui" style={{ flex: 2.4, padding: '11px 14px' }}>Gross development value</div>
-              <div style={{ flex: 0.8 }} />
-              <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>{n0(R.nia)}</div>
-              <div style={{ flex: 1 }} />
-              <div className="text-right" style={{ flex: 1.3, padding: '11px 14px', color: brand[700] }}>{formatMoneyFull(R.gdv)}</div>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-3 gap-3">
-            <Kpi label="Net internal area" value={`${n0(R.nia)} ft²`} />
-            <Kpi label="Gross internal area" value={`${n0(R.gia)} ft²`} />
-            <Kpi label="Efficiency (NIA:GIA)" value={`${input.efficiency}%`} />
-          </div>
-
-          {R.phases?.length ? (
-            <>
-              <SectionTitle>Phasing</SectionTitle>
-              <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 10 }}>
-                <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
-                  <div style={{ flex: 2.2, padding: '9px 14px' }}>Phase</div>
-                  <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>On site</div>
-                  <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>Units</div>
-                  <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£/ft²</div>
-                  <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>Construction</div>
-                  <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>GDV</div>
-                </div>
-                {R.phases.map((p, i) => (
-                  <div key={i} className="flex border-t border-border-faint fig text-[11.5px] font-medium">
-                    <div className="font-ui text-[12px]" style={{ flex: 2.2, padding: '9px 14px' }}>{p.name}</div>
-                    <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{p.buildMonths} mo</div>
-                    <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>{p.unitCount}</div>
-                    <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£{n0(p.buildRate)}</div>
-                    <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{formatMoneyFull(p.cost + p.otherTotal)}</div>
-                    <div className="text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px', color: brand[700] }}>{formatMoneyFull(p.gdv)}</div>
-                  </div>
-                ))}
               </div>
-              <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
-                The scheme is delivered in {R.phases.length} phases over {R.period + R.salesMonths} months, sharing one facility;
-                receipts from a completed phase repay it while a later phase is still drawing, holding peak debt to{' '}
-                {formatMoneyFull(R.facility)}. Construction is stated at each phase's own rate — a blended £{n0(R.buildRate)}/ft² of GIA
-                across the scheme — and includes fees, contingency and any costs booked to that phase. Areas are net internal (NIA);
-                gross internal area is derived at the stated {input.efficiency}% efficiency.
-              </p>
-            </>
-          ) : (
-            <>
-              <SectionTitle>Basis of areas</SectionTitle>
-              <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
-                Unit areas are net internal areas (NIA) in square feet as scheduled in the current appraisal. Gross internal area is derived
-                at the stated NIA:GIA efficiency of {input.efficiency}%. Capital values are applied per square foot of NIA; construction costs
-                are applied per square foot of GIA.
-              </p>
-            </>
-          )}
-          <PageFoot no={3} total={pageTotal} refCode={refCode} firmName={firmName} />
-        </A4Page>
+
+              {!isLast && (
+                <p className="mt-2 text-[11px] text-ink-3">
+                  Schedule continues on page {scheduleStartPageNo + pi + 1}; the scheme totals on its last sheet.
+                </p>
+              )}
+
+              {isLast && (
+                <>
+                  <div className="mt-5 grid grid-cols-3 gap-3">
+                    <Kpi label="Net internal area" value={`${n0(R.nia)} ft²`} />
+                    <Kpi label="Gross internal area" value={`${n0(R.gia)} ft²`} />
+                    <Kpi label="Efficiency (NIA:GIA)" value={`${input.efficiency}%`} />
+                  </div>
+                  {R.phases?.length ? (
+                    schedule.phasingShares && <PhasingBlock phases={R.phases} first />
+                  ) : (
+                    <>
+                      <SectionTitle>Basis of areas</SectionTitle>
+                      <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
+                        Unit areas are net internal areas (NIA) in square feet as scheduled in the current appraisal. Gross internal
+                        area is derived at the stated NIA:GIA efficiency of {input.efficiency}%. Capital values are applied per square
+                        foot of NIA; construction costs are applied per square foot of GIA.
+                      </p>
+                    </>
+                  )}
+                </>
+              )}
+              <PageFoot no={scheduleStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
+            </A4Page>
+          );
+        })}
+
+        {/* ===== PHASING — its own sheets when the schedule's last page cannot hold it ===== */}
+        {phasingChunks.map((chunk, ci) => (
+          <A4Page key={`phasing-${ci}`}>
+            <PageHead
+              title={phasingChunks.length > 1 ? `2 · Phasing (${ci + 1} of ${phasingChunks.length})` : '2 · Phasing'}
+              scheme={scheme}
+            />
+            <PhasingBlock phases={chunk} first={ci === 0} last={ci === phasingChunks.length - 1} />
+            <PageFoot
+              no={scheduleStartPageNo + schedule.pages.length + ci}
+              total={pageTotal}
+              refCode={refCode}
+              firmName={firmName}
+            />
+          </A4Page>
+        ))}
 
         {/* ===== PHASE COST OVERRIDES — continuation of section 2, only when a phase prices its own trades ===== */}
         {phaseOverrides.shown.length > 0 && (
