@@ -2,13 +2,18 @@ version: '3.9'
 
 services:
   db:
-    image: postgres:16-alpine
+    # PG 18 to match production (flyio/postgres-flex). Two major versions of skew
+    # between test and prod is a class of bug nobody can see until it ships.
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: apex
       POSTGRES_PASSWORD: apex
       POSTGRES_DB: apex
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG18's image wants the mount one level up — it puts the cluster in a
+      # subdirectory so pg_upgrade --link can work across the mount boundary.
+      # Mounting the old .../data path makes 18 refuse to start.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U apex']
       interval: 5s

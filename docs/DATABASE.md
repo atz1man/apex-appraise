@@ -65,11 +65,57 @@ to match. `infra/entrypoint.sh` handles the crossing once, and narrowly: only wh
 the live schema already identical to the models — the signature of a db-push database. It
 records one bookkeeping row and reads no data.
 
-**That block is temporary.** Once production is baselined it is dead code, and dead code
-that writes to `_prisma_migrations` is not the kind to leave lying around. Remove it.
+That block was temporary and is **gone** — production reports "Database schema is up to
+date!", so the code path could never fire again, and dead code that writes to
+`_prisma_migrations` is not the kind to leave lying around. A database restored from a
+backup taken *before* 6 August 2026 would need the baseline recorded by hand:
+`npx prisma migrate resolve --applied 00000000000000_baseline`.
 
 ## Raw SQL
 
 There is none in this codebase, and it should stay that way. If it ever arrives it must
 run on both SQLite and PostgreSQL: `CURRENT_TIMESTAMP` not `NOW()`, no `SERIAL`, no `::`
 casts.
+
+## Versions
+
+Production runs **PostgreSQL 18** (`flyio/postgres-flex`). Local dev and CI run
+`postgres:18-alpine` to match. They must not drift: until 6 August 2026 both ran
+PG 16 against a PG 18 production — two major versions of skew, meaning every test
+and every migration was validated on a database that was not the one customers
+use. The restore drill is what exposed it (PG 17+ catalogues NOT NULL constraints
+in `pg_constraint`, so the structural fingerprints differed by 249 objects).
+
+Note for PG18: its image expects the volume at `/var/lib/postgresql`, not
+`/var/lib/postgresql/data` — it places the cluster in a subdirectory so
+`pg_upgrade --link` works across the mount boundary. Mounting the old path makes
+the container refuse to start.
+
+## Backups
+
+**What exists.** Fly takes daily block-level snapshots of the database volume,
+retained **5 days**. Verified present — five snapshots, ~288 MiB stored.
+
+**What that is not.** Snapshots are block-level and provider-locked: they cannot
+restore a single table, cannot be read without attaching a volume, cannot leave
+Fly, and 5 days means corruption noticed on the sixth day is unrecoverable. For a
+product holding client valuations under professional indemnity, that is thin.
+
+**The drill.** `scripts/restore-drill.sh` takes a logical dump, restores it into a
+scratch database beside the live one, and compares exact per-table row counts and
+the full column/index/constraint fingerprint. It reports PASS only if every one
+matches, drops the scratch database on every exit path, and never writes to the
+source. Run it on the database host so no client data leaves it:
+
+```bash
+fly ssh console -a apex-appraise-db -C "sh -c 'PGPASSWORD=\$OPERATOR_PASSWORD PGUSER=postgres SOURCE_DB=apex_appraise_api DUMP_DIR=/data sh /tmp/drill.sh'"
+```
+
+Last run against production, 6 August 2026: **PASS** — 24 tables, 2,124 rows, 646
+structural objects identical. That is the first time this product's backup has
+been proven to come back rather than assumed to.
+
+**Still open, and it is a decision, not a task:** off-site logical backups need a
+destination — object storage, a retention period, and a call on where UK client
+valuation data is allowed to live. That is an owner's decision with cost and
+compliance in it, so it is not made here.

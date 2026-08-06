@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine # must match production; see docs/DATABASE.md
         env:
           POSTGRES_USER: apex
           POSTGRES_PASSWORD: apex
