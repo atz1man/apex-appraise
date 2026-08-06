@@ -53,11 +53,28 @@ jobs:
         run: |
           sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
           sed -i 's|url      = "file:./dev.db"|url      = env("DATABASE_URL")|' apps/api/prisma/schema.prisma
-      - name: Push schema + seed against Postgres
+      - name: Apply migrations + seed against Postgres
         env:
           DATABASE_URL: postgresql://apex:apex@localhost:5432/apex
         run: |
           cd apps/api
-          npx prisma db push --skip-generate
+          # the same command production boots with, against an EMPTY database:
+          # this is what proves the committed migrations can actually build the
+          # schema from nothing, which `db push` never checked
+          npx prisma migrate deploy
           npx prisma generate
           npx tsx prisma/seed.ts
+      - name: Schema and migrations agree
+        env:
+          DATABASE_URL: postgresql://apex:apex@localhost:5432/apex
+        run: |
+          cd apps/api
+          # a schema edit without a migration is the failure this catches: the
+          # models would drift ahead of the SQL and prod would boot the old shape
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code && echo "in sync" || {
+              echo "::error::schema.prisma has changes with no migration — run the baseline procedure in docs/DATABASE.md"
+              exit 1
+            }

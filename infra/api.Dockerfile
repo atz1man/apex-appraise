@@ -31,5 +31,6 @@ RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/sche
 
 EXPOSE 4100
 WORKDIR /app/apps/api
-# push schema on boot (swap for `prisma migrate deploy` once a migration baseline exists)
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx prisma/seed.ts || true && npx tsx src/main.ts"]
+COPY infra/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+CMD ["/app/entrypoint.sh"]
