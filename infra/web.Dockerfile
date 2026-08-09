@@ -18,6 +18,8 @@ RUN cd apps/web && pnpm build
 
 FROM nginx:alpine
 COPY infra/nginx.conf.template /etc/nginx/templates/default.conf.template
+# not a template: included verbatim by every proxied location
+COPY infra/client-ip.conf /etc/nginx/client-ip.conf
 ENV API_UPSTREAM=api:4100
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

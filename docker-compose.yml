@@ -36,6 +36,11 @@ services:
       EPC_BEARER_TOKEN: ${EPC_BEARER_TOKEN:-}
       NODE_ENV: production
       PORT: 4100
+      # The browser suite logs in on every test from a single IP, so the honest
+      # production limits would fail it for the wrong reason. The limiter itself
+      # is covered directly by apps/api/test/security.test.ts.
+      RATE_LIMIT_PER_MIN: 5000
+      AUTH_RATE_LIMIT_PER_MIN: 1000
       WEB_URL: http://web:80
       APP_URL: ${APP_URL:-http://localhost:8080}
       SMTP_URL: ${SMTP_URL:-}

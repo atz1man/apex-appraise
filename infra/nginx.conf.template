@@ -14,6 +14,7 @@ server {
   location /trpc/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
   }
 
   # ^~ matters: without it the .png/.webp regex location below wins over this
@@ -22,24 +23,28 @@ server {
   location ^~ /uploads/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
     client_max_body_size 100m;
   }
 
   location /reports/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
     proxy_read_timeout 120s;
   }
 
   location /webhooks/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
   }
 
   # Nightly demo reset (token-guarded in the API; api app is flycast-only)
   location /admin/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
     proxy_read_timeout 120s;
   }
 
