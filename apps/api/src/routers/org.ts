@@ -465,10 +465,11 @@ export const orgRouter = router({
         orderBy: { at: 'desc' },
         take: input.limit,
       });
-      const dealIds = [...new Set(events.map((e) => e.dealId))];
+      // org-level events — sign-ins, invites, plan changes — carry no deal
+      const dealIds = [...new Set(events.map((e) => e.dealId).filter((id): id is string => !!id))];
       const deals = await ctx.prisma.deal.findMany({ where: { id: { in: dealIds } }, select: { id: true, name: true } });
       const nameOf = new Map(deals.map((d) => [d.id, d.name]));
-      return events.map((e) => ({ ...e, dealName: nameOf.get(e.dealId) ?? null }));
+      return events.map((e) => ({ ...e, dealName: e.dealId ? (nameOf.get(e.dealId) ?? null) : null }));
     }),
 
   /**

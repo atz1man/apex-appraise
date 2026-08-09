@@ -411,13 +411,21 @@ model EngagementTerms {
 model ActivityEvent {
   id     String @id @default(cuid())
   orgId  String
-  dealId String
+  // org-level events — a sign-in, an invite, a plan change — belong to no deal
+  dealId String?
+  // WHO, immutably. `actor` is the display name as it stood at the time, which is
+  // what a reader wants to see; it is not an identity — people are renamed and
+  // two of them can share a name. An audit trail that cannot survive a rename is
+  // not evidence.
+  userId String?
   actor  String
   action String
   target String
+  ip     String?
   at     DateTime @default(now())
 
   @@index([dealId, at])
+  @@index([orgId, at])
 }
 
 // ---- Tasks ----

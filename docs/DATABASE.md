@@ -119,3 +119,31 @@ been proven to come back rather than assumed to.
 destination — object storage, a retention period, and a call on where UK client
 valuation data is allowed to live. That is an owner's decision with cost and
 compliance in it, so it is not made here.
+
+## Adding a migration
+
+`--from-migrations` needs a reachable shadow database, and the compose Postgres
+publishes no port — so use the schema-to-schema diff instead. It needs no database
+at all and is deterministic:
+
+```bash
+# 1. edit apps/api/prisma/schema.prisma, then sync your dev sqlite
+cd apps/api && npx prisma db push --skip-generate && npx prisma generate
+
+# 2. diff the committed schema against the new one, both rewritten to postgres
+git show HEAD:apps/api/prisma/schema.prisma > /tmp/old.prisma
+cp apps/api/prisma/schema.prisma /tmp/new.prisma
+for f in /tmp/old.prisma /tmp/new.prisma; do
+  sed -i '' 's/provider = "sqlite"/provider = "postgresql"/; s|url      = "file:./dev.db"|url      = env("DATABASE_URL")|' "$f"
+done
+mkdir -p prisma/migrations/$(date -u +%Y%m%d%H%M%S)_your_change
+npx prisma migrate diff --from-schema-datamodel /tmp/old.prisma \
+  --to-schema-datamodel /tmp/new.prisma --script \
+  > prisma/migrations/*_your_change/migration.sql
+```
+
+Then **read the SQL before committing it**. A migration that drops a column or
+adds a NOT NULL without a default will destroy or block on real data, and this is
+the last point at which that is cheap to notice. CI runs `migrate deploy` against
+an empty Postgres and then fails the build if `schema.prisma` and the migrations
+disagree, so a schema edit without a migration cannot merge.
