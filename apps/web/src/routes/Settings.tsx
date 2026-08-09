@@ -546,6 +546,38 @@ const TOE_FIELDS: Array<[string, string, string]> = [
   ['toeComplaintsProcedure', 'Complaints handling', 'The firm operates a complaints handling procedure…'],
 ];
 
+/**
+ * Server faults. Admin-only, and empty most of the time — which is the point: a
+ * panel that is normally blank is read the moment it is not.
+ */
+function ErrorsPanel() {
+  const { data, isLoading } = trpc.org.errors.useQuery({ limit: 25 });
+  if (isLoading) return null;
+  if (!data?.length) return null;
+  return (
+    <Panel title="Server faults" right={<StatusChip status="amber" label={`${data.length}`} />}>
+      <div className="flex flex-col gap-2">
+        {data.map((e) => (
+          <div key={e.id} className="text-[12px]">
+            <div className="flex items-baseline gap-2">
+              <span className="fig text-ink-3">{e.method}</span>
+              <span className="fig flex-1 min-w-0 truncate">{e.path}</span>
+              {e.count > 1 && <span className="fig text-ink-3">×{e.count}</span>}
+              <span className="fig text-[10.5px] text-ink-3">
+                {new Date(e.lastAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </span>
+            </div>
+            <div className="text-[11.5px] text-ink-2">{e.message}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 text-[10.5px] text-ink-3">
+        Credentials are stripped before storage. Kept on this server — nothing is sent to a third party.
+      </div>
+    </Panel>
+  );
+}
+
 function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const utils = trpc.useUtils();
   const toast = useToast();
@@ -926,6 +958,7 @@ export default function Settings() {
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
         <PolicyPanel isAdmin={isAdmin} />
+        {isAdmin && <ErrorsPanel />}
         <SecurityPanel />
         {isAdmin && <DataPrivacyPanel />}
         <AboutPanel />

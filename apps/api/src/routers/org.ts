@@ -468,6 +468,25 @@ export const orgRouter = router({
    * Workspace audit trail — every recorded action across the org's deals,
    * newest first. Admin-only; feeds the Settings audit-log panel.
    */
+  /**
+   * Recent server faults. Admin-only and org-wide: an error is either this
+   * workspace's or it happened before a principal was known, and an analyst has
+   * no way to act on either.
+   */
+  errors: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }).default({}))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.errorEvent.findMany({
+        where: { OR: [{ orgId: ctx.principal.orgId }, { orgId: null }] },
+        orderBy: { lastAt: 'desc' },
+        take: input.limit,
+        select: { id: true, method: true, path: true, statusCode: true, code: true, message: true, count: true, firstAt: true, lastAt: true },
+      });
+      // the stack is deliberately NOT returned: it is the part most likely to
+      // carry something that should not travel, and it is of no use in a list
+      return rows;
+    }),
+
   auditLog: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).default({}))
     .query(async ({ ctx, input }) => {

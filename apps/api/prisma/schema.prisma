@@ -335,6 +335,33 @@ model Document {
 // house defaults new terms of engagement are drafted from. Blank fields fall
 // back to Apex's built-in wording — nothing here can weaken the engine's own
 // factual AI statement, which is not editable by design.
+// Server faults, kept where they can be looked at.
+//
+// No external provider: a self-hosted deployment and a firm with a data-residency
+// policy both need this to work without shipping their errors to a third party.
+// The trade is retention and volume, both bounded below.
+model ErrorEvent {
+  id        String   @id @default(cuid())
+  // null when the fault happened before a principal was resolved (a bad token,
+  // an unauthenticated route) — those are exactly the ones worth seeing
+  orgId     String?
+  userId    String?
+  method    String
+  path      String
+  statusCode Int
+  code      String?
+  message   String
+  stack     String?
+  // repeats of the same fault increment rather than insert: an error storm must
+  // not be able to fill the database it is reporting on
+  count     Int      @default(1)
+  firstAt   DateTime @default(now())
+  lastAt    DateTime @default(now())
+
+  @@index([orgId, lastAt])
+  @@index([path, message])
+}
+
 model OrgPolicy {
   id    String @id @default(cuid())
   orgId String @unique
