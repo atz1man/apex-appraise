@@ -1469,6 +1469,63 @@ test('a version can be submitted, approved, and then not quietly edited', async 
 });
 
 /**
+ * The cross-deal review queue on the Hub.
+ *
+ * Shares 'Stour Valley Logistics' with the signing walk, which only touches that
+ * deal's engagement terms — but this test SELF-CLEANS anyway: it approves the
+ * version it submitted, so it leaves no work sitting in a customer-facing demo
+ * queue, and proves the queue empties as well as fills.
+ */
+test('the hub shows what is waiting on you, and stops showing it once decided', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const run = `${Date.now()}`.slice(-6);
+  const versionId = await page.evaluate(async (tag) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const id = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Stour Valley')).id;
+    const input = {
+      units: [{ label: 'Units', count: 6, area: 900, cap: 400 }], efficiency: 85,
+      trades: [{ label: 'Build', rate: 120 }], profFeePct: 11, contingencyPct: 5, otherCosts: [],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 16, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 }, disposal: { agentPct: 1.5, legalPct: 0.5 }, targetProfitOnGdvPct: 20,
+    };
+    const r = await fetch('/trpc/appraisal.save', {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ json: { dealId: id, input, asNewVersion: true, label: `Queue ${tag}` } }),
+    });
+    const vid = (await r.json()).result.data.json.id;
+    await fetch('/trpc/appraisal.submitForReview', { method: 'POST', headers: auth, body: JSON.stringify({ json: { versionId: vid } }) });
+    return vid;
+  }, run);
+
+  // the Hub is the root route
+  await page.goto('/');
+  const queue = page.locator('[data-review-queue]');
+  await expect(queue).toBeVisible();
+  await expect(queue.getByText('Waiting on you')).toBeVisible();
+  await expect(queue.getByText(`Queue ${run}`)).toBeVisible();
+  // the figures a reviewer decides on are on the card, not one click away
+  await expect(queue.getByText('GDV').first()).toBeVisible();
+
+  // decide it, and the queue lets it go
+  await page.evaluate(async (vid) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    await fetch('/trpc/appraisal.review', {
+      method: 'POST', headers: auth,
+      body: JSON.stringify({ json: { versionId: vid, decision: 'approve', note: 'Checked' } }),
+    });
+  }, versionId);
+
+  await page.goto('/');
+  await page.waitForTimeout(600);
+  await expect(page.getByText(`Queue ${run}`)).toHaveCount(0);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

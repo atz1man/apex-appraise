@@ -247,6 +247,75 @@ export const appraisalRouter = router({
   }),
 
   /**
+   * What is waiting — across every deal.
+   *
+   * The workflow is worthless if you have to open a deal to discover something
+   * needs you. Two lists, because they are two different jobs: work waiting on
+   * YOUR decision, and your own work that came back.
+   *
+   * The review list is empty for non-admins rather than hidden, because only
+   * admins can decide — showing an analyst a queue they cannot act on would be
+   * noise dressed as a task.
+   */
+  reviewQueue: internalProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.appraisal.findMany({
+      where: {
+        orgId: ctx.principal.orgId,
+        OR: [
+          { reviewStatus: 'in_review' },
+          { reviewStatus: 'changes_requested', submittedById: ctx.principal.userId },
+        ],
+      },
+      orderBy: { submittedAt: 'asc' }, // oldest first: a queue is a queue
+      select: {
+        id: true, dealId: true, label: true, note: true, reviewStatus: true,
+        submittedById: true, submittedAt: true, reviewNote: true, resultCache: true,
+      },
+      take: 100,
+    });
+    if (!rows.length) return { awaitingReview: [], returnedToMe: [] };
+
+    const [deals, actors] = await Promise.all([
+      ctx.prisma.deal.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.dealId))] }, orgId: ctx.principal.orgId },
+        select: { id: true, name: true },
+      }),
+      ctx.prisma.user.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.submittedById).filter((x): x is string => !!x))] }, orgId: ctx.principal.orgId },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const dealName = new Map(deals.map((d) => [d.id, d.name]));
+    const actorName = new Map(actors.map((u) => [u.id, u.name]));
+
+    const shape = (r: (typeof rows)[number]) => {
+      let headline: { gdv: number; profit: number; poc: number } | null = null;
+      try {
+        const c = r.resultCache ? (JSON.parse(r.resultCache) as { result: { gdv: number; profit: number; poc: number } }) : null;
+        if (c?.result) headline = { gdv: c.result.gdv, profit: c.result.profit, poc: c.result.poc };
+      } catch {
+        headline = null;
+      }
+      return {
+        id: r.id,
+        dealId: r.dealId,
+        dealName: dealName.get(r.dealId) ?? 'Unknown deal',
+        label: r.label,
+        note: r.note,
+        reviewNote: r.reviewNote,
+        submittedBy: r.submittedById ? (actorName.get(r.submittedById) ?? 'A former colleague') : null,
+        submittedAt: r.submittedAt,
+        headline,
+      };
+    };
+
+    return {
+      awaitingReview: ctx.principal.role === 'ADMIN' ? rows.filter((r) => r.reviewStatus === 'in_review').map(shape) : [],
+      returnedToMe: rows.filter((r) => r.reviewStatus === 'changes_requested').map(shape),
+    };
+  }),
+
+  /**
    * Send a version to be reviewed.
    *
    * Any internal member may submit — drafting is the analyst's job and asking for

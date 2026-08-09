@@ -166,3 +166,45 @@ describe('resubmission', () => {
     expect(cur.review.reviewedBy).toBe('Review Owner');
   });
 });
+
+describe('the queue across deals', () => {
+  // the describes above leave the current version approved; a queue test that
+  // inherits that state is testing the previous test's leftovers
+  beforeAll(async () => {
+    await callerFor(T.principal).appraisal.save({
+      dealId: T.dealId, input: input(140), asNewVersion: true, label: 'For the queue',
+    } as never);
+  });
+
+  it('shows a reviewer what is waiting, oldest first, and never another org’s work', async () => {
+    const other = await makeTenant('Rival');
+    await callerFor(other.principal).appraisal.save({ dealId: other.dealId, input: input(), label: 'Theirs' } as never);
+    const theirs = await prisma.appraisal.findFirstOrThrow({ where: { dealId: other.dealId, isCurrent: true } });
+    await callerFor(other.principal).appraisal.submitForReview({ versionId: theirs.id } as never);
+
+    const v = await current();
+    await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
+
+    const q = (await callerFor(T.principal).appraisal.reviewQueue()) as {
+      awaitingReview: Array<{ dealId: string; dealName: string; submittedBy: string | null }>;
+    };
+    expect(q.awaitingReview.map((x) => x.dealId)).toContain(T.dealId);
+    // the rival firm's submission is not in this firm's queue
+    expect(q.awaitingReview.map((x) => x.dealId)).not.toContain(other.dealId);
+    expect(q.awaitingReview[0]!.dealName).toBe('Review Wharf');
+    expect(q.awaitingReview[0]!.submittedBy).toBe('Review Owner');
+  });
+
+  it('shows an analyst nothing to review, but does show their own work coming back', async () => {
+    const v = await current();
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'request_changes', note: 'Contingency looks light' } as never);
+
+    const asAnalyst = (await callerFor(analyst).appraisal.reviewQueue()) as {
+      awaitingReview: unknown[];
+      returnedToMe: Array<{ reviewNote: string | null }>;
+    };
+    // a queue they cannot act on would be noise dressed as a task
+    expect(asAnalyst.awaitingReview).toEqual([]);
+    expect(asAnalyst.returnedToMe[0]!.reviewNote).toBe('Contingency looks light');
+  });
+});

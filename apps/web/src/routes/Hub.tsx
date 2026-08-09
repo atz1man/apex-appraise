@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { Avatar, Button, Icon, Skeleton, TopBar, SPARKLE } from '../components/ui';
+import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -81,6 +81,7 @@ export default function Hub() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.deals.list.useQuery({});
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
+  const { data: queue } = trpc.appraisal.reviewQueue.useQuery(undefined, { staleTime: 15_000 });
   const loadSample = trpc.org.loadSampleDeal.useMutation({
     onSuccess: (res) => {
       utils.deals.list.invalidate();
@@ -204,6 +205,53 @@ export default function Hub() {
             </div>
           </section>
         )}
+
+        {/* What is waiting — the workflow is worthless if you have to open a deal
+            to find out something needs you. Rendered only when there IS something:
+            an empty "nothing to review" panel is furniture. */}
+        {(queue?.awaitingReview.length || queue?.returnedToMe.length) ? (
+          <section className="mt-9" data-review-queue>
+            <div className="eyebrow">Review</div>
+            <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">
+              {queue.awaitingReview.length > 0 ? 'Waiting on you' : 'Back with you'}
+            </h2>
+            <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+              {[
+                ...queue.awaitingReview.map((v) => ({ ...v, mine: false })),
+                ...queue.returnedToMe.map((v) => ({ ...v, mine: true })),
+              ].map((v) => (
+                <Link
+                  key={v.id}
+                  to={`/deal/${v.dealId}/appraisal`}
+                  className="bg-surface border border-border-strong rounded-panel shadow-rest p-4 hover:shadow-lift transition-shadow"
+                >
+                  <div className="flex items-center gap-2">
+                    <StatusChip status={v.mine ? 'red' : 'amber'} label={v.mine ? 'CHANGES REQUESTED' : 'IN REVIEW'} />
+                    <span className="fig ml-auto text-[10.5px] text-ink-3">
+                      {v.submittedAt
+                        ? new Date(v.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[13.5px] font-semibold">{v.dealName}</div>
+                  <div className="text-[11.5px] text-ink-3">
+                    {v.label}
+                    {v.submittedBy && !v.mine ? ` · ${v.submittedBy}` : ''}
+                  </div>
+                  {v.mine && v.reviewNote && <div className="mt-1.5 text-[11.5px] text-ink-2">“{v.reviewNote}”</div>}
+                  {v.headline && (
+                    <div className="mt-2 flex gap-4 text-[11.5px]">
+                      <span className="text-ink-3">GDV</span>
+                      <span className="fig font-semibold">{fM(v.headline.gdv)}</span>
+                      <span className="text-ink-3">Profit</span>
+                      <span className="fig font-semibold">{fM(v.headline.profit)}</span>
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* deal tools grid */}
         <section className="mt-9">

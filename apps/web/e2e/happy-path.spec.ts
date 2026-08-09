@@ -19,8 +19,14 @@ test('internal team golden path', async ({ page }) => {
   await expect(page.getByText('Sourcing')).toBeVisible();
   await expect(page.getByText('Northgate Trade & Industrial Park').first()).toBeVisible();
 
-  // Deal overview — the deal home with lifecycle stepper and workfile grid
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  /**
+   * Deal overview. Clicked as the LINK it is, not as loose text: the board
+   * re-sorts when any deal's headline figures change, and another test saving an
+   * appraisal can move a card between the hit-test and the click. A role locator
+   * is re-resolved on the retry; a text node in a re-ordering list is not.
+   */
+  await page.getByRole('link', { name: /Northgate Trade & Industrial Park/ }).first().click();
+  await expect(page).toHaveURL(/\/deal\//);
   await expect(page.getByText('Workfile')).toBeVisible();
   await expect(page.getByRole('button', { name: /Advance stage/ })).toBeVisible();
 
