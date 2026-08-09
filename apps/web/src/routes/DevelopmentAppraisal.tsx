@@ -177,6 +177,8 @@ export default function DevelopmentAppraisal() {
   const [sensTab, setSensTab] = useState<'roc' | 'profit' | 'residual'>('roc');
   const [period, setPeriod] = useState<Periodicity>('month');
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionNote, setVersionNote] = useState('');
+  const [compareId, setCompareId] = useState<string | null>(null);
   const [versionLabel, setVersionLabel] = useState('');
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
   const restore = trpc.appraisal.restore.useMutation({
@@ -1659,11 +1661,20 @@ export default function DevelopmentAppraisal() {
           <Button
             loading={saveVersion.isPending}
             disabled={!versionLabel.trim()}
-            onClick={() => saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() })}
+            onClick={() =>
+              saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), note: versionNote.trim() || undefined })
+            }
           >
             Save as version
           </Button>
         </div>
+        {/* the diff can show what moved; only the author can say why */}
+        <input
+          className="w-full mb-4"
+          placeholder="Why this version? — e.g. “Rebased on the tender return from Kier”"
+          value={versionNote}
+          onChange={(e) => setVersionNote(e.target.value)}
+        />
         <div className="flex flex-col gap-2.5">
           {(versions ?? []).map((v) => {
             const cur = versions?.find((x) => x.isCurrent)?.headline;
@@ -1690,8 +1701,9 @@ export default function DevelopmentAppraisal() {
                     )}
                   </div>
                 )}
+                {v.note && <div className="mt-2 text-[11.5px] text-ink-2 italic">“{v.note}”</div>}
                 {!v.isCurrent && (
-                  <div className="mt-2.5">
+                  <div className="mt-2.5 flex gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -1700,8 +1712,12 @@ export default function DevelopmentAppraisal() {
                     >
                       Restore as current
                     </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setCompareId(compareId === v.id ? null : v.id)}>
+                      {compareId === v.id ? 'Hide changes' : 'What changed'}
+                    </Button>
                   </div>
                 )}
+                {compareId === v.id && <VersionDiff dealId={dealId} fromId={v.id} toId={versions?.find((x) => x.isCurrent)?.id ?? v.id} />}
               </div>
             );
           })}
@@ -1711,6 +1727,88 @@ export default function DevelopmentAppraisal() {
           Restoring never rewrites history — the old version's inputs become a new current version, and the audit trail records who restored what.
         </div>
       </Drawer>
+    </div>
+  );
+}
+
+/**
+ * What changed between a version and the current one, and what it did to the
+ * answer. Rendered where the reviewer already is — inside the versions drawer —
+ * because a diff you have to go and find is a diff nobody reads.
+ */
+function VersionDiff({ dealId, fromId, toId }: { dealId: string; fromId: string; toId: string }) {
+  const { data, isLoading } = trpc.appraisal.compare.useQuery({ fromId, toId }, { enabled: fromId !== toId });
+  void dealId;
+
+  if (fromId === toId) return <div className="mt-2.5 text-[11.5px] text-ink-3">This is the current version.</div>;
+  if (isLoading) return <div className="mt-2.5 text-[11.5px] text-ink-3">Comparing…</div>;
+  if (!data) return null;
+
+  const fmt = (val: number | string | null, unit: string) => {
+    if (val === null) return '—';
+    if (typeof val === 'string') return val;
+    if (unit === 'money') return fM(val);
+    if (unit === 'pct') return `${val}%`;
+    if (unit === 'psf') return `£${val}`;
+    if (unit === 'months') return `${val} mo`;
+    return String(val);
+  };
+
+  const impact = [
+    ['GDV', data.impact.gdv],
+    ['Total cost', data.impact.totalCost],
+    ['Profit', data.impact.profit],
+    ['Residual land', data.impact.residualNet],
+  ] as Array<[string, { before: number; after: number }]>;
+
+  return (
+    // marked so a reader — human or test — can address this block on its own: the
+    // appraisal behind the drawer uses several of the same labels
+    <div className="mt-3 border-t border-border-std pt-3" data-version-diff>
+      <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-2">
+        {data.from.label} → {data.to.label}
+      </div>
+
+      {data.diff.identical ? (
+        // worth saying explicitly: two versions with the same inputs is a real
+        // finding, not an empty screen
+        <div className="text-[11.5px] text-ink-2">No inputs differ between these versions.</div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {data.diff.changes.map((c) => (
+            <div key={c.path} className="flex items-baseline gap-2 text-[11.5px]">
+              <span className="text-ink-2 flex-1 min-w-0 truncate">{c.label}</span>
+              <span className="fig text-ink-3">{fmt(c.before, c.unit)}</span>
+              <span className="text-ink-3">→</span>
+              <span className="fig font-semibold">{fmt(c.after, c.unit)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-4">
+        {impact.map(([label, v]) => {
+          const delta = v.after - v.before;
+          const moved = Math.abs(delta) >= 1;
+          return (
+            <div key={label}>
+              <div className="text-[10px] uppercase tracking-wide text-ink-3">{label}</div>
+              <div className="fig text-[12px] font-semibold">
+                {fM(v.after)}
+                {moved && (
+                  <span
+                    className="ml-1 font-medium"
+                    style={{ color: delta > 0 ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--status-red, 178 58 46))' }}
+                  >
+                    {delta > 0 ? '+' : '−'}
+                    {fM(Math.abs(delta))}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

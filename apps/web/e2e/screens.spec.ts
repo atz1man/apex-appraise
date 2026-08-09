@@ -1303,6 +1303,75 @@ test('the appraisal report prints an investment section without desyncing pagina
 });
 
 /**
+ * Version comparison in the drawer a reviewer actually opens.
+ *
+ * OWNS 'Southbourne Grove'. It saves versions, so it must not touch a deal any
+ * other test reads.
+ */
+test('a reviewer can see what changed between versions, and why', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  /**
+   * Versions accumulate: this test saves two every run, so a fixed label matches
+   * more of them each time and the assertion fails on the SECOND run with a
+   * strict-mode error that reads like a missing element. Each run labels its own.
+   */
+  const run = `${Date.now()}`.slice(-6);
+  const dealId = await page.evaluate(async (tag) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const id = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Southbourne')).id;
+    const input = {
+      units: [{ label: '2-bed apartments', count: 10, area: 750, cap: 420 }],
+      efficiency: 85,
+      trades: [{ label: 'Superstructure', rate: 110 }],
+      profFeePct: 11,
+      contingencyPct: 5,
+      otherCosts: [],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+      disposal: { agentPct: 1.5, legalPct: 0.5 },
+      targetProfitOnGdvPct: 20,
+    };
+    const save = (body: unknown) =>
+      fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: body }) });
+    await save({ dealId: id, input, label: `Base ${tag}` });
+    await save({
+      dealId: id,
+      input: { ...input, trades: [{ label: 'Superstructure', rate: 130 }] },
+      asNewVersion: true,
+      label: `Post-tender ${tag}`,
+      note: `Rebased on the tender return ${tag}`,
+    });
+    return id;
+  }, run);
+
+  await page.goto(`/deal/${dealId}/appraisal`);
+  await page.getByRole('button', { name: /^Versions/ }).click();
+  await expect(page.getByText(`Post-tender ${run}`)).toBeVisible();
+  // the reason is on the record next to the version it explains
+  await expect(page.getByText(`“Rebased on the tender return ${run}”`)).toBeVisible();
+
+  // the newest non-current version is this run's Base, which is what we compare
+  await page.getByRole('button', { name: 'What changed' }).first().click();
+  /**
+   * Scoped to the diff block. The appraisal behind the drawer carries several of
+   * the same labels — "Residual land" among them — so an unscoped assertion
+   * matches two elements and fails strict mode with an error that reads exactly
+   * like the element being absent.
+   */
+  const diff = page.locator('[data-version-diff]');
+  await expect(diff.getByText('Trade — Superstructure')).toBeVisible();
+  await expect(diff.getByText('£110', { exact: true })).toBeVisible();
+  await expect(diff.getByText('£130', { exact: true })).toBeVisible();
+  // and the consequence a reviewer is actually judging
+  await expect(diff.getByText('Residual land', { exact: true })).toBeVisible();
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

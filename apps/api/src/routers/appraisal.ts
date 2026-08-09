@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   autoAppraise,
+  compareAppraisals,
   computeAppraisal,
   jvWaterfall,
   sensitivityGrid,
@@ -104,6 +105,8 @@ export const appraisalRouter = router({
         // creates a fresh current version under the given label
         asNewVersion: z.boolean().default(false),
         label: z.string().max(60).optional(),
+        /** why this version exists — the half of a review a diff cannot supply */
+        note: z.string().max(500).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -127,6 +130,7 @@ export const appraisalRouter = router({
             dealId: input.dealId,
             isCurrent: true,
             label: input.label?.trim() || `v${(await ctx.prisma.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
+            note: input.note?.trim() || null,
           },
         });
       } else if (existing) {
@@ -166,7 +170,7 @@ export const appraisalRouter = router({
     const rows = await ctx.prisma.appraisal.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, label: true, source: true, isCurrent: true, createdAt: true, updatedAt: true, resultCache: true },
+      select: { id: true, label: true, note: true, source: true, isCurrent: true, createdAt: true, updatedAt: true, resultCache: true },
     });
     return rows.map((r) => {
       let headline: { gdv: number; residualNet: number; profit: number; poc: number } | null = null;
@@ -178,9 +182,51 @@ export const appraisalRouter = router({
       } catch {
         headline = null;
       }
-      return { id: r.id, label: r.label, source: r.source, isCurrent: r.isCurrent, createdAt: r.createdAt, updatedAt: r.updatedAt, headline };
+      return { id: r.id, label: r.label, note: r.note, source: r.source, isCurrent: r.isCurrent, createdAt: r.createdAt, updatedAt: r.updatedAt, headline };
     });
   }),
+
+  /**
+   * What changed between two versions, and what it did to the answer.
+   *
+   * The impact figures are RE-COMPUTED from both versions' inputs rather than
+   * read from each row's stored resultCache. A cache records what the engine said
+   * on the day it was written, so comparing two caches can show a difference that
+   * is really an engine change between the two saves — which is exactly the sort
+   * of phantom a reviewer must never be shown.
+   */
+  compare: internalProcedure
+    .input(z.object({ fromId: z.string(), toId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const [from, to] = await Promise.all([
+        ctx.prisma.appraisal.findFirst({ where: { id: input.fromId, orgId: ctx.principal.orgId } }),
+        ctx.prisma.appraisal.findFirst({ where: { id: input.toId, orgId: ctx.principal.orgId } }),
+      ]);
+      if (!from || !to) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (from.dealId !== to.dealId) {
+        // comparing versions across deals would produce a diff that looks
+        // authoritative and means nothing
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Those versions belong to different deals' });
+      }
+
+      const beforeInput = appraisalRowToEngineInput(from);
+      const afterInput = appraisalRowToEngineInput(to);
+      const b = computeAppraisal(beforeInput);
+      const a = computeAppraisal(afterInput);
+
+      return {
+        from: { id: from.id, label: from.label, note: from.note, at: from.updatedAt },
+        to: { id: to.id, label: to.label, note: to.note, at: to.updatedAt },
+        diff: compareAppraisals(beforeInput, afterInput),
+        impact: {
+          gdv: { before: b.gdv, after: a.gdv },
+          totalCost: { before: b.totalCost, after: a.totalCost },
+          profit: { before: b.profit, after: a.profit },
+          poc: { before: b.poc, after: a.poc },
+          residualNet: { before: b.residualNet, after: a.residualNet },
+        },
+      };
+    }),
 
   /**
    * Restore an old version: its inputs become a NEW current version, so history

@@ -95,6 +95,10 @@ model Appraisal {
   deal       Deal    @relation(fields: [dealId], references: [id])
   isCurrent  Boolean @default(true)
   label      String  @default("Base")
+  // why this version exists, in the author's words. The diff says WHAT moved;
+  // only the person who moved it can say why, and that is the half a reviewer
+  // cannot reconstruct later.
+  note       String?
   source     String  @default("manual") // manual | ai | field
   efficiency Float   @default(90)
   units      String  // JSON AppraisalUnit[] {label,count,area,cap,conf,source} — cap in £/sqft
