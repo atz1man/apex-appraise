@@ -14,6 +14,7 @@ import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
+import { ShareLinks } from '../components/ShareLinks';
 import { CompsLadder } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
@@ -209,7 +210,7 @@ export default function RedBookReport() {
    */
   const exportable = !!appr && !!R && !!input;
   const toolbar = (
-    <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5">
+    <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5 relative">
       <Link to={`/deal/${dealId}/appraisal`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-700">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         Back to appraisal
@@ -237,6 +238,7 @@ export default function RedBookReport() {
             Download PDF
           </Button>
         )}
+        {exportable && <ShareLinks dealId={dealId} kind="redbook" />}
         {exportable && (
         <Button onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>

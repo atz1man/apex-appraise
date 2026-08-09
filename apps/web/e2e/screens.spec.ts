@@ -1897,7 +1897,8 @@ test('a shared report link works for a stranger, and stops when it is revoked', 
   // made through the real button, because "can a valuer actually produce one" is
   // half of what is being tested
   await page.goto(`/deal/${dealId}/report`);
-  await page.getByRole('button', { name: 'Share link' }).click();
+  await page.getByRole('button', { name: /^Share link/ }).click();
+  await page.getByRole('button', { name: 'New link' }).click();
   const banner = page.locator('[data-share-link]');
   await expect(banner).toBeVisible();
   const url = await banner.locator('input').inputValue();
@@ -1918,22 +1919,20 @@ test('a shared report link works for a stranger, and stops when it is revoked', 
   // something the holder of a guess is entitled to learn
   expect((await request.get('/shared/definitely-not-a-real-token.pdf')).status()).toBe(404);
 
-  // and the firm can take it back
-  const shareId = await page.evaluate(async (deal) => {
-    const r = await fetch(`/trpc/appraisal.shares?input=${encodeURIComponent(JSON.stringify({ json: deal }))}`, {
-      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` },
-    });
-    const rows = (await r.json()).result.data.json as Array<{ id: string; state: string }>;
-    return rows.find((x) => x.state === 'live')!.id;
-  }, dealId);
-
-  await page.evaluate(async (id) => {
-    await fetch('/trpc/appraisal.revokeShare', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ json: { id } }),
-    });
-  }, shareId);
+  /**
+   * And the firm can take it back — from the PRODUCT, not the API. Revocation
+   * shipped as a security property with no button behind it, which is the same as
+   * not being able to revoke at all; this drives the button a valuer would press.
+   */
+  const panel = page.locator('[data-share-panel]');
+  /**
+   * Counted, not matched. Every run leaves a withdrawn link behind, so asserting
+   * that "REVOKED is visible" passes on history rather than on what this run did.
+   * The live count going back to where it started is the fact being tested.
+   */
+  const liveNow = await panel.getByText('LIVE').count();
+  await panel.getByRole('button', { name: 'Withdraw' }).first().click();
+  await expect(panel.getByText('LIVE')).toHaveCount(liveNow - 1);
 
   expect((await request.get(url)).status()).toBe(404);
 });
