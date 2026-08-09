@@ -16,7 +16,10 @@ npx prisma migrate deploy
 
 # Seeding is idempotent and demo-only, so it may fail without taking the API with
 # it — but it must not fail SILENTLY, which is what `|| true` used to do.
-echo "[boot] seeding demo data"
+# Seeds a FRESH database and refuses a populated one — the script itself holds
+# that guard, because `pnpm seed` run by hand against production would otherwise
+# do the same damage this boot step nearly did.
+echo "[boot] seeding demo data if this database is empty"
 npx tsx prisma/seed.ts || echo "[boot] WARNING: seed failed — continuing, demo data may be stale"
 
 echo "[boot] starting api"

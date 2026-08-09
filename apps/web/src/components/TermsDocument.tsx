@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { formatMoneyFull } from '@apex/appraisal-engine';
 import { FirmMark } from './ui';
+import { A4Page as PaperPage, PRINT_CSS } from './paper';
 
 /**
  * The client-facing terms of engagement (RICS VPS 1), laid out for A4. Shared by
@@ -60,23 +61,8 @@ export const TERMS_PRINT_CSS = `
 const fmtLong = (d: string | Date) =>
   new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-function A4Page({ children }: { children: ReactNode }) {
-  return (
-    <div
-      className="a4-page bg-surface flex flex-col overflow-hidden"
-      style={{
-        width: 794,
-        // 1122, not 1123 — chromium prints A4 at 1122.5px (see docs/COMPLIANCE.md)
-        minHeight: 1122,
-        borderRadius: 3,
-        boxShadow: '0 4px 24px rgba(20,30,25,0.12)',
-        padding: '54px 64px',
-      }}
-    >
-      {children}
-    </div>
-  );
-}
+/** the engagement letter sets its own margins — see components/paper.tsx */
+const A4Page = ({ children }: { children: ReactNode }) => <PaperPage padding="54px 64px">{children}</PaperPage>;
 
 function Clause({ n, title, children }: { n: string; title: string; children: ReactNode }) {
   return (

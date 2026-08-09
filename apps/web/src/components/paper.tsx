@@ -35,7 +35,22 @@ export const PRINT_CSS = `
 /** Usable content height inside a page, after padding, head and foot. */
 export const PAGE_CONTENT_PX = 924;
 
-export function A4Page({ children, pad = true }: { children: ReactNode; pad?: boolean }) {
+/**
+ * `padding` is a parameter, not a constant, and deliberately so. The documents do
+ * not agree: the appraisal report and funding pack use 56/60, the Red Book and
+ * terms of engagement 54/64. Standardising them here would re-wrap two documents
+ * and quietly move every page break in them — which, for a valuation and a signed
+ * engagement letter, is not a cosmetic change.
+ */
+export function A4Page({
+  children,
+  pad = true,
+  padding = '56px 60px',
+}: {
+  children: ReactNode;
+  pad?: boolean;
+  padding?: string;
+}) {
   return (
     <div
       className="a4-page bg-surface flex flex-col overflow-hidden"
@@ -45,7 +60,7 @@ export function A4Page({ children, pad = true }: { children: ReactNode; pad?: bo
         minHeight: 1122,
         borderRadius: 3,
         boxShadow: '0 4px 24px rgba(20,30,25,0.12)',
-        padding: pad ? '56px 60px' : 0,
+        padding: pad ? padding : 0,
       }}
     >
       {children}

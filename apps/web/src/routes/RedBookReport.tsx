@@ -15,23 +15,20 @@ import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
+import { A4Page as PaperPage, PRINT_CSS } from '../components/paper';
+
+/** the Red Book sets its own margins — see the note in components/paper.tsx */
+const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
+  <PaperPage pad={pad} padding="54px 64px">
+    {children}
+  </PaperPage>
+);
 import { CompsLadder } from '../components/charts';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
 /* ------------------------------------------------------------------ */
 
-const PRINT_CSS = `
-@page { size: A4; margin: 0; }
-@media print {
-  body { background: #fff !important; }
-  .no-print { display: none !important; }
-  .a4-canvas { padding: 0 !important; gap: 0 !important; background: #fff !important; }
-  .a4-page { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; page-break-after: always; break-after: page; }
-  /* without this the final break emits a trailing blank sheet — every PDF printed one page more than its footers claimed */
-  .a4-page:last-child { page-break-after: auto !important; break-after: auto !important; }
-}
-`;
 
 /** Evergreen gradient placeholders for the photo strip (photo-log pattern — no real images). */
 const PHOTO_GRADS = [
@@ -88,25 +85,6 @@ function poundsInWords(pounds: number): string {
 }
 
 /* ---------------------------- page chrome ---------------------------- */
-
-function A4Page({ children, pad = true }: { children: ReactNode; pad?: boolean }) {
-  return (
-    <div
-      className="a4-page bg-surface flex flex-col overflow-hidden"
-      style={{
-        width: 794,
-        // 1122, not 1123: chromium prints A4 at 1122.5px, so a page sized to the
-        // rounded-up height spills a blank sheet and desyncs the "page n of N" footers
-        minHeight: 1122,
-        borderRadius: 3,
-        boxShadow: '0 4px 24px rgba(20,30,25,0.12)',
-        padding: pad ? '54px 64px' : 0,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 function PageHead({ title, right }: { title: string; right: string }) {
   return (
