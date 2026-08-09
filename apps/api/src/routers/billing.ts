@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { APP_URL } from '../email.js';
 import { PLANS, ensurePrice, stripeConfigured, stripeFetch, stripePublishableKey } from '../stripe.js';
 import { authedProcedure, internalProcedure, router } from '../trpc.js';
+import { usageFor } from '../entitlements.js';
 
 /** Admin-only guard on top of internal. */
 const adminProcedure = internalProcedure.use(({ ctx, next }) => {
@@ -20,6 +21,9 @@ export const billingRouter = router({
       mode: stripePublishableKey()?.startsWith('pk_test') ? ('test' as const) : ('live' as const),
       plan: org?.plan ?? 'TRIAL',
       plans: PLANS,
+      // what the workspace has used against what it may use — so the UI can warn
+      // before someone hits a wall mid-task rather than after
+      usage: await usageFor(ctx.prisma, ctx.principal.orgId, org?.plan ?? 'TRIAL'),
     };
   }),
 

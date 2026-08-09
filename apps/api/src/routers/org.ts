@@ -9,6 +9,7 @@ import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
 import { authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
+import { assertCanAddMember, usageFor } from '../entitlements.js';
 
 const initialsOf = (name: string) =>
   name
@@ -246,6 +247,8 @@ export const orgRouter = router({
       const email = input.email.toLowerCase();
       const existing = await ctx.prisma.user.findUnique({ where: { email } });
       if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
+      const inviteOrg = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      await assertCanAddMember(ctx.prisma, ctx.principal.orgId, inviteOrg?.plan ?? 'TRIAL');
       const tempPassword = randomBytes(6).toString('base64url');
       await ctx.prisma.user.create({
         data: {

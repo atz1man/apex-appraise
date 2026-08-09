@@ -16,7 +16,13 @@ const hash = (s: string) => hashPassword(s);
 const p = (pounds: number) => BigInt(Math.round(pounds * 100));
 
 export async function seedDemo(prisma: PrismaClient): Promise<string> {
-  const org = await prisma.organisation.create({ data: { name: 'Brookfield Developments' } });
+  // ENTERPRISE, not the TRIAL default: this workspace is the showcase, with 11
+  // deals and 8 seats. Leaving it on TRIAL would either mean the plan limits are
+  // not enforced, or the demo cannot add a deal — and the first of those is how
+  // limits quietly stop being real.
+  const org = await prisma.organisation.create({
+    data: { name: 'Brookfield Developments', plan: 'ENTERPRISE' },
+  });
 
   const [ao, dw, mv, pa] = await Promise.all([
     prisma.user.create({ data: { orgId: org.id, email: 'arthur@apexappraise.co.uk', password: hash('demo'), name: 'Arthur O.', role: 'ADMIN', initials: 'AO' } }),

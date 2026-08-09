@@ -770,6 +770,36 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
         </span>
       }
     >
+      {/* Usage against allowance, shown whether or not Stripe is wired up: the
+          limits are enforced by the API regardless, so hiding them behind billing
+          configuration would let someone meet a wall they were never shown. */}
+      <div className="mb-4 flex flex-wrap gap-5 border-b border-border-std pb-3">
+        {([
+          ['Deals', data.usage.deals],
+          ['Team members', data.usage.members],
+        ] as Array<[string, { used: number; limit: number | null }]>).map(([label, u]) => {
+          const atLimit = u.limit != null && u.used >= u.limit;
+          return (
+            <div key={label}>
+              <div className="text-[10.5px] uppercase tracking-wide text-ink-3">{label}</div>
+              <div
+                className="fig text-[14px] font-semibold"
+                style={{ color: atLimit ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}
+              >
+                {u.used}
+                <span className="text-ink-3 font-medium"> / {u.limit ?? '∞'}</span>
+              </div>
+            </div>
+          );
+        })}
+        {(data.usage.deals.limit != null && data.usage.deals.used >= data.usage.deals.limit) ||
+        (data.usage.members.limit != null && data.usage.members.used >= data.usage.members.limit) ? (
+          <div className="self-center text-[12px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>
+            You're at your plan's limit — existing work is unaffected, but you can't add more until you upgrade.
+          </div>
+        ) : null}
+      </div>
+
       {!data.configured ? (
         <div className="text-[12.5px] text-ink-2">
           Stripe isn't configured on this server — set <code className="fig">STRIPE_SECRET_KEY</code> to enable subscriptions.

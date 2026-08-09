@@ -4,6 +4,7 @@ import { portfolioRollup } from '@apex/appraisal-engine';
 import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
+import { assertCanAddDeal } from '../entitlements.js';
 
 const dealOut = (d: {
   id: string; name: string; address: string; postcode?: string | null; assetType: string; stage: string;
@@ -80,8 +81,10 @@ export const dealsRouter = router({
         nextMilestone: z.string().optional(),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.deal.create({
+    .mutation(async ({ ctx, input }) => {
+      const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      await assertCanAddDeal(ctx.prisma, ctx.principal.orgId, org?.plan ?? 'TRIAL');
+      return ctx.prisma.deal.create({
         data: {
           orgId: ctx.principal.orgId,
           name: input.name,
@@ -97,8 +100,8 @@ export const dealsRouter = router({
           nextMilestone: input.nextMilestone,
           ownerId: ctx.principal.userId,
         },
-      }),
-    ),
+      });
+    }),
 
   setStage: internalProcedure
     .input(z.object({ id: z.string(), stage: zDealStage }))
