@@ -4,6 +4,7 @@ import { lettingsRollup, salesRollup } from '@apex/appraisal-engine';
 import { LETTING_MILESTONES, SALES_MILESTONES } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
+import { assertOwned } from '../auth/owned.js';
 
 const salesStatusForProg = (prog: number) =>
   prog >= 7 ? 'HANDOVER' : prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE';
@@ -189,7 +190,10 @@ export const salesRouter = router({
         status: tenancyStatusForProg(input.progress),
         appliedAt: input.progress > 0 ? new Date() : null,
       };
-      if (id) return ctx.prisma.tenancy.update({ where: { id }, data });
+      if (id) {
+        await assertOwned(ctx.prisma.tenancy, id, ctx.principal.orgId);
+        return ctx.prisma.tenancy.update({ where: { id }, data });
+      }
       return ctx.prisma.tenancy.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
     }),
 

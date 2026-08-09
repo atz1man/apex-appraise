@@ -23,6 +23,8 @@ jobs:
         run: pnpm --filter @apex/api prisma:generate
       - name: Typecheck API
         run: pnpm --filter @apex/api build
+      - name: API tests (tenant isolation)
+        run: pnpm --filter @apex/api test
       - name: Typecheck web
         run: pnpm --filter @apex/web lint
 

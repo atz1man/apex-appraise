@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
+import { assertOwned } from '../auth/owned.js';
 
 const zRoom = z.object({
   name: z.string(),
@@ -82,6 +83,7 @@ export const inspectionsRouter = router({
         surveyorId: ctx.principal.userId,
         inspectedAt: new Date(),
       };
+      if (input.id) await assertOwned(ctx.prisma.inspection, input.id, ctx.principal.orgId);
       const row = input.id
         ? await ctx.prisma.inspection.update({ where: { id: input.id }, data })
         : await ctx.prisma.inspection.create({ data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId } });

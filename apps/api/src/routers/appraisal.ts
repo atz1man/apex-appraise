@@ -12,6 +12,7 @@ import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { internalProcedure, router } from '../trpc.js';
+import { assertOwned } from '../auth/owned.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -761,7 +762,10 @@ export const comparablesRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { id, ...data } = input;
-      if (id) return ctx.prisma.comparable.update({ where: { id }, data });
+      if (id) {
+        await assertOwned(ctx.prisma.comparable, id, ctx.principal.orgId);
+        return ctx.prisma.comparable.update({ where: { id }, data });
+      }
       return ctx.prisma.comparable.create({ data: { ...data, orgId: ctx.principal.orgId } });
     }),
 
@@ -815,7 +819,10 @@ export const scenariosRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { id, ...data } = input;
-      if (id) return ctx.prisma.scenario.update({ where: { id }, data });
+      if (id) {
+        await assertOwned(ctx.prisma.scenario, id, ctx.principal.orgId);
+        return ctx.prisma.scenario.update({ where: { id }, data });
+      }
       return ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
     }),
 

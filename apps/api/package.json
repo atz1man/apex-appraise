@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
-    "test": "echo 'no api unit tests yet' && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@apex/appraisal-engine": "workspace:*",
@@ -33,6 +33,7 @@
     "@types/nodemailer": "^8.0.1",
     "prisma": "^5.22.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2"
   }
 }

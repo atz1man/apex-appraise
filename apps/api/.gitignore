@@ -1,1 +1,4 @@
 uploads/
+test.db
+test.db-journal
+test/.schema.test.prisma

@@ -7,6 +7,7 @@ import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
+import { assertOwned } from '../auth/owned.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -77,6 +78,7 @@ export const costRouter = router({
         spent: toPence(spent),
         forecast: toPence(forecast),
       };
+      if (id) await assertOwned(ctx.prisma.costPackage, id, ctx.principal.orgId);
       const row = id
         ? await ctx.prisma.costPackage.update({ where: { id }, data })
         : await ctx.prisma.costPackage.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
