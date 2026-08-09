@@ -1770,6 +1770,26 @@ test('a new signup reaches the appraisal form in one click, on its own deal', as
   await page.getByLabel(/address/i).fill('1 Trial Street, Bournemouth');
   await page.getByRole('button', { name: /Create & appraise from documents/i }).click();
   await expect(page).toHaveURL(/\/deal\/[^/]+\/auto/, { timeout: 30_000 });
+
+  /**
+   * The money moment, in the same journey rather than a second registration:
+   * one click produces a full appraisal even with no AI key configured, which is
+   * the self-hosted and CI case.
+   */
+  await page.getByRole('button', { name: /Generate appraisal/i }).click();
+  await expect(page.getByText('Auto-generated appraisal')).toBeVisible({ timeout: 60_000 });
+
+  /**
+   * But it must not let the reader believe those figures came from their text.
+   * Without a key the scheme, areas and values are the built-in worked example
+   * and only S106, CIL and the asking price are read from what was pasted — said
+   * ABOVE the figures, because a caveat underneath arrives after the damage.
+   */
+  const notice = page.locator('[data-sample-notice]');
+  if ((await notice.count()) === 0) return; // a keyed server really did read the text
+  await expect(notice).toBeVisible();
+  await expect(notice.getByText(/worked example, not your text/i)).toBeVisible();
+  await expect(notice.getByText(/Manual entry/)).toBeVisible();
 });
 
 /**

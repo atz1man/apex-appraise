@@ -681,6 +681,7 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
 // ---------- Auto-Appraisal ----------
 
 const SAMPLE_EXTRACTION: Extraction = {
+  sample: true,
   scheme: 'Northgate Trade & Industrial Park',
   address: 'Holdenhurst Road, Bournemouth BH8 8EW',
   assetType: 'industrial',
@@ -852,6 +853,9 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
   const num = (m: RegExpMatchArray | null, dflt: number) => (m ? parseFloat(m[1].replace(/,/g, '')) : dflt);
   return {
     ...SAMPLE_EXTRACTION,
+    // flagged, because everything except these three figures is the worked
+    // example and NOT a reading of what the user pasted
+    sample: true,
     s106: num(s106Match, SAMPLE_EXTRACTION.s106),
     cilPerSqm: num(cilMatch, SAMPLE_EXTRACTION.cilPerSqm),
     asking: num(askingMatch, SAMPLE_EXTRACTION.asking),

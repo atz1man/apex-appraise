@@ -301,6 +301,8 @@ export default function AutoAppraisal() {
     if (phase === 'loading') return;
     const m = manual;
     const extraction: Extraction = {
+      // manual entry is the user's own scheme, never the worked example
+      sample: false,
       scheme: m.scheme,
       address: m.address,
       assetType: assetEnum(m.assetType),
@@ -701,6 +703,27 @@ export default function AutoAppraisal() {
 
           {phase === 'result' && run && ind && x && (
             <div className="flex flex-col gap-4">
+              {/* A server with no AI key returns the built-in worked example, not a
+                  reading of what was pasted — so it says so, above the figures and
+                  before anyone acts on them. Handing someone a confident appraisal
+                  of a scheme they did not paste is how a trial ends. */}
+              {run.extraction.sample && (
+                <section
+                  className="rounded-panel p-3.5 border"
+                  style={{ borderColor: 'rgb(var(--status-amber, 133 82 14))', background: 'rgb(var(--status-amber-bg, 250 243 226))' }}
+                  data-sample-notice
+                >
+                  <div className="text-[12.5px] font-semibold" style={{ color: 'rgb(var(--status-amber, 133 82 14))' }}>
+                    This is the worked example, not your text
+                  </div>
+                  <div className="mt-1 text-[12px] text-ink-2">
+                    AI extraction isn't configured on this server, so the scheme, areas and values below come from the built-in
+                    sample — only the S106, CIL and asking figures were read from what you pasted. Use <b>Manual entry</b> to
+                    appraise your own scheme.
+                  </div>
+                </section>
+              )}
+
               {/* headline */}
               <section className="relative overflow-hidden rounded-panel p-[22px] text-white" style={{ background: 'linear-gradient(155deg,#1B6048,#13503B)' }}>
                 <div className="absolute -top-[26px] -right-[26px] w-[120px] h-[120px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />

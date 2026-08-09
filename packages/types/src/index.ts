@@ -159,6 +159,13 @@ const numOr = (dflt: number) => z.number().nullish().transform((v) => v ?? dflt)
 const strOr = (dflt: string) => z.string().nullish().transform((v) => v ?? dflt);
 
 export const zExtraction = z.object({
+  /**
+   * True when this is the built-in worked example rather than a reading of the
+   * user's own text — which is what an unkeyed server returns. The UI must say so:
+   * handing someone a confident appraisal of a scheme they did not paste, with a
+   * different name and address on it, is the kind of thing that ends a trial.
+   */
+  sample: z.boolean().nullish().transform((v) => v ?? false),
   scheme: strOr('Development scheme'),
   address: strOr(''),
   assetType: z.enum(['industrial', 'residential', 'commercial', 'mixed']).nullish().transform((v) => v ?? 'mixed'),
