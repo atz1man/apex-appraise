@@ -553,14 +553,25 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const [form, setForm] = useState<Record<string, string> | null>(null);
   const [cap, setCap] = useState<string>('');
   const [open, setOpen] = useState(false);
+  // held as strings so an empty box stays empty: "" means no covenant, and a
+  // number state would turn that into 0 — a limit of zero, which every deal breaches
+  const [covenantText, setCovenantText] = useState({ covLtgdvMaxPct: '', covLtcMaxPct: '', covMinProfitOnCostPct: '' });
 
   useEffect(() => {
     if (policy && !form) {
-      const { updatedAt: _u, toeLiabilityCap, ...rest } = policy;
+      const { updatedAt: _u, toeLiabilityCap, covLtgdvMaxPct, covLtcMaxPct, covMinProfitOnCostPct, ...rest } = policy;
       setForm(Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, String(v ?? '')])));
       setCap(toeLiabilityCap == null ? '' : String(toeLiabilityCap));
+      setCovenantText({
+        covLtgdvMaxPct: covLtgdvMaxPct == null ? '' : String(covLtgdvMaxPct),
+        covLtcMaxPct: covLtcMaxPct == null ? '' : String(covLtcMaxPct),
+        covMinProfitOnCostPct: covMinProfitOnCostPct == null ? '' : String(covMinProfitOnCostPct),
+      });
     }
   }, [policy, form]);
+
+  // "" → null (no covenant), never 0
+  const covNum = (v: string) => (v.trim() === '' ? null : Number.parseFloat(v));
 
   const save = trpc.org.savePolicy.useMutation({
     onSuccess: () => {
@@ -592,6 +603,9 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
               save.mutate({
                 ...(form as unknown as PolicyForm),
                 toeLiabilityCap: cap.trim() === '' ? null : parseFloat(cap) || 0,
+                covLtgdvMaxPct: covNum(covenantText.covLtgdvMaxPct),
+                covLtcMaxPct: covNum(covenantText.covLtcMaxPct),
+                covMinProfitOnCostPct: covNum(covenantText.covMinProfitOnCostPct),
               })
             }
           >
@@ -673,8 +687,43 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
                 />
               </label>
             </div>
+
+
           </div>
         )}
+
+        {/* Facility covenants. Left blank they are NOT tested — the portfolio
+            shows the ratios either way. Placeholders carry the market-standard
+            figures as a starting point; nothing is applied until it is typed,
+            because a breach against a limit nobody agreed to is an accusation,
+            not a finding. */}
+        <div className="mt-5 pt-4 border-t border-border-std">
+          <div className="text-[12.5px] font-semibold">Facility covenants</div>
+          <div className="mt-1 text-[11.5px] text-ink-3">
+            Leave blank and nothing is tested — the portfolio still shows where each deal stands.
+          </div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {([
+              ['covLtgdvMaxPct', 'Max loan to GDV (%)', '65'],
+              ['covLtcMaxPct', 'Max loan to cost (%)', '70'],
+              ['covMinProfitOnCostPct', 'Min profit on cost (%)', '15'],
+            ] as Array<[keyof typeof covenantText, string, string]>).map(([key, label, suggestion]) => (
+              <label key={key} className="block">
+                <span className="label-mono text-ink-3 block mb-1">{label}</span>
+                <input
+                  type="number"
+                  className="w-full fig"
+                  aria-label={label}
+                  disabled={!isAdmin}
+                  placeholder={`Not set — typically ${suggestion}`}
+                  value={covenantText[key]}
+                  onChange={(e) => setCovenantText({ ...covenantText, [key]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
       </div>
       {!isAdmin && <div className="mt-3 text-[11.5px] text-ink-3">Only an admin can change the firm policy.</div>}
     </Panel>

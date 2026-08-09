@@ -12,6 +12,7 @@
  */
 
 import type { DrawdownResult } from './drawdown.js';
+import type { CovenantResult } from './covenants.js';
 
 export interface ExposurePosition {
   dealId: string;
@@ -34,6 +35,8 @@ export interface ExposurePosition {
    * not a zero that would read as "no works, all fine".
    */
   drawdown?: DrawdownResult | null;
+  /** how this position stands against the firm's own facility covenants */
+  covenants?: CovenantResult | null;
 }
 
 export interface ExposureGroup {

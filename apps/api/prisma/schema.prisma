@@ -341,6 +341,13 @@ model OrgPolicy {
 
   aiPolicy String @default("")
 
+  // Facility covenants, firm-wide. NULLABLE ON PURPOSE: an unset limit is not
+  // tested, because a breach measured against a threshold nobody agreed to is an
+  // accusation rather than a finding.
+  covLtgdvMaxPct       Float?
+  covLtcMaxPct         Float?
+  covMinProfitOnCostPct Float?
+
   // terms-of-engagement house style
   toePurpose               String @default("")
   toeOtherUsers            String @default("")

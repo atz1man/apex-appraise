@@ -1586,6 +1586,69 @@ test('the board states the book’s debt exposure and its largest concentration'
 });
 
 /**
+ * Facility covenants: not tested until the firm sets its own limits.
+ *
+ * SELF-CLEANING — it sets a limit, asserts the breach, and clears it again, so it
+ * leaves no invented covenant on a customer-facing demo. Sets it through the real
+ * Settings form rather than the API, because "can an admin actually enter this"
+ * is half of what is being tested.
+ */
+test('covenants are judged only once the firm sets them, and can be cleared again', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  /**
+   * Establish the precondition rather than assume it. A previous run — or a demo
+   * left mid-configuration — can have a limit already saved, and a test that
+   * merely hopes for a clean slate fails on the state someone else left.
+   */
+  await page.goto('/settings');
+  await page.getByLabel('Max loan to GDV (%)').fill('');
+  await page.getByRole('button', { name: 'Save policy' }).click();
+  await page.waitForTimeout(1000);
+
+  // nothing set: the board shows the ratios and judges none of them
+  await page.goto('/board');
+  await expect(page.locator('[data-exposure]')).toBeVisible();
+  await expect(page.getByText('Covenant breaches')).toHaveCount(0);
+
+  await page.goto('/settings');
+  const limit = page.getByLabel('Max loan to GDV (%)');
+  // the placeholder offers the market-standard figure without applying it
+  await expect(limit).toHaveAttribute('placeholder', /typically 65/);
+  await limit.fill('20');
+  await page.getByRole('button', { name: 'Save policy' }).click();
+  await page.waitForTimeout(1000);
+
+  await page.goto('/board');
+  const panel = page.locator('[data-exposure]');
+  await expect(panel.getByText('Covenant breaches')).toBeVisible();
+  // named, measured, and against the limit the firm actually set. .first():
+  // several deals genuinely breach at this limit, and asserting the format of one
+  // is the point — the COUNT is checked against the API below instead.
+  await expect(panel.getByText(/Loan to GDV .* against a maximum of 20%/).first()).toBeVisible();
+  const breaching = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.exposure', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const d = (await r.json()).result.data.json as { positions: Array<{ covenants: { breaches: unknown[] } }> };
+    return d.positions.filter((p) => p.covenants.breaches.length > 0).length;
+  });
+  // every breaching deal is listed — a panel that showed only the first would let
+  // the rest of the book go unmentioned
+  await expect(panel.getByText(/against a maximum of 20%/)).toHaveCount(breaching);
+
+  // clear it: a covenant that cannot be removed is one nobody will risk setting
+  await page.goto('/settings');
+  await page.getByLabel('Max loan to GDV (%)').fill('');
+  await page.getByRole('button', { name: 'Save policy' }).click();
+  await page.waitForTimeout(1000);
+  await page.goto('/board');
+  await expect(page.locator('[data-exposure]')).toBeVisible();
+  await expect(page.getByText('Covenant breaches')).toHaveCount(0);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

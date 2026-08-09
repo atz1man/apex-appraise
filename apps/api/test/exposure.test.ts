@@ -106,3 +106,44 @@ describe('drawdown against works', () => {
     expect(e.positions[0]!.drawdown).toBeNull();
   });
 });
+
+describe('facility covenants', () => {
+  it('tests nothing until the firm sets its own limits', async () => {
+    const e = (await callerFor(A.principal).deals.exposure()) as {
+      positions: Array<{ covenants: { untested: boolean; tests: unknown[] } }>;
+    };
+    // no limits saved: the ratios exist, but nothing is called a breach
+    expect(e.positions[0]!.covenants.untested).toBe(true);
+    expect(e.positions[0]!.covenants.tests).toEqual([]);
+  });
+
+  it('tests against the limits the firm actually saved, and names the breach', async () => {
+    const policy = (await callerFor(A.principal).org.policy()) as Record<string, unknown>;
+    await callerFor(A.principal).org.savePolicy({
+      ...policy,
+      // deliberately tight, so the seeded deal breaches
+      covLtgdvMaxPct: 1,
+      covLtcMaxPct: null,
+      covMinProfitOnCostPct: null,
+    } as never);
+
+    const e = (await callerFor(A.principal).deals.exposure()) as {
+      positions: Array<{ covenants: { untested: boolean; breaches: Array<{ key: string; headroomPts: number }> } }>;
+    };
+    const c = e.positions[0]!.covenants;
+    expect(c.untested).toBe(false);
+    expect(c.breaches.map((b) => b.key)).toEqual(['ltgdv']);
+    // negative headroom, so the panel can say by how much
+    expect(c.breaches[0]!.headroomPts).toBeLessThan(0);
+  });
+
+  it('lets a covenant be cleared again', async () => {
+    const policy = (await callerFor(A.principal).org.policy()) as Record<string, unknown>;
+    await callerFor(A.principal).org.savePolicy({ ...policy, covLtgdvMaxPct: null } as never);
+    const e = (await callerFor(A.principal).deals.exposure()) as {
+      positions: Array<{ covenants: { untested: boolean } }>;
+    };
+    // a covenant that cannot be removed is a covenant nobody will risk setting
+    expect(e.positions[0]!.covenants.untested).toBe(true);
+  });
+});

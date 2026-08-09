@@ -5,7 +5,14 @@ import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertCanAddDeal } from '../entitlements.js';
-import { aggregateExposure, computeAppraisal, monthsBetween, postcodeArea, spendAgainstProgramme } from '@apex/appraisal-engine';
+import {
+  aggregateExposure,
+  computeAppraisal,
+  monthsBetween,
+  postcodeArea,
+  spendAgainstProgramme,
+  testCovenants,
+} from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
 
 const dealOut = (d: {
@@ -83,11 +90,17 @@ export const dealsRouter = router({
    */
   exposure: internalProcedure.query(async ({ ctx }) => {
     const orgId = ctx.principal.orgId;
-    const [deals, appraisals, packages] = await Promise.all([
+    const [deals, appraisals, packages, policy] = await Promise.all([
       ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       ctx.prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
       ctx.prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
+      ctx.prisma.orgPolicy.findUnique({ where: { orgId } }),
     ]);
+    const limits = {
+      ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
+      ltcMaxPct: policy?.covLtcMaxPct ?? null,
+      minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
+    };
     /**
      * Progress is weighted by BUDGET, not averaged across packages. A 2%-complete
      * groundworks package and a 2%-complete £5m frame package are not equally
@@ -139,6 +152,10 @@ export const dealsRouter = router({
                   progressPct: cost.weighted / cost.budget,
                 })
               : null,
+          covenants: testCovenants(
+            { facility: r.facility, totalCost: r.totalCost, gdv: r.gdv, profit: r.profit },
+            limits,
+          ),
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);

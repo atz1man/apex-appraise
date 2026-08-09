@@ -143,6 +143,36 @@ export default function Board() {
                 </div>
               ))}
             </div>
+            {/* Covenant breaches: the firm's own limits, tested against each
+                deal. Absent limits, nothing appears — the ratios are still on the
+                panel, they are simply not judged. */}
+            {exposure.positions.some((p) => (p.covenants?.breaches.length ?? 0) > 0) && (
+              <div className="mt-3 pt-3 border-t border-border-std">
+                <div className="text-[11px] uppercase tracking-wide" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>
+                  Covenant breaches
+                </div>
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {exposure.positions
+                    .filter((p) => (p.covenants?.breaches.length ?? 0) > 0)
+                    .map((p) => (
+                      <div key={p.dealId} className="text-[12px]">
+                        <span className="font-semibold">{p.name}</span>
+                        {p.covenants!.breaches.map((b) => (
+                          <span key={b.key} className="text-ink-2">
+                            {' '}— {b.label} {b.actualPct.toFixed(1)}% against a{' '}
+                            {b.direction === 'max' ? 'maximum' : 'minimum'} of {b.limitPct}%
+                            <span className="fig" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>
+                              {/* a real minus sign, as everywhere else in the product */}
+                              {' '}({b.headroomPts < 0 ? '−' : ''}{Math.abs(b.headroomPts).toFixed(1)} pts)
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {/* Deals drawing ahead of the works. Named individually because
                 "one deal is overspending" is not actionable and "Harbour Reach is
                 £250k ahead of its works" is. */}

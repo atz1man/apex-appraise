@@ -171,6 +171,10 @@ export const orgRouter = router({
       toeComplaintsProcedure: row?.toeComplaintsProcedure ?? '',
       toeValuerReg: row?.toeValuerReg ?? '',
       toeLiabilityCap: row?.toeLiabilityCap == null ? null : P(row.toeLiabilityCap),
+      // null means "no covenant", never zero: an unset limit is not tested
+      covLtgdvMaxPct: row?.covLtgdvMaxPct ?? null,
+      covLtcMaxPct: row?.covLtcMaxPct ?? null,
+      covMinProfitOnCostPct: row?.covMinProfitOnCostPct ?? null,
       updatedAt: row?.updatedAt ?? null,
     };
   }),
@@ -192,10 +196,21 @@ export const orgRouter = router({
         toeComplaintsProcedure: z.string().max(1000),
         toeValuerReg: z.string().max(120),
         toeLiabilityCap: z.number().min(0).nullish(),
+        // nullish, not defaulted: clearing a covenant must be possible, and a
+        // silent default would test a limit the firm never agreed
+        covLtgdvMaxPct: z.number().min(0).max(200).nullish(),
+        covLtcMaxPct: z.number().min(0).max(200).nullish(),
+        covMinProfitOnCostPct: z.number().min(0).max(200).nullish(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const data = { ...input, toeLiabilityCap: input.toeLiabilityCap == null ? null : toPence(input.toeLiabilityCap) };
+      const data = {
+        ...input,
+        toeLiabilityCap: input.toeLiabilityCap == null ? null : toPence(input.toeLiabilityCap),
+        covLtgdvMaxPct: input.covLtgdvMaxPct ?? null,
+        covLtcMaxPct: input.covLtcMaxPct ?? null,
+        covMinProfitOnCostPct: input.covMinProfitOnCostPct ?? null,
+      };
       await ctx.prisma.orgPolicy.upsert({
         where: { orgId: ctx.principal.orgId },
         create: { ...data, orgId: ctx.principal.orgId },
