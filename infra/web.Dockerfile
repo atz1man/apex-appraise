@@ -9,7 +9,12 @@ COPY packages/appraisal-engine/package.json packages/appraisal-engine/
 COPY packages/types/package.json packages/types/
 COPY packages/ui-tokens/package.json packages/ui-tokens/
 # frozen lockfile: the image resolves exactly what runs locally and in CI
-RUN pnpm install --frozen-lockfile
+# Registry downloads fail occasionally — a node/undici parser assertion inside
+# pnpm's fetch, not anything about this repo. Retries turn a transient network
+# fault into a slower build instead of a red pipeline and a blocked deploy.
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_maxtimeout=120000
+RUN pnpm install --frozen-lockfile || (echo "install failed — retrying once" && sleep 5 && pnpm install --frozen-lockfile)
 COPY packages ./packages
 COPY apps ./apps
 # the web typecheck infers tRPC types through the API, which needs the Prisma client
