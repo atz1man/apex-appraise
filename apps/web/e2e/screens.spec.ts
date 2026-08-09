@@ -1793,6 +1793,36 @@ test('a new signup reaches the appraisal form in one click, on its own deal', as
 });
 
 /**
+ * The root route serves both audiences.
+ *
+ * It used to serve only one: `/` was the protected workspace, so a stranger who
+ * typed the domain was bounced to a login form — complete with demo credentials —
+ * and the marketing page with the pricing on it sat at /welcome, reachable only
+ * by someone who already knew the URL. The pitch cannot convert anyone who never
+ * sees it.
+ */
+test('the root shows the pitch to a stranger and the workspace to a user', async ({ page }) => {
+  // signed out: the product and its pricing, not a login form
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'Pricing' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Start free/ }).first()).toBeVisible();
+  await expect(page.getByText(/EMAIL/)).toHaveCount(0);
+
+  // signed in: straight to the workspace, and it survives a reload
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  await page.goto('/');
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  // /welcome still works, since existing links and bookmarks point at it
+  await page.goto('/welcome');
+  await expect(page.getByRole('link', { name: 'Pricing' }).first()).toBeVisible();
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

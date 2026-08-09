@@ -66,6 +66,17 @@ function Splash() {
   );
 }
 
+/** Signed in → the workspace. Signed out → the pitch. */
+function Root() {
+  return getToken() && getPrincipal() ? (
+    <Protected>
+      <Hub />
+    </Protected>
+  ) : (
+    <Landing />
+  );
+}
+
 function Protected({ children, portal }: { children: JSX.Element; portal?: 'buyer' | 'investor' }) {
   const location = useLocation();
   const token = getToken();
@@ -110,7 +121,12 @@ export default function App() {
           <Route path="/reset" element={<ResetPassword />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
-          <Route path="/" element={<Protected><Hub /></Protected>} />
+          {/* The root is the front door for BOTH audiences. A signed-in user gets
+              their workspace; a stranger gets the product and its pricing, rather
+              than being bounced to a login form with demo credentials on it —
+              which is what happened, and it made the marketing page unreachable
+              unless you already knew the /welcome URL. */}
+          <Route path="/" element={<Root />} />
           <Route path="/portfolio/pack" element={<Protected><FundingPack /></Protected>} />
           <Route path="/board" element={<Protected><Board /></Protected>} />
           <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
