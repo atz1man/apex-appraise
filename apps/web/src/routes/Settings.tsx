@@ -800,12 +800,18 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
         ) : null}
       </div>
 
-      {!data.configured ? (
-        <div className="text-[12.5px] text-ink-2">
-          Stripe isn't configured on this server — set <code className="fig">STRIPE_SECRET_KEY</code> to enable subscriptions.
+      {/* The tiers show whether or not Stripe is wired up. What you are on and
+          what you could move to is information about YOUR account; only taking a
+          payment needs a payment processor. Hiding the plans on an unconfigured
+          server left self-hosted and pre-billing deployments with no pricing at
+          all — and the limits are enforced either way. */}
+      {!data.configured && (
+        <div className="mb-3 text-[12.5px] text-ink-2">
+          Stripe isn't configured on this server — set <code className="fig">STRIPE_SECRET_KEY</code> to enable
+          subscriptions. Plan limits still apply.
         </div>
-      ) : (
-        <>
+      )}
+      <>
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             {data.plans.map((p) => {
               const current = data.plan === p.key;
@@ -830,7 +836,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                       </li>
                     ))}
                   </ul>
-                  {isAdmin && !current && (
+                  {isAdmin && !current && data.configured && (
                     <Button
                       className="mt-3 w-full"
                       variant={p.key === 'GROWTH' ? 'primary' : 'secondary'}
@@ -845,12 +851,13 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
               );
             })}
           </div>
-          <div className="mt-3 text-[10.5px] text-ink-3">
-            Card payments are processed by Stripe Checkout — no card details touch this server.
-            {data.mode === 'test' && ' Test mode: use card 4242 4242 4242 4242, any future expiry, any CVC.'}
-          </div>
+          {data.configured && (
+            <div className="mt-3 text-[10.5px] text-ink-3">
+              Card payments are processed by Stripe Checkout — no card details touch this server.
+              {data.mode === 'test' && ' Test mode: use card 4242 4242 4242 4242, any future expiry, any CVC.'}
+            </div>
+          )}
         </>
-      )}
     </Panel>
   );
 }

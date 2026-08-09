@@ -80,3 +80,48 @@ jobs:
               echo "::error::schema.prisma has changes with no migration — run the baseline procedure in docs/DATABASE.md"
               exit 1
             }
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - name: Build and start the production stack
+        env:
+          # a throwaway signing key: this stack is created and destroyed inside
+          # this job, and no real secret should ever be needed to run the tests
+          JWT_SECRET: ci-ephemeral-not-a-real-secret
+        run: |
+          # --env-file /dev/null so a stray .env can never leak real credentials
+          # into a CI run, and so the suite is proven to pass WITHOUT them
+          docker compose --env-file /dev/null up -d --build
+      - name: Wait for the stack
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/ > /dev/null 2>&1; then echo "up after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          echo "::error::the stack never came up"
+          docker compose logs --tail 60
+          exit 1
+      - name: Install browsers
+        run: pnpm --filter @apex/web exec playwright install --with-deps chromium
+      - name: Browser suite against the built stack
+        env:
+          E2E_BASE_URL: http://localhost:8080
+        run: pnpm --filter @apex/web exec playwright test
+      - name: API logs on failure
+        if: failure()
+        run: docker compose logs --tail 120 api
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

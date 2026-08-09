@@ -126,12 +126,27 @@ test('billing panel shows plan tiers with Stripe checkout', async ({ page }) => 
   await loginInternal(page);
   await page.goto('/settings');
   await expect(page.getByText('Billing & plan')).toBeVisible();
-  // plan tiers come from live Stripe sandbox price lookups — allow for network latency
+  // The tiers are account information and render with or without a payment
+  // processor, so this half holds everywhere — including CI, which has no keys.
   await expect(page.getByText('Starter', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Growth', { exact: true })).toBeVisible();
   await expect(page.getByText('Enterprise', { exact: true })).toBeVisible();
-  // configured sandbox shows test-mode chip and subscribe CTAs for admins
-  await expect(page.getByText('STRIPE TEST MODE')).toBeVisible();
+  // and the allowance is shown whether or not billing is wired up
+  await expect(page.getByText('Team members', { exact: true })).toBeVisible();
+
+  /**
+   * The checkout half needs a real Stripe key, which CI does not have. Asked of
+   * the APP rather than of an env var: the test cannot see the server's
+   * configuration, and skipping on a variable it cannot read would make this pass
+   * for the wrong reason on a machine that does have a key.
+   */
+  const stripeConfigured = await page.getByText('STRIPE TEST MODE').count();
+  if (!stripeConfigured) {
+    await expect(page.getByText(/Stripe isn't configured on this server/)).toBeVisible();
+    // the plans are still shown, and the limits still bite
+    await expect(page.getByText(/Plan limits still apply/)).toBeVisible();
+    return;
+  }
   await expect(page.getByRole('button', { name: /Subscribe|Switch plan/ }).first()).toBeVisible();
 });
 
