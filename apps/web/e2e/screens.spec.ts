@@ -1526,6 +1526,47 @@ test('the hub shows what is waiting on you, and stops showing it once decided', 
 });
 
 /**
+ * Portfolio debt exposure on the board — the lender's question, which no
+ * per-deal figure answers. Read-only: it computes from deals other tests own, so
+ * it asserts SHAPE and INTERNAL CONSISTENCY rather than fixed figures, which
+ * would break every time another test re-saves an appraisal.
+ */
+test('the board states the book’s debt exposure and its largest concentration', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  await page.goto('/board');
+
+  const panel = page.locator('[data-exposure]');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText('Facility')).toBeVisible();
+  await expect(panel.getByText('Utilisation')).toBeVisible();
+  await expect(panel.getByText(/Largest concentration:/)).toBeVisible();
+
+  const read = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.exposure', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    return (await r.json()).result.data.json as {
+      positions: Array<{ facility: number }>;
+      totals: { facility: number; drawn: number; undrawn: number; utilisation: number };
+      byRegion: Array<{ share: number }>;
+      largest: { share: number } | null;
+    };
+  });
+
+  // the book adds up to the deals it summarises
+  const summed = read.positions.reduce((a, p) => a + p.facility, 0);
+  expect(Math.round(summed)).toBe(Math.round(read.totals.facility));
+  expect(read.byRegion.reduce((a, g) => a + g.share, 0)).toBeCloseTo(1, 6);
+  // undrawn is never negative, however over-drawn the book is
+  expect(read.totals.undrawn).toBeGreaterThanOrEqual(0);
+  expect(read.largest!.share).toBeLessThanOrEqual(1);
+
+  // an over-drawn book says so in words rather than leaving a bare percentage
+  // that reads like a rounding fault
+  if (read.totals.utilisation > 1) await expect(panel.getByText('over facility')).toBeVisible();
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

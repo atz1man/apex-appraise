@@ -5,6 +5,8 @@ import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertCanAddDeal } from '../entitlements.js';
+import { aggregateExposure, computeAppraisal, postcodeArea } from '@apex/appraisal-engine';
+import { appraisalRowToEngineInput } from '../mappers.js';
 
 const dealOut = (d: {
   id: string; name: string; address: string; postcode?: string | null; assetType: string; stage: string;
@@ -65,6 +67,54 @@ export const dealsRouter = router({
     });
     if (!d) throw new TRPCError({ code: 'NOT_FOUND' });
     return { ...dealOut(d), counts: d._count };
+  }),
+
+  /**
+   * Portfolio exposure — the lender's view of the book.
+   *
+   * Facility is RE-COMPUTED from each deal's current appraisal rather than read
+   * from a stored figure. Peak debt is a property of the whole monthly model, so
+   * a cached number can only be as good as the day it was written; recomputing
+   * means the book always agrees with the deals it sums.
+   *
+   * Drawn comes from cost monitoring — committed spend is what the borrower has
+   * actually called on, and it is the only figure here that does not come from
+   * the appraisal.
+   */
+  exposure: internalProcedure.query(async ({ ctx }) => {
+    const orgId = ctx.principal.orgId;
+    const [deals, appraisals, packages] = await Promise.all([
+      ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
+      ctx.prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
+      ctx.prisma.costPackage.groupBy({ by: ['dealId'], where: { orgId }, _sum: { committed: true } }),
+    ]);
+    const drawnBy = new Map(packages.map((p) => [p.dealId, Number(p._sum.committed ?? 0) / 100]));
+    const byDeal = new Map(appraisals.map((a) => [a.dealId, a]));
+
+    const positions = deals
+      .map((d) => {
+        const a = byDeal.get(d.id);
+        // a deal with no appraisal has no facility to be exposed to — it is a
+        // prospect, not a position, and padding the book with zeroes would
+        // understate every concentration
+        if (!a) return null;
+        const r = computeAppraisal(appraisalRowToEngineInput(a));
+        return {
+          dealId: d.id,
+          name: d.name,
+          assetType: d.assetType,
+          region: postcodeArea(d.postcode),
+          stage: d.stage,
+          gdv: r.gdv,
+          totalCost: r.totalCost,
+          facility: r.facility,
+          equity: r.equity,
+          drawn: drawnBy.get(d.id) ?? 0,
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    return aggregateExposure(positions);
   }),
 
   create: internalProcedure

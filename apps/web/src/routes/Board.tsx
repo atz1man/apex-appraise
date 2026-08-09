@@ -43,6 +43,7 @@ export default function Board() {
   const [newOpen, setNewOpen] = useState(false);
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data: exposure } = trpc.deals.exposure.useQuery(undefined, { staleTime: 30_000 });
   const setStage = trpc.deals.setStage.useMutation({ onSuccess: () => utils.deals.list.invalidate() });
   const createDeal = trpc.deals.create.useMutation({
     onSuccess: (d) => {
@@ -101,6 +102,65 @@ export default function Board() {
           <StatCard label="Equity required" value={R ? fM(R.equityRequired) : '—'} />
           <StatCard label="Active deals" value={R ? String(R.activeCount) : '—'} />
         </div>
+        )}
+
+        {/* Exposure — the lender's question, which no per-deal figure answers:
+            how much of the book is riding on one scheme, one asset class, one
+            town. Shown only once there is a book to have a shape. */}
+        {exposure && exposure.totals.deals > 1 && (
+          <section className="mt-4 bg-surface border border-border-strong rounded-panel shadow-rest p-4" data-exposure>
+            <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <span className="text-[13px] font-semibold">Debt exposure</span>
+              <span className="text-[11px] text-ink-3">
+                {exposure.totals.deals} funded {exposure.totals.deals === 1 ? 'deal' : 'deals'} · recomputed from each appraisal
+              </span>
+            </div>
+            <div className="mt-3 flex gap-5 flex-wrap">
+              {([
+                ['Facility', fM(exposure.totals.facility), null],
+                ['Drawn', fM(exposure.totals.drawn), null],
+                ['Undrawn', fM(exposure.totals.undrawn), null],
+                [
+                  'Utilisation',
+                  `${Math.round(exposure.totals.utilisation * 100)}%`,
+                  // drawn beyond the appraised facility is the single most
+                  // important thing on this panel. Left as a bare "108%" it reads
+                  // as a rounding glitch; said out loud it is the finding a lender
+                  // opened the page for.
+                  exposure.totals.utilisation > 1 ? 'over facility' : null,
+                ],
+                ['Loan to GDV', `${Math.round(exposure.totals.loanToGdv * 100)}%`, null],
+              ] as Array<[string, string, string | null]>).map(([k, v, warn]) => (
+                <div key={k}>
+                  <div className="text-[10px] uppercase tracking-wide text-ink-3">{k}</div>
+                  <div
+                    className="fig text-[15px] font-semibold"
+                    style={warn ? { color: 'rgb(var(--status-red, 178 58 46))' } : undefined}
+                  >
+                    {v}
+                  </div>
+                  {warn && <div className="text-[10px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>{warn}</div>}
+                </div>
+              ))}
+            </div>
+            {exposure.largest && (
+              <div className="mt-3 pt-3 border-t border-border-std text-[12px]">
+                <span className="text-ink-2">Largest concentration: </span>
+                <span className="font-semibold">
+                  {Math.round(exposure.largest.share * 100)}% in{' '}
+                  {exposure.largest.dimension === 'deal'
+                    ? exposure.largest.key
+                    : exposure.largest.dimension === 'region'
+                      ? `postcode area ${exposure.largest.key}`
+                      : exposure.largest.key.toLowerCase().replace('_', ' ')}
+                </span>
+                {/* a threshold worth stating rather than leaving to be eyeballed */}
+                {exposure.largest.share >= 0.4 && (
+                  <span style={{ color: 'rgb(var(--status-amber, 133 82 14))' }}> · above 40% of the book</span>
+                )}
+              </div>
+            )}
+          </section>
         )}
 
         {/* asset-type filters */}
