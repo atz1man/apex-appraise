@@ -17,11 +17,11 @@ import {
   type Periodicity,
   type Phase,
 } from '@apex/appraisal-engine';
-import { trpc } from '../lib/trpc';
+import { getPrincipal, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
@@ -178,6 +178,7 @@ export default function DevelopmentAppraisal() {
   const [period, setPeriod] = useState<Periodicity>('month');
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionNote, setVersionNote] = useState('');
+  const [reviewNote, setReviewNote] = useState('');
   const [compareId, setCompareId] = useState<string | null>(null);
   const [versionLabel, setVersionLabel] = useState('');
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
@@ -1680,7 +1681,7 @@ export default function DevelopmentAppraisal() {
             const cur = versions?.find((x) => x.isCurrent)?.headline;
             const d = v.headline && cur && !v.isCurrent ? v.headline.residualNet - cur.residualNet : null;
             return (
-              <div key={v.id} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: 'rgb(var(--brand-ink, 20 80 59))', background: 'rgb(var(--sunken, 251 252 251))' } : undefined}>
+              <div key={v.id} data-version={v.label} className="rounded-card border border-border-strong p-3.5" style={v.isCurrent ? { borderColor: 'rgb(var(--brand-ink, 20 80 59))', background: 'rgb(var(--sunken, 251 252 251))' } : undefined}>
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold">{v.label}</span>
                   {v.isCurrent && <span className="label-mono rounded-[6px] bg-tint-success text-brand-ink px-1.5 py-[2px]">CURRENT</span>}
@@ -1702,6 +1703,7 @@ export default function DevelopmentAppraisal() {
                   </div>
                 )}
                 {v.note && <div className="mt-2 text-[11.5px] text-ink-2 italic">“{v.note}”</div>}
+                <ReviewRow version={v} dealId={dealId} note={reviewNote} setNote={setReviewNote} />
                 {!v.isCurrent && (
                   <div className="mt-2.5 flex gap-2">
                     <Button
@@ -1727,6 +1729,97 @@ export default function DevelopmentAppraisal() {
           Restoring never rewrites history — the old version's inputs become a new current version, and the audit trail records who restored what.
         </div>
       </Drawer>
+    </div>
+  );
+}
+
+/**
+ * Review state and the two decisions, on the version they apply to.
+ *
+ * The approve button is shown only to admins, but the STATUS is shown to
+ * everyone: an analyst needs to know their work is waiting on someone, and
+ * hiding that would make the queue invisible to the person who cares most.
+ */
+function ReviewRow({
+  version,
+  dealId,
+  note,
+  setNote,
+}: {
+  version: { id: string; review: { status: string; submittedBy: string | null; reviewedBy: string | null; note: string | null; selfApproved: boolean } };
+  dealId: string;
+  note: string;
+  setNote: (v: string) => void;
+}) {
+  const utils = trpc.useUtils();
+  const principal = getPrincipal();
+  const isAdmin = principal?.role === 'ADMIN';
+  const refresh = () => {
+    utils.appraisal.versions.invalidate(dealId);
+    utils.appraisal.getCurrent.invalidate(dealId);
+  };
+  const submit = trpc.appraisal.submitForReview.useMutation({ onSuccess: refresh });
+  const decide = trpc.appraisal.review.useMutation({ onSuccess: () => { setNote(''); refresh(); } });
+
+  const r = version.review;
+  const chip: Record<string, { label: string; status: 'green' | 'amber' | 'neutral' | 'red' }> = {
+    draft: { label: 'DRAFT', status: 'neutral' },
+    in_review: { label: 'IN REVIEW', status: 'amber' },
+    approved: { label: 'APPROVED', status: 'green' },
+    changes_requested: { label: 'CHANGES REQUESTED', status: 'red' },
+  };
+  const c = chip[r.status] ?? chip.draft!;
+
+  return (
+    <div className="mt-2.5 flex flex-col gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <StatusChip status={c.status} label={c.label} />
+        {r.status === 'approved' && r.reviewedBy && (
+          <span className="text-[11px] text-ink-3">
+            by {r.reviewedBy}
+            {/* said out loud rather than left for a reader to infer */}
+            {r.selfApproved && ' (their own work)'}
+          </span>
+        )}
+        {r.status === 'in_review' && r.submittedBy && (
+          <span className="text-[11px] text-ink-3">submitted by {r.submittedBy}</span>
+        )}
+      </div>
+      {r.note && <div className="text-[11.5px] text-ink-2">Reviewer: “{r.note}”</div>}
+
+      {r.status !== 'approved' && r.status !== 'in_review' && (
+        <div>
+          <Button variant="secondary" size="sm" loading={submit.isPending} onClick={() => submit.mutate({ versionId: version.id })}>
+            Submit for review
+          </Button>
+        </div>
+      )}
+
+      {r.status === 'in_review' && isAdmin && (
+        <div className="flex flex-col gap-2">
+          <input
+            className="w-full"
+            placeholder="Note — required when sending it back"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ versionId: version.id, decision: 'approve', note: note.trim() || undefined })}>
+              Approve
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!note.trim() || decide.isPending}
+              onClick={() => decide.mutate({ versionId: version.id, decision: 'request_changes', note: note.trim() })}
+            >
+              Request changes
+            </Button>
+          </div>
+        </div>
+      )}
+      {decide.error && <div className="text-[11.5px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>{decide.error.message}</div>}
+      {submit.error && <div className="text-[11.5px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>{submit.error.message}</div>}
     </div>
   );
 }

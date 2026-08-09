@@ -8,7 +8,7 @@ import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
-import { authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
+import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
 
 const initialsOf = (name: string) =>
@@ -20,10 +20,6 @@ const initialsOf = (name: string) =>
     .join('') || 'AA';
 
 /** Admin-only guard on top of internal. */
-const adminProcedure = internalProcedure.use(({ ctx, next }) => {
-  if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
-  return next({ ctx });
-});
 
 const DEFAULT_INTEGRATIONS = [
   'HM Land Registry',

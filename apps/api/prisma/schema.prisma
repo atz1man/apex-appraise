@@ -99,6 +99,15 @@ model Appraisal {
   // only the person who moved it can say why, and that is the half a reviewer
   // cannot reconstruct later.
   note       String?
+  // Review state: draft | in_review | approved | changes_requested.
+  // An approval attaches to a VERSION, never to the deal — approving "the
+  // appraisal" means nothing if the thing approved can change afterwards.
+  reviewStatus   String    @default("draft")
+  submittedById  String?
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNote     String?
   source     String  @default("manual") // manual | ai | field
   efficiency Float   @default(90)
   units      String  // JSON AppraisalUnit[] {label,count,area,cap,conf,source} — cap in £/sqft

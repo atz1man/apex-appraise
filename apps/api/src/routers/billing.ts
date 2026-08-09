@@ -2,14 +2,10 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { APP_URL } from '../email.js';
 import { PLANS, ensurePrice, stripeConfigured, stripeFetch, stripePublishableKey } from '../stripe.js';
-import { authedProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, authedProcedure, internalProcedure, router } from '../trpc.js';
 import { usageFor } from '../entitlements.js';
 
 /** Admin-only guard on top of internal. */
-const adminProcedure = internalProcedure.use(({ ctx, next }) => {
-  if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
-  return next({ ctx });
-});
 
 export const billingRouter = router({
   /** Publishable key + plan catalogue + this workspace's current plan. */

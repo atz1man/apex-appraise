@@ -20,6 +20,16 @@ export const internalProcedure = authedProcedure.use(({ ctx, next }) => {
 });
 
 /** Investor portal only. */
+/**
+ * ADMIN-only. Defined ONCE: this guard was copied into two routers, and a
+ * permission check that exists in several places is one edit away from meaning
+ * different things in each.
+ */
+export const adminProcedure = internalProcedure.use(({ ctx, next }) => {
+  if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
+  return next({ ctx });
+});
+
 export const investorProcedure = authedProcedure.use(({ ctx, next }) => {
   if (ctx.principal.principalType !== 'investor') throw new TRPCError({ code: 'FORBIDDEN' });
   return next({ ctx });

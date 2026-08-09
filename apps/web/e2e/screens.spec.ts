@@ -1372,6 +1372,103 @@ test('a reviewer can see what changed between versions, and why', async ({ page 
 });
 
 /**
+ * Review and approval through the UI a director would actually use.
+ *
+ * OWNS 'Old Brewery Quarter' — it approves a version, and an approved version
+ * cannot be edited, so no other test may share this deal. (Elm Grove would have
+ * been wrong: the terms-of-engagement walk already uses it.)
+ */
+test('a version can be submitted, approved, and then not quietly edited', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const run = `${Date.now()}`.slice(-6);
+  const dealId = await page.evaluate(async (tag) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const list = await fetch('/trpc/deals.list', { headers: auth });
+    const id = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Old Brewery')).id;
+    const input = {
+      units: [{ label: '2-bed apartments', count: 8, area: 750, cap: 430 }],
+      efficiency: 85,
+      trades: [{ label: 'Superstructure', rate: 115 }],
+      profFeePct: 11,
+      contingencyPct: 5,
+      otherCosts: [],
+      finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+      site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+      disposal: { agentPct: 1.5, legalPct: 0.5 },
+      targetProfitOnGdvPct: 20,
+    };
+    await fetch('/trpc/appraisal.save', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ json: { dealId: id, input, asNewVersion: true, label: `For review ${tag}` } }),
+    });
+    return id;
+  }, run);
+
+  await page.goto(`/deal/${dealId}/appraisal`);
+  await page.getByRole('button', { name: /^Versions/ }).click();
+  await expect(page.getByText(`For review ${run}`)).toBeVisible();
+
+  /**
+   * Scoped to THIS run's version row. `.first()` matched a previous run's
+   * approved version, so the APPROVED assertion passed instantly against a stale
+   * row while this version was still in review — and the save below then raced
+   * ahead of the approval and was allowed. The test reported a broken lock that
+   * was not broken.
+   */
+  const row = page.locator(`[data-version="For review ${run}"]`);
+  await expect(row).toHaveCount(1);
+
+  await row.getByRole('button', { name: 'Submit for review' }).click();
+  await expect(row.getByText('IN REVIEW')).toBeVisible();
+
+  // sending it back needs a reason — the button stays disabled until there is one
+  await expect(row.getByRole('button', { name: 'Request changes' })).toBeDisabled();
+
+  await row.getByRole('button', { name: 'Approve' }).click();
+  await expect(row.getByText('APPROVED')).toBeVisible();
+  // one person did both halves here, and the record says so rather than leaving
+  // a reader to notice the names match
+  await expect(row.getByText(/\(their own work\)/)).toBeVisible();
+
+  /**
+   * The rule the whole feature rests on: the approved figures cannot be changed
+   * without a new version. Asked of the API directly, because the point is that
+   * the SERVER refuses — a UI that merely hides the button protects nothing.
+   */
+  const refused = await page.evaluate(async (id) => {
+    const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+    const r = await fetch('/trpc/appraisal.save', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({
+        json: {
+          dealId: id,
+          input: {
+            units: [{ label: '2-bed apartments', count: 8, area: 750, cap: 430 }],
+            efficiency: 85,
+            trades: [{ label: 'Superstructure', rate: 999 }],
+            profFeePct: 11,
+            contingencyPct: 5,
+            otherCosts: [],
+            finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+            site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+            disposal: { agentPct: 1.5, legalPct: 0.5 },
+            targetProfitOnGdvPct: 20,
+          },
+        },
+      }),
+    });
+    return (await r.json()).error?.json?.message ?? 'NOT REFUSED';
+  }, dealId);
+  expect(refused).toMatch(/approved and cannot be edited/);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

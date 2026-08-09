@@ -12,8 +12,9 @@ import {
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
-import { internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
+import { recordAudit } from '../audit.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -134,7 +135,40 @@ export const appraisalRouter = router({
           },
         });
       } else if (existing) {
-        row = await ctx.prisma.appraisal.update({ where: { id: existing.id }, data });
+        /**
+         * The rule that gives approval its meaning. Editing an approved version in
+         * place would change what somebody signed off without anyone signing off
+         * on the change — and the version history would show no trace of it. The
+         * way forward is a new version, which starts as a draft and has to be
+         * approved on its own merits.
+         */
+        if (existing.reviewStatus === 'approved') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `“${existing.label}” has been approved and cannot be edited. Save your changes as a new version.`,
+          });
+        }
+        /**
+         * Editing a version that is out for review takes it back off the reviewer's
+         * desk. Left in review it would be approved in a state nobody read — the
+         * reviewer opened one set of figures and signed a different one.
+         *
+         * Withdrawn rather than refused: the analyst is mid-thought, and blocking
+         * the save would only teach them to stop submitting until they are certain.
+         */
+        const withdrawn = existing.reviewStatus === 'in_review';
+        row = await ctx.prisma.appraisal.update({
+          where: { id: existing.id },
+          data: withdrawn
+            ? { ...data, reviewStatus: 'draft', submittedById: null, submittedAt: null }
+            : data,
+        });
+        if (withdrawn) {
+          await recordAudit(ctx.prisma, {
+            orgId: ctx.principal.orgId, dealId: input.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+            action: 'edited a version that was in review, withdrawing it', target: existing.label, ip: ctx.ip,
+          });
+        }
       } else {
         row = await ctx.prisma.appraisal.create({
           data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
@@ -170,8 +204,19 @@ export const appraisalRouter = router({
     const rows = await ctx.prisma.appraisal.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, label: true, note: true, source: true, isCurrent: true, createdAt: true, updatedAt: true, resultCache: true },
+      select: {
+        id: true, label: true, note: true, source: true, isCurrent: true, createdAt: true, updatedAt: true, resultCache: true,
+        reviewStatus: true, submittedById: true, submittedAt: true, reviewedById: true, reviewedAt: true, reviewNote: true,
+      },
     });
+    // one lookup for every actor on the list, so a version row never has to say
+    // "user cmxyz…" to a reader
+    const actorIds = [...new Set(rows.flatMap((r) => [r.submittedById, r.reviewedById]).filter((x): x is string => !!x))];
+    const actors = actorIds.length
+      ? await ctx.prisma.user.findMany({ where: { id: { in: actorIds }, orgId: ctx.principal.orgId }, select: { id: true, name: true } })
+      : [];
+    const nameOf = new Map(actors.map((u) => [u.id, u.name]));
+
     return rows.map((r) => {
       let headline: { gdv: number; residualNet: number; profit: number; poc: number } | null = null;
       try {
@@ -182,9 +227,101 @@ export const appraisalRouter = router({
       } catch {
         headline = null;
       }
-      return { id: r.id, label: r.label, note: r.note, source: r.source, isCurrent: r.isCurrent, createdAt: r.createdAt, updatedAt: r.updatedAt, headline };
+      return {
+        id: r.id, label: r.label, note: r.note, source: r.source, isCurrent: r.isCurrent,
+        createdAt: r.createdAt, updatedAt: r.updatedAt, headline,
+        review: {
+          status: r.reviewStatus,
+          submittedBy: r.submittedById ? (nameOf.get(r.submittedById) ?? 'A former colleague') : null,
+          submittedAt: r.submittedAt,
+          reviewedBy: r.reviewedById ? (nameOf.get(r.reviewedById) ?? 'A former colleague') : null,
+          reviewedAt: r.reviewedAt,
+          note: r.reviewNote,
+          // stated rather than left to be inferred from two names being equal:
+          // a sole practitioner approving their own work is legitimate, and the
+          // record should say so plainly rather than hide it
+          selfApproved: !!r.reviewedById && r.reviewedById === r.submittedById,
+        },
+      };
     });
   }),
+
+  /**
+   * Send a version to be reviewed.
+   *
+   * Any internal member may submit — drafting is the analyst's job and asking for
+   * a second pair of eyes should never need permission.
+   */
+  submitForReview: internalProcedure
+    .input(z.object({ versionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const v = await assertOwned(ctx.prisma.appraisal, input.versionId, ctx.principal.orgId);
+      if (v.reviewStatus === 'approved') {
+        throw new TRPCError({ code: 'CONFLICT', message: 'That version is already approved.' });
+      }
+      const row = await ctx.prisma.appraisal.update({
+        where: { id: v.id },
+        data: {
+          reviewStatus: 'in_review',
+          submittedById: ctx.principal.userId,
+          submittedAt: new Date(),
+          // a resubmission clears the previous decision: the note referred to a
+          // version that no longer exists in that form
+          reviewedById: null,
+          reviewedAt: null,
+          reviewNote: null,
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'submitted an appraisal version for review', target: v.label, ip: ctx.ip,
+      });
+      return { id: row.id, status: row.reviewStatus };
+    }),
+
+  /**
+   * Approve a version, or send it back.
+   *
+   * ADMIN only. In a valuation firm the sign-off carries professional
+   * responsibility, so it is deliberately not something every seat can do.
+   *
+   * Self-approval is ALLOWED and RECORDED. A sole practitioner is a real customer
+   * and blocking them would make the feature unusable for the smallest firms; the
+   * honest answer is to let it happen and say so on the record, so a reader can
+   * see that one person did both.
+   */
+  review: adminProcedure
+    .input(
+      z.object({
+        versionId: z.string(),
+        decision: z.enum(['approve', 'request_changes']),
+        note: z.string().max(500).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const v = await assertOwned(ctx.prisma.appraisal, input.versionId, ctx.principal.orgId);
+      if (v.reviewStatus !== 'in_review') {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `“${v.label}” is ${v.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
+        });
+      }
+      // sending work back without saying why wastes the next round trip
+      if (input.decision === 'request_changes' && !input.note?.trim()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Say what needs changing.' });
+      }
+      const status = input.decision === 'approve' ? 'approved' : 'changes_requested';
+      const row = await ctx.prisma.appraisal.update({
+        where: { id: v.id },
+        data: { reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt: new Date(), reviewNote: input.note?.trim() || null },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
+        target: v.label, ip: ctx.ip,
+      });
+      return { id: row.id, status: row.reviewStatus };
+    }),
 
   /**
    * What changed between two versions, and what it did to the answer.
