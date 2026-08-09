@@ -1649,6 +1649,79 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
 });
 
 /**
+ * The portfolio funding pack — the book as a lender receives it.
+ *
+ * Read-only over deals other tests own, so it asserts structure and internal
+ * consistency rather than fixed figures. Pagination is exercised with a
+ * deliberately long book, because the demo has three schemes and would never
+ * reach a second page.
+ */
+test('the funding pack states the book, its exceptions, and paginates honestly', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('Portfolio funding pack').first()).toBeVisible();
+  // exceptions come BEFORE the table: a reader who has to find them among the
+  // rows will not find them
+  await expect(page.getByText('Exceptions')).toBeVisible();
+
+  const real = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      pages: p.length,
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
+      feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]),
+      totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
+    };
+  });
+  expect(real.overflowing).toBe(0);
+  expect(real.feet).toEqual(Array.from({ length: real.pages }, (_, i) => `Page ${i + 1} of ${real.pages}`));
+  // the book totals once, on the last sheet
+  expect(real.totals).toBe(1);
+
+  /**
+   * Pagination, forced. The demo book is three schemes; a pack that only ever
+   * renders one page has never had its page break exercised, and the first
+   * customer with thirty schemes would be the one to find out.
+   */
+  await page.route('**/trpc/deals.exposure*', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    // tRPC batches, so a response may be an ARRAY of envelopes rather than one
+    const envelope = Array.isArray(body) ? body[0] : body;
+    const data = envelope.result.data.json;
+    const one = data.positions[0];
+    data.positions = Array.from({ length: 40 }, (_, i) => ({ ...one, dealId: `synthetic-${i}`, name: `Scheme ${i + 1}` }));
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await page.waitForTimeout(600);
+
+  const long = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      pages: p.length,
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
+      feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]),
+      rows: p.reduce((a, x) => a + ((x.textContent ?? '').match(/Scheme \d+/g)?.length ?? 0), 0),
+      totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
+    };
+  });
+  expect(long.pages).toBeGreaterThan(1);
+  expect(long.overflowing).toBe(0);
+  expect(long.feet).toEqual(Array.from({ length: long.pages }, (_, i) => `Page ${i + 1} of ${long.pages}`));
+  // every scheme appears exactly once — a page break that DROPS rows is worse
+  // than one that overflows, because nothing on the page says so
+  expect(long.rows).toBe(40);
+  expect(long.totals).toBe(1);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

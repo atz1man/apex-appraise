@@ -21,6 +21,7 @@ function handleAuthError(err: unknown): boolean {
 // mobile connections. Heavy libs (exceljs, leaflet) are already lazy inside.
 const Login = lazy(() => import('./routes/Login'));
 const Hub = lazy(() => import('./routes/Hub'));
+const FundingPack = lazy(() => import('./routes/FundingPack'));
 const Board = lazy(() => import('./routes/Board'));
 const DevelopmentAppraisal = lazy(() => import('./routes/DevelopmentAppraisal'));
 const AutoAppraisal = lazy(() => import('./routes/AutoAppraisal'));
@@ -110,6 +111,7 @@ export default function App() {
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
           <Route path="/" element={<Protected><Hub /></Protected>} />
+          <Route path="/portfolio/pack" element={<Protected><FundingPack /></Protected>} />
           <Route path="/board" element={<Protected><Board /></Protected>} />
           <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />

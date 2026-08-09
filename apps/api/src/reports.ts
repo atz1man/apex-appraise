@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import jwt from 'jsonwebtoken';
 import { chromium, type Browser } from 'playwright';
 import { JWT_SECRET, prisma } from './context.js';
+import { recordAudit } from './audit.js';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
 
@@ -31,6 +32,62 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function registerReports(app: FastifyInstance) {
+  /**
+   * The portfolio funding pack — a whole-book document, so it hangs off the org
+   * rather than a deal. Same renderer as the per-deal reports: one source of
+   * truth, so the pack cannot drift from what the screen shows.
+   */
+  app.get<{ Querystring: { t?: string } }>('/reports/portfolio/funding-pack.pdf', async (req, reply) => {
+    const token = req.query.t;
+    if (!token) return reply.code(401).send({ error: 'token required' });
+    let userId: string;
+    try {
+      userId = (jwt.verify(token, JWT_SECRET) as { sub: string }).sub;
+    } catch {
+      return reply.code(401).send({ error: 'invalid token' });
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    // internal only: the pack is the whole book, and a portal login is scoped to
+    // one position within it
+    if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
+
+    let browser: Browser;
+    try {
+      browser = await getBrowser();
+    } catch (e) {
+      req.log.error(e, 'chromium unavailable for PDF rendering');
+      return reply.code(501).send({ error: 'PDF rendering unavailable on this server — use Print / Save PDF instead.' });
+    }
+    const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
+    try {
+      await context.addInitScript(
+        ([t, p]: string[]) => {
+          localStorage.setItem('apex_token', t);
+          localStorage.setItem('apex_principal', p);
+        },
+        [token, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
+      );
+      const page = await context.newPage();
+      await page.goto(`${WEB_URL}/portfolio/pack`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.a4-page', { timeout: 15_000 });
+      await page.emulateMedia({ media: 'print' });
+      const pdf = await page.pdf({ format: 'A4', printBackground: true });
+      await recordAudit(prisma, {
+        orgId: user.orgId,
+        userId: user.id,
+        actor: user.name,
+        action: 'generated PDF',
+        target: 'Portfolio funding pack',
+        ip: req.ip,
+      });
+      reply.header('content-type', 'application/pdf');
+      reply.header('content-disposition', 'inline; filename="portfolio-funding-pack.pdf"');
+      return reply.send(pdf);
+    } finally {
+      await context.close();
+    }
+  });
+
   app.get<{ Params: { dealId: string; kind: string }; Querystring: { t?: string } }>(
     '/reports/:dealId/:kind.pdf',
     async (req, reply) => {
