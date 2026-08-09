@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
@@ -40,7 +40,20 @@ export default function Board() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
-  const [newOpen, setNewOpen] = useState(false);
+  /**
+   * ?new=1 opens the deal form straight away — the Hub's primary call to action
+   * links here, and arriving at a page that merely offers the same button again
+   * is a step that exists for no reason.
+   */
+  const [search, setSearch] = useSearchParams();
+  const [newOpen, setNewOpen] = useState(search.get('new') === '1');
+  useEffect(() => {
+    if (search.get('new') !== '1') return;
+    setNewOpen(true);
+    // drop the parameter so a refresh or a back-navigation does not reopen it
+    search.delete('new');
+    setSearch(search, { replace: true });
+  }, [search, setSearch]);
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.deals.list.useQuery({});
   const { data: exposure } = trpc.deals.exposure.useQuery(undefined, { staleTime: 30_000 });

@@ -198,7 +198,10 @@ export default function Hub() {
               text and cost-plan notes and get a full residual appraisal in seconds.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5 flex-wrap">
-              <Button to="/board">New deal from documents →</Button>
+              {/* straight into the form. Landing on the board — where the same
+                  words appear again as a button — made the user click "New deal
+                  from documents" twice to reach one form. */}
+              <Button to="/board?new=1">New deal from documents →</Button>
               <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
                 {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
               </Button>

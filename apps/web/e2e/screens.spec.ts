@@ -1722,6 +1722,57 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
 });
 
 /**
+ * Time to value for a brand-new signup.
+ *
+ * The trial promise is "documents in, appraisal out". This walks it as a stranger
+ * would and counts the clicks, because the flow was one click longer than it
+ * looked: the Hub's primary call to action landed on the board, where the SAME
+ * words appeared again as a button, so a new user clicked "New deal from
+ * documents" twice to reach one form.
+ *
+ * Registers its own workspace, so it owns everything it touches.
+ */
+test('a new signup reaches the appraisal form in one click, on its own deal', async ({ page }) => {
+  test.setTimeout(120_000);
+  const stamp = `${Date.now()}`.slice(-7);
+
+  await page.goto('/register');
+  /**
+   * Filled by LABEL, and only once the form has rendered. An earlier version
+   * filled inputs by index as soon as the page loaded; under a parallel run the
+   * values landed before React hydrated and were discarded, so the form
+   * submitted empty and the failure looked like the Hub never appearing.
+   */
+  await expect(page.getByRole('heading', { name: 'Start your organisation' })).toBeVisible();
+  await page.getByLabel(/Organisation name/i).fill(`Trial Firm ${stamp}`);
+  await page.getByLabel(/Your name/i).fill('Sam Trial');
+  await page.getByLabel(/^Email/i).fill(`trial${stamp}@example.test`);
+  await page.getByLabel(/^Password/i).fill('a-strong-trial-password');
+  await page.getByLabel(/Confirm password/i).fill('a-strong-trial-password');
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+
+  // lands in a workspace of their own, with nothing in it yet
+  await expect(page.getByText('Add your first deal')).toBeVisible({ timeout: 30_000 });
+
+  /**
+   * ONE click to the form. A link, not a button — it is styled as one, which is
+   * why an earlier version of this test looked for the wrong role.
+   */
+  await page.getByRole('link', { name: /New deal from documents/i }).first().click();
+  await expect(page.getByText('New deal', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Create & appraise from documents/i })).toBeVisible();
+
+  // the deep-link parameter is cleaned up, so a refresh does not reopen the form
+  await expect(page).toHaveURL(/\/board$/);
+
+  // and the form leads where it says: straight into Auto-Appraisal on their deal
+  await page.getByLabel(/deal name/i).fill(`Trial Scheme ${stamp}`);
+  await page.getByLabel(/address/i).fill('1 Trial Street, Bournemouth');
+  await page.getByRole('button', { name: /Create & appraise from documents/i }).click();
+  await expect(page).toHaveURL(/\/deal\/[^/]+\/auto/, { timeout: 30_000 });
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.
@@ -2081,8 +2132,13 @@ test('a locked-out user can reset their password, once, without being enumerated
   const token = await page.evaluate(() => localStorage.getItem('apex_token'));
   const auth = { authorization: `Bearer ${token}` };
 
-  // a user of this test's own, invited into the demo org
-  const email = 'reset-drill@apexappraise.co.uk';
+  /**
+   * A NEW address every run. Reset requests are throttled per email — correctly,
+   * since an unthrottled endpoint is a way to mail-bomb someone — so a fixed
+   * address makes this test pass once and then silently receive no email at all,
+   * which surfaces as "that reset link is invalid" and reads like a broken token.
+   */
+  const email = `reset-drill-${Date.now()}@apexappraise.co.uk`;
   await call('org.invite', { name: 'Reset Drill', email, role: 'ANALYST' }, auth);
 
   /**
@@ -2104,6 +2160,15 @@ test('a locked-out user can reset their password, once, without being enumerated
    */
   const box = await request.get(`${base}/trpc/org.demoMailbox`, { headers: auth });
   const messages = (await box.json()).result.data.json.messages as Array<{ to: string; subject: string; text: string }>;
+  /**
+   * The FIRST match, because readMailbox returns newest-first. Every earlier token
+   * was invalidated by the request that followed it, so the newest is the only
+   * one that works.
+   *
+   * This line was briefly "changed" to take the last match, on a theory about run
+   * accumulation that was wrong — the real cause was the demo mailbox evicting the
+   * message before the test read it, now fixed by giving it depth.
+   */
   const mail = messages.find((m) => m.to === email && m.subject.includes('Reset'));
   expect(mail, 'a reset email should have been sent').toBeTruthy();
   const rawToken = mail!.text.match(/\/reset\?token=([\w-]+)/)?.[1];

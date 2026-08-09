@@ -27,7 +27,14 @@ const FROM = () => process.env.EMAIL_FROM ?? 'Apex Appraise <no-reply@apexapprai
  * set, nothing is recorded and the reader returns nothing, so a production
  * instance cannot serve anyone else's messages even by mistake.
  */
-const MAILBOX_LIMIT = 25;
+/**
+ * 25 was too small once the test suite started registering workspaces: each
+ * signup sends a welcome email, and a reset email could be evicted between the
+ * request that created it and the read that needed it — a failure that looks
+ * exactly like a broken reset token. It is an in-memory demo aid; 200 costs
+ * nothing and gives the mailbox enough depth to be trusted.
+ */
+const MAILBOX_LIMIT = 200;
 const mailbox: Array<{ to: string; subject: string; text: string; at: string }> = [];
 
 export const mailboxEnabled = () => !process.env.SMTP_URL;

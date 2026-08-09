@@ -22,7 +22,15 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
   await expect(page.getByText('Add your first deal')).toBeVisible();
   // activation checklist starts from zero on a fresh workspace
   await expect(page.getByTestId('getting-started-progress')).toHaveText('0 of 5 done');
+  /**
+   * This now opens the deal form immediately rather than merely navigating to the
+   * board — the CTA used to land on a page offering the same button again. A user
+   * who changes their mind closes it, which is what happens here before checking
+   * the empty pipeline behind it.
+   */
   await page.getByRole('link', { name: /New deal from documents/ }).click();
+  await expect(page.getByText('New deal', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Your pipeline is empty')).toBeVisible();
   // no seeded deals leak across orgs
   await expect(page.getByText('Northgate Trade & Industrial Park')).toHaveCount(0);
