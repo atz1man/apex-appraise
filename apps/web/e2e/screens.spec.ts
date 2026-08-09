@@ -1938,6 +1938,85 @@ test('a shared report link works for a stranger, and stops when it is revoked', 
 });
 
 /**
+ * The terms of engagement — the document a client signs.
+ *
+ * Its length is decided by the FIRM: every clause is house style out of Settings,
+ * capped between 600 and 2000 characters. It used to be three hand-placed sheets
+ * with "Page 1 of 3" written into them, so a firm that filled the form in printed
+ * SIX sheets while claiming three, with clauses split wherever the paper ran out.
+ *
+ * SELF-CLEANING: it saves a full house style, measures, and puts the firm's real
+ * policy back — leaving lorem in a customer-facing demo would be worse than the
+ * bug.
+ */
+test('the terms document paginates to fit whatever house style a firm writes', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const dealId = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    return (await r.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+
+  const measure = () =>
+    page.evaluate(() => {
+      const p = [...document.querySelectorAll('.a4-page')];
+      return {
+        pages: p.length,
+        overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
+        feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]).filter(Boolean),
+      };
+    });
+
+  await page.goto(`/deal/${dealId}/engagement/document`);
+  await page.waitForSelector('.a4-page');
+  const short = await measure();
+  expect(short.overflowing).toBe(0);
+  expect(short.feet).toEqual(Array.from({ length: short.pages }, (_, i) => `Page ${i + 1} of ${short.pages}`));
+
+  const original = await page.evaluate(async () => {
+    const r = await fetch('/trpc/org.policy', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const { updatedAt: _u, ...rest } = (await r.json()).result.data.json;
+    return rest as Record<string, unknown>;
+  });
+
+  const savePolicy = (body: Record<string, unknown>) =>
+    page.evaluate(async (p) => {
+      await fetch('/trpc/org.savePolicy', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ json: p }),
+      });
+    }, body);
+
+  try {
+    const filler = 'The valuer will have regard to the RICS Valuation - Global Standards and to the circumstances of the property. '.repeat(20);
+    const caps: Record<string, number> = {
+      toePurpose: 1000, toeOtherUsers: 1000, toeInterest: 600, toeExtentOfInvestigation: 2000,
+      toeSourcesOfInformation: 2000, toeAssumptions: 2000, toeSpecialAssumptions: 2000,
+      toeReportFormat: 1000, toeRestrictionsOnUse: 1000, toeFeeBasis: 1000, toeComplaintsProcedure: 1000,
+    };
+    await savePolicy({ ...original, ...Object.fromEntries(Object.entries(caps).map(([k, n]) => [k, filler.slice(0, n)])) });
+
+    await page.goto(`/deal/${dealId}/engagement/document`);
+    await page.waitForSelector('.a4-page');
+    await page.waitForTimeout(500);
+    const long = await measure();
+
+    // it grew, every sheet still fits A4, and the footers count what is there
+    expect(long.pages).toBeGreaterThan(short.pages);
+    expect(long.overflowing).toBe(0);
+    expect(long.feet).toEqual(Array.from({ length: long.pages }, (_, i) => `Page ${i + 1} of ${long.pages}`));
+  } finally {
+    // restored even if an assertion above fails — a demo left full of lorem is
+    // worse than the defect this test covers
+    await savePolicy(original);
+  }
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.
