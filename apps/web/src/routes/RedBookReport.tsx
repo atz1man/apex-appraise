@@ -201,6 +201,13 @@ export default function RedBookReport() {
   const summary = compsData?.summary;
   const hasComps = comps.length > 0 && !!summary;
 
+  /**
+   * There is nothing to export until an appraisal exists. Offering the buttons
+   * anyway sent the user to a report route that waited fifteen seconds for a page
+   * that would never render and then returned a 500 — telling them the server was
+   * broken when the truth was that this deal has no appraisal yet.
+   */
+  const exportable = !!appr && !!R && !!input;
   const toolbar = (
     <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5">
       <Link to={`/deal/${dealId}/appraisal`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-700">
@@ -212,24 +219,30 @@ export default function RedBookReport() {
       <span className="text-[13px] text-ink-2 truncate">{subject}</span>
       <span className="fig text-[11px] font-medium text-ink-3">{refCode}</span>
       <div className="ml-auto flex gap-2">
-        <Button
-          variant="secondary"
-          className="print:hidden"
-          loading={draftNarrative.isPending}
-          onClick={() => draftNarrative.mutate(dealId)}
-        >
-          Draft narrative with AI
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => window.open(`/reports/${dealId}/redbook.pdf?t=${encodeURIComponent(getToken() ?? '')}`, '_blank')}
-        >
-          Download PDF
-        </Button>
+        {exportable && (
+          <Button
+            variant="secondary"
+            className="print:hidden"
+            loading={draftNarrative.isPending}
+            onClick={() => draftNarrative.mutate(dealId)}
+          >
+            Draft narrative with AI
+          </Button>
+        )}
+        {exportable && (
+          <Button
+            variant="secondary"
+            onClick={() => window.open(`/reports/${dealId}/redbook.pdf?t=${encodeURIComponent(getToken() ?? '')}`, '_blank')}
+          >
+            Download PDF
+          </Button>
+        )}
+        {exportable && (
         <Button onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>
           Print / Save PDF
         </Button>
+        )}
       </div>
     </div>
   );

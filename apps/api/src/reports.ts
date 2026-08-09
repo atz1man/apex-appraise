@@ -107,6 +107,21 @@ export function registerReports(app: FastifyInstance) {
       const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
       if (!deal) return reply.code(404).send({ error: 'deal not found' });
 
+      /**
+       * A valuation report needs something to value. Without a current appraisal
+       * the page renders no sheets, the renderer waits fifteen seconds for one and
+       * the request dies as a 500 — which tells the user their server is broken
+       * when the truth is that the deal has no appraisal yet.
+       */
+      if (kind === 'appraisal' || kind === 'redbook') {
+        const appraisal = await prisma.appraisal.findFirst({ where: { dealId, orgId: user.orgId, isCurrent: true } });
+        if (!appraisal) {
+          return reply.code(409).send({
+            error: `${deal.name} has no saved appraisal yet — run or save one, then the ${KIND_LABEL[kind]} can be produced.`,
+          });
+        }
+      }
+
       let browser: Browser;
       try {
         browser = await getBrowser();

@@ -1823,6 +1823,59 @@ test('the root shows the pitch to a stranger and the workspace to a user', async
 });
 
 /**
+ * The Red Book report — the regulated deliverable — audited the way the appraisal
+ * report is: every page against A4, footers contiguous, and the same for a deal
+ * with nothing to value.
+ *
+ * The last one is what this found: a deal with no saved appraisal offered a
+ * "Download PDF" button that sent the renderer looking for a page which would
+ * never exist, waited fifteen seconds, and returned a 500 — telling the valuer
+ * their server was broken when the truth was that the deal had no appraisal.
+ */
+test('the red book paginates honestly and refuses clearly when there is nothing to value', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const ids = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const d = (await r.json()).result.data.json.deals as Array<{ id: string; name: string }>;
+    return {
+      valued: d.find((x) => x.name.startsWith('Harbour'))!.id,
+      unvalued: d.find((x) => x.name.startsWith('Elm Grove'))!.id,
+      token: localStorage.getItem('apex_token') ?? '',
+    };
+  });
+
+  await page.goto(`/deal/${ids.valued}/redbook`);
+  await page.waitForSelector('.a4-page');
+  const m = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      pages: p.length,
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
+      feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]).filter(Boolean),
+    };
+  });
+  expect(m.overflowing).toBe(0);
+  expect(m.feet[m.feet.length - 1]).toBe(`Page ${m.pages} of ${m.pages}`);
+
+  /**
+   * Nothing to value: the page says so, and — the part that was broken — it does
+   * not offer an export that cannot work.
+   */
+  await page.goto(`/deal/${ids.unvalued}/redbook`);
+  await expect(page.getByText('No appraisal saved yet')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download PDF' })).toHaveCount(0);
+
+  // and the endpoint itself refuses in words rather than failing as a server fault
+  const refused = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(ids.token)}`);
+  expect(refused.status()).toBe(409);
+  expect(await refused.text()).toMatch(/has no saved appraisal yet/);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.
