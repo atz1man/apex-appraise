@@ -62,7 +62,7 @@ test.describe('internal screens', () => {
 
   test('cost monitoring shows variance rollup', async ({ page }) => {
     await page.goto('/board');
-    await page.getByText('Harbour Reach').first().click();
+    await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
     const url = page.url();
     const dealId = url.match(/deal\/([^/]+)/)![1];
     await page.goto(`/deal/${dealId}/costs`);
@@ -72,10 +72,12 @@ test.describe('internal screens', () => {
 
   test('sales CRM tracks units and opens the drawer', async ({ page }) => {
     await page.goto('/board');
-    await page.getByText('Harbour Reach').first().click();
+    await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
     const dealId = page.url().match(/deal\/([^/]+)/)![1];
     await page.goto(`/deal/${dealId}/sales`);
     await expect(page.getByText('Unit sales tracker')).toBeVisible();
+    // a row in the tracker, not a link — the role rewrite that fixed the deal
+    // cards does not apply here
     await page.getByText('Plot 3').first().click();
     await expect(page.getByText('Sales progression')).toBeVisible();
   });
@@ -1539,8 +1541,10 @@ test('the board states the book’s debt exposure and its largest concentration'
 
   const panel = page.locator('[data-exposure]');
   await expect(panel).toBeVisible();
-  await expect(panel.getByText('Facility')).toBeVisible();
-  await expect(panel.getByText('Utilisation')).toBeVisible();
+  // exact: getByText with a string matches case-INSENSITIVE substrings, so plain
+  // 'Facility' also matches the "over facility" warning next to it
+  await expect(panel.getByText('Facility', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Utilisation', { exact: true })).toBeVisible();
   await expect(panel.getByText(/Largest concentration:/)).toBeVisible();
 
   const read = await page.evaluate(async () => {
@@ -1564,6 +1568,21 @@ test('the board states the book’s debt exposure and its largest concentration'
   // an over-drawn book says so in words rather than leaving a bare percentage
   // that reads like a rounding fault
   if (read.totals.utilisation > 1) await expect(panel.getByText('over facility')).toBeVisible();
+
+  /**
+   * A deal drawing ahead of its works is named, not merely counted: "one deal is
+   * overspending" is not actionable, "Harbour Reach is £3.4m ahead of its works"
+   * is. Conditional because it depends on cost monitoring other tests may change.
+   */
+  const overspending = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.exposure', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const d = (await r.json()).result.data.json as { positions: Array<{ name: string; drawdown: { status: string } | null }> };
+    return d.positions.filter((p) => p.drawdown?.status === 'overspending').map((p) => p.name);
+  });
+  if (overspending.length) {
+    await expect(panel.getByText('Drawn ahead of works')).toBeVisible();
+    await expect(panel.getByText(new RegExp(overspending[0]!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeVisible();
+  }
 });
 
 /**

@@ -49,7 +49,7 @@ test('calendar shows org tasks and creates a new one', async ({ page }) => {
 test('deal overview shows KPIs, workfile and lifecycle', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Harbour Reach').first().click();
+  await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
   await expect(page.getByText('Workfile')).toBeVisible();
   await expect(page.getByText('Construction cost health')).toBeVisible();
   await expect(page.getByText('Sales health')).toBeVisible();
@@ -78,7 +78,7 @@ test('settings: org panel, members, invite (admin)', async ({ page }) => {
 test('site pack renders with live-data controls and provenance', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('link', { name: /Northgate Trade \& Industrial Park/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Site pack' }).click();
   await expect(page.getByRole('heading', { name: 'Site pack' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Pull live data/ })).toBeVisible();
@@ -92,7 +92,7 @@ test('site pack renders with live-data controls and provenance', async ({ page }
 test('appraisal versions: save, list with figures, restore', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('link', { name: /Northgate Trade \& Industrial Park/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
   await expect(page.getByText('Unit schedule')).toBeVisible();
   // engine-depth rail: Monte Carlo risk panel renders with percentiles
@@ -113,7 +113,7 @@ test('appraisal versions: save, list with figures, restore', async ({ page }) =>
 test('appraisal exports a real .xlsx workbook', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('link', { name: /Northgate Trade \& Industrial Park/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
   await expect(page.getByText('Unit schedule')).toBeVisible();
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
@@ -199,7 +199,7 @@ test('data & privacy: export, audit trail, and full workspace deletion', async (
 test('appraisal charts: cashflow J-curve and profit bridge render from the engine', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('link', { name: /Northgate Trade \& Industrial Park/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
   await expect(page.getByText('Unit schedule')).toBeVisible();
   await page.getByText('Cashflow', { exact: true }).first().click();
@@ -213,7 +213,7 @@ test('appraisal charts: cashflow J-curve and profit bridge render from the engin
 test('sales velocity chart shows cumulative GDV secured vs appraised', async ({ page }) => {
   await loginInternal(page);
   await page.goto('/board');
-  await page.getByText('Harbour Reach').first().click();
+  await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Sales', exact: true }).click();
   await expect(page.getByText('Unit sales tracker')).toBeVisible();
   await expect(page.getByTestId('sales-velocity')).toBeVisible();

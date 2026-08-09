@@ -143,6 +143,30 @@ export default function Board() {
                 </div>
               ))}
             </div>
+            {/* Deals drawing ahead of the works. Named individually because
+                "one deal is overspending" is not actionable and "Harbour Reach is
+                £250k ahead of its works" is. */}
+            {exposure.positions.some((p) => p.drawdown?.status === 'overspending') && (
+              <div className="mt-3 pt-3 border-t border-border-std">
+                <div className="text-[11px] uppercase tracking-wide text-ink-3">Drawn ahead of works</div>
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {exposure.positions
+                    .filter((p) => p.drawdown?.status === 'overspending')
+                    .map((p) => (
+                      <div key={p.dealId} className="text-[12px]">
+                        <span className="font-semibold">{p.name}</span>
+                        <span className="text-ink-2">
+                          {' '}— {fM(p.drawn)} committed against {fM(p.drawdown!.expectedByProgress)} of works
+                        </span>
+                        <span className="fig" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>
+                          {' '}+{fM(p.drawdown!.varianceOnProgress)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {exposure.largest && (
               <div className="mt-3 pt-3 border-t border-border-std text-[12px]">
                 <span className="text-ink-2">Largest concentration: </span>

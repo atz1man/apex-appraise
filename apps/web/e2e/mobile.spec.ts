@@ -28,7 +28,7 @@ test('core screens have no horizontal scroll at phone width', async ({ page }) =
   await page.goto('/board');
   await expect(page.getByText('Northgate Trade & Industrial Park').first()).toBeVisible();
   await noScroll();
-  await page.getByText('Northgate Trade & Industrial Park').first().click();
+  await page.getByRole('link', { name: /Northgate Trade \& Industrial Park/ }).first().click();
   await expect(page.getByText('Workfile', { exact: true })).toBeVisible();
   await noScroll(); // deal overview — rail stacked below content
   await page.getByRole('navigation').getByRole('link', { name: 'Appraisal', exact: true }).click();
@@ -41,7 +41,7 @@ test('charts are phone-proportioned and sales page has no horizontal scroll', as
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByText('Deal tools').waitFor();
   await page.goto('/board');
-  await page.getByText('Harbour Reach').first().click();
+  await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
   await page.getByRole('navigation').getByRole('link', { name: 'Sales', exact: true }).click();
   await expect(page.getByTestId('sales-velocity')).toBeVisible();
   await expect

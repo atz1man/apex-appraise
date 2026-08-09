@@ -77,3 +77,32 @@ describe('portfolio exposure', () => {
     expect(e.totals.undrawn).toBeGreaterThan(0);
   });
 });
+
+describe('drawdown against works', () => {
+  it('judges spend on the works done, not on the calendar', async () => {
+    // half the money committed against a quarter of the works
+    await callerFor(A.principal).cost.upsertPackage({
+      dealId: A.dealId, name: 'Frame', budget: 1_000_000, committed: 500_000, spent: 400_000, forecast: 1_000_000, retentionPct: 5,
+    } as never);
+    await prisma.costPackage.updateMany({ where: { dealId: A.dealId }, data: { progressPct: 25 } });
+
+    const e = (await callerFor(A.principal).deals.exposure()) as {
+      positions: Array<{ dealId: string; drawdown: { status: string; varianceOnProgress: number } | null }>;
+    };
+    const pos = e.positions.find((p) => p.dealId === A.dealId)!;
+    expect(pos.drawdown).not.toBeNull();
+    expect(pos.drawdown!.status).toBe('overspending');
+    expect(pos.drawdown!.varianceOnProgress).toBeGreaterThan(0);
+  });
+
+  it('reports nothing rather than a false clean bill when there is no cost monitoring', async () => {
+    const fresh = await makeTenant('NoCosts');
+    await callerFor(fresh.principal).appraisal.save({ dealId: fresh.dealId, input: input(), label: 'Base' } as never);
+    const e = (await callerFor(fresh.principal).deals.exposure()) as {
+      positions: Array<{ drawdown: unknown }>;
+    };
+    // a 0%-complete reading would report this as underspending, which is a
+    // finding about nothing
+    expect(e.positions[0]!.drawdown).toBeNull();
+  });
+});

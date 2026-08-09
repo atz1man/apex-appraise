@@ -11,6 +11,8 @@
  * deals it sums would be worse than no total at all.
  */
 
+import type { DrawdownResult } from './drawdown.js';
+
 export interface ExposurePosition {
   dealId: string;
   name: string;
@@ -26,6 +28,12 @@ export interface ExposurePosition {
   equity: number;
   /** committed spend to date, from cost monitoring */
   drawn: number;
+  /**
+   * How that spend compares with the works done. Optional because a deal with no
+   * cost monitoring has nothing to compare — and null is the honest answer there,
+   * not a zero that would read as "no works, all fine".
+   */
+  drawdown?: DrawdownResult | null;
 }
 
 export interface ExposureGroup {

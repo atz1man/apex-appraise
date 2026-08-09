@@ -5,7 +5,7 @@ import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertCanAddDeal } from '../entitlements.js';
-import { aggregateExposure, computeAppraisal, postcodeArea } from '@apex/appraisal-engine';
+import { aggregateExposure, computeAppraisal, monthsBetween, postcodeArea, spendAgainstProgramme } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
 
 const dealOut = (d: {
@@ -86,9 +86,22 @@ export const dealsRouter = router({
     const [deals, appraisals, packages] = await Promise.all([
       ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       ctx.prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
-      ctx.prisma.costPackage.groupBy({ by: ['dealId'], where: { orgId }, _sum: { committed: true } }),
+      ctx.prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
     ]);
-    const drawnBy = new Map(packages.map((p) => [p.dealId, Number(p._sum.committed ?? 0) / 100]));
+    /**
+     * Progress is weighted by BUDGET, not averaged across packages. A 2%-complete
+     * groundworks package and a 2%-complete £5m frame package are not equally
+     * informative, and a plain mean lets a trivial package drag the number.
+     */
+    const costBy = new Map<string, { drawn: number; budget: number; weighted: number }>();
+    for (const p of packages) {
+      const cur = costBy.get(p.dealId) ?? { drawn: 0, budget: 0, weighted: 0 };
+      const budget = Number(p.budget) / 100;
+      cur.drawn += Number(p.committed) / 100;
+      cur.budget += budget;
+      cur.weighted += budget * (p.progressPct ?? 0);
+      costBy.set(p.dealId, cur);
+    }
     const byDeal = new Map(appraisals.map((a) => [a.dealId, a]));
 
     const positions = deals
@@ -99,6 +112,7 @@ export const dealsRouter = router({
         // understate every concentration
         if (!a) return null;
         const r = computeAppraisal(appraisalRowToEngineInput(a));
+        const cost = costBy.get(d.id);
         return {
           dealId: d.id,
           name: d.name,
@@ -109,7 +123,22 @@ export const dealsRouter = router({
           totalCost: r.totalCost,
           facility: r.facility,
           equity: r.equity,
-          drawn: drawnBy.get(d.id) ?? 0,
+          drawn: cost?.drawn ?? 0,
+          drawdown:
+            // only where there is something to measure: a deal with no cost
+            // packages has no works to compare money against, and inventing a
+            // 0%-complete reading would report every such deal as underspending
+            cost && cost.budget > 0
+              ? spendAgainstProgramme({
+                  constructionTotal: r.build + r.fees + r.cont,
+                  periodMonths: r.period,
+                  profile: (a.spendProfile ?? 'SCURVE').toLowerCase() as never,
+                  monthsElapsed:
+                    a.startYear && a.startMonth ? monthsBetween({ year: a.startYear, month: a.startMonth }, new Date()) : 0,
+                  actualToDate: cost.drawn,
+                  progressPct: cost.weighted / cost.budget,
+                })
+              : null,
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
