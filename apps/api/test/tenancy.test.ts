@@ -189,3 +189,61 @@ describe('the suite can tell a refusal from a wall', () => {
     await expectDenied('deals.get', () => callerFor(A.principal).deals.get(B.dealId));
   });
 });
+
+/**
+ * The read side.
+ *
+ * The write audit found five procedures that would let one firm change another's
+ * records. Reads were never swept, and a read leak in a valuation product is a
+ * confidentiality breach rather than a corruption — a competitor's costs, deal
+ * names and client names. One was found (benchmarks.trend, see benchmarks.test.ts);
+ * this sweep is what stops the next one shipping.
+ */
+describe('reads never cross an org boundary', () => {
+  const dealScoped: Array<[string, (c: ReturnType<typeof callerFor>, dealId: string) => Promise<unknown>]> = [
+    ['deals.get', (c, d) => c.deals.get(d)],
+    ['appraisal.getCurrent', (c, d) => c.appraisal.getCurrent(d)],
+    ['appraisal.versions', (c, d) => c.appraisal.versions(d)],
+    ['appraisal.shares', (c, d) => c.appraisal.shares(d)],
+    ['comparables.list', (c, d) => c.comparables.list(d)],
+    ['scenarios.list', (c, d) => c.scenarios.list(d)],
+    ['cost.packages', (c, d) => c.cost.packages(d)],
+    ['sales.units', (c, d) => c.sales.units(d)],
+    ['sales.tenancies', (c, d) => c.sales.tenancies(d)],
+    ['inspections.get', (c, d) => c.inspections.get(d)],
+    ['documents.list', (c, d) => c.documents.list(d)],
+  ];
+
+  it('refuses every deal-scoped read of another firm’s deal', async () => {
+    const caller = callerFor(A.principal);
+    for (const [name, call] of dealScoped) {
+      // B.dealId belongs to the other firm; a pass is a throw, a null or an
+      // empty list — anything but that firm's data coming back
+      await expectDenied(name, () => call(caller, B.dealId) as Promise<unknown>);
+    }
+  });
+
+  it('still returns a firm’s OWN data through those same reads', async () => {
+    // without this the sweep above would pass against an API that refuses
+    // everything, which proves nothing at all
+    const caller = callerFor(A.principal);
+    const own = await caller.deals.get(A.dealId);
+    expect(own).toBeTruthy();
+    await expect(caller.sales.units(A.dealId)).resolves.toBeDefined();
+  });
+
+  it('lists only its own deals', async () => {
+    const list = (await callerFor(A.principal).deals.list({} as never)) as { deals: Array<{ id: string }> };
+    const ids = list.deals.map((d) => d.id);
+    expect(ids).toContain(A.dealId);
+    expect(ids).not.toContain(B.dealId);
+  });
+
+  it('keeps the portfolio, audit trail and fault log to one firm', async () => {
+    const exposure = (await callerFor(A.principal).deals.exposure()) as { positions: Array<{ dealId: string }> };
+    expect(exposure.positions.map((p) => p.dealId)).not.toContain(B.dealId);
+
+    const audit = (await callerFor(A.principal).org.auditLog({ limit: 100 } as never)) as Array<{ orgId: string }>;
+    expect(audit.every((e) => e.orgId === A.orgId)).toBe(true);
+  });
+});

@@ -61,7 +61,20 @@ export const benchmarksRouter = router({
     .input(z.object({ region: z.string(), useClass: z.string() }))
     .query(async ({ ctx, input }) => {
       const points = await ctx.prisma.benchmarkPoint.findMany({
-        where: { region: input.region, useClass: input.useClass, metric: 'buildPsf' },
+        where: {
+          region: input.region,
+          useClass: input.useClass,
+          metric: 'buildPsf',
+          /**
+           * Market points are ownerless and shared on purpose. A firm's OWN
+           * points are the opposite — their build costs against their own scheme
+           * names — and this query used to fetch every org's and split them by
+           * `isOwn` afterwards, which handed each firm its competitors' cost base
+           * and deal names. The sibling `metrics` query five lines up scopes
+           * correctly; this one did not.
+           */
+          OR: [{ isOwn: false }, { isOwn: true, orgId: ctx.principal.orgId }],
+        },
         select: { value: true, period: true, isOwn: true, dealName: true },
         orderBy: { period: 'asc' },
       });

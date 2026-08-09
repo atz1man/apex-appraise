@@ -27,6 +27,14 @@ const pkgOut = (pk: any) => ({
 
 export const costRouter = router({
   packages: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    /**
+     * Every query below is already org-scoped, so nothing leaked — but this was
+     * the one deal-scoped read that answered a foreign deal id with an empty
+     * envelope instead of NOT_FOUND. Its siblings all refuse, and a reader of the
+     * isolation sweep should not have to work out which shape means "no".
+     */
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
     const packages = await ctx.prisma.costPackage.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       include: { contractor: true },
@@ -130,6 +138,8 @@ export const costRouter = router({
 
 export const photosRouter = router({
   list: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
     const photos = await ctx.prisma.sitePhoto.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       include: { contractor: { select: { name: true } } },

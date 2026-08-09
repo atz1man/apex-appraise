@@ -48,6 +48,8 @@ const tenancyOut = (t: any) => ({
 
 export const salesRouter = router({
   units: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
     const units = await ctx.prisma.unit.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { name: 'asc' },
@@ -69,6 +71,8 @@ export const salesRouter = router({
   }),
 
   tenancies: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
     const tenancies = await ctx.prisma.tenancy.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { name: 'asc' },
