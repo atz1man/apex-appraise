@@ -15,6 +15,7 @@ import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } fr
 import { adminProcedure, internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
 import { recordAudit } from '../audit.js';
+import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -313,6 +314,77 @@ export const appraisalRouter = router({
       awaitingReview: ctx.principal.role === 'ADMIN' ? rows.filter((r) => r.reviewStatus === 'in_review').map(shape) : [],
       returnedToMe: rows.filter((r) => r.reviewStatus === 'changes_requested').map(shape),
     };
+  }),
+
+  /**
+   * A read-only link to this deal's report, for someone with no account.
+   *
+   * Returns the raw token ONCE, here, at creation. It is stored hashed, so this
+   * is the only moment it can be shown — which is the point: the server cannot
+   * later hand out a working link to anyone who asks nicely.
+   */
+  createShare: internalProcedure
+    .input(
+      z.object({
+        dealId: z.string(),
+        kind: z.enum(['appraisal', 'redbook']),
+        days: z.number().int().min(1).max(SHARE_MAX_DAYS).default(SHARE_DEFAULT_DAYS),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const deal = await assertDeal(ctx, input.dealId);
+      const { token, tokenHash } = newShareToken();
+      const expiresAt = new Date(Date.now() + input.days * 24 * 60 * 60 * 1000);
+      const share = await ctx.prisma.reportShare.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          kind: input.kind,
+          tokenHash,
+          expiresAt,
+          createdById: ctx.principal.userId,
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: input.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'shared a report by link', target: `${deal.name} — ${input.kind}`, ip: ctx.ip,
+      });
+      return { id: share.id, token, expiresAt };
+    }),
+
+  shares: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    await assertDeal(ctx, input);
+    const rows = await ctx.prisma.reportShare.findMany({
+      where: { dealId: input, orgId: ctx.principal.orgId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    // no tokenHash in the response: it is not the token, but it is also not
+    // anything a screen needs, and hashes have a way of being treated as secrets
+    return rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      expiresAt: r.expiresAt,
+      revokedAt: r.revokedAt,
+      createdAt: r.createdAt,
+      viewCount: r.viewCount,
+      lastViewedAt: r.lastViewedAt,
+      state: shareRefusal(r) ?? 'live',
+    }));
+  }),
+
+  revokeShare: internalProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const share = await assertOwned(ctx.prisma.reportShare, input.id, ctx.principal.orgId);
+    // idempotent: withdrawing an already-withdrawn link is not an error, and a
+    // second click in a panicked moment should not show a failure
+    if (!share.revokedAt) {
+      await ctx.prisma.reportShare.update({ where: { id: share.id }, data: { revokedAt: new Date() } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: share.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'revoked a shared report link', target: share.kind, ip: ctx.ip,
+      });
+    }
+    return { ok: true };
   }),
 
   /**

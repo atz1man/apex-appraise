@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { chromium, type Browser } from 'playwright';
 import { JWT_SECRET, prisma } from './context.js';
 import { recordAudit } from './audit.js';
+import { SHARE_REFUSAL_MESSAGE, hashShareToken, shareRefusal } from './share.js';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
 
@@ -32,6 +33,76 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function registerReports(app: FastifyInstance) {
+  /**
+   * A shared report, for someone with no account.
+   *
+   * Serves the PDF and nothing else — no data API, no app shell, no session. The
+   * document is rendered as the colleague who created the link, which is the
+   * identity that was entitled to it; the recipient never holds credentials of
+   * any kind.
+   */
+  app.get<{ Params: { token: string } }>('/shared/:token.pdf', async (req, reply) => {
+    // never indexed, never cached by an intermediary: a valuation is not public
+    // just because its URL is unguessable
+    reply.header('x-robots-tag', 'noindex, nofollow, noarchive');
+    reply.header('cache-control', 'private, no-store');
+
+    const share = await prisma.reportShare.findUnique({ where: { tokenHash: hashShareToken(req.params.token) } });
+    // an unknown token and a dead one get the same answer: whether a link ever
+    // existed is not something the holder of a guess is entitled to learn
+    if (!share || shareRefusal(share)) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
+
+    const creator = await prisma.user.findUnique({ where: { id: share.createdById } });
+    if (!creator || creator.orgId !== share.orgId) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
+    const deal = await prisma.deal.findFirst({ where: { id: share.dealId, orgId: share.orgId } });
+    if (!deal) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
+
+    let browser: Browser;
+    try {
+      browser = await getBrowser();
+    } catch (e) {
+      req.log.error(e, 'chromium unavailable for shared report');
+      return reply.code(503).send({ error: 'This report cannot be produced right now — please try again shortly.' });
+    }
+    // a short-lived token for the RENDERER only; it never leaves this process
+    const renderToken = jwt.sign({ sub: creator.id }, JWT_SECRET, { expiresIn: '2m' });
+    const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
+    try {
+      await context.addInitScript(
+        ([t, p]: string[]) => {
+          localStorage.setItem('apex_token', t);
+          localStorage.setItem('apex_principal', p);
+        },
+        [renderToken, JSON.stringify({ userId: creator.id, name: creator.name, initials: creator.initials, role: creator.role, principalType: 'internal' })],
+      );
+      const page = await context.newPage();
+      const route = share.kind === 'redbook' ? 'redbook' : 'report';
+      await page.goto(`${WEB_URL}/deal/${share.dealId}/${route}`, { waitUntil: 'networkidle' });
+      await page.waitForSelector('.a4-page', { timeout: 15_000 });
+      await page.emulateMedia({ media: 'print' });
+      const pdf = await page.pdf({ format: 'A4', printBackground: true });
+
+      await prisma.reportShare.update({
+        where: { id: share.id },
+        data: { viewCount: { increment: 1 }, lastViewedAt: new Date() },
+      });
+      await recordAudit(prisma, {
+        orgId: share.orgId,
+        dealId: share.dealId,
+        actor: 'Shared link',
+        action: 'a shared report link was opened',
+        target: `${deal.name} — ${share.kind}`,
+        ip: req.ip,
+      });
+
+      reply.header('content-type', 'application/pdf');
+      reply.header('content-disposition', 'inline; filename="report.pdf"');
+      return reply.send(pdf);
+    } finally {
+      await context.close();
+    }
+  });
+
   /**
    * The portfolio funding pack — a whole-book document, so it hangs off the org
    * rather than a deal. Same renderer as the per-deal reports: one source of

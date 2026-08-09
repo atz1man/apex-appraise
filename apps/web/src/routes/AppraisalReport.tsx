@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   computeAppraisal,
@@ -237,6 +237,16 @@ export default function AppraisalReport() {
   const today = fmtLong(new Date());
   const scheme = deal?.name ?? 'Development appraisal';
 
+  /**
+   * A read-only link for someone with no account. The token is shown once, here,
+   * because it is stored hashed — the server cannot produce it again, which is
+   * the property that makes a leaked database not also a set of live links.
+   */
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const createShare = trpc.appraisal.createShare.useMutation({
+    onSuccess: (s) => setShareLink(`${window.location.origin}/shared/${s.token}.pdf`),
+  });
+
   const toolbar = (
     <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5">
       <Link to={`/deal/${dealId}/appraisal`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-700">
@@ -254,11 +264,31 @@ export default function AppraisalReport() {
         >
           Download PDF
         </Button>
+        <Button
+          variant="secondary"
+          loading={createShare.isPending}
+          onClick={() => createShare.mutate({ dealId, kind: 'appraisal' })}
+        >
+          Share link
+        </Button>
         <Button onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>
           Print / Save PDF
         </Button>
       </div>
+      {/* shown once and only here — the token cannot be produced again */}
+      {shareLink && (
+        <div className="absolute left-0 right-0 top-[54px] bg-surface border-b border-border-strong px-5 py-2.5 flex items-center gap-3" data-share-link>
+          <span className="text-[12px] text-ink-2 flex-none">Read-only link, expires in 30 days:</span>
+          <input className="flex-1 fig text-[11.5px]" readOnly value={shareLink} onFocus={(e) => e.currentTarget.select()} />
+          <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(shareLink)}>
+            Copy
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setShareLink(null)}>
+            Done
+          </Button>
+        </div>
+      )}
     </div>
   );
 

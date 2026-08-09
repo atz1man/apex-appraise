@@ -9,6 +9,8 @@ export default defineConfig({
       '/trpc': { target: 'http://localhost:4100', changeOrigin: true },
       '/uploads': { target: 'http://localhost:4100', changeOrigin: true },
       '/reports': { target: 'http://localhost:4100', changeOrigin: true },
+      // public read-only report links, same as nginx does in production
+      '/shared': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {

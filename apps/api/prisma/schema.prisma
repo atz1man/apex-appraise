@@ -362,6 +362,30 @@ model ErrorEvent {
   @@index([path, message])
 }
 
+// A read-only link to a report, for someone with no account.
+//
+// It serves the rendered PDF, never a data API. That is the whole security
+// design: an unauthenticated JSON endpoint over valuation inputs would be a much
+// larger thing to get right, and nobody asked for one — they asked to send a
+// lender the appraisal.
+model ReportShare {
+  id          String    @id @default(cuid())
+  orgId       String
+  dealId      String
+  // appraisal | redbook
+  kind        String
+  // hashed, like a password reset: a leaked row must not be a working link
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+  viewCount   Int       @default(0)
+  lastViewedAt DateTime?
+
+  @@index([orgId, dealId])
+}
+
 model OrgPolicy {
   id    String @id @default(cuid())
   orgId String @unique

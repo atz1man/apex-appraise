@@ -27,6 +27,14 @@ server {
     client_max_body_size 100m;
   }
 
+  # public read-only report links — rendered by the API, same timeout as /reports/
+  location /shared/ {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
+    proxy_read_timeout 120s;
+  }
+
   location /reports/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;

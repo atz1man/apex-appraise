@@ -1876,6 +1876,69 @@ test('the red book paginates honestly and refuses clearly when there is nothing 
 });
 
 /**
+ * A read-only report link, for someone with no account.
+ *
+ * The link serves the rendered PDF and nothing else — no data API, no app shell,
+ * no session. Everything below is a security property rather than a feature:
+ * a stranger can open it, a stranger cannot guess it, search engines are told not
+ * to touch it, and the firm can take it back.
+ */
+test('a shared report link works for a stranger, and stops when it is revoked', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+
+  const dealId = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    return (await r.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
+  });
+
+  // made through the real button, because "can a valuer actually produce one" is
+  // half of what is being tested
+  await page.goto(`/deal/${dealId}/report`);
+  await page.getByRole('button', { name: 'Share link' }).click();
+  const banner = page.locator('[data-share-link]');
+  await expect(banner).toBeVisible();
+  const url = await banner.locator('input').inputValue();
+  expect(url).toMatch(/\/shared\/[\w-]{40,}\.pdf$/);
+
+  /**
+   * Opened with the `request` fixture: it carries no localStorage and no session,
+   * so this is a genuine stranger holding nothing but the URL.
+   */
+  const res = await request.get(url);
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('application/pdf');
+  expect((await res.body()).subarray(0, 4).toString()).toBe('%PDF');
+  // a valuation is not public just because its URL is unguessable
+  expect(res.headers()['x-robots-tag']).toContain('noindex');
+
+  // a guess gets the same answer as a dead link — whether one ever existed is not
+  // something the holder of a guess is entitled to learn
+  expect((await request.get('/shared/definitely-not-a-real-token.pdf')).status()).toBe(404);
+
+  // and the firm can take it back
+  const shareId = await page.evaluate(async (deal) => {
+    const r = await fetch(`/trpc/appraisal.shares?input=${encodeURIComponent(JSON.stringify({ json: deal }))}`, {
+      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+    });
+    const rows = (await r.json()).result.data.json as Array<{ id: string; state: string }>;
+    return rows.find((x) => x.state === 'live')!.id;
+  }, dealId);
+
+  await page.evaluate(async (id) => {
+    await fetch('/trpc/appraisal.revokeShare', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ json: { id } }),
+    });
+  }, shareId);
+
+  expect((await request.get(url)).status()).toBe(404);
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.
