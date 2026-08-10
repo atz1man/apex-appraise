@@ -11,6 +11,7 @@ export default defineConfig({
       '/reports': { target: 'http://localhost:4100', changeOrigin: true },
       // public read-only report links, same as nginx does in production
       '/shared': { target: 'http://localhost:4100', changeOrigin: true },
+      '/api': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {

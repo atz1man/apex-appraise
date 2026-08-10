@@ -27,6 +27,15 @@ server {
     client_max_body_size 100m;
   }
 
+  # The public API. Without this, /api/v1/... falls through to the SPA and an
+  # integrator receives index.html with HTTP 200 — a failure that looks exactly
+  # like success, which is the worst kind to ship.
+  location /api/ {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
+  }
+
   # public read-only report links — rendered by the API, same timeout as /reports/
   location /shared/ {
     proxy_pass http://${API_UPSTREAM};
