@@ -728,7 +728,7 @@ export const orgRouter = router({
         p.holding.findMany({ where: { investor: { orgId } } }),
         p.cashflow.findMany({ where: { investor: { orgId } } }),
         p.payment.findMany({ where: { orgId } }),
-        p.benchmarkPoint.findMany({ where: { orgId, isOwn: true } }),
+        p.benchmarkPoint.findMany({ where: { orgId, source: 'contributed' } }),
         p.integrationConnection.findMany({ where: { orgId }, select: { id: true, provider: true, status: true, lastSync: true } }),
       ]);
     // Deep-convert BigInt (pence) → Number for a portable plain-JSON file

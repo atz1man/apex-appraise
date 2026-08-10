@@ -21,6 +21,12 @@ model Organisation {
   plan      String     @default("TRIAL") // TRIAL | STARTER | GROWTH | ENTERPRISE
   stripeCustomerId String?
   stripeSubscriptionId String?
+  // Contributing a client's appraisal ratios to a shared pool is a decision a
+  // firm makes deliberately — the underlying figures are client-confidential —
+  // so it is off until somebody with authority turns it on. Reading cohorts is
+  // NOT gated on contributing: making a paid feature conditional on sharing
+  // client data would be pressure dressed up as reciprocity.
+  contributesBenchmarks Boolean @default(false)
   users     User[]
   deals     Deal[]
   contractors Contractor[]
@@ -767,11 +773,20 @@ model BenchmarkPoint {
   metric   String // buildPsf | gdvPsf | poc
   value    Float
   period   String // e.g. "2026-Q2"
-  isOwn    Boolean @default(false)
+  // 'contributed' — a real appraisal a firm chose to contribute, and the only
+  // kind that may be presented as market evidence.
+  // 'illustrative' — demonstration figures. Labelled as such wherever shown, and
+  // never mixed into a contributed cohort: a valuer citing invented comparables
+  // is a professional problem, not a cosmetic one.
+  source   String @default("contributed")
+  // the contributing firm. Null only for illustrative points. Kept so a cohort
+  // can count DISTINCT contributors and exclude the reader's own figures.
   orgId    String?
-  dealName String? // only for own points
+  dealName String? // returned only to the contributing org, never to a cohort reader
+  createdAt DateTime @default(now())
 
   @@index([region, useClass, metric])
+  @@index([orgId])
 }
 
 // ---- Integrations ----

@@ -5,5 +5,6 @@ export * from './exposure.js';
 export * from './drawdown.js';
 export * from './covenants.js';
 export * from './cash.js';
+export * from './benchmarks.js';
 export * from './rollups.js';
 export * from './format.js';

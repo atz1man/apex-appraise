@@ -25,23 +25,79 @@ const ordinal = (n: number) => {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 };
 
+type Cohort =
+  | { published: true; lo: number; p25: number; median: number; p75: number; hi: number; points: number; contributors: number }
+  | {
+      published: false;
+      reason: 'no_data' | 'too_few_contributors' | 'too_few_points';
+      points: number;
+      contributors: number;
+      minContributors: number;
+      minPoints: number;
+    };
+
+/** Where a cohort's numbers came from. Shown, never inferred. */
+type Basis = 'contributed' | 'illustrative' | 'none';
+
 type MetricStats = {
-  lo: number;
-  p25: number;
-  median: number;
-  p75: number;
-  hi: number;
+  basis: Basis;
+  cohort: Cohort;
   yours: number | null;
   rank: number | null;
-  sampleSize: number;
   ownDeals: Array<{ value: number; dealName: string | null; period: string }>;
 };
 
+/**
+ * Why a cohort is being withheld, in words a surveyor can act on.
+ *
+ * The alternative — the thing this replaces — was quantiles of zero rendered as a
+ * £0/ft² market benchmark, which reads as a measurement rather than an absence.
+ */
+function withheldReason(c: Extract<Cohort, { published: false }>, scope: string): string {
+  if (c.reason === 'no_data') return `No contributed appraisals in ${scope} yet.`;
+  if (c.reason === 'too_few_contributors') {
+    return `Held back until ${c.minContributors} separate firms have contributed — ${c.contributors} so far. A median across fewer than that is close to publishing somebody's own cost base.`;
+  }
+  return `Only ${c.points} appraisals from ${c.contributors} firms so far, against a minimum of ${c.minPoints}. Too thin to publish as a median.`;
+}
+
 /** Percentile strip card: IQR band, median tick, your marker, rank badge. */
-function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: MetricStats; isPct?: boolean; lowerBetter?: boolean }) {
+function MetricCard({
+  label,
+  m,
+  scope,
+  isPct,
+  lowerBetter,
+}: {
+  label: string;
+  m: MetricStats;
+  scope: string;
+  isPct?: boolean;
+  lowerBetter?: boolean;
+}) {
   const fmt = (v: number) => (isPct ? formatPct(v, 0) : `£${Math.round(v)}`);
-  const range = m.hi - m.lo || 1;
-  const pos = (v: number) => Math.max(3, Math.min(97, ((v - m.lo) / range) * 100));
+  const c = m.cohort;
+
+  /**
+   * A withheld cohort still shows the firm its OWN figure — that is its own data
+   * and always available — but no strip, no rank and no "vs median", because
+   * there is no median anyone should be quoting.
+   */
+  if (!c.published) {
+    return (
+      <div className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
+        <span className="label-mono text-ink-3">{label}</span>
+        <div className="mt-2 fig text-[24px] font-semibold tracking-[-1px]">{m.yours != null ? fmt(m.yours) : '—'}</div>
+        <div className="mt-2.5 rounded-[9px] bg-sunken px-2.5 py-2 text-[11px] leading-[1.5] text-ink-2b">
+          <span className="label-mono text-ink-3">NO BENCHMARK YET</span>
+          <div className="mt-1">{withheldReason(c, scope)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const range = c.hi - c.lo || 1;
+  const pos = (v: number) => Math.max(3, Math.min(97, ((v - c.lo) / range) * 100));
 
   // rank wording from the raw percentile; goodness colouring inverts for lower-is-better metrics
   let badge: { label: string; text: string; bg: string } | null = null;
@@ -52,7 +108,7 @@ function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: Metric
     const tone = goodness >= 55 ? statusTokens.green : goodness >= 45 ? statusTokens.neutral : statusTokens.amber;
     badge = { label: `${ordinal(m.rank)} · ${wording}`, text: tone.text, bg: tone.bg };
 
-    const delta = m.yours - m.median;
+    const delta = m.yours - c.median;
     const good = lowerBetter ? delta < 0 : delta > 0;
     const deltaStr = isPct
       ? `${formatPp(Math.round(delta * 100))} vs median`
@@ -83,9 +139,9 @@ function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: Metric
         <div className="absolute left-0 right-0 top-[9px] h-1.5 rounded-[3px] bg-sunken-2" />
         <div
           className="absolute top-[9px] h-1.5 rounded-[3px]"
-          style={{ background: 'rgb(var(--border-green-soft, 214 230 221))', left: `${pos(m.p25)}%`, width: `${Math.max(0, pos(m.p75) - pos(m.p25))}%` }}
+          style={{ background: 'rgb(var(--border-green-soft, 214 230 221))', left: `${pos(c.p25)}%`, width: `${Math.max(0, pos(c.p75) - pos(c.p25))}%` }}
         />
-        <div className="absolute top-1 h-4 w-[2px] bg-ink-3 -translate-x-[1px]" style={{ left: `${pos(m.median)}%` }} />
+        <div className="absolute top-1 h-4 w-[2px] bg-ink-3 -translate-x-[1px]" style={{ left: `${pos(c.median)}%` }} />
         {m.yours != null && (
           <div
             className="absolute top-[5px] w-3.5 h-3.5 rounded-full border-2 border-surface -translate-x-1/2"
@@ -95,11 +151,18 @@ function MetricCard({ label, m, isPct, lowerBetter }: { label: string; m: Metric
         )}
       </div>
       <div className="mt-1.5 flex justify-between fig text-[9.5px] font-medium text-ink-3">
-        <span>{fmt(m.lo)}</span>
-        <span>med {fmt(m.median)}</span>
-        <span>{fmt(m.hi)}</span>
+        <span>{fmt(c.lo)}</span>
+        <span>med {fmt(c.median)}</span>
+        <span>{fmt(c.hi)}</span>
       </div>
-      {m.yours == null && <div className="mt-2 text-[11px] text-ink-3b">No deals of yours in this scope yet.</div>}
+      <div className="mt-2 text-[10.5px] leading-[1.45] text-ink-3b">
+        {m.basis === 'illustrative' ? (
+          <>Illustrative sample — demonstration figures, not market evidence.</>
+        ) : (
+          <>{n0(c.points)} appraisals from {n0(c.contributors)} firms. Yours are excluded.</>
+        )}
+      </div>
+      {m.yours == null && <div className="mt-1.5 text-[11px] text-ink-3b">No deals of yours in this scope yet.</div>}
     </div>
   );
 }
@@ -120,14 +183,32 @@ export default function Benchmarking() {
       utils.benchmarks.invalidate();
     },
   });
+  const setContribution = trpc.benchmarks.setContribution.useMutation({
+    onSuccess: () => {
+      utils.benchmarks.invalidate();
+    },
+  });
+  /**
+   * While the change is in flight the control shows what was ASKED FOR, not the
+   * stale server value — otherwise the switch visibly springs back under the
+   * cursor and reads as broken. It is not a claim of success: a failure reverts
+   * it and shows the error underneath.
+   */
+  const optedIn = setContribution.isPending
+    ? (setContribution.variables?.enabled ?? contribQ.data?.optedIn ?? false)
+    : (contribQ.data?.optedIn ?? false);
   const effectiveContribId = contribDealId || dealsQ.data?.deals.find((d) => d.name.startsWith('Northgate'))?.id || dealsQ.data?.deals[0]?.id || '';
 
   const M = metricsQ.data;
-  const trend = trendQ.data ?? [];
+  const trend = trendQ.data?.series ?? [];
+  const trendBasis = trendQ.data?.basis ?? 'none';
   const scopeShort = `${useLabel(useClass)} · ${region}`;
 
   // ---- trend chart scaffolding (hand-rolled bars, £ axis) ----
-  const allVals = trend.flatMap((t) => [t.marketMedian, ...t.own.map((o) => o.value)]).filter((v) => v > 0);
+  // a withheld quarter contributes no median — it must not pull the axis to zero
+  const allVals = trend
+    .flatMap((t) => [t.cohortMedian, ...t.own.map((o) => o.value)])
+    .filter((v): v is number => v != null && v > 0);
   const axMax = allVals.length ? Math.ceil((Math.max(...allVals) * 1.08) / 10) * 10 : 100;
   const axMin = allVals.length ? Math.max(0, Math.floor((Math.min(...allVals) * 0.88) / 10) * 10) : 0;
   const hOf = (v: number) => Math.max(0, Math.min(100, ((v - axMin) / (axMax - axMin || 1)) * 100));
@@ -135,16 +216,19 @@ export default function Benchmarking() {
   const ticks = [0, 1, 2, 3].map((i) => Math.round(axMin + tickStep * i));
 
   // latest own point vs market for the callout
-  const latestOwn = [...trend].reverse().find((t) => t.own.length > 0);
+  // only a quarter that has BOTH your deals and a publishable median can be
+  // compared; the rest have nothing honest to say
+  const latestOwn = [...trend].reverse().find((t) => t.own.length > 0 && t.cohortMedian != null);
   const latestCallout = latestOwn
     ? (() => {
         const you = latestOwn.own.reduce((a, o) => a + o.value, 0) / latestOwn.own.length;
-        const mkt = latestOwn.marketMedian;
+        const mkt = latestOwn.cohortMedian!;
         const diffPct = mkt ? Math.round(Math.abs((you - mkt) / mkt) * 100) : 0;
         return {
           you: `£${Math.round(you)}`,
           mkt: `£${Math.round(mkt)}`,
-          text: `${diffPct}% ${you <= mkt ? 'below' : 'above'} market`,
+          // "market" is a claim; an illustrative series has not earned the word
+          text: `${diffPct}% ${you <= mkt ? 'below' : 'above'} ${trendBasis === 'illustrative' ? 'the illustrative median' : 'market'}`,
           good: you <= mkt,
         };
       })()
@@ -171,22 +255,32 @@ export default function Benchmarking() {
   // ---- derived intelligence sentences ----
   const insights: string[] = [];
   if (M) {
-    if (M.buildPsf.yours != null && M.buildPsf.median > 0) {
-      const diff = Math.round(((M.buildPsf.median - M.buildPsf.yours) / M.buildPsf.median) * 100);
+    const buildCohort = M.buildPsf.cohort;
+    const pocCohort = M.poc.cohort;
+    /**
+     * Every sentence below is a market claim, so each one is gated on a
+     * publishable cohort of REAL contributions. An insight drawn from
+     * demonstration figures would be the most convincing thing on the screen and
+     * the least true.
+     */
+    const evidential = M.buildPsf.basis === 'contributed';
+    if (evidential && buildCohort.published && M.buildPsf.yours != null && buildCohort.median > 0) {
+      const diff = Math.round(((buildCohort.median - M.buildPsf.yours) / buildCohort.median) * 100);
       insights.push(
         diff >= 0
           ? `Your build costs run ${diff}% below the ${region} median for ${useLabel(useClass).toLowerCase()} — a consistent procurement edge.`
           : `Your build costs run ${Math.abs(diff)}% above the ${region} median for ${useLabel(useClass).toLowerCase()} — worth a procurement review before the next scheme.`,
       );
     }
-    if (M.poc.yours != null && M.poc.rank != null) {
+    if (M.poc.basis === 'contributed' && pocCohort.published && M.poc.yours != null && M.poc.rank != null) {
       insights.push(
         `Profit on cost sits at the ${ordinal(M.poc.rank)} percentile of the benchmark set across your ${useLabel(useClass).toLowerCase()} schemes.`,
       );
     }
-    if (trend.length >= 3) {
-      const last = trend[trend.length - 1].marketMedian;
-      const prev = trend[trend.length - 2].marketMedian;
+    const published = trend.filter((t) => t.cohortMedian != null);
+    if (trendBasis === 'contributed' && published.length >= 3) {
+      const last = published[published.length - 1].cohortMedian!;
+      const prev = published[published.length - 2].cohortMedian!;
       const movePct = prev ? ((last - prev) / prev) * 100 : 0;
       insights.push(
         Math.abs(movePct) < 1.5
@@ -196,10 +290,25 @@ export default function Benchmarking() {
             : `Market build costs eased ${formatPct(Math.abs(movePct) / 100, 1)} last quarter — tender conditions are softening.`,
       );
     }
-    if (insights.length === 0) insights.push(`No deals of yours in ${scopeShort} yet — benchmarks below reflect the anonymised market set.`);
+    if (insights.length === 0) {
+      insights.push(
+        M.buildPsf.basis === 'illustrative'
+          ? `The ${scopeShort} figures below are illustrative — a demonstration of the shape, not measured evidence. Real comparisons appear once firms contribute.`
+          : M.buildPsf.cohort.published
+            ? `No deals of yours in ${scopeShort} yet — contribute an appraisal to see where you sit.`
+            : `No contributed benchmark for ${scopeShort} yet, so there is nothing to compare against.`,
+      );
+    }
   }
 
-  const sampleSize = M?.buildPsf.sampleSize ?? 0;
+  const headBasis = M?.buildPsf.basis ?? 'none';
+  const headCohort = M?.buildPsf.cohort;
+  const headline =
+    headBasis === 'illustrative'
+      ? 'Illustrative data'
+      : headCohort?.published
+        ? `${n0(headCohort.points)} appraisals · ${n0(headCohort.contributors)} firms`
+        : 'No benchmark yet';
   const loading = metricsQ.isLoading || trendQ.isLoading;
 
   return (
@@ -229,13 +338,15 @@ export default function Benchmarking() {
         <div className="mt-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="eyebrow">{scopeShort.toUpperCase()}</div>
-            <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">How your deals compare to the market</h1>
+            <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">
+              {headBasis === 'contributed' ? 'How your deals compare to the market' : 'How your deals compare'}
+            </h1>
           </div>
           <div className="flex items-center gap-[7px] px-[11px] py-1.5 rounded-[9px] bg-tint-success">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="rgb(var(--brand-ink, 20 80 59))">
               <path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" />
             </svg>
-            <span className="text-[11.5px] font-semibold text-brand-ink">n = {n0(sampleSize)} appraisals</span>
+            <span className="text-[11.5px] font-semibold text-brand-ink">{headline}</span>
           </div>
         </div>
 
@@ -247,9 +358,9 @@ export default function Benchmarking() {
           <>
             {/* percentile strip cards */}
             <div className="mt-[18px] grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              <MetricCard label="Build cost £/ft²" m={M.buildPsf} lowerBetter />
-              <MetricCard label="GDV £/ft²" m={M.gdvPsf} />
-              <MetricCard label="Profit on cost" m={M.poc} isPct />
+              <MetricCard label="Build cost £/ft²" m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
+              <MetricCard label="GDV £/ft²" m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
+              <MetricCard label="Profit on cost" m={M.poc} scope={scopeShort.toLowerCase()} isPct />
             </div>
 
             <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
@@ -262,7 +373,7 @@ export default function Benchmarking() {
                       <div className="text-right">
                         <div className="fig text-[10px] font-medium text-ink-3">Latest quarter with your data</div>
                         <div className="fig mt-0.5 text-[12px] font-semibold">
-                          Your {latestCallout.you} vs market median {latestCallout.mkt}{' '}
+                          Your {latestCallout.you} vs {trendBasis === 'illustrative' ? 'illustrative' : 'cohort'} median {latestCallout.mkt}{' '}
                           <span style={{ color: latestCallout.good ? statusTokens.green.text : statusTokens.red.text }}>
                             — {latestCallout.text}
                           </span>
@@ -297,14 +408,23 @@ export default function Benchmarking() {
                           <div className="absolute inset-0 flex items-end gap-2.5">
                             {trend.map((t) => (
                               <div key={t.period} className="flex-1 h-full relative flex items-end justify-center">
-                                {/* market median bar with value label */}
-                                <div className="relative w-[46%] rounded-t-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))', height: `${hOf(t.marketMedian)}%` }}>
-                                  {/* same as the deal label below: it sits over the muted bar
-                                      at phone widths (3.11:1 dark, 4.12:1 light) */}
-                                  <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink-2 whitespace-nowrap bg-surface rounded-[4px] px-1 leading-[1.35]">
-                                    £{Math.round(t.marketMedian)}
-                                  </span>
-                                </div>
+                                {/* cohort median bar — absent, with a reason, where the
+                                    quarter is too thin to publish. A zero-height bar would
+                                    read as a collapse in build costs. */}
+                                {t.cohortMedian == null ? (
+                                  <div
+                                    className="w-[46%] h-full border-x border-b-0 border-t-0 border-dashed border-border-faint"
+                                    title="Too few contributing firms in this quarter to publish a median"
+                                  />
+                                ) : (
+                                  <div className="relative w-[46%] rounded-t-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))', height: `${hOf(t.cohortMedian)}%` }}>
+                                    {/* same as the deal label below: it sits over the muted bar
+                                        at phone widths (3.11:1 dark, 4.12:1 light) */}
+                                    <span className="absolute -top-[14px] left-1/2 -translate-x-1/2 fig text-[8px] font-semibold text-ink-2 whitespace-nowrap bg-surface rounded-[4px] px-1 leading-[1.35]">
+                                      £{Math.round(t.cohortMedian)}
+                                    </span>
+                                  </div>
+                                )}
                                 {/* your deals as dots */}
                                 {t.own.map((o, i) => (
                                   <div
@@ -336,7 +456,7 @@ export default function Benchmarking() {
                       <div className="mt-3 flex gap-4 text-[10.5px] text-ink-3">
                         <span className="flex items-center gap-[5px]">
                           <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: 'rgb(var(--bar-muted, 201 214 206))' }} />
-                          Market median
+                          {trendBasis === 'illustrative' ? 'Illustrative median' : 'Cohort median'}
                         </span>
                         <span className="flex items-center gap-[5px]">
                           <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'rgb(var(--brand-ink, 20 80 59))' }} />
@@ -368,7 +488,9 @@ export default function Benchmarking() {
                       </thead>
                       <tbody>
                         {dealRows.map((r) => {
-                          const vs = r.poc != null && M.poc.median > 0 ? r.poc - M.poc.median : null;
+                          // no published median means no comparison to draw
+                          const pocC = M.poc.cohort;
+                          const vs = r.poc != null && pocC.published && pocC.median > 0 ? r.poc - pocC.median : null;
                           return (
                             <tr key={`${r.dealName}-${r.period}`} className="hover:bg-sunken transition-colors">
                               <Td className="font-semibold text-[13px]">{r.dealName}</Td>
@@ -472,15 +594,38 @@ export default function Benchmarking() {
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <h3 className="text-[13px] font-semibold">Data contribution</h3>
                   <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
-                    Benchmarks are built from anonymised, aggregated appraisals across the Apex network. Your deals feed the median; nothing
-                    identifiable is shared.
+                    Contributing shares three ratios from an appraisal — build £/ft², GDV £/ft² and profit on cost. Never the address, the
+                    client, the deal name or any absolute figure. A cohort is only ever published once{' '}
+                    {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
+                    against your own schemes.
                   </p>
+                  <label className="mt-3 flex items-start gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-[2px]"
+                      checked={optedIn}
+                      disabled={!contribQ.data || setContribution.isPending}
+                      onChange={(e) => setContribution.mutate({ enabled: e.target.checked })}
+                    />
+                    <span className="text-[11.5px] leading-[1.45] text-ink-2b">
+                      <span className="font-semibold text-ink">Contribute this workspace's appraisals</span>
+                      <br />
+                      Off by default. Turning it off again withdraws everything already contributed.
+                    </span>
+                  </label>
+                  {setContribution.data && setContribution.data.withdrawn > 0 && (
+                    <div className="mt-2 rounded-[8px] bg-sunken px-2.5 py-1.5 text-[11px] text-ink-2b">
+                      Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
+                    </div>
+                  )}
+                  {setContribution.error && <div className="mt-2 text-[11px] text-status-red">{setContribution.error.message}</div>}
                   <div className="mt-3 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas">
                     {contribQ.data ? (
                       <>
-                        <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-ink">{n0(contribQ.data.total)}</span>
+                        <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-ink">{n0(contribQ.data.firms)}</span>
                         <span className="text-[11.5px] leading-[1.4] text-ink-2b">
-                          anonymised data points · your org contributed {n0(contribQ.data.yours)}
+                          {contribQ.data.firms === 1 ? 'firm contributing' : 'firms contributing'} · {n0(contribQ.data.total)} data points ·
+                          yours {n0(contribQ.data.yours)}
                         </span>
                       </>
                     ) : (
@@ -488,14 +633,19 @@ export default function Benchmarking() {
                     )}
                   </div>
                   <div className="mt-3 flex items-center gap-2">
-                    <select className="flex-1 h-9 text-[12px]" value={effectiveContribId} onChange={(e) => setContribDealId(e.target.value)}>
+                    <select
+                      className="flex-1 h-9 text-[12px]"
+                      aria-label="Deal to contribute"
+                      value={effectiveContribId}
+                      onChange={(e) => setContribDealId(e.target.value)}
+                    >
                       {(dealsQ.data?.deals ?? []).map((d) => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </select>
                     <Button
                       loading={contribute.isPending}
-                      disabled={!effectiveContribId}
+                      disabled={!effectiveContribId || !contribQ.data?.optedIn}
                       onClick={() => contribute.mutate(effectiveContribId)}
                     >
                       Contribute

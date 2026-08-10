@@ -102,8 +102,81 @@ test.describe('internal screens', () => {
 
   test('benchmarking renders percentile strips', async ({ page }) => {
     await page.goto('/benchmarking');
-    await expect(page.getByText('How your deals compare to the market')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /How your deals compare/ })).toBeVisible();
     await expect(page.getByText('Build cost trend — £/ft²')).toBeVisible();
+  });
+
+  test('benchmarking never passes demonstration figures off as market evidence', async ({ page }) => {
+    await page.goto('/benchmarking');
+    /**
+     * This deployment's benchmark pool holds seeded demonstration figures and one
+     * contributing firm, so nothing here is market evidence. The screen has to say
+     * so — in the header, on every card, and in the wording of the headline, which
+     * must not claim a comparison "to the market" it cannot support.
+     */
+    await expect(page.getByText('Illustrative data')).toBeVisible();
+    await expect(page.getByText(/Illustrative sample — demonstration figures, not market evidence/).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How your deals compare', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How your deals compare to the market' })).toHaveCount(0);
+    // the legend and callout must not call an illustrative series "market" either
+    await expect(page.getByText('Illustrative median', { exact: true })).toBeVisible();
+    // and nowhere on the page may an illustrative figure be called a market one
+    await expect(page.getByText(/vs market median/)).toHaveCount(0);
+    await expect(page.getByText(/% below market|% above market/)).toHaveCount(0);
+  });
+
+  test('benchmark contribution is consented, and says what leaves the workspace', async ({ page }) => {
+    await page.goto('/benchmarking');
+    // the promise: three ratios, nothing identifying, and a floor before publication
+    await expect(page.getByText(/Never the address, the client, the deal name or any absolute figure/)).toBeVisible();
+    await expect(page.getByText(/A cohort is only ever published once 5 separate firms are in it/)).toBeVisible();
+  });
+
+  test.describe('on a workspace of its own', () => {
+    /**
+     * Toggling consent OFF withdraws everything the workspace has contributed —
+     * which is the point of the feature and precisely why this cannot run against
+     * the shared demo firm: the test would quietly delete its benchmark history
+     * on every run, and the next person to look at the demo would find it empty.
+     */
+    test('consent gates contribution in both directions', async ({ page }) => {
+      const stamp = Date.now();
+      await page.goto('/register');
+      await page.getByLabel(/Organisation name/i).fill(`Consent Co ${stamp}`);
+      await page.getByLabel(/Your name/i).fill('Cara Consent');
+      await page.getByLabel(/^Email/i).fill(`consent-${stamp}@test.co.uk`);
+      await page.getByLabel(/^Password/i).fill('super-secret-9');
+      await page.getByLabel(/Confirm password/i).fill('super-secret-9');
+      await page.getByRole('button', { name: /Create|Start/ }).click();
+      await expect(page.getByText('Add your first deal')).toBeVisible();
+      // a deal to offer, so the Contribute button is gated by CONSENT and not
+      // merely by having nothing to contribute
+      await page.getByRole('button', { name: 'Explore with a sample deal' }).click();
+      // wait for the navigation, not for text — 'Appraisal' also names a nav item,
+      // so a text match returns before the sample deal has been built
+      await page.waitForURL(/\/deal\//, { timeout: 60_000 });
+
+      await page.goto('/benchmarking');
+      const toggle = page.getByRole('checkbox');
+      const contribute = page.getByRole('button', { name: 'Contribute' });
+
+      // a new workspace has not been asked yet, so it has not consented
+      await expect(toggle).not.toBeChecked();
+      await expect(contribute, 'contributing was allowed without consent').toBeDisabled();
+
+      /**
+       * click() with a retrying assertion rather than check()/uncheck(): consent
+       * is a server round-trip, and those helpers verify the box the instant
+       * after the click, before the mutation has answered.
+       */
+      await toggle.click();
+      await expect(toggle).toBeChecked();
+      await expect(contribute).toBeEnabled();
+
+      await toggle.click();
+      await expect(toggle).not.toBeChecked();
+      await expect(contribute).toBeDisabled();
+    });
   });
 
   test('integrations catalogue with statuses', async ({ page }) => {

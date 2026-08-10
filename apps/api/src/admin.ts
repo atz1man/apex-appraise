@@ -31,7 +31,7 @@ export function registerAdmin(app: FastifyInstance) {
         ...orgCascadeDeletes(prisma, admin.orgId),
         // Market benchmark rows carry no orgId, so the org cascade skips them;
         // clear them too or every reset would duplicate the pseudo-market.
-        prisma.benchmarkPoint.deleteMany({ where: { isOwn: false } }),
+        prisma.benchmarkPoint.deleteMany({ where: { source: 'illustrative' } }),
       ]);
     }
     const orgId = await seedDemo(prisma);

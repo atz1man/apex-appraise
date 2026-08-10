@@ -21,7 +21,10 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
   // not enforced, or the demo cannot add a deal — and the first of those is how
   // limits quietly stop being real.
   const org = await prisma.organisation.create({
-    data: { name: 'Brookfield Developments', plan: 'ENTERPRISE' },
+    // the demo firm contributes, because further down it is given contributed
+    // benchmark points — a workspace holding contributions with consent switched
+    // off is a contradiction, and turning consent off is what withdraws them
+    data: { name: 'Brookfield Developments', plan: 'ENTERPRISE', contributesBenchmarks: true },
   });
 
   const [ao, dw, mv, pa] = await Promise.all([
@@ -550,7 +553,11 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
             const base = medians[metric][useClass] * (metric === 'poc' ? 1 : regionFactor[region]);
             const noise = 1 + (pseudo() - 0.5) * 0.36;
             await prisma.benchmarkPoint.create({
-              data: { region, useClass, metric, period, value: base * noise * (metric === 'poc' ? 1 : drift) },
+              // ILLUSTRATIVE, and marked as such. These figures come from a
+              // pseudo-random generator seeded three lines up — they are a shape
+              // for the demo, not evidence, and a valuer must never be able to
+              // mistake them for a market sample.
+              data: { region, useClass, metric, period, value: base * noise * (metric === 'poc' ? 1 : drift), source: 'illustrative' },
             });
           }
         }
@@ -568,7 +575,7 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
   ];
   for (const [metric, dealName, value, period] of own) {
     await prisma.benchmarkPoint.create({
-      data: { region: 'South West', useClass: 'INDUSTRIAL', metric, period, value, isOwn: true, orgId: org.id, dealName },
+      data: { region: 'South West', useClass: 'INDUSTRIAL', metric, period, value, source: 'contributed', orgId: org.id, dealName },
     });
   }
 
