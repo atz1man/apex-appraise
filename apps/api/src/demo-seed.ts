@@ -198,7 +198,9 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       aiUse:
         'Artificial intelligence may be used on this instruction to assist with document extraction, report narrative, data-room questions and scenario risk commentary. No artificial intelligence system computed, adjusted or approved any figure in this valuation. All monetary outputs are produced by the deterministic Apex Appraise engine from inputs accepted by the valuer, who retains full professional responsibility for the valuation and its conclusions. The report will state which of these were actually used, and the firm will provide further detail on request.',
       valuerName: 'Dana Whitlock MRICS',
-      valuerReg: 'RICS Registered Valuer · No. 1148207',
+      // a plausible-looking registration number in seeded data is one somebody
+      // real may hold; the demo's is unmistakably a sample
+      valuerReg: 'RICS Registered Valuer · No. SAMPLE-0000',
       issuedAt: new Date('2026-05-18'),
       acceptedAt: new Date('2026-05-21'),
       acceptedBy: 'R. Halewood',

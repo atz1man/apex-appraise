@@ -250,12 +250,18 @@ export const documentsRouter = router({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
         orderBy: { addedAt: 'desc' },
       });
-      const all = await ctx.prisma.document.findMany({ where: { dealId: input.dealId, orgId: ctx.principal.orgId }, select: { category: true, sizeBytes: true } });
+      const all = await ctx.prisma.document.findMany({
+        where: { dealId: input.dealId, orgId: ctx.principal.orgId },
+        select: { category: true, sizeBytes: true, extraction: true },
+      });
       const byCategory: Record<string, number> = {};
       let totalBytes = 0;
+      let awaited = 0;
       for (const d of all) {
         byCategory[d.category] = (byCategory[d.category] ?? 0) + 1;
-        totalBytes += Number(d.sizeBytes);
+        // an expected document holds no bytes and must not inflate the room's size
+        if (d.extraction === 'AWAITED') awaited++;
+        else totalBytes += Number(d.sizeBytes);
       }
       return {
         /**
@@ -271,11 +277,81 @@ export const documentsRouter = router({
         })),
         counts: { all: all.length, byCategory },
         totalBytes,
+        // stated separately so the room can show what is still outstanding
+        awaited,
       };
     }),
 
-  add: internalProcedure
-    .input(z.object({ dealId: z.string(), name: z.string().min(1), category: z.string(), sizeBytes: z.number().default(0) }))
+  /**
+   * Who can actually see this deal's documents.
+   *
+   * The panel this feeds used to render three hardcoded names — the demo firm's
+   * people — to every workspace on the platform. A data room's access list is a
+   * security statement: a firm reading it is deciding whether confidential
+   * material is exposed, and an invented list means they cannot see who really
+   * holds the keys while believing they can.
+   */
+  access: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+
+    const [members, holdings, buyerVisibleCount] = await Promise.all([
+      ctx.prisma.user.findMany({
+        where: { orgId: ctx.principal.orgId, principalType: 'internal' },
+        select: { id: true, name: true, initials: true, role: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      ctx.prisma.holding.findMany({
+        where: { dealId: deal.id },
+        select: { investor: { select: { id: true, name: true, initials: true, orgId: true } } },
+      }),
+      ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, buyerVisible: true } }),
+    ]);
+
+    // an investor reaches the deal through a holding, and only through one
+    const investors = holdings
+      .map((h) => h.investor)
+      .filter((inv) => inv.orgId === ctx.principal.orgId)
+      .filter((inv, i, all) => all.findIndex((x) => x.id === inv.id) === i);
+
+    const buyerAccounts = await ctx.prisma.user.count({
+      where: { orgId: ctx.principal.orgId, principalType: 'buyer', buyerUnitId: { not: null } },
+    });
+
+    return {
+      // permission words follow the role that actually governs the account
+      team: members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        initials: m.initials,
+        role: m.role,
+        permission: m.role === 'ADMIN' ? 'Full' : m.role === 'VIEWER' ? 'View' : 'Edit',
+        you: m.id === ctx.principal.userId,
+      })),
+      investors: investors.map((inv) => ({ id: inv.id, name: inv.name, initials: inv.initials, permission: 'View' })),
+      /**
+       * Buyers are counted, not named: a buyer sees only the documents flagged
+       * for them, so listing them beside people with full access would overstate
+       * what they reach. The count of flagged documents is the honest figure.
+       */
+      buyers: { accounts: buyerAccounts, visibleDocuments: buyerVisibleCount },
+    };
+  }),
+
+  /**
+   * List a document the deal is still WAITING for.
+   *
+   * This used to accept a size from the client, which sent a random number
+   * between 120KB and 6MB — so a row appeared in the data room carrying a
+   * plausible file size, the status of a stored file, an audit line saying
+   * "uploaded", and a link to nothing. In a room a lender reads, a document that
+   * does not exist is worse than a gap: a gap gets chased.
+   *
+   * It is now what it always was in truth — a placeholder for an expected
+   * document. No size, because there is no file to have one.
+   */
+  expect: internalProcedure
+    .input(z.object({ dealId: z.string(), name: z.string().min(1), category: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -287,13 +363,22 @@ export const documentsRouter = router({
           name: input.name,
           category: input.category,
           ext,
-          sizeBytes: BigInt(Math.round(input.sizeBytes)),
-          extraction: 'STORED',
+          sizeBytes: BigInt(0),
+          extraction: 'AWAITED',
+          // never offered to a buyer: there is nothing to offer
+          buyerVisible: false,
           addedById: ctx.principal.userId,
         },
       });
       await ctx.prisma.activityEvent.create({
-        data: { orgId: ctx.principal.orgId, dealId: input.dealId, actor: ctx.principal.name, action: 'uploaded', target: input.name },
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          actor: ctx.principal.name,
+          // "uploaded" was a lie in the audit trail as well as on the screen
+          action: 'listed as expected',
+          target: input.name,
+        },
       });
       return doc;
     }),
@@ -303,6 +388,18 @@ export const documentsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const doc = await ctx.prisma.document.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
       if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      /**
+       * An expected document cannot be marked stored, linked or extracted by
+       * pressing a chip — only an actual upload does that. Without this the
+       * placeholder could be walked back into claiming a file exists, which is
+       * the exact thing the AWAITED status was introduced to stop.
+       */
+      if (doc.extraction === 'AWAITED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'That document has not been received yet — upload the file to change its status.',
+        });
+      }
       return ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
     }),
 

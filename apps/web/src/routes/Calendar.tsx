@@ -4,19 +4,24 @@ import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 
-// ---- Team (matches the seeded org users / design handoff) ----
-const PEOPLE: Array<{ initials: string; name: string; short: string }> = [
-  { initials: 'AO', name: 'Arthur O.', short: 'Arthur' },
-  { initials: 'DW', name: 'Dana W.', short: 'Dana' },
-  { initials: 'MV', name: 'Marcus V.', short: 'Marcus' },
-  { initials: 'PA', name: 'Priya A.', short: 'Priya' },
+/**
+ * The team is the workspace's real members.
+ *
+ * This was a fixed list of four people from the seeded demo firm, shown to every
+ * workspace — so a firm filtered its calendar by strangers and could only assign
+ * work to people who do not exist, while its own colleagues were unreachable.
+ */
+const FLAT_ACCENTS = [
+  'rgb(var(--status-green, 30 122 85))',
+  'rgb(var(--status-blue, 45 91 168))',
+  'rgb(var(--status-amber, 154 98 18))',
+  'rgb(var(--status-purple, 107 78 138))',
 ];
-/** Flat per-person accent for calendar pill dots — per the design handoff prototype. */
-const FLAT: Record<string, string> = {
-  AO: 'rgb(var(--status-green, 30 122 85))',
-  DW: 'rgb(var(--status-blue, 45 91 168))',
-  MV: 'rgb(var(--status-amber, 154 98 18))',
-  PA: 'rgb(var(--status-purple, 107 78 138))',
+/** A stable accent per person, from their initials — never a random one. */
+const accentFor = (initials: string) => {
+  let h = 0;
+  for (const ch of initials) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return FLAT_ACCENTS[h % FLAT_ACCENTS.length];
 };
 
 const ASPECTS = ['Site visit', 'Comparables', 'Cost plan', 'Planning', 'Finance', 'Site purchase', 'Cashflow', 'Returns', 'Cost monitoring', 'General'];
@@ -56,6 +61,13 @@ export default function Calendar() {
 
   const { data: taskData, isLoading: tasksLoading } = trpc.tasks.list.useQuery({});
   const { data: dealData, isLoading: dealsLoading } = trpc.deals.list.useQuery({});
+  /** the workspace's real members, in the shape this screen uses */
+  const { data: members } = trpc.org.members.useQuery();
+  const PEOPLE = (members ?? []).map((m) => ({
+    initials: m.initials,
+    name: m.name,
+    short: m.name.split(/\s+/)[0] ?? m.name,
+  }));
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
@@ -290,7 +302,7 @@ export default function Calendar() {
                       const over = isOverdue(t);
                       const bg = t.done ? neutral.tintSuccess2 : over ? statusTokens.red.bg : neutral.tintSuccess;
                       const color = t.done ? statusTokens.green.text : over ? statusTokens.red.text : brandInk;
-                      const dot = t.done ? statusTokens.green.dot : over ? statusTokens.red.dot : (FLAT[t.assignee] ?? brand[500]);
+                      const dot = t.done ? statusTokens.green.dot : over ? statusTokens.red.dot : accentFor(t.assignee ?? '');
                       return (
                         <button
                           key={t.id}

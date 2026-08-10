@@ -179,6 +179,49 @@ test.describe('internal screens', () => {
     });
   });
 
+  test('the data room states who can actually reach it', async ({ page }) => {
+    const id = await northgateId(page);
+    await page.goto(`/deal/${id}/dataroom`);
+    /**
+     * This panel used to render three hardcoded names — the demo firm's people —
+     * to every workspace on the platform. A data room's access list is a security
+     * statement: a firm reading it decides whether confidential material is
+     * exposed, so it has to be the real one.
+     */
+    await expect(page.getByText('Access')).toBeVisible();
+    await expect(page.getByText('· you')).toBeVisible();
+    await expect(page.getByText('Administrator').first()).toBeVisible();
+  });
+
+  test('a document the deal is waiting for is not dressed as a stored file', async ({ page }) => {
+    const id = await northgateId(page);
+    await page.goto(`/deal/${id}/dataroom`);
+    const name = `Awaited survey ${Date.now()}.pdf`;
+    await page.getByRole('button', { name: /List one you are waiting for/ }).click();
+    await page.getByPlaceholder(/Document you are waiting for/).fill(name);
+    await page.getByRole('button', { name: 'List as expected' }).click();
+
+    await expect(page.getByText(name).first()).toBeVisible();
+    // no invented size, and a status that says what it is
+    await expect(page.getByText('AWAITED').first()).toBeVisible();
+    await expect(page.getByText('Expected — no file received yet').first()).toBeVisible();
+    // the audit trail said "uploaded" for a file that had never been sent
+    await expect(page.getByText(/listed as expected/).first()).toBeVisible();
+  });
+
+  test('the Red Book valuation is signed by the valuer named in the terms', async ({ page }) => {
+    const id = await northgateId(page);
+    await page.goto(`/deal/${id}/redbook`);
+    /**
+     * Both signature blocks used to print a hardcoded name and RICS registration
+     * number, on every firm's valuation. The valuer is the one the client agreed
+     * to in the terms of engagement — and no seeded registration number may look
+     * like one a real registered valuer might hold.
+     */
+    await expect(page.getByText(/RICS Registered Valuer/).first()).toBeVisible();
+    await expect(page.getByText('No. 1148207')).toHaveCount(0);
+  });
+
   test('integrations catalogue with statuses', async ({ page }) => {
     await page.goto('/integrations');
     await expect(page.getByText('Connect your data sources')).toBeVisible();

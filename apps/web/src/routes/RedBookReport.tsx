@@ -31,14 +31,26 @@ import { openReport } from '../lib/download';
 /* ------------------------------------------------------------------ */
 
 
-/** Evergreen gradient placeholders for the photo strip (photo-log pattern — no real images). */
-const PHOTO_GRADS = [
-  'linear-gradient(150deg,#1E7A55 0%,#14503B 60%,#0F3528 100%)',
-  'linear-gradient(150deg,#5E9C80 0%,#1B6048 55%,#0C2A20 100%)',
-  'linear-gradient(150deg,#7FB99E 0%,#1E7A55 50%,#13402F 100%)',
-];
-
-const VALUER = { name: 'Dana Whitlock MRICS', reg: 'RICS Registered Valuer · No. 1148207' };
+/**
+ * The valuer signing this report.
+ *
+ * This was a hardcoded name and RICS registration number — "Dana Whitlock MRICS,
+ * No. 1148207" — printed in both signature blocks of every Red Book valuation
+ * this platform produced, for every firm. A Red Book valuation is a signed
+ * professional document: the valuer's name and registration number are the whole
+ * of its authority and where its liability attaches, and that number may well
+ * belong to a real registered valuer who has never seen the property.
+ *
+ * The valuer is the one NAMED IN THE TERMS OF ENGAGEMENT for the instruction —
+ * the person the client agreed would carry it out. Where the terms do not name
+ * one, the report says so and prints no credentials, because an unsigned
+ * valuation is a fixable state and a falsely signed one is not.
+ */
+const valuerFrom = (toe?: { valuerName?: string | null; valuerReg?: string | null } | null) => {
+  const name = toe?.valuerName?.trim() ?? '';
+  const reg = toe?.valuerReg?.trim() ?? '';
+  return name ? { named: true as const, name, reg } : { named: false as const, name: '', reg: '' };
+};
 
 /** RICS Red Book definition of Market Value (VPS 4). */
 const MV_DEFINITION =
@@ -143,6 +155,14 @@ export default function RedBookReport() {
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
   // the report is written under the agreed terms of engagement — cite them (VPS 1)
   const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * Photographs of the subject. A Red Book report's photographs are part of the
+   * record of inspection — this page previously drew three gradients and captioned
+   * the first "Front elevation", asserting an inspection exhibit that did not
+   * exist, in a document carrying professional indemnity.
+   */
+  const { data: sitePhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  const valuer = valuerFrom(toe);
   const utils = trpc.useUtils();
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
@@ -404,8 +424,14 @@ export default function RedBookReport() {
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Valuer</div>
-                <div className="mt-1.5 text-[14px] font-semibold">{VALUER.name}</div>
-                <div className="text-[12.5px] text-ink-2">{VALUER.reg}</div>
+                {valuer.named ? (
+                  <>
+                    <div className="mt-1.5 text-[14px] font-semibold">{valuer.name}</div>
+                    {valuer.reg && <div className="text-[12.5px] text-ink-2">{valuer.reg}</div>}
+                  </>
+                ) : (
+                  <div className="mt-1.5 text-[12.5px] text-ink-2">Not named in the terms of engagement</div>
+                )}
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Reference</div>
@@ -486,14 +512,43 @@ export default function RedBookReport() {
         <A4Page>
           <PageHead title="Property & location" right="Section 1–2" />
 
-          {/* photo strip — evergreen placeholders per the photo-log pattern */}
-          <div className="mt-5 grid gap-2.5" style={{ gridTemplateColumns: '2fr 1fr 1fr', height: 208 }}>
-            <div className="rounded-[12px] relative" style={{ background: PHOTO_GRADS[0] }}>
-              <div className="absolute fig text-[10px] font-medium text-white rounded-[7px]" style={{ left: 12, bottom: 12, padding: '4px 9px', background: 'rgba(12,18,14,0.5)' }}>Front elevation</div>
-            </div>
-            <div className="rounded-[12px]" style={{ background: PHOTO_GRADS[1] }} />
-            <div className="rounded-[12px]" style={{ background: PHOTO_GRADS[2] }} />
-          </div>
+          {/**
+           * Photographs of the subject, with their own captions. Where none have
+           * been taken the report SAYS so — a valuation that appears to carry a
+           * photographic record it does not have misstates the inspection, and a
+           * reader has no way to tell from a captioned rectangle.
+           */}
+          {(() => {
+            const withFile = (sitePhotos ?? []).filter((ph) => ph.url).slice(0, 3);
+            if (withFile.length === 0) {
+              return (
+                <div
+                  className="mt-5 rounded-[12px] border border-dashed border-border-std flex items-center justify-center text-center"
+                  style={{ height: 96 }}
+                >
+                  <span className="text-[11.5px] text-ink-3">
+                    No inspection photographs are held on file for this property.
+                  </span>
+                </div>
+              );
+            }
+            const cols = withFile.length === 1 ? '1fr' : withFile.length === 2 ? '2fr 1fr' : '2fr 1fr 1fr';
+            return (
+              <div className="mt-5 grid gap-2.5" style={{ gridTemplateColumns: cols, height: 208 }}>
+                {withFile.map((ph) => (
+                  <div key={ph.id} className="rounded-[12px] relative overflow-hidden">
+                    <img src={ph.url} alt={ph.caption} style={{ height: '100%', width: '100%', objectFit: 'cover', display: 'block' }} />
+                    <div
+                      className="absolute fig text-[10px] font-medium text-white rounded-[7px]"
+                      style={{ left: 12, bottom: 12, padding: '4px 9px', background: 'rgba(12,18,14,0.5)' }}
+                    >
+                      {ph.caption}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           <Micro>1 · Description</Micro>
           <Body>
@@ -804,10 +859,19 @@ export default function RedBookReport() {
           <div className="mt-7 border-t border-border-std pt-6 flex justify-between items-end">
             <div>
               <div style={{ width: 188, height: 48, borderBottom: `1.5px solid ${neutral.crumb}` }} />
-              <div className="mt-2.5 text-[14px] font-semibold">{VALUER.name}</div>
-              <div className="text-[12px] text-ink-2">{VALUER.reg}</div>
-              <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
-              <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {today}</div>
+              {valuer.named ? (
+                <>
+                  <div className="mt-2.5 text-[14px] font-semibold">{valuer.name}</div>
+                  {valuer.reg && <div className="text-[12px] text-ink-2">{valuer.reg}</div>}
+                  <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
+                  <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {today}</div>
+                </>
+              ) : (
+                /* no name, no registration number, and no date pretending it was signed */
+                <div className="mt-2.5 text-[12px] leading-[1.5] text-ink-2" style={{ maxWidth: 300 }}>
+                  This report is unsigned. Name the valuer and their RICS registration number in the terms of engagement before it is issued.
+                </div>
+              )}
             </div>
             <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={brand[700]} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

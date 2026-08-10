@@ -4,6 +4,7 @@ import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { n0 } from '../lib/format';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
 const FOLDER_ICON = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
@@ -32,7 +33,7 @@ const EXT_STYLE: Record<string, { bg: string; color: string }> = {
 };
 const EXT_FALLBACK = { bg: 'rgb(var(--sunken-2, 240 239 233))', color: 'rgb(var(--ink-2b, 110 114 105))' };
 
-const STATUS_CHIP: Record<string, StatusKey> = { EXTRACTED: 'green', LINKED: 'blue', STORED: 'neutral' };
+const STATUS_CHIP: Record<string, StatusKey> = { EXTRACTED: 'green', LINKED: 'blue', STORED: 'neutral', AWAITED: 'amber' };
 const NEXT_STATUS: Record<string, 'EXTRACTED' | 'LINKED' | 'STORED'> = {
   EXTRACTED: 'LINKED',
   LINKED: 'STORED',
@@ -43,13 +44,33 @@ const STATUS_SUB: Record<string, string> = {
   EXTRACTED: 'Parsed by AI extraction',
   LINKED: 'Linked to appraisal',
   STORED: 'Stored — not yet extracted',
+  AWAITED: 'Expected — no file received yet',
 };
 
-const ACCESS = [
-  { initials: 'AO', name: 'Arthur O.', role: 'Owner', perm: 'Full', dot: 'linear-gradient(135deg,#1E7A55,#14503B)' },
-  { initials: 'DW', name: 'Dana W.', role: 'Valuer (MRICS)', perm: 'Edit', dot: 'linear-gradient(135deg,#3C7FB5,#1F4E73)' },
-  { initials: 'BF', name: 'Brookfield', role: 'Investor', perm: 'View', dot: 'linear-gradient(135deg,#9B79C0,#5E3F86)' },
+/**
+ * Role as a person reads it. The access list itself is now fetched — it used to
+ * be three hardcoded names shown to every workspace on the platform, which told
+ * a firm that people it had never heard of could read its confidential room.
+ */
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: 'Administrator',
+  ANALYST: 'Analyst',
+  SURVEYOR: 'Surveyor',
+  VIEWER: 'Viewer',
+};
+
+/** A stable colour per person, derived from their id — never a random one. */
+const AVATAR_GRADS = [
+  'linear-gradient(135deg,#1E7A55,#14503B)',
+  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
+  'linear-gradient(135deg,#9B79C0,#5E3F86)',
+  'linear-gradient(135deg,#C08A3E,#7A5220)',
 ];
+const gradOf = (id: string) => {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_GRADS[h % AVATAR_GRADS.length];
+};
 
 const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
@@ -82,8 +103,9 @@ export default function DataRoom() {
     { enabled: !!dealId },
   );
   const { data: activity } = trpc.documents.activity.useQuery(dealId, { enabled: !!dealId });
+  const accessQ = trpc.documents.access.useQuery(dealId, { enabled: !!dealId });
 
-  const addDoc = trpc.documents.add.useMutation({
+  const addDoc = trpc.documents.expect.useMutation({
     onSuccess: () => {
       utils.documents.list.invalidate();
       utils.documents.activity.invalidate(dealId);
@@ -126,8 +148,13 @@ export default function DataRoom() {
   const submitDoc = () => {
     if (!draft.name.trim() || addDoc.isPending) return;
     const name = draft.name.trim().includes('.') ? draft.name.trim() : `${draft.name.trim()}.pdf`;
-    // metadata only — no real file transfer; size is a plausible placeholder
-    addDoc.mutate({ dealId, name, category: draft.category, sizeBytes: Math.round(120_000 + Math.random() * 6_000_000) });
+    /**
+     * This lists a document the deal is still waiting for. It used to invent a
+     * file size between 120KB and 6MB and present the row as a stored file —
+     * complete with a link to nothing — which in a room a lender reads is worse
+     * than an obvious gap, because a gap gets chased.
+     */
+    addDoc.mutate({ dealId, name, category: draft.category });
   };
 
   /** real multipart upload to the API's local/S3-compatible store */
@@ -261,7 +288,7 @@ export default function DataRoom() {
                       openForm();
                     }}
                   >
-                    Add by name instead
+                    List one you are waiting for
                   </button>
                 </div>
                 {uploadError && <div className="mt-1 text-[11.5px] text-status-red">{uploadError}</div>}
@@ -272,7 +299,7 @@ export default function DataRoom() {
                 <input
                   autoFocus
                   className="flex-1"
-                  placeholder="File name — e.g. Elemental cost plan v4.xlsx"
+                  placeholder="Document you are waiting for — e.g. Elemental cost plan v4.xlsx"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   onKeyDown={(e) => e.key === 'Enter' && submitDoc()}
@@ -283,7 +310,7 @@ export default function DataRoom() {
                   ))}
                 </select>
                 <Button onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
-                  {!addDoc.isPending && 'Add document'}
+                  {!addDoc.isPending && 'List as expected'}
                 </Button>
                 <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
               </div>
@@ -295,8 +322,9 @@ export default function DataRoom() {
               <SkeletonRows rows={6} height={20} />
             </div>
           ) : docs.length === 0 ? (
-            <EmptyState title="This folder is empty" cta={<Button variant="secondary" onClick={openForm}>Upload a document</Button>}>
-              Upload contracts, reports and drawings — every document becomes part of the deal workfile.
+            <EmptyState title="This folder is empty" cta={<Button variant="secondary" onClick={openForm}>List an expected document</Button>}>
+              Drop in contracts, reports and drawings — every uploaded document becomes part of the deal workfile. You can also list one you
+              are still waiting for, so the gap is visible while it is chased.
             </EmptyState>
           ) : (
             <div className="bg-surface border border-border-strong rounded-card overflow-hidden shadow-rest">
@@ -333,16 +361,24 @@ export default function DataRoom() {
                     </div>
                     <div className="text-[12px] text-ink-2b" style={{ flex: 1.2 }}>{d.category}</div>
                     <div className="text-[12px] text-ink-2b" style={{ flex: 1 }}>{fmtDay(d.addedAt)}</div>
-                    <div className="fig text-right text-[11.5px] font-medium text-ink-3" style={{ flex: 1 }}>{fmtBytes(d.sizeBytes)}</div>
+                    {/* an expected document has no size, because it has no file */}
+                    <div className="fig text-right text-[11.5px] font-medium text-ink-3" style={{ flex: 1 }}>
+                      {d.extraction === 'AWAITED' ? '—' : fmtBytes(d.sizeBytes)}
+                    </div>
                     <div className="flex justify-end" style={{ flex: 1.2 }}>
-                      <button
-                        title="Click to cycle extraction status"
-                        className="cursor-pointer transition-opacity disabled:opacity-50"
-                        disabled={setExtraction.isPending}
-                        onClick={() => setExtraction.mutate({ id: d.id, status: NEXT_STATUS[d.extraction] ?? 'EXTRACTED' })}
-                      >
-                        <StatusChip status={STATUS_CHIP[d.extraction] ?? 'neutral'} label={d.extraction} />
-                      </button>
+                      {d.extraction === 'AWAITED' ? (
+                        // not cyclable: only an actual upload can make this a stored file
+                        <StatusChip status="amber" label="AWAITED" />
+                      ) : (
+                        <button
+                          title="Click to cycle extraction status"
+                          className="cursor-pointer transition-opacity disabled:opacity-50"
+                          disabled={setExtraction.isPending}
+                          onClick={() => setExtraction.mutate({ id: d.id, status: NEXT_STATUS[d.extraction] ?? 'EXTRACTED' })}
+                        >
+                          <StatusChip status={STATUS_CHIP[d.extraction] ?? 'neutral'} label={d.extraction} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -356,23 +392,57 @@ export default function DataRoom() {
         {/* access + activity */}
         <div className="bg-surface border-t lg:border-t-0 lg:border-l border-border-strong" style={{ padding: '22px 18px' }}>
           <div className="text-[13px] font-semibold">Access</div>
-          <div className="mt-3 flex flex-col gap-2.5">
-            {ACCESS.map((a) => (
-              <div key={a.initials} className="flex items-center gap-2.5">
-                <span
-                  className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
-                  style={{ background: a.dot }}
-                >
-                  {a.initials}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-medium">{a.name}</div>
-                  <div className="text-[10.5px] text-ink-3">{a.role}</div>
+          {accessQ.isLoading ? (
+            <div className="mt-3"><Spinner /></div>
+          ) : (
+            <div className="mt-3 flex flex-col gap-2.5">
+              {(accessQ.data?.team ?? []).map((a) => (
+                <div key={a.id} className="flex items-center gap-2.5">
+                  <span
+                    className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
+                    style={{ background: gradOf(a.id) }}
+                  >
+                    {a.initials}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-medium truncate">
+                      {a.name}
+                      {a.you && <span className="text-ink-3 font-normal"> · you</span>}
+                    </div>
+                    <div className="text-[10.5px] text-ink-3">{ROLE_LABEL[a.role] ?? a.role}</div>
+                  </div>
+                  <span className="fig text-[10px] font-medium text-ink-3">{a.permission}</span>
                 </div>
-                <span className="fig text-[10px] font-medium text-ink-3">{a.perm}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+              {(accessQ.data?.investors ?? []).map((inv) => (
+                <div key={inv.id} className="flex items-center gap-2.5">
+                  <span
+                    className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
+                    style={{ background: gradOf(inv.id) }}
+                  >
+                    {inv.initials}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-medium truncate">{inv.name}</div>
+                    <div className="text-[10.5px] text-ink-3">Investor · holds in this deal</div>
+                  </div>
+                  <span className="fig text-[10px] font-medium text-ink-3">{inv.permission}</span>
+                </div>
+              ))}
+              {/**
+               * Buyers are counted rather than listed: each reaches only the
+               * documents flagged for them, so naming them alongside people with
+               * full access would overstate what they can see.
+               */}
+              {(accessQ.data?.buyers.accounts ?? 0) > 0 && (
+                <div className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">
+                  {n0(accessQ.data!.buyers.accounts)} buyer{accessQ.data!.buyers.accounts === 1 ? '' : 's'} can reach{' '}
+                  {n0(accessQ.data!.buyers.visibleDocuments)} document{accessQ.data!.buyers.visibleDocuments === 1 ? '' : 's'} marked visible
+                  to them.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 text-[13px] font-semibold">Ask the workfile</div>
           <div className="mt-1 text-[11px] text-ink-3">The AI answers from this deal's uploaded documents only.</div>

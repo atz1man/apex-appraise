@@ -45,6 +45,7 @@ export default function InvestorPortal() {
   const effectiveId = selectedId ?? listQ.data?.[0]?.id ?? null;
   const getQ = trpc.investors.get.useQuery(effectiveId ?? '', { enabled: isInternal && !!effectiveId });
   const myQ = trpc.investors.myPosition.useQuery(undefined, { enabled: !isInternal });
+  const contactQ = trpc.investors.myContact.useQuery(undefined, { enabled: !isInternal });
 
   const inv = isInternal ? getQ.data : myQ.data;
   const isLoading = isInternal ? listQ.isLoading || getQ.isLoading : myQ.isLoading;
@@ -323,24 +324,30 @@ export default function InvestorPortal() {
                   </div>
                 </section>
 
-                {/* manager contact */}
+                {/* manager contact — the real administrator at the managing firm */}
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <h3 className="text-[13px] font-semibold">Your manager</h3>
-                  <div className="mt-3 flex items-center gap-[11px]">
-                    <Avatar initials="AO" size={40} />
-                    <div className="flex-1">
-                      <div className="text-[13px] font-semibold">Arthur O.</div>
-                      <div className="text-[11px] text-ink-3">Brookfield Developments</div>
+                  {contactQ.data?.manager ? (
+                    <div className="mt-3 flex items-center gap-[11px]">
+                      <Avatar initials={contactQ.data.manager.initials} size={40} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold truncate">{contactQ.data.manager.name}</div>
+                        <div className="text-[11px] text-ink-3 truncate">{contactQ.data.firm}</div>
+                      </div>
+                      <a
+                        href={`mailto:${contactQ.data.manager.email}`}
+                        className="w-[34px] h-[34px] rounded-[9px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
+                        title={`Email ${contactQ.data.manager.name}`}
+                        aria-label={`Email ${contactQ.data.manager.name}`}
+                      >
+                        <Icon d="M4 4h16v12H5.2L4 17.2z" size={16} color={brand[700]} strokeWidth={1.9} />
+                      </a>
                     </div>
-                    <a
-                      href="mailto:arthur@apexappraise.co.uk"
-                      className="w-[34px] h-[34px] rounded-[9px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
-                      title="Email Arthur"
-                      aria-label="Email Arthur"
-                    >
-                      <Icon d="M4 4h16v12H5.2L4 17.2z" size={16} color={brand[700]} strokeWidth={1.9} />
-                    </a>
-                  </div>
+                  ) : (
+                    <div className="mt-2.5 text-[11.5px] leading-[1.5] text-ink-3">
+                      {contactQ.isLoading ? 'Loading…' : `No named contact is set at ${contactQ.data?.firm || 'the managing firm'} yet.`}
+                    </div>
+                  )}
                 </section>
               </div>
             </div>

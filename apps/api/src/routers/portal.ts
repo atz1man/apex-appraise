@@ -64,6 +64,27 @@ export const investorsRouter = router({
     if (!ctx.principal.investorId) throw new TRPCError({ code: 'FORBIDDEN' });
     return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId);
   }),
+
+  /**
+   * Who to contact at the managing firm.
+   *
+   * The portal used to print "Arthur O. · Brookfield Developments" with a mailto
+   * to a demo address, to every investor of every firm. An LP writing to that
+   * address reaches nobody, and the firm never learns they tried.
+   */
+  myContact: investorProcedure.query(async ({ ctx }) => {
+    const [org, admin] = await Promise.all([
+      ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId }, select: { name: true } }),
+      ctx.prisma.user.findFirst({
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', role: 'ADMIN' },
+        select: { name: true, email: true, initials: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    // no administrator on the account is a real state, and better said than faked
+    if (!admin) return { firm: org?.name ?? '', manager: null };
+    return { firm: org?.name ?? '', manager: { name: admin.name, email: admin.email, initials: admin.initials } };
+  }),
 });
 
 /** First visit bootstraps the buyer's payment schedule from the unit's state. */

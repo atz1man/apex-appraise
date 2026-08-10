@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { computeAppraisal } from '@apex/appraisal-engine';
-import { brandMarkGradient } from '@apex/ui-tokens';
 import { fM } from '../lib/format';
 import { BrandMark, Icon } from '../components/ui';
 
@@ -155,13 +154,20 @@ const NAV_LINKS: Array<[string, string]> = [
 
 const TRUST_ROW = ['RICS Red Book native', 'Land Registry · EPC · planning data', 'Full audit trail'];
 
-const LOGOS = ['Brookfield', 'Meridian Capital', 'Harbour Group', 'Stour Estates', 'Glenfield'];
-
+/**
+ * What the product does, not what it has supposedly achieved.
+ *
+ * These were "58% less time per instruction", "2,400+ appraisals run on the
+ * platform" and "£1.2bn of GDV modelled to date" — an efficacy claim and two
+ * usage figures, none of them measured. A UK advertiser has to hold evidence for
+ * a claim like that before it is published, and the honest substitutes are the
+ * things a reader can verify by opening the output.
+ */
 const STATS: Array<[string, string]> = [
-  ['58%', 'less time per instruction'],
-  ['2,400+', 'appraisals run on the platform'],
-  ['£1.2bn', 'of GDV modelled to date'],
-  ['100%', 'figures traceable to evidence'],
+  ['100%', 'of figures traceable to their evidence'],
+  ['1', 'valuation engine behind every screen, export and report'],
+  ['RICS', 'Red Book structure, terms of engagement and AI disclosure'],
+  ['0', 'figures written by an AI model'],
 ];
 
 const STAGES: Array<[string, string, string]> = [
@@ -772,13 +778,18 @@ export default function Landing() {
         <HeroAppMock />
       </div>
 
-      {/* LOGOS / TRUST */}
+      {/**
+       * A customer logo wall used to sit here, naming five firms that are not
+       * customers, under "Trusted by developers & surveying firms across the UK".
+       * Replaced with the standards the product is actually built to — claims that
+       * can be checked by reading the output rather than taken on trust.
+       */}
       <div className="bg-surface border-b border-border-strong">
         <div className={`${WRAP} py-[30px] flex items-center gap-7 flex-wrap justify-center`}>
-          <span className="font-mono text-[12px] font-medium tracking-[0.5px] text-ink-2b">Trusted by developers &amp; surveying firms across the UK</span>
+          <span className="font-mono text-[12px] font-medium tracking-[0.5px] text-ink-2b">Built to</span>
           <div className="flex gap-9 items-center flex-wrap justify-center">
-            {LOGOS.map((name) => (
-              <span key={name} className="text-[17px] font-bold text-ink-2b">
+            {TRUST_ROW.map((name) => (
+              <span key={name} className="text-[15px] font-semibold text-ink-2b">
                 {name}
               </span>
             ))}
@@ -908,21 +919,20 @@ export default function Landing() {
           <svg width="34" height="34" viewBox="0 0 24 24" fill="#3FD894" className="opacity-50 mx-auto" aria-hidden="true">
             <path d="M10 7L7 12h3v5H4v-7l3-3h3zm10 0l-3 5h3v5h-6v-7l3-3h3z" />
           </svg>
+          {/**
+           * A testimonial attributed to a named director with MRICS post-nominals
+           * at a named firm used to sit here. Nobody said it. A testimonial has to
+           * be genuine and evidenced before it is published, and inventing one —
+           * complete with a professional designation — is the kind of thing that
+           * costs more to be caught at than it ever earns.
+           *
+           * What replaces it is the product's own commitment, which is ours to make.
+           */}
           <p className="mt-5 text-[22px] md:text-[28px] font-medium tracking-[-0.8px] leading-[1.3]">
-            &ldquo;It collapsed our appraisal-to-report cycle from days to hours — and for the first time every number in the pack traces
-            back to its evidence.&rdquo;
+            &ldquo;Every number in the pack traces back to the evidence it came from — and the model never writes one of them.&rdquo;
           </p>
-          <div className="mt-[26px] flex items-center justify-center gap-3">
-            <span
-              className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-[14px] font-semibold"
-              style={{ background: brandMarkGradient }}
-            >
-              DW
-            </span>
-            <span className="text-left">
-              <span className="block text-[14px] font-semibold">Dana Whitlock MRICS</span>
-              <span className="block text-[12.5px] text-accent-muted-2">Director, Brookfield Developments</span>
-            </span>
+          <div className="mt-[26px] text-[13px] text-accent-muted-2">
+            The commitment this product is built on. Customer references are available on request.
           </div>
         </div>
       </div>

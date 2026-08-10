@@ -105,6 +105,16 @@ export default function AppraisalReport() {
   const { data: org } = trpc.org.get.useQuery();
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The instruction's own terms carry who this was prepared FOR and BY. The cover
+   * used to print "Brookfield Developments Ltd" as the client of every firm's
+   * report, and to append "MRICS" to whichever user owned the deal — a claim of
+   * chartered status on someone's behalf that nothing in the product had checked.
+   */
+  const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
+  const preparedFor = toe?.clientName?.trim() || null;
+  // a name from the terms already carries its own post-nominals if the valuer has any
+  const preparedBy = toe?.valuerName?.trim() || deal?.owner?.name || null;
 
   const input = appr?.input;
 
@@ -572,11 +582,15 @@ export default function AppraisalReport() {
             <div className="grid grid-cols-2" style={{ gap: '26px 40px' }}>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Prepared for</div>
-                <div className="mt-1.5 text-[16px] font-semibold">Brookfield Developments Ltd</div>
+                <div className="mt-1.5 text-[16px] font-semibold">
+                  {preparedFor ?? <span className="text-[13px] font-medium text-ink-3">Client not named in the terms of engagement</span>}
+                </div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Prepared by</div>
-                <div className="mt-1.5 text-[16px] font-semibold">{deal?.owner?.name ?? 'D. Whitlock'} MRICS</div>
+                <div className="mt-1.5 text-[16px] font-semibold">
+                  {preparedBy ?? <span className="text-[13px] font-medium text-ink-3">Not named</span>}
+                </div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>File reference</div>
@@ -1251,7 +1265,7 @@ export default function AppraisalReport() {
           <div className="mt-8 flex gap-10">
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />
-              <div className="text-[12px] font-medium">{deal?.owner?.name ?? 'D. Whitlock'} MRICS</div>
+              <div className="text-[12px] font-medium">{preparedBy ?? 'Not named'}</div>
               <div className="text-[11px] text-ink-3">For and on behalf of {org?.name ?? 'Apex Appraise'}</div>
             </div>
             <div className="flex-1">
@@ -1280,9 +1294,23 @@ export default function AppraisalReport() {
                     </span>
                     <span className="fig text-[10px] font-medium text-ink-3">{fmtShort(ph.takenAt)}</span>
                   </div>
-                  <div className="flex items-end p-2.5" style={{ height: 180, background: PHOTO_GRADS[i % PHOTO_GRADS.length] }}>
-                    <span className="label-mono" style={{ color: 'rgba(255,255,255,0.75)' }}>Site photo</span>
-                  </div>
+                  {/**
+                   * The actual photograph. This block used to draw a gradient
+                   * labelled "Site photo" beside each record's real caption, date
+                   * and contractor — a monitoring report that showed a lender the
+                   * metadata of photographs it was hiding. Where a record genuinely
+                   * has no file yet, it says that rather than filling the space.
+                   */}
+                  {ph.url ? (
+                    <img src={ph.url} alt={ph.caption} style={{ height: 180, width: '100%', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    <div
+                      className="flex items-center justify-center"
+                      style={{ height: 180, background: PHOTO_GRADS[i % PHOTO_GRADS.length] }}
+                    >
+                      <span className="label-mono" style={{ color: 'rgba(255,255,255,0.85)' }}>Photograph not uploaded</span>
+                    </div>
+                  )}
                   <div style={{ padding: '11px 13px' }}>
                     <div className="text-[12.5px] font-semibold truncate">{ph.caption}</div>
                     <div className="mt-1.5 flex items-center gap-1.5">
