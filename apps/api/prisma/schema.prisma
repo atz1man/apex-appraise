@@ -511,6 +511,72 @@ model SsoConnection {
   lastLoginAt  DateTime?
 }
 
+// A firm's bank feed, under UK Open Banking (PSD2).
+//
+// Xero says what suppliers INVOICED. This says what actually left the account,
+// and what the lender actually advanced. Until now "drawn" in the funding pack
+// was committed spend standing in for cash — a proxy a lender would not accept
+// for long.
+model BankConnection {
+  id            String    @id @default(cuid())
+  orgId         String    @unique
+  provider      String    @default("truelayer")
+  institution   String
+  accessToken   String
+  refreshToken  String
+  expiresAt     DateTime
+  // PSD2 account-information consent expires — 90 days is the UK norm — and the
+  // feed goes silent when it does. Stored so the product can say so BEFORE it
+  // stops rather than after.
+  consentExpiresAt DateTime
+  createdById   String
+  createdAt     DateTime  @default(now())
+  lastSyncAt    DateTime?
+  lastSyncError String?
+
+  accounts      BankAccount[]
+}
+
+model BankAccount {
+  id           String  @id @default(cuid())
+  orgId        String
+  connectionId String
+  connection   BankConnection @relation(fields: [connectionId], references: [id])
+  // the provider's id for this account
+  externalId   String
+  name         String
+  // last four only: a full account number has no business being stored to show
+  // somebody which account they picked
+  last4        String
+  currency     String  @default("GBP")
+  // which scheme this account funds, once someone says
+  dealId       String?
+  transactions BankTransaction[]
+
+  @@unique([connectionId, externalId])
+  @@index([orgId])
+}
+
+model BankTransaction {
+  id         String   @id @default(cuid())
+  orgId      String
+  accountId  String
+  account    BankAccount @relation(fields: [accountId], references: [id])
+  // the provider's id, so re-syncing the same window cannot double-count
+  externalId String
+  bookedAt   DateTime
+  // pence, signed: negative is money out
+  amount     BigInt
+  description String
+  // what the firm has said this is, never what we guessed:
+  // unclassified | drawdown | equity | receipt | cost
+  classification String @default("unclassified")
+  classifiedById String?
+
+  @@unique([accountId, externalId])
+  @@index([orgId, bookedAt])
+}
+
 model OrgPolicy {
   id    String @id @default(cuid())
   orgId String @unique

@@ -2068,6 +2068,13 @@ test('settings offers API keys, Xero and SSO, and is honest about what is missin
   await expect(page.getByText(/Xero is not configured on this server/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Connect Xero' })).toHaveCount(0);
 
+  // the bank feed says the same thing about itself, and explains what it is for
+  await expect(page.getByRole('heading', { name: 'Bank feed' })).toBeVisible();
+  await expect(page.getByText(/Open banking is not configured on this server/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect a bank account' })).toHaveCount(0);
+  // read-only is a promise worth making on the screen, not only in the scopes
+  await expect(page.getByText(/Read-only: Apex cannot move money/)).toBeVisible();
+
   // SSO: nothing can be saved until the fields that make it work are present
   await expect(page.getByRole('button', { name: 'Save' }).last()).toBeDisabled();
 

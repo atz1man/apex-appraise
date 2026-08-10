@@ -27,8 +27,16 @@ export interface ExposurePosition {
   /** peak debt: the most the facility is ever asked to carry */
   facility: number;
   equity: number;
-  /** committed spend to date, from cost monitoring */
+  /** committed spend to date, or actual drawdowns once a bank feed exists */
   drawn: number;
+  /** which of those it is — the pack states it rather than implying confidence */
+  drawnSource?: 'bank' | 'committed';
+  /** money actually out of the account, where known */
+  paid?: number;
+  invoicedUnpaid?: number;
+  paidUnbilled?: number;
+  /** money in that nobody has classified yet */
+  unclassifiedIn?: number;
   /**
    * How that spend compares with the works done. Optional because a deal with no
    * cost monitoring has nothing to compare — and null is the honest answer there,

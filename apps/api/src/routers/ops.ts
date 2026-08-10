@@ -21,6 +21,15 @@ import {
 } from '../xero.js';
 import { APP_URL } from '../email.js';
 import { recordAudit } from '../audit.js';
+import {
+  CONSENT_DAYS,
+  authorizeUrl as bankAuthorizeUrl,
+  bankConfigured,
+  exchangeCode as bankExchangeCode,
+  fetchAccounts,
+  newState,
+  syncBank,
+} from '../open-banking.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -419,6 +428,147 @@ ${question}`;
  * machinery than the problem deserves.
  */
 const xeroStates = new Map<string, { orgId: string; userId: string; at: number }>();
+
+export const bankRouter = router({
+  status: adminProcedure.query(async ({ ctx }) => {
+    const conn = await ctx.prisma.bankConnection.findUnique({
+      where: { orgId: ctx.principal.orgId },
+      include: { accounts: true },
+    });
+    const unclassified = conn
+      ? await ctx.prisma.bankTransaction.count({ where: { orgId: ctx.principal.orgId, classification: 'unclassified', amount: { gt: 0 } } })
+      : 0;
+    return {
+      configured: bankConfigured(),
+      connected: !!conn,
+      institution: conn?.institution ?? null,
+      lastSyncAt: conn?.lastSyncAt ?? null,
+      lastSyncError: conn?.lastSyncError ?? null,
+      consentExpiresAt: conn?.consentExpiresAt ?? null,
+      // days remaining, so a screen can warn BEFORE the feed goes quiet
+      consentDaysLeft: conn ? Math.ceil((conn.consentExpiresAt.getTime() - Date.now()) / 86_400_000) : null,
+      accounts: (conn?.accounts ?? []).map((a) => ({ id: a.id, name: a.name, last4: a.last4, dealId: a.dealId })),
+      unclassifiedIn: unclassified,
+    };
+  }),
+
+  connect: adminProcedure.mutation(async ({ ctx }) => {
+    if (!bankConfigured()) {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Open banking is not configured on this server.' });
+    }
+    const state = newState();
+    bankStates.set(state, { orgId: ctx.principal.orgId, userId: ctx.principal.userId, at: Date.now() });
+    return { url: bankAuthorizeUrl(`${APP_URL()}/settings?bank=1`, state) };
+  }),
+
+  complete: adminProcedure
+    .input(z.object({ code: z.string().min(1), state: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const pending = bankStates.get(input.state);
+      bankStates.delete(input.state);
+      if (!pending || pending.orgId !== ctx.principal.orgId || Date.now() - pending.at > 10 * 60_000) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That connection attempt has expired — start again.' });
+      }
+      const tokens = await bankExchangeCode(input.code, `${APP_URL()}/settings?bank=1`);
+      const accounts = await fetchAccounts(tokens.accessToken);
+      const consentExpiresAt = new Date(Date.now() + CONSENT_DAYS * 86_400_000);
+
+      const conn = await ctx.prisma.bankConnection.upsert({
+        where: { orgId: ctx.principal.orgId },
+        create: {
+          orgId: ctx.principal.orgId,
+          institution: accounts[0]?.name ?? 'Bank',
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+          consentExpiresAt,
+          createdById: ctx.principal.userId,
+        },
+        update: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+          // reconnecting renews the consent clock — that is the whole point of
+          // doing it, and leaving the old date would keep the warning showing
+          consentExpiresAt,
+          lastSyncError: null,
+        },
+      });
+
+      for (const a of accounts) {
+        await ctx.prisma.bankAccount.upsert({
+          where: { connectionId_externalId: { connectionId: conn.id, externalId: a.externalId } },
+          create: { orgId: ctx.principal.orgId, connectionId: conn.id, externalId: a.externalId, name: a.name, last4: a.last4, currency: a.currency },
+          // a re-connect must not drop which deal an account was mapped to
+          update: { name: a.name, last4: a.last4 },
+        });
+      }
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'connected a bank feed', target: `${accounts.length} account(s)`, ip: ctx.ip,
+      });
+      return { accounts: accounts.length, consentExpiresAt };
+    }),
+
+  mapAccount: adminProcedure
+    .input(z.object({ accountId: z.string(), dealId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const account = await assertOwned(ctx.prisma.bankAccount, input.accountId, ctx.principal.orgId);
+      if (input.dealId) {
+        const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+        if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+      await ctx.prisma.bankAccount.update({ where: { id: account.id }, data: { dealId: input.dealId } });
+      return { ok: true };
+    }),
+
+  sync: adminProcedure.mutation(({ ctx }) => syncBank(ctx.prisma, ctx.principal.orgId)),
+
+  /** Money in, awaiting a human saying what it is. */
+  unclassified: internalProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.bankTransaction.findMany({
+      where: { orgId: ctx.principal.orgId, classification: 'unclassified', amount: { gt: 0 } },
+      orderBy: { bookedAt: 'desc' },
+      take: 50,
+      include: { account: { select: { name: true, dealId: true } } },
+    });
+    return rows.map((t) => ({
+      id: t.id,
+      bookedAt: t.bookedAt,
+      amount: Number(t.amount) / 100,
+      description: t.description,
+      account: t.account.name,
+      dealId: t.account.dealId,
+    }));
+  }),
+
+  classify: internalProcedure
+    .input(z.object({ id: z.string(), classification: z.enum(['drawdown', 'equity', 'receipt', 'cost']) }))
+    .mutation(async ({ ctx, input }) => {
+      const tx = await assertOwned(ctx.prisma.bankTransaction, input.id, ctx.principal.orgId);
+      await ctx.prisma.bankTransaction.update({
+        where: { id: tx.id },
+        // who said so: a drawdown figure in a lender pack should be attributable
+        data: { classification: input.classification, classifiedById: ctx.principal.userId },
+      });
+      return { ok: true };
+    }),
+
+  disconnect: adminProcedure.mutation(async ({ ctx }) => {
+    const conn = await ctx.prisma.bankConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+    if (!conn) return { ok: true };
+    // transactions already imported are kept: they are this firm's record of what
+    // happened, not the provider's to take away
+    await ctx.prisma.bankConnection.delete({ where: { id: conn.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'disconnected the bank feed', target: conn.institution, ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+});
+
+const bankStates = new Map<string, { orgId: string; userId: string; at: number }>();
 
 export const xeroRouter = router({
   /** What this workspace's Xero link looks like right now. */

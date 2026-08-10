@@ -10,6 +10,7 @@ import {
   computeAppraisal,
   monthsBetween,
   postcodeArea,
+  reconcileCash,
   spendAgainstProgramme,
   testCovenants,
 } from '@apex/appraisal-engine';
@@ -90,12 +91,26 @@ export const dealsRouter = router({
    */
   exposure: internalProcedure.query(async ({ ctx }) => {
     const orgId = ctx.principal.orgId;
-    const [deals, appraisals, packages, policy] = await Promise.all([
+    const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
       ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       ctx.prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
       ctx.prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
       ctx.prisma.orgPolicy.findUnique({ where: { orgId } }),
+      // the bank feed, where one exists — cash beats a proxy built from invoices
+      ctx.prisma.bankAccount.findMany({
+        where: { orgId, dealId: { not: null } },
+        select: { dealId: true, transactions: { select: { amount: true, classification: true } } },
+      }),
     ]);
+
+    /** Per deal, the transactions of whichever accounts fund it. */
+    const cashBy = new Map<string, Array<{ amount: number; classification: string }>>();
+    for (const acct of bankAccounts) {
+      if (!acct.dealId) continue;
+      const list = cashBy.get(acct.dealId) ?? [];
+      for (const t of acct.transactions) list.push({ amount: Number(t.amount), classification: t.classification });
+      cashBy.set(acct.dealId, list);
+    }
     const limits = {
       ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
       ltcMaxPct: policy?.covLtcMaxPct ?? null,
@@ -126,6 +141,10 @@ export const dealsRouter = router({
         if (!a) return null;
         const r = computeAppraisal(appraisalRowToEngineInput(a));
         const cost = costBy.get(d.id);
+        const cash = reconcileCash({
+          committed: cost?.drawn ?? 0,
+          transactions: cashBy.get(d.id) as never,
+        });
         return {
           dealId: d.id,
           name: d.name,
@@ -136,7 +155,18 @@ export const dealsRouter = router({
           totalCost: r.totalCost,
           facility: r.facility,
           equity: r.equity,
-          drawn: cost?.drawn ?? 0,
+          /**
+           * Drawn comes from the bank when the deal has a mapped account, and
+           * from committed spend when it does not. `drawnSource` travels with it
+           * so the funding pack can say which — a figure taken from a statement
+           * and one inferred from invoices do not deserve equal confidence.
+           */
+          drawn: cash.drawn,
+          drawnSource: cash.drawnSource,
+          paid: cash.paid,
+          invoicedUnpaid: cash.invoicedUnpaid,
+          paidUnbilled: cash.paidUnbilled,
+          unclassifiedIn: cash.unclassifiedIn,
           drawdown:
             // only where there is something to measure: a deal with no cost
             // packages has no works to compare money against, and inventing a
@@ -148,7 +178,9 @@ export const dealsRouter = router({
                   profile: (a.spendProfile ?? 'SCURVE').toLowerCase() as never,
                   monthsElapsed:
                     a.startYear && a.startMonth ? monthsBetween({ year: a.startYear, month: a.startMonth }, new Date()) : 0,
-                  actualToDate: cost.drawn,
+                  // works are certified against what has actually been PAID once
+                  // a bank feed exists; invoiced-not-paid is a payables position
+                  actualToDate: cash.drawnSource === 'bank' ? cash.paid : cost.drawn,
                   progressPct: cost.weighted / cost.budget,
                 })
               : null,

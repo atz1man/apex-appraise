@@ -3,7 +3,7 @@ import { authRouter } from './routers/auth.js';
 import { dealsRouter } from './routers/deals.js';
 import { appraisalRouter, autoAppraisalRouter, comparablesRouter, scenariosRouter } from './routers/appraisal.js';
 import { salesRouter } from './routers/sales.js';
-import { costRouter, documentsRouter, integrationsRouter, photosRouter, tasksRouter, xeroRouter } from './routers/ops.js';
+import { bankRouter, costRouter, documentsRouter, integrationsRouter, photosRouter, tasksRouter, xeroRouter } from './routers/ops.js';
 import { orgRouter } from './routers/org.js';
 import { buyerRouter, investorsRouter } from './routers/portal.js';
 import { inspectionsRouter } from './routers/inspections.js';
@@ -26,6 +26,7 @@ export const appRouter = router({
   sitePack: sitePackRouter,
   billing: billingRouter,
   cost: costRouter,
+  bank: bankRouter,
   photos: photosRouter,
   tasks: tasksRouter,
   documents: documentsRouter,

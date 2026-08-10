@@ -39,6 +39,10 @@ export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.P
     prisma.webhookDelivery.deleteMany({ where: { orgId } }),
     prisma.webhookEndpoint.deleteMany({ where: { orgId } }),
     prisma.apiKey.deleteMany({ where: { orgId } }),
+    // transactions reference their account, which references the connection
+    prisma.bankTransaction.deleteMany({ where: { orgId } }),
+    prisma.bankAccount.deleteMany({ where: { orgId } }),
+    prisma.bankConnection.deleteMany({ where: { orgId } }),
     prisma.xeroDealMap.deleteMany({ where: { orgId } }),
     // the tokens go with the workspace: a refresh token outliving the firm that
     // granted it is a standing key to their accounting system
