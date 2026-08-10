@@ -278,6 +278,9 @@ model Contractor {
 }
 
 model CostPackage {
+  // manual | xero — a package fed by the ledger is not one a person maintains,
+  // and the sync must never overwrite what a quantity surveyor typed
+  source   String @default("manual")
   id       String @id @default(cuid())
   orgId    String
   dealId   String
@@ -445,6 +448,43 @@ model WebhookDelivery {
 
   @@index([orgId, createdAt])
   @@index([endpointId, status])
+}
+
+// A workspace's link to a Xero organisation.
+//
+// One row per Apex workspace. Tokens are stored because there is no other way to
+// hold an OAuth session, and the refresh token is the sensitive one: it is a
+// standing key to the customer's accounting system until revoked.
+model XeroConnection {
+  id           String    @id @default(cuid())
+  orgId        String    @unique
+  // Xero's own organisation id — a connection can span several, and the wrong
+  // one silently reads another company's ledger
+  tenantId     String
+  tenantName   String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scopes       String
+  connectedById String
+  connectedAt  DateTime  @default(now())
+  lastSyncAt   DateTime?
+  lastSyncError String?
+  // Xero tracking category used to say which deal a bill belongs to
+  trackingCategoryId   String?
+  trackingCategoryName String?
+}
+
+// Which Xero tracking option maps to which deal.
+model XeroDealMap {
+  id             String @id @default(cuid())
+  orgId          String
+  dealId         String
+  trackingOptionId   String
+  trackingOptionName String
+
+  @@unique([orgId, trackingOptionId])
+  @@index([orgId, dealId])
 }
 
 model OrgPolicy {

@@ -2,13 +2,16 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
-import { internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
 import { assertOwned } from '../auth/owned.js';
 import { signFileUrl } from '../uploads.js';
+import { XERO_SCOPES, authorizeUrl, exchangeCode, listConnections, syncXero, xeroConfigured } from '../xero.js';
+import { APP_URL } from '../email.js';
+import { recordAudit } from '../audit.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -400,6 +403,139 @@ ${question}`;
 }
 
 // ---------- Integrations & org ----------
+
+/**
+ * Pending OAuth states, in memory. Short-lived by nature (fifteen minutes), and
+ * losing them on restart costs an admin one retry — a table would be more
+ * machinery than the problem deserves.
+ */
+const xeroStates = new Map<string, { orgId: string; userId: string; at: number }>();
+
+export const xeroRouter = router({
+  /** What this workspace's Xero link looks like right now. */
+  status: internalProcedure.query(async ({ ctx }) => {
+    const conn = await ctx.prisma.xeroConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+    const maps = conn
+      ? await ctx.prisma.xeroDealMap.findMany({ where: { orgId: ctx.principal.orgId } })
+      : [];
+    return {
+      // configured is about THIS SERVER having Xero credentials; connected is
+      // about this workspace having linked an organisation. A screen that
+      // conflates them tells an admin to reconnect when the fault is ours.
+      configured: xeroConfigured(),
+      connected: !!conn,
+      tenantName: conn?.tenantName ?? null,
+      trackingCategoryName: conn?.trackingCategoryName ?? null,
+      lastSyncAt: conn?.lastSyncAt ?? null,
+      lastSyncError: conn?.lastSyncError ?? null,
+      mappedDeals: maps.length,
+    };
+  }),
+
+  /** Begin consent. Returns where to send the admin. */
+  connect: adminProcedure.mutation(({ ctx }) => {
+    if (!xeroConfigured()) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Xero is not configured on this server — set XERO_CLIENT_ID and XERO_CLIENT_SECRET.',
+      });
+    }
+    const { url, state } = authorizeUrl(`${APP_URL()}/integrations/xero/callback`);
+    // the state is checked on return; it is tied to the admin who started it
+    xeroStates.set(state, { orgId: ctx.principal.orgId, userId: ctx.principal.userId, at: Date.now() });
+    return { url };
+  }),
+
+  /** Finish consent. */
+  complete: adminProcedure
+    .input(z.object({ code: z.string().min(1), state: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const pending = xeroStates.get(input.state);
+      xeroStates.delete(input.state);
+      // an unknown or stale state is a cross-site attempt or a very slow human;
+      // either way it is not a consent we can trust
+      if (!pending || pending.orgId !== ctx.principal.orgId || Date.now() - pending.at > 15 * 60_000) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That Xero sign-in has expired — start again.' });
+      }
+      const tokens = await exchangeCode(input.code, `${APP_URL()}/integrations/xero/callback`);
+      const tenants = await listConnections(tokens.access_token);
+      if (!tenants.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No Xero organisation was granted.' });
+
+      const data = {
+        tenantId: tenants[0]!.tenantId,
+        tenantName: tenants[0]!.tenantName,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        scopes: tokens.scope ?? XERO_SCOPES,
+        connectedById: ctx.principal.userId,
+      };
+      await ctx.prisma.xeroConnection.upsert({
+        where: { orgId: ctx.principal.orgId },
+        create: { orgId: ctx.principal.orgId, ...data },
+        update: data,
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'connected Xero', target: tenants[0]!.tenantName, ip: ctx.ip,
+      });
+      return { tenantName: tenants[0]!.tenantName };
+    }),
+
+  setCategory: adminProcedure
+    .input(z.object({ id: z.string().min(1), name: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.xeroConnection.update({
+        where: { orgId: ctx.principal.orgId },
+        data: { trackingCategoryId: input.id, trackingCategoryName: input.name },
+      });
+      return { ok: true };
+    }),
+
+  mapDeal: adminProcedure
+    .input(z.object({ dealId: z.string(), trackingOptionId: z.string(), trackingOptionName: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.prisma.xeroDealMap.upsert({
+        where: { orgId_trackingOptionId: { orgId: ctx.principal.orgId, trackingOptionId: input.trackingOptionId } },
+        create: { orgId: ctx.principal.orgId, dealId: input.dealId, trackingOptionId: input.trackingOptionId, trackingOptionName: input.trackingOptionName },
+        update: { dealId: input.dealId, trackingOptionName: input.trackingOptionName },
+      });
+      return { ok: true };
+    }),
+
+  sync: adminProcedure.mutation(async ({ ctx }) => {
+    try {
+      const out = await syncXero(ctx.prisma, ctx.principal.orgId);
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'synced costs from Xero', target: `${out.packages} package(s), ${out.deals} deal(s)`, ip: ctx.ip,
+      });
+      return out;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Sync failed';
+      // recorded so the screen can show WHY without the admin opening a ticket
+      await ctx.prisma.xeroConnection
+        .update({ where: { orgId: ctx.principal.orgId }, data: { lastSyncError: message.slice(0, 300) } })
+        .catch(() => {});
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+    }
+  }),
+
+  disconnect: adminProcedure.mutation(async ({ ctx }) => {
+    await ctx.prisma.xeroDealMap.deleteMany({ where: { orgId: ctx.principal.orgId } });
+    await ctx.prisma.xeroConnection.deleteMany({ where: { orgId: ctx.principal.orgId } });
+    // packages already pulled are LEFT: they are the firm's cost record now, and
+    // deleting a month of monitoring because someone unlinked an account would be
+    // the integration doing damage on its way out
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'disconnected Xero', target: 'accounting', ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+});
 
 export const integrationsRouter = router({
   list: internalProcedure.query(async ({ ctx }) => {

@@ -39,6 +39,10 @@ export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.P
     prisma.webhookDelivery.deleteMany({ where: { orgId } }),
     prisma.webhookEndpoint.deleteMany({ where: { orgId } }),
     prisma.apiKey.deleteMany({ where: { orgId } }),
+    prisma.xeroDealMap.deleteMany({ where: { orgId } }),
+    // the tokens go with the workspace: a refresh token outliving the firm that
+    // granted it is a standing key to their accounting system
+    prisma.xeroConnection.deleteMany({ where: { orgId } }),
     prisma.errorEvent.deleteMany({ where: { orgId } }),
     prisma.benchmarkPoint.deleteMany({ where: { orgId } }),
     prisma.integrationConnection.deleteMany({ where: { orgId } }),
