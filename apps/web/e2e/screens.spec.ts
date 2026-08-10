@@ -751,11 +751,23 @@ test('firm logo brands the client-facing documents', async ({ page, request }) =
   const { url } = (await up.json()) as { url: string };
   expect(url).toMatch(/^\/uploads\/files\/logo-/);
 
-  // the uploaded file is reachable from the WEB origin, not just the API's —
-  // in production an nginx regex location used to swallow /uploads/*.png
-  const fetched = await request.get(url);
+  /**
+   * Reachable from the WEB origin, not just the API's — in production an nginx
+   * regex location used to swallow /uploads/*.png.
+   *
+   * With CREDENTIALS. This assertion used to fetch the URL bare and expect 200,
+   * which is to say it asserted the exposure: uploaded files were served by a
+   * static handler to anyone who had the URL, and the keys are a timestamp plus
+   * the original filename.
+   */
+  const fetched = await request.get(url, { headers: { authorization: `Bearer ${token}` } });
   expect(fetched.status()).toBe(200);
   expect(fetched.headers()['content-type']).toContain('image/png');
+
+  // and a stranger with the URL gets nothing — the same 404 as a file that was
+  // never there, because whether it exists is not theirs to learn
+  const anonymous = await request.get(url, { headers: { authorization: '' } });
+  expect(anonymous.status()).toBe(404);
 
   // settings shows the mark and offers to replace it
   await page.goto('/settings');

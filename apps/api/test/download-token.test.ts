@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { JWT_SECRET } from '../src/context.js';
 import { signDownloadToken, verifyDownloadToken } from '../src/download-token.js';
+import { signFileUrl } from '../src/uploads.js';
 import { callerFor, expectDenied, makeTenant, resetDatabase, type Tenant } from './harness.js';
 
 /**
@@ -97,5 +98,32 @@ describe('minting one', () => {
       token: string;
     };
     expect(verifyDownloadToken(token, { kind: 'portfolio' })).toEqual({ userId: A.userId });
+  });
+});
+
+describe('file tokens', () => {
+  it('name the single file they may fetch', () => {
+    const token = signDownloadToken({ sub: 'user-1', kind: 'file', key: '123-cost-plan.pdf' });
+    expect(verifyDownloadToken(token, { kind: 'file', key: '123-cost-plan.pdf' })).toEqual({ userId: 'user-1' });
+    // the keys are `<Date.now()>-<original filename>`, so a neighbouring file is
+    // a very short guess away — the token has to be the thing that stops it
+    expect(verifyDownloadToken(token, { kind: 'file', key: '124-cost-plan.pdf' })).toBeNull();
+    expect(verifyDownloadToken(token, { kind: 'file', key: '123-planning-decision.pdf' })).toBeNull();
+  });
+
+  it('cannot be used as a report token, or the reverse', () => {
+    const file = signDownloadToken({ sub: 'user-1', kind: 'file', key: 'k' });
+    expect(verifyDownloadToken(file, { kind: 'appraisal', dealId: 'deal-1' })).toBeNull();
+    const report = signDownloadToken({ sub: 'user-1', kind: 'appraisal', dealId: 'deal-1' });
+    expect(verifyDownloadToken(report, { kind: 'file', key: 'k' })).toBeNull();
+  });
+
+  it('signs only our own upload URLs, leaving anything else alone', () => {
+    const signed = signFileUrl('/uploads/files/123-plan.pdf', 'user-1');
+    expect(signed).toMatch(/^\/uploads\/files\/123-plan\.pdf\?t=/);
+    // not ours to sign — rewriting these would break them
+    expect(signFileUrl('https://example.com/x.pdf', 'user-1')).toBe('https://example.com/x.pdf');
+    expect(signFileUrl('', 'user-1')).toBe('');
+    expect(signFileUrl(null, 'user-1')).toBe('');
   });
 });

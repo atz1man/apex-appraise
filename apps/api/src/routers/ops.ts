@@ -8,6 +8,7 @@ import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-cre
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
 import { assertOwned } from '../auth/owned.js';
+import { signFileUrl } from '../uploads.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -150,7 +151,7 @@ export const photosRouter = router({
       caption: ph.caption,
       contractor: ph.contractor?.name ?? null,
       contractorId: ph.contractorId,
-      url: ph.url,
+      url: signFileUrl(ph.url, ctx.principal.userId),
       takenAt: ph.takenAt,
       weekCommencing: ph.weekCommencing,
     }));
@@ -236,7 +237,17 @@ export const documentsRouter = router({
         totalBytes += Number(d.sizeBytes);
       }
       return {
-        documents: docs.map((d) => ({ ...d, sizeBytes: Number(d.sizeBytes) })),
+        /**
+         * URLs come back SIGNED. An <img> or a link in a new tab cannot send a
+         * bearer header, so the file's own short-lived token rides in the URL —
+         * scoped to that one file, for half an hour. Files with no stored URL
+         * (metadata-only rows) are left alone.
+         */
+        documents: docs.map((d) => ({
+          ...d,
+          sizeBytes: Number(d.sizeBytes),
+          url: signFileUrl(d.url, ctx.principal.userId),
+        })),
         counts: { all: all.length, byCategory },
         totalBytes,
       };

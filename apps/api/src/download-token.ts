@@ -24,20 +24,30 @@ import { JWT_SECRET } from './context.js';
 export const DOWNLOAD_TOKEN_TTL = '2m';
 const AUDIENCE = 'apex.report-download';
 
-export type DownloadKind = 'appraisal' | 'redbook' | 'engagement' | 'portfolio';
+export type DownloadKind = 'appraisal' | 'redbook' | 'engagement' | 'portfolio' | 'file';
 
 export interface DownloadClaims {
   sub: string;
   kind: DownloadKind;
   /** absent for portfolio-wide documents, which are not scoped to one deal */
   dealId?: string;
+  /** for kind 'file': the stored upload key this token may fetch, and only that one */
+  key?: string;
 }
 
+/**
+ * Files live longer than reports. A report is opened once from a click; an
+ * uploaded photo or document sits in a page the user may leave open, and a
+ * two-minute URL would break the moment they came back from lunch. Half an hour,
+ * still scoped to a single file.
+ */
+export const FILE_TOKEN_TTL = '30m';
+
 export function signDownloadToken(claims: DownloadClaims): string {
-  return jwt.sign({ kind: claims.kind, dealId: claims.dealId }, JWT_SECRET, {
+  return jwt.sign({ kind: claims.kind, dealId: claims.dealId, key: claims.key }, JWT_SECRET, {
     subject: claims.sub,
     audience: AUDIENCE,
-    expiresIn: DOWNLOAD_TOKEN_TTL,
+    expiresIn: claims.kind === 'file' ? FILE_TOKEN_TTL : DOWNLOAD_TOKEN_TTL,
   });
 }
 
@@ -50,19 +60,22 @@ export function signDownloadToken(claims: DownloadClaims): string {
  */
 export function verifyDownloadToken(
   token: string,
-  want: { kind: DownloadKind; dealId?: string },
+  want: { kind: DownloadKind; dealId?: string; key?: string },
 ): { userId: string } | null {
   try {
     const claims = jwt.verify(token, JWT_SECRET, { audience: AUDIENCE }) as {
       sub?: string;
       kind?: string;
       dealId?: string;
+      key?: string;
     };
     if (!claims.sub) return null;
     if (claims.kind !== want.kind) return null;
     // a token for one deal must not fetch another's, and a deal-scoped token must
     // not stand in for the portfolio-wide one
     if ((claims.dealId ?? null) !== (want.dealId ?? null)) return null;
+    // a file token names the one file it may fetch
+    if ((claims.key ?? null) !== (want.key ?? null)) return null;
     return { userId: claims.sub };
   } catch {
     return null;

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { JWT_SECRET, prisma } from './context.js';
+import { signDownloadToken, verifyDownloadToken } from './download-token.js';
 
 const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 
@@ -39,10 +40,80 @@ const safeName = (name: string) => name.replace(/[^\w.\- ()£]/g, '_');
  * (apps/api/uploads/, gitignored); swap the write for S3 presigned uploads in prod —
  * the URL contract (`/uploads/files/<key>`) stays the same.
  */
+/**
+ * Which organisation owns a stored file.
+ *
+ * Uploads land in three places — deal documents, site photos and firm logos — and
+ * the key alone says nothing about who owns it. Anything not claimed by a row is
+ * not served at all, which also covers files left on disk by a deleted workspace.
+ */
+/**
+ * Append a file token to a stored upload URL.
+ *
+ * Returns anything that is not one of our upload URLs untouched — an external
+ * link or an empty string is not ours to sign, and quietly rewriting it would
+ * break it.
+ */
+export function signFileUrl(url: string | null | undefined, userId: string): string {
+  if (!url || !url.startsWith('/uploads/files/')) return url ?? '';
+  const key = url.slice('/uploads/files/'.length);
+  return `${url}?t=${encodeURIComponent(signDownloadToken({ sub: userId, kind: 'file', key }))}`;
+}
+
+async function orgForKey(key: string): Promise<string | null> {
+  const url = `/uploads/files/${key}`;
+  const [doc, photo, org] = await Promise.all([
+    prisma.document.findFirst({ where: { url }, select: { orgId: true } }),
+    prisma.sitePhoto.findFirst({ where: { url }, select: { orgId: true } }),
+    prisma.organisation.findFirst({ where: { logoUrl: url }, select: { id: true } }),
+  ]);
+  return doc?.orgId ?? photo?.orgId ?? org?.id ?? null;
+}
+
 export async function registerUploads(app: FastifyInstance) {
   await mkdir(UPLOAD_DIR, { recursive: true });
   await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
-  await app.register(fastifyStatic, { root: UPLOAD_DIR, prefix: '/uploads/files/' });
+  /**
+   * Uploaded files are SERVED behind a check, not by a static handler.
+   *
+   * `fastifyStatic` used to answer /uploads/files/<key> to anyone. The keys are
+   * `<Date.now()>-<original filename>`, so "cost-plan.pdf" or
+   * "planning-decision.pdf" plus a timestamp — guessable, and it did not much
+   * matter, because nothing was checked anyway. A client's cost plan came back
+   * with HTTP 200 to a request carrying no credentials at all.
+   *
+   * Two ways in, because two kinds of caller exist. Application code can send a
+   * bearer header; an <img> or a link in a new tab cannot, so those carry a token
+   * scoped to the single file (see download-token.ts). Both end in the same
+   * question: does this file belong to the caller's organisation?
+   */
+  await app.register(fastifyStatic, { root: UPLOAD_DIR, prefix: '/uploads/raw-internal/', serve: false });
+
+  app.get<{ Params: { '*': string }; Querystring: { t?: string } }>('/uploads/files/*', async (req, reply) => {
+    const key = req.params['*'];
+    if (!key || key.includes('..')) return reply.code(400).send({ error: 'bad key' });
+
+    const owner = await orgForKey(key);
+    // a key nobody owns is not a file we serve — never fall back to the disk
+    if (!owner) return reply.code(404).send({ error: 'not found' });
+
+    const bearer = await principalFrom(req);
+    let allowed = bearer?.orgId === owner;
+    if (!allowed && req.query.t) {
+      const claim = verifyDownloadToken(req.query.t, { kind: 'file', key });
+      if (claim) {
+        const u = await prisma.user.findUnique({ where: { id: claim.userId } });
+        allowed = !!u && u.orgId === owner;
+      }
+    }
+    // the same 404 either way: whether a file exists is not something to confirm
+    // to someone who may not have it
+    if (!allowed) return reply.code(404).send({ error: 'not found' });
+
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-robots-tag', 'noindex, nofollow');
+    return reply.sendFile(key, UPLOAD_DIR);
+  });
 
   app.post('/uploads/document', async (req, reply) => {
     const user = await principalFrom(req);

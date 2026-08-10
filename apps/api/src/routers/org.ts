@@ -10,6 +10,7 @@ import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEma
 import { orgCascadeDeletes } from '../org-delete.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
+import { signFileUrl } from '../uploads.js';
 
 const initialsOf = (name: string) =>
   name
@@ -104,7 +105,7 @@ export const orgRouter = router({
       ctx.prisma.user.count({ where: { orgId: org.id, principalType: 'internal' } }),
       ctx.prisma.investor.count({ where: { orgId: org.id } }),
     ]);
-    return { id: org.id, name: org.name, logoUrl: org.logoUrl, createdAt: org.createdAt, counts: { deals, users, investors } };
+    return { id: org.id, name: org.name, logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId), createdAt: org.createdAt, counts: { deals, users, investors } };
   }),
 
   /** Activation checklist — real completion state for the Hub's getting-started card. */
@@ -135,7 +136,7 @@ export const orgRouter = router({
       where: { id: ctx.principal.orgId },
       select: { name: true, logoUrl: true },
     });
-    return { name: org?.name ?? 'Apex Appraise', logoUrl: org?.logoUrl ?? '' };
+    return { name: org?.name ?? 'Apex Appraise', logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId) };
   }),
 
   /** Remove the firm mark and fall back to the Apex mark on documents. */
