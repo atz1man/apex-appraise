@@ -58,7 +58,7 @@ export const PLANS: PlanDef[] = [
     name: 'Enterprise',
     pricePencePerMonth: 39900,
     blurb: 'Multi-entity groups and funds',
-    features: ['Everything in Growth', 'Unlimited members', 'Priority support', 'Data exports + API access'],
+    features: ['Everything in Growth', 'Unlimited members', 'Priority support', 'Public API + webhooks'],
   },
 ];
 

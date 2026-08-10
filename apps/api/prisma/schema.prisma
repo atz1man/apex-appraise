@@ -386,6 +386,67 @@ model ReportShare {
   @@index([orgId, dealId])
 }
 
+// A machine's credential for the public API.
+//
+// Hashed like every other secret here: the raw key is shown once at creation and
+// cannot be produced again. `prefix` is stored in the clear ONLY so a screen can
+// say which key is which — it is not enough to authenticate with.
+model ApiKey {
+  id          String    @id @default(cuid())
+  orgId       String
+  name        String
+  // first characters, for identification in a list — never sufficient to auth
+  prefix      String
+  keyHash     String    @unique
+  // "read" or "read,write" — write is deliberately opt-in
+  scopes      String    @default("read")
+  createdById String
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  @@index([orgId])
+}
+
+// Where this workspace wants to be told when something happens.
+model WebhookEndpoint {
+  id          String    @id @default(cuid())
+  orgId       String
+  url         String
+  // shared secret for the signature; the receiver verifies with it
+  secret      String
+  // comma-separated event names this endpoint asked for
+  events      String
+  active      Boolean   @default(true)
+  createdById String
+  createdAt   DateTime  @default(now())
+  lastAttemptAt DateTime?
+  // consecutive failures — an endpoint that stops answering stops being tried
+  failureCount Int      @default(0)
+
+  deliveries  WebhookDelivery[]
+
+  @@index([orgId])
+}
+
+model WebhookDelivery {
+  id         String   @id @default(cuid())
+  orgId      String
+  endpointId String
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  event      String
+  payload    String
+  status     String   @default("pending") // pending | delivered | failed
+  attempts   Int      @default(0)
+  responseCode Int?
+  error      String?
+  createdAt  DateTime @default(now())
+  deliveredAt DateTime?
+
+  @@index([orgId, createdAt])
+  @@index([endpointId, status])
+}
+
 model OrgPolicy {
   id    String @id @default(cuid())
   orgId String @unique

@@ -7,11 +7,13 @@ import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
 import { registerReports } from './reports.js';
 import { registerWebhooks } from './webhooks.js';
+import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
 import type { TRPCError } from '@trpc/server';
 import type { FastifyError } from 'fastify';
 import { captureError, httpCapturePayload, trpcCapturePayload } from './errors.js';
 import { prisma, type Context } from './context.js';
+import { drainWebhooks } from './webhook-delivery.js';
 
 const PORT = Number(process.env.PORT ?? 4100);
 
@@ -62,8 +64,19 @@ async function main() {
   await registerUploads(app);
   registerReports(app);
   registerWebhooks(app);
+  registerPublicApi(app);
   registerAdmin(app);
   app.get('/health', async () => ({ ok: true, service: 'apex-api' }));
+  /**
+   * Webhook delivery runs on a timer in-process. No queue server: one more piece
+   * of infrastructure to operate is a worse trade at this size than a table and a
+   * loop, and the retry schedule lives in the delivery module either way.
+   */
+  const drain = setInterval(() => {
+    void drainWebhooks(prisma).catch((e: unknown) => app.log.error(e, 'webhook drain failed'));
+  }, 15_000);
+  drain.unref();
+
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`apex-api listening on :${PORT}`);
 }

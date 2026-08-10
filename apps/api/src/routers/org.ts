@@ -11,6 +11,10 @@ import { orgCascadeDeletes } from '../org-delete.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
 import { signFileUrl } from '../uploads.js';
+import { mintApiKey } from '../api-keys.js';
+import { recordAudit } from '../audit.js';
+import { assertOwned } from '../auth/owned.js';
+import { WEBHOOK_EVENTS, isWebhookEvent, newWebhookSecret } from '../webhook-delivery.js';
 
 const initialsOf = (name: string) =>
   name
@@ -487,6 +491,119 @@ export const orgRouter = router({
       // carry something that should not travel, and it is of no use in a list
       return rows;
     }),
+
+  /**
+   * API keys. Admin-only: a key is a standing credential for the whole
+   * workspace, which is not a thing an analyst should be able to mint.
+   */
+  apiKeys: adminProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.apiKey.findMany({
+      where: { orgId: ctx.principal.orgId },
+      orderBy: { createdAt: 'desc' },
+      // never the hash: it is not the key, but hashes get treated as secrets
+      select: { id: true, name: true, prefix: true, scopes: true, createdAt: true, lastUsedAt: true, revokedAt: true },
+    });
+    return rows.map((r) => ({ ...r, scopes: r.scopes.split(','), live: !r.revokedAt }));
+  }),
+
+  createApiKey: adminProcedure
+    .input(z.object({ name: z.string().min(1).max(60), write: z.boolean().default(false) }))
+    .mutation(async ({ ctx, input }) => {
+      const { key, prefix, keyHash } = mintApiKey();
+      const row = await ctx.prisma.apiKey.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          name: input.name,
+          prefix,
+          keyHash,
+          // write is opt-in: most integrations read, and a key that can only read
+          // is a smaller thing to lose
+          scopes: input.write ? 'read,write' : 'read',
+          createdById: ctx.principal.userId,
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'created an API key', target: `${input.name} (${prefix}…)`, ip: ctx.ip,
+      });
+      // the ONLY time the raw key exists in a response
+      return { id: row.id, name: row.name, key, scopes: row.scopes.split(',') };
+    }),
+
+  revokeApiKey: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.apiKey, input.id, ctx.principal.orgId);
+    if (!row.revokedAt) {
+      await ctx.prisma.apiKey.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'revoked an API key', target: `${row.name} (${row.prefix}…)`, ip: ctx.ip,
+      });
+    }
+    return { ok: true };
+  }),
+
+  /** Where this workspace wants to be told when something happens. */
+  webhooks: adminProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.prisma.webhookEndpoint.findMany({
+      where: { orgId: ctx.principal.orgId },
+      orderBy: { createdAt: 'desc' },
+      // never the secret: shown once at creation, like a key
+      select: { id: true, url: true, events: true, active: true, createdAt: true, lastAttemptAt: true, failureCount: true },
+    });
+    return { endpoints: rows.map((r) => ({ ...r, events: r.events.split(',').filter(Boolean) })), available: WEBHOOK_EVENTS };
+  }),
+
+  createWebhook: adminProcedure
+    .input(
+      z.object({
+        url: z.string().url().max(500),
+        events: z.array(z.string()).min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const events = input.events.filter(isWebhookEvent);
+      // an endpoint subscribed to nothing we emit would sit there looking healthy
+      // and never fire, which is worse than being told now
+      if (!events.length) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Unknown events. Available: ${WEBHOOK_EVENTS.join(', ')}` });
+      }
+      if (!input.url.startsWith('https://')) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Webhook URLs must be https — payloads carry deal figures' });
+      }
+      const secret = newWebhookSecret();
+      const row = await ctx.prisma.webhookEndpoint.create({
+        data: { orgId: ctx.principal.orgId, url: input.url, secret, events: events.join(','), createdById: ctx.principal.userId },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'added a webhook endpoint', target: input.url, ip: ctx.ip,
+      });
+      // the only time the secret is returned
+      return { id: row.id, url: row.url, events, secret };
+    }),
+
+  deleteWebhook: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.webhookEndpoint, input.id, ctx.principal.orgId);
+    await ctx.prisma.webhookDelivery.deleteMany({ where: { endpointId: row.id } });
+    await ctx.prisma.webhookEndpoint.delete({ where: { id: row.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'removed a webhook endpoint', target: row.url, ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+
+  /** Recent deliveries, so a failing integration can be diagnosed without us. */
+  webhookDeliveries: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(25) }).default({}))
+    .query(({ ctx, input }) =>
+      ctx.prisma.webhookDelivery.findMany({
+        where: { orgId: ctx.principal.orgId },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit,
+        select: { id: true, event: true, status: true, attempts: true, responseCode: true, error: true, createdAt: true, deliveredAt: true },
+      }),
+    ),
 
   auditLog: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).default({}))

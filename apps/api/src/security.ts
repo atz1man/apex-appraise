@@ -71,7 +71,20 @@ export async function registerSecurity(app: FastifyInstance) {
     timeWindow: '1 minute',
     // Two buckets per IP. Sensitive procedures get their own, much smaller budget,
     // so hammering the login endpoint cannot hide inside ordinary app traffic.
-    keyGenerator: (req) => `${isSensitive(req.url) ? 'auth' : 'all'}:${clientIp(req)}`,
+    /**
+     * An API key gets its own bucket, not its customer's IP.
+     *
+     * Integrations call from a handful of server addresses, and several customers
+     * behind one cloud provider's egress would otherwise share a limit and
+     * throttle each other. The key is also the thing we can talk to them about.
+     */
+    keyGenerator: (req) => {
+      const auth = req.headers.authorization;
+      if (typeof auth === 'string' && auth.startsWith('Bearer apex_live_')) {
+        return `key:${auth.slice(7, 40)}`;
+      }
+      return `${isSensitive(req.url) ? 'auth' : 'all'}:${clientIp(req)}`;
+    },
     max: (req: FastifyRequest) =>
       isSensitive(req.url) ? num('AUTH_RATE_LIMIT_PER_MIN', 10) : num('RATE_LIMIT_PER_MIN', 600),
     // statusCode must be in the body the builder returns: without it the plugin

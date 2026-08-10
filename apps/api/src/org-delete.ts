@@ -35,6 +35,10 @@ export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.P
     // a share row outliving its workspace leaves a public token pointing at a
     // deal that no longer exists — dead, but not something to leave lying around
     prisma.reportShare.deleteMany({ where: { orgId } }),
+    // deliveries reference their endpoint, so they go first
+    prisma.webhookDelivery.deleteMany({ where: { orgId } }),
+    prisma.webhookEndpoint.deleteMany({ where: { orgId } }),
+    prisma.apiKey.deleteMany({ where: { orgId } }),
     prisma.errorEvent.deleteMany({ where: { orgId } }),
     prisma.benchmarkPoint.deleteMany({ where: { orgId } }),
     prisma.integrationConnection.deleteMany({ where: { orgId } }),

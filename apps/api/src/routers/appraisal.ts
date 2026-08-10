@@ -17,6 +17,7 @@ import { assertOwned } from '../auth/owned.js';
 import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
+import { emitWebhook } from '../webhook-delivery.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -487,6 +488,25 @@ export const appraisalRouter = router({
         action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
         target: v.label, ip: ctx.ip,
       });
+      /**
+       * Tell anyone who asked. Queued, not delivered here: approving a valuation
+       * must not wait on someone else's server, nor fail because it is down.
+       */
+      if (input.decision === 'approve') {
+        const deal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+        const result = computeAppraisal(appraisalRowToEngineInput(row));
+        await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.approved', {
+          dealId: v.dealId,
+          dealName: deal?.name ?? null,
+          appraisalId: row.id,
+          label: row.label,
+          approvedBy: ctx.principal.name,
+          approvedAt: row.reviewedAt,
+          gdv: Math.round(result.gdv * 100) / 100,
+          profit: Math.round(result.profit * 100) / 100,
+          profitOnCost: result.poc,
+        });
+      }
       return { id: row.id, status: row.reviewStatus };
     }),
 
