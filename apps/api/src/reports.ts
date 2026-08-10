@@ -4,6 +4,7 @@ import { chromium, type Browser } from 'playwright';
 import { JWT_SECRET, prisma } from './context.js';
 import { recordAudit } from './audit.js';
 import { SHARE_REFUSAL_MESSAGE, hashShareToken, shareRefusal } from './share.js';
+import { verifyDownloadToken, type DownloadKind } from './download-token.js';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
 
@@ -111,13 +112,9 @@ export function registerReports(app: FastifyInstance) {
   app.get<{ Querystring: { t?: string } }>('/reports/portfolio/funding-pack.pdf', async (req, reply) => {
     const token = req.query.t;
     if (!token) return reply.code(401).send({ error: 'token required' });
-    let userId: string;
-    try {
-      userId = (jwt.verify(token, JWT_SECRET) as { sub: string }).sub;
-    } catch {
-      return reply.code(401).send({ error: 'invalid token' });
-    }
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const claim = verifyDownloadToken(token, { kind: 'portfolio' });
+    if (!claim) return reply.code(401).send({ error: 'invalid or expired download token' });
+    const user = await prisma.user.findUnique({ where: { id: claim.userId } });
     // internal only: the pack is the whole book, and a portal login is scoped to
     // one position within it
     if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
@@ -167,12 +164,14 @@ export function registerReports(app: FastifyInstance) {
         return reply.code(404).send({ error: 'unknown report' });
       const token = req.query.t;
       if (!token) return reply.code(401).send({ error: 'token required' });
-      let userId: string;
-      try {
-        userId = (jwt.verify(token, JWT_SECRET) as { sub: string }).sub;
-      } catch {
-        return reply.code(401).send({ error: 'invalid token' });
-      }
+      /**
+       * A DOWNLOAD token, not a session token. This URL ends up in browser
+       * history and access logs; what it carries must be worth as little as
+       * possible if it is found there.
+       */
+      const claim = verifyDownloadToken(token, { kind: kind as DownloadKind, dealId });
+      if (!claim) return reply.code(401).send({ error: 'invalid or expired download token' });
+      const userId = claim.userId;
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
       const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });

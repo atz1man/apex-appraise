@@ -5,6 +5,7 @@ import { fM } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { Button, Listbox, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { openReport } from '../lib/download';
 
 /**
  * Terms of engagement (RICS Red Book VPS 1) — drafted from the deal, edited by
@@ -84,6 +85,7 @@ const STATUS_TONE = { DRAFT: 'amber', ISSUED: 'blue', ACCEPTED: 'green' } as con
 export default function Engagement() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const toast = useToast();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: saved, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
@@ -204,7 +206,7 @@ export default function Engagement() {
             <Button variant="secondary" to={`/deal/${dealId}/engagement/document`}>Preview</Button>
             <Button
               variant="secondary"
-              onClick={() => window.open(`/api/reports/${dealId}/engagement.pdf?t=${getToken()}`, '_blank')}
+              onClick={() => void openReport(mintDownload.mutateAsync, 'engagement', `/reports/${dealId}/engagement.pdf`, dealId)}
             >
               Download PDF
             </Button>

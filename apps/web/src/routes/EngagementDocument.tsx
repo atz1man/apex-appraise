@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, Spinner } from '../components/ui';
 import { TermsDocument, TERMS_PRINT_CSS } from '../components/TermsDocument';
+import { openReport } from '../lib/download';
 
 /**
  * Internal preview of the terms of engagement. The layout itself lives in
@@ -11,6 +12,7 @@ export default function EngagementDocument() {
   const { dealId = '' } = useParams();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: t, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
+  const mintDownload = trpc.appraisal.downloadToken.useMutation();
 
   if (isLoading || !t) {
     return (
@@ -33,7 +35,7 @@ export default function EngagementDocument() {
         <span className="text-[13px] font-semibold">Terms of engagement</span>
         <span className="fig text-[11px] text-ink-3">{ref}</span>
         <div className="ml-auto flex gap-2">
-          <Button variant="secondary" onClick={() => window.open(`/api/reports/${dealId}/engagement.pdf?t=${getToken()}`, '_blank')}>
+          <Button variant="secondary" onClick={() => void openReport(mintDownload.mutateAsync, 'engagement', `/reports/${dealId}/engagement.pdf`, dealId)}>
             Download PDF
           </Button>
           <Button onClick={() => window.print()}>Print / Save PDF</Button>

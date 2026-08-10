@@ -16,6 +16,7 @@ import { adminProcedure, internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
 import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
+import { signDownloadToken } from '../download-token.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -315,6 +316,31 @@ export const appraisalRouter = router({
       returnedToMe: rows.filter((r) => r.reviewStatus === 'changes_requested').map(shape),
     };
   }),
+
+  /**
+   * A token for one document, for two minutes — see src/download-token.ts.
+   *
+   * The browser cannot set a header when it opens a PDF in a new tab, so the
+   * credential travels in the URL. It used to be the user's session token.
+   */
+  downloadToken: internalProcedure
+    .input(
+      z.object({
+        kind: z.enum(['appraisal', 'redbook', 'engagement', 'portfolio']),
+        dealId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // a portfolio document covers the whole org; everything else is one deal,
+      // and ownership is checked here rather than trusted from the token later
+      if (input.kind !== 'portfolio') {
+        if (!input.dealId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'dealId required' });
+        await assertDeal(ctx, input.dealId);
+      }
+      return {
+        token: signDownloadToken({ sub: ctx.principal.userId, kind: input.kind, dealId: input.dealId }),
+      };
+    }),
 
   /**
    * A read-only link to this deal's report, for someone with no account.

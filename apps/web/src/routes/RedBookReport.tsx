@@ -24,6 +24,7 @@ const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boo
   </PaperPage>
 );
 import { CompsLadder } from '../components/charts';
+import { openReport } from '../lib/download';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -143,6 +144,7 @@ export default function RedBookReport() {
   // the report is written under the agreed terms of engagement — cite them (VPS 1)
   const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
   const utils = trpc.useUtils();
+  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
     onSuccess: () => {
       utils.appraisal.getCurrent.invalidate(dealId);
@@ -211,7 +213,7 @@ export default function RedBookReport() {
         {exportable && (
           <Button
             variant="secondary"
-            onClick={() => window.open(`/reports/${dealId}/redbook.pdf?t=${encodeURIComponent(getToken() ?? '')}`, '_blank')}
+            onClick={() => void openReport(mintDownload.mutateAsync, 'redbook', `/reports/${dealId}/redbook.pdf`, dealId)}
           >
             Download PDF
           </Button>

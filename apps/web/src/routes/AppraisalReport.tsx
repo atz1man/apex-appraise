@@ -15,6 +15,7 @@ import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
 import { A4Page, PRINT_CSS } from '../components/paper';
 import { CashflowChart, ProfitBridge } from '../components/charts';
+import { openReport } from '../lib/download';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -109,6 +110,7 @@ export default function AppraisalReport() {
 
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
+  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const sens = useMemo(() => (input ? sensitivityGrid(input, 'roc') : null), [input]);
   // the growth-explicit cross-check, when the appraisal carries one
   const dcf = useMemo(
@@ -222,7 +224,7 @@ export default function AppraisalReport() {
       <div className="ml-auto flex gap-2">
         <Button
           variant="secondary"
-          onClick={() => window.open(`/reports/${dealId}/appraisal.pdf?t=${encodeURIComponent(getToken() ?? '')}`, '_blank')}
+          onClick={() => void openReport(mintDownload.mutateAsync, 'appraisal', `/reports/${dealId}/appraisal.pdf`, dealId)}
         >
           Download PDF
         </Button>

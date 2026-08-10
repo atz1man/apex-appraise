@@ -1869,10 +1869,25 @@ test('the red book paginates honestly and refuses clearly when there is nothing 
   await expect(page.getByText('No appraisal saved yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download PDF' })).toHaveCount(0);
 
-  // and the endpoint itself refuses in words rather than failing as a server fault
-  const refused = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(ids.token)}`);
+  /**
+   * And the endpoint itself refuses in words rather than failing as a server
+   * fault. It needs a DOWNLOAD token, not the session — report URLs carry a
+   * two-minute, one-document credential, because a URL ends up in logs and
+   * history. Authentication runs first, so this 409 is only ever shown to
+   * someone entitled to ask.
+   */
+  const mint = await request.post('/trpc/appraisal.downloadToken', {
+    headers: { authorization: `Bearer ${ids.token}`, 'content-type': 'application/json' },
+    data: { json: { kind: 'redbook', dealId: ids.unvalued } },
+  });
+  const downloadToken = (await mint.json()).result.data.json.token as string;
+  const refused = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(downloadToken)}`);
   expect(refused.status()).toBe(409);
   expect(await refused.text()).toMatch(/has no saved appraisal yet/);
+
+  // the session token, which used to work here, no longer opens a document
+  const withSession = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(ids.token)}`);
+  expect(withSession.status()).toBe(401);
 });
 
 /**
