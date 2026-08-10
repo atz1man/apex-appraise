@@ -33,7 +33,7 @@ async function main() {
 
   // wipe (idempotent seed)
   const tables = [
-    'WebhookDelivery', 'WebhookEndpoint', 'ApiKey', 'ReportShare', 'ErrorEvent', 'XeroDealMap', 'XeroConnection',
+    'WebhookDelivery', 'WebhookEndpoint', 'ApiKey', 'ReportShare', 'ErrorEvent', 'XeroDealMap', 'XeroConnection', 'SsoConnection',
     'Payment', 'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
     'CostPackage', 'Contractor', 'SalesMilestone', 'Unit', 'Tenancy', 'Inspection',
     'Scenario', 'Comparable', 'Appraisal', 'EngagementTerms', 'OrgPolicy', 'BenchmarkPoint', 'IntegrationConnection',

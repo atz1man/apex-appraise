@@ -54,3 +54,48 @@ here rather than implied by silence.
 Removes the tokens and the deal mappings. Packages already pulled are LEFT — they
 are the firm's cost record now, and deleting a month of monitoring because someone
 unlinked an account would be the integration doing damage on its way out.
+
+## Single sign-on (Microsoft Entra, Google Workspace)
+
+One OIDC implementation covers both. That is not tidiness: every provider-specific
+path is another place a verification step can quietly go missing, and the
+verification is the entire security of the thing.
+
+### What you must do
+
+1. Register an application with your identity provider. Redirect URI:
+   `https://<your-host>/sso/callback`. Scopes: `openid email profile`.
+2. In Settings → Single sign-on, give the issuer (for Entra,
+   `https://login.microsoftonline.com/<tenant-id>/v2.0`), the client id and
+   secret, and the email domains your firm owns.
+3. Optionally enforce it, which refuses password sign-in for your workspace —
+   including for accounts that had a password before.
+
+### What is checked, and why
+
+An ID token is a signed assertion that a person is who they say. Each check below
+has an attack behind it, and each is tested by actually attempting the forgery:
+
+- **Signature**, against the provider's published keys. Without it an identity is
+  JSON somebody typed.
+- **Algorithm**, pinned to RS256. Accepting `none`, or letting an attacker sign
+  with HS256 using the provider's *public* key as the shared secret, are both
+  classic forgeries — and that key is published by definition.
+- **Issuer and audience.** A genuine token, for a different application, signed by
+  a provider we trust, is still not a login here.
+- **Nonce.** Otherwise a captured token can be replayed into another session.
+- **`email_verified`.** An unverified address is a claim, not an identity.
+- **The domain.** Verifying a token proves who signed it, not that its holder is
+  entitled to your workspace. A provider may assert any address; only domains the
+  firm claims are accepted — and an address already registered to another
+  workspace is refused outright.
+
+### Accounts
+
+A first sign-in creates the account with the role you nominate. It carries no
+password at all: a placeholder hash would be a credential nobody chose and nobody
+rotates, and an empty one never authenticates.
+
+The login screen answers home-realm discovery identically for a known and an
+unknown address. Anything else turns it into a way to ask which firms use this
+product and who works there.

@@ -487,6 +487,30 @@ model XeroDealMap {
   @@index([orgId, dealId])
 }
 
+// A firm's own identity provider.
+//
+// One per workspace. OIDC, so Microsoft Entra and Google Workspace are the same
+// code path — a provider-specific implementation would be two things to keep
+// correct and two places for a verification step to go missing.
+model SsoConnection {
+  id           String  @id @default(cuid())
+  orgId        String  @unique
+  // e.g. https://login.microsoftonline.com/<tenant>/v2.0
+  issuer       String
+  clientId     String
+  clientSecret String
+  // email domains this firm claims, comma-separated. A provider may assert any
+  // address; only these are accepted into THIS workspace.
+  domains      String
+  // when true, password sign-in is refused for this workspace
+  enforced     Boolean @default(false)
+  // role given to someone signing in for the first time
+  defaultRole  String  @default("ANALYST")
+  createdById  String
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+}
+
 model OrgPolicy {
   id    String @id @default(cuid())
   orgId String @unique
