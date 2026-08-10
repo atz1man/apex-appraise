@@ -605,6 +605,84 @@ export const orgRouter = router({
       }),
     ),
 
+  /** How this workspace federates, if it does. The secret is never returned. */
+  ssoConfig: adminProcedure.query(async ({ ctx }) => {
+    const c = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+    if (!c) return null;
+    return {
+      issuer: c.issuer,
+      clientId: c.clientId,
+      // presence, not the value — a screen needs to know whether one is set
+      hasSecret: !!c.clientSecret,
+      domains: c.domains.split(',').map((d) => d.trim()).filter(Boolean),
+      enforced: c.enforced,
+      defaultRole: c.defaultRole,
+      lastLoginAt: c.lastLoginAt,
+    };
+  }),
+
+  saveSso: adminProcedure
+    .input(
+      z.object({
+        issuer: z.string().url().max(300),
+        clientId: z.string().min(1).max(300),
+        // absent means "leave the stored one alone", so an admin editing domains
+        // does not have to paste the secret again
+        clientSecret: z.string().min(1).max(500).optional(),
+        domains: z.array(z.string().min(3).max(200)).min(1),
+        enforced: z.boolean().default(false),
+        defaultRole: z.enum(['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER']).default('ANALYST'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const domains = input.domains.map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean);
+      /**
+       * A domain may be claimed by one workspace only. Two firms claiming the
+       * same one would make home-realm discovery a coin toss, and the loser's
+       * people would be sent to a stranger's identity provider.
+       */
+      const others = await ctx.prisma.ssoConnection.findMany({ where: { orgId: { not: ctx.principal.orgId } } });
+      const clash = domains.find((d) =>
+        others.some((o) => o.domains.split(',').map((x) => x.trim().toLowerCase()).includes(d)),
+      );
+      if (clash) {
+        throw new TRPCError({ code: 'CONFLICT', message: `${clash} is already claimed by another workspace.` });
+      }
+
+      const existing = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+      if (!existing && !input.clientSecret) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A client secret is needed to set this up.' });
+      }
+      const data = {
+        issuer: input.issuer.replace(/\/$/, ''),
+        clientId: input.clientId,
+        domains: domains.join(','),
+        enforced: input.enforced,
+        defaultRole: input.defaultRole,
+        ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
+      };
+      await ctx.prisma.ssoConnection.upsert({
+        where: { orgId: ctx.principal.orgId },
+        create: { orgId: ctx.principal.orgId, clientSecret: input.clientSecret ?? '', createdById: ctx.principal.userId, ...data },
+        update: data,
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: input.enforced ? 'required single sign-on' : 'configured single sign-on',
+        target: domains.join(', '), ip: ctx.ip,
+      });
+      return { ok: true };
+    }),
+
+  deleteSso: adminProcedure.mutation(async ({ ctx }) => {
+    await ctx.prisma.ssoConnection.deleteMany({ where: { orgId: ctx.principal.orgId } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'removed single sign-on', target: 'identity provider', ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+
   auditLog: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).default({}))
     .query(async ({ ctx, input }) => {

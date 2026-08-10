@@ -283,6 +283,46 @@ textarea {
     border-color 0.18s ease,
     box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
+/**
+ * Checkboxes are drawn rather than left to the browser.
+ *
+ * A native checkbox takes the generic input rules above and then ignores most of
+ * them: what renders is the platform widget, whose computed fill matches the page
+ * and whose border is nothing. That is 1:1 against the background — no visible
+ * edge at all for anyone who needs one — and the non-text contrast sweep is right
+ * to fail it (WCAG 1.4.11).
+ */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1.5px solid rgb(var(--control-border));
+  background: rgb(var(--surface));
+}
+input[type='checkbox']:checked {
+  background: rgb(var(--brand-ink));
+  border-color: rgb(var(--brand-ink));
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translateY(-1px);
+}
+input[type='checkbox']:focus-visible {
+  outline: 2px solid rgb(var(--brand-ink));
+  outline-offset: 2px;
+}
+
 input:hover,
 select:hover,
 textarea:hover {

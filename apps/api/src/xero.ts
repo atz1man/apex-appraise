@@ -343,3 +343,34 @@ export async function syncXero(
     unmapped,
   };
 }
+
+/** Tracking categories and their options, so an admin picks rather than types. */
+export async function fetchTrackingCategories(
+  accessToken: string,
+  tenantId: string,
+  transport: XeroTransport = realTransport,
+): Promise<Array<{ id: string; name: string; options: Array<{ id: string; name: string }> }>> {
+  const res = await transport(`${API_BASE}/TrackingCategories`, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${accessToken}`, 'xero-tenant-id': tenantId, accept: 'application/json' },
+  });
+  if (res.status !== 200) throw new Error(`Xero tracking categories failed: HTTP ${res.status}`);
+  const body = (await res.json()) as {
+    TrackingCategories?: Array<{
+      TrackingCategoryID: string;
+      Name: string;
+      Status?: string;
+      Options?: Array<{ TrackingOptionID: string; Name: string; Status?: string }>;
+    }>;
+  };
+  return (body.TrackingCategories ?? [])
+    // an archived category still exists in Xero and would look selectable
+    .filter((c) => (c.Status ?? 'ACTIVE') === 'ACTIVE')
+    .map((c) => ({
+      id: c.TrackingCategoryID,
+      name: c.Name,
+      options: (c.Options ?? [])
+        .filter((o) => (o.Status ?? 'ACTIVE') === 'ACTIVE')
+        .map((o) => ({ id: o.TrackingOptionID, name: o.Name })),
+    }));
+}

@@ -2044,6 +2044,63 @@ test('the terms document paginates to fit whatever house style a firm writes', a
 });
 
 /**
+ * The three integration surfaces in Settings.
+ *
+ * Each has a server-side prerequisite a customer cannot satisfy, and each must
+ * say which side the gap is on. "Not configured on this server" and "not
+ * connected by this firm" are different sentences, and telling an admin to
+ * reconnect when the fault is ours wastes their afternoon.
+ */
+test('settings offers API keys, Xero and SSO, and is honest about what is missing', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  await page.goto('/settings');
+
+  // role, not text: these titles also appear in the body copy beneath them
+  await expect(page.getByRole('heading', { name: 'Single sign-on' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Xero' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'API keys' })).toBeVisible();
+
+  // Xero: this deployment holds no Xero credentials, and the panel says so rather
+  // than offering a Connect button that cannot work
+  await expect(page.getByText(/Xero is not configured on this server/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect Xero' })).toHaveCount(0);
+
+  // SSO: nothing can be saved until the fields that make it work are present
+  await expect(page.getByRole('button', { name: 'Save' }).last()).toBeDisabled();
+
+  /**
+   * An API key is shown exactly once. The server stores only a hash, so this
+   * screen is the single moment it exists — which is the property worth pinning.
+   */
+  // a unique name per run: the demo workspace keeps every key ever minted, and a
+  // fixed name makes every locator below ambiguous on the second run
+  const keyName = `E2E integration ${Date.now().toString().slice(-6)}`;
+  await page.getByLabel('Key name').fill(keyName);
+  await page.getByRole('button', { name: 'Create key' }).click();
+  const banner = page.locator('[data-new-key]');
+  await expect(banner).toBeVisible();
+  const key = await banner.locator('input').inputValue();
+  expect(key).toMatch(/^apex_live_/);
+
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(banner).toHaveCount(0);
+
+  // listed afterwards by prefix only — the whole key never reappears
+  await expect(page.getByText(keyName)).toBeVisible();
+  const settingsText = await page.locator('body').innerText();
+  expect(settingsText, 'the full key was shown again after dismissal').not.toContain(key);
+  expect(settingsText).toContain(key.slice(0, 16));
+
+  // and it can be taken back
+  const row = page.locator('div').filter({ hasText: new RegExp(`^${keyName}`) }).last();
+  await row.getByRole('button', { name: 'Revoke' }).click();
+  await expect(row.getByText('REVOKED')).toBeVisible();
+});
+
+/**
  * The DCF sensitivity matrix. Growth and the exit yield are the two assumptions
  * a hold is least certain about, so the report prints a grid over both — on its
  * own sheet, because the investment page has about 46px spare.

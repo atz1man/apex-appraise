@@ -9,7 +9,16 @@ import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
 import { assertOwned } from '../auth/owned.js';
 import { signFileUrl } from '../uploads.js';
-import { XERO_SCOPES, authorizeUrl, exchangeCode, listConnections, syncXero, xeroConfigured } from '../xero.js';
+import {
+  XERO_SCOPES,
+  accessTokenFor,
+  authorizeUrl,
+  exchangeCode,
+  fetchTrackingCategories,
+  listConnections,
+  syncXero,
+  xeroConfigured,
+} from '../xero.js';
 import { APP_URL } from '../email.js';
 import { recordAudit } from '../audit.js';
 
@@ -481,6 +490,19 @@ export const xeroRouter = router({
       });
       return { tenantName: tenants[0]!.tenantName };
     }),
+
+  /**
+   * The tracking categories this Xero organisation actually has, with their
+   * options. Fetched live rather than typed: a category id copied by hand is a
+   * silent misconfiguration that reads every bill against the wrong dimension.
+   */
+  categories: adminProcedure.query(async ({ ctx }) => {
+    const conn = await ctx.prisma.xeroConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+    if (!conn) return { categories: [] as Array<{ id: string; name: string; options: Array<{ id: string; name: string }> }> };
+    const token = await accessTokenFor(ctx.prisma, ctx.principal.orgId);
+    const cats = await fetchTrackingCategories(token, conn.tenantId);
+    return { categories: cats };
+  }),
 
   setCategory: adminProcedure
     .input(z.object({ id: z.string().min(1), name: z.string().min(1) }))
