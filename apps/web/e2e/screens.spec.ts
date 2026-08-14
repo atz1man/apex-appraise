@@ -278,6 +278,40 @@ test.describe('internal screens', () => {
     await expect(page.getByText('Portfolio funding pack')).toHaveCount(0);
   });
 
+  test('the workbench states no Market Value until an approach can be applied', async ({ page }) => {
+    /**
+     * A deal with no appraisal and no comparables used to be given "Market value
+     * £0 — Weighted across three approaches": an opinion asserted where no
+     * approach had been applied, on the screen whose figure is saved and carried
+     * into the Red Book. An opinion nobody has formed is not zero.
+     */
+    const stamp = Date.now();
+    await page.goto('/register');
+    await page.getByLabel(/Organisation name/i).fill(`Bare Co ${stamp}`);
+    await page.getByLabel(/Your name/i).fill('Bea Bare');
+    await page.getByLabel(/^Email/i).fill(`bare-${stamp}@test.co.uk`);
+    await page.getByLabel(/^Password/i).fill('super-secret-9');
+    await page.getByLabel(/Confirm password/i).fill('super-secret-9');
+    await page.getByRole('button', { name: /Create|Start/ }).click();
+    await expect(page.getByText('Add your first deal')).toBeVisible();
+
+    const dealId = await page.evaluate(async () => {
+      const res = await fetch('/trpc/deals.create', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+        body: JSON.stringify({ json: { name: 'Bare Site', address: '2 Bare Lane, Poole', postcode: 'BH15 1AA', assetType: 'RESIDENTIAL' } }),
+      });
+      return (await res.json())?.result?.data?.json?.id as string;
+    });
+
+    await page.goto(`/deal/${dealId}/workbench`);
+    await expect(page.getByText('No approach can be derived yet — save an appraisal or add comparable evidence.')).toBeVisible();
+    await expect(page.getByText('Weighted across three approaches')).toHaveCount(0);
+    // each approach says what is missing rather than showing a figure
+    await expect(page.getByText('No supported £/ft² yet — add comparable evidence.')).toBeVisible();
+    await expect(page.getByText('No build cost in the appraisal yet.')).toBeVisible();
+  });
+
   test('integrations catalogue with statuses', async ({ page }) => {
     await page.goto('/integrations');
     await expect(page.getByText('Connect your data sources')).toBeVisible();

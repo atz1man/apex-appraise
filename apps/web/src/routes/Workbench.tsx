@@ -264,8 +264,30 @@ export default function Workbench() {
           <div className="flex-[1.4] min-w-[210px] rounded-card px-4 py-3.5 text-white relative overflow-hidden" style={{ background: 'linear-gradient(150deg,#1B6048,#13503B)' }}>
             <div className="absolute rounded-full" style={{ top: -24, right: -24, width: 96, height: 96, background: 'rgba(255,255,255,0.07)' }} />
             <div className="label-mono text-white/65">Market value</div>
-            <div className="fig mt-1.5 text-[26px] font-semibold tracking-[-1.4px]">{formatMoneyFull(Math.round(reconciled))}</div>
-            <div className="mt-0.5 text-[11px] text-white/70">{nia > 0 ? `£${n0(reconciled / nia)} / ft² · ${n0(nia)} ft² NIA` : 'Weighted across three approaches'}</div>
+            {/**
+              * With nothing to weigh, this said "£0 — Weighted across three
+              * approaches" for a deal that had no appraisal and no comparables:
+              * a Market Value opinion asserted where no approach had been
+              * applied, on the screen whose figure is saved and carried into the
+              * Red Book. An opinion nobody has formed is not zero.
+              */}
+            {contributing.length === 0 ? (
+              <>
+                <div className="fig mt-1.5 text-[26px] font-semibold tracking-[-1.4px]">—</div>
+                <div className="mt-0.5 text-[11px] leading-[1.45] text-white/70">
+                  No approach can be derived yet — save an appraisal or add comparable evidence.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="fig mt-1.5 text-[26px] font-semibold tracking-[-1.4px]">{formatMoneyFull(Math.round(reconciled))}</div>
+                <div className="mt-0.5 text-[11px] text-white/70">
+                  {nia > 0
+                    ? `£${n0(reconciled / nia)} / ft² · ${n0(nia)} ft² NIA`
+                    : `Weighted across ${contributing.length === 1 ? 'one approach' : `${contributing.length} approaches`}`}
+                </div>
+              </>
+            )}
           </div>
           <StatCard
             label="Supported £/ft²"
