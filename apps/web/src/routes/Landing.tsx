@@ -167,7 +167,15 @@ const STATS: Array<[string, string]> = [
   ['100%', 'of figures traceable to their evidence'],
   ['1', 'valuation engine behind every screen, export and report'],
   ['RICS', 'Red Book structure, terms of engagement and AI disclosure'],
-  ['0', 'figures written by an AI model'],
+  /**
+   * "figures written by an AI model" was wrong, and it was mine. The model DOES
+   * write numbers — it reads unit counts, areas and £/ft² out of a customer's own
+   * planning and cost documents, each one cited back to the page it came from.
+   * What it never does is COMPUTE: GDV, profit, residual land value and the
+   * Market Value opinion all come from the engine. That is the claim worth
+   * making, and it is the one that is true.
+   */
+  ['0', 'financial outputs computed by an AI model'],
 ];
 
 const STAGES: Array<[string, string, string]> = [
@@ -929,7 +937,8 @@ export default function Landing() {
            * What replaces it is the product's own commitment, which is ours to make.
            */}
           <p className="mt-5 text-[22px] md:text-[28px] font-medium tracking-[-0.8px] leading-[1.3]">
-            &ldquo;Every number in the pack traces back to the evidence it came from — and the model never writes one of them.&rdquo;
+            &ldquo;Every number traces back to the document or the calculation it came from. The model reads evidence and cites the page;
+            it never computes a valuation.&rdquo;
           </p>
           <div className="mt-[26px] text-[13px] text-accent-muted-2">
             The commitment this product is built on. Customer references are available on request.

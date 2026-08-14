@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { unsupportedFigures } from '../narrative-guard.js';
 import { z } from 'zod';
 import {
   autoAppraise,
@@ -746,6 +747,8 @@ async function draftNarrativeSections(facts: {
     ? `${facts.compCount} adjusted comparable${facts.compCount === 1 ? '' : 's'} (${facts.compAddresses.join('; ')}) supporting ${facts.supportedPsf != null ? `£${facts.supportedPsf}/ft²` : 'the adopted rate'}`
     : 'no comparables logged — appraisal-led evidence only';
   const key = process.env.ANTHROPIC_API_KEY;
+  /** figures the model wrote that the engine did not produce — logged, then the draft is dropped */
+  const narrativeRejections: string[] = [];
   if (key) {
     const instruction = `Write the three narrative sections of a RICS Red Book valuation report via record_narrative.
 
@@ -772,17 +775,40 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
       const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
       const toolUse = body.content.find((c) => c.type === 'tool_use');
       const parsed = zNarrativeSections.safeParse(toolUse?.input);
-      if (parsed.success) return parsed.data;
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI narrative drafting returned an unusable response — try again.' });
+      if (parsed.success) {
+        /**
+         * The model was told to use the engine's figures verbatim. This checks it
+         * did. A draft that carries a figure nobody calculated is discarded for
+         * the deterministic template below, which interpolates the same numbers
+         * and cannot drift — losing some prose quality rather than putting an
+         * invented Market Value into a signed valuation.
+         */
+        const unsupported = unsupportedFigures(parsed.data as unknown as Record<string, string>, {
+          money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
+          percents: [Number((facts.poc * 100).toFixed(1))],
+        });
+        if (unsupported.length === 0) return parsed.data;
+        narrativeRejections.push(...unsupported);
+      } else {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI narrative drafting returned an unusable response — try again.' });
+      }
     }
-    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
-    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: `AI narrative drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
-    });
+    else {
+      // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+      const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `AI narrative drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+      });
+    }
   }
-  // demo fallback: deterministic templates interpolating the same engine figures
+  /**
+   * Deterministic templates interpolating the same engine figures. Used in demo
+   * mode, and whenever a model draft carried a figure the engine did not produce.
+   */
+  if (narrativeRejections.length) {
+    console.warn(`[narrative] draft discarded — figures not produced by the engine: ${narrativeRejections.join(', ')}`);
+  }
   const evidence = facts.compCount
     ? `${facts.compCount} adjusted comparable transaction${facts.compCount === 1 ? '' : 's'}, which support${facts.compCount === 1 ? 's' : ''} a rate of £${facts.supportedPsf}/ft²`
     : 'the current development appraisal, pending comparable evidence';

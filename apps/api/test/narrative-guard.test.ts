@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import { moneyIn, percentIn, unsupportedFigures } from '../src/narrative-guard.js';
+
+/**
+ * The model is told to use the engine's figures verbatim and invent nothing.
+ * This checks it did — because the valuation rationale is required to end with
+ * the Market Value opinion, and a transposed digit there is a figure nobody
+ * calculated, printed in a signed valuation, in the sentence a reader trusts
+ * most. Nothing downstream would catch it: the tiles and the export stay right,
+ * and only the prose disagrees.
+ */
+
+const facts = {
+  // Market Value, GDV, profit, £/ft² analysed, supported £/ft²
+  money: [8_575_000, 8_575_165, 1_430_000, 205, 198],
+  percents: [20.4],
+};
+
+describe('reading figures out of prose', () => {
+  it('finds money however it is written', () => {
+    const found = moneyIn('The value is £8,575,000, or £8.6m, at £205/ft² and a £12k fee.');
+    expect(found.map((f) => f.value)).toEqual([8_575_000, 8_600_000, 205, 12_000]);
+  });
+
+  it('finds percentages', () => {
+    expect(percentIn('a 20.4% return, versus 15%').map((f) => f.value)).toEqual([20.4, 15]);
+  });
+});
+
+describe('a draft that used the figures it was given', () => {
+  it('passes when every figure matches the engine', () => {
+    const sections = {
+      valuationRationale: "The valuer's opinion of Market Value is £8,575,000, a 20.4% profit on cost.",
+      riskCommentary: 'Sales rates moving away from the supported £198/ft² are the principal risk.',
+    };
+    expect(unsupportedFigures(sections, facts)).toEqual([]);
+  });
+
+  it('accepts a figure said shortly', () => {
+    /**
+     * "£8.6m" is 8,575,000 written to two significant digits — the same figure,
+     * abbreviated, which is ordinary valuation prose.
+     */
+    expect(unsupportedFigures({ marketCommentary: 'Against a GDV of £8.6m the market is active.' }, facts)).toEqual([]);
+  });
+
+  it('ignores prose that is not a valuation figure', () => {
+    const sections = {
+      marketCommentary: 'Marketing periods are typically six to eight weeks and volumes over twelve months were stable.',
+    };
+    expect(unsupportedFigures(sections, facts)).toEqual([]);
+  });
+});
+
+describe('a draft that wrote a figure nobody calculated', () => {
+  it('catches a transposed digit in the Market Value', () => {
+    /**
+     * The failure this exists for. £8,570,000 is £5,000 away from the opinion the
+     * engine produced, reads as entirely plausible, and would be printed as the
+     * valuer's concluded figure.
+     */
+    const bad = unsupportedFigures(
+      { valuationRationale: "The valuer's opinion of Market Value is £8,570,000." },
+      facts,
+    );
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain('£8,570,000');
+  });
+
+  it('is not fooled by a near miss inside a percentage tolerance', () => {
+    // a tolerance wide enough to allow abbreviations would swallow this
+    expect(unsupportedFigures({ riskCommentary: 'compressing the 20.9% profit on cost' }, facts)).toHaveLength(1);
+  });
+
+  it('catches an invented rate', () => {
+    expect(unsupportedFigures({ riskCommentary: 'the supported £215/ft²' }, facts)).toHaveLength(1);
+  });
+
+  it('names the section so the fault can be found', () => {
+    const bad = unsupportedFigures({ marketCommentary: 'a GDV of £9,100,000' }, facts);
+    expect(bad[0]).toMatch(/^marketCommentary: /);
+  });
+
+  it('reports every offending figure, not just the first', () => {
+    const bad = unsupportedFigures(
+      { valuationRationale: 'Market Value of £8,570,000 at £215/ft², a 20.9% return.' },
+      facts,
+    );
+    expect(bad).toHaveLength(3);
+  });
+});
