@@ -454,6 +454,17 @@ export interface AutoAppraisalResult {
   finance: number;
   targetProfit: number;
   residualNet: number;
+  /** land at the residual, grossed for acquisition costs — the basis `totalCost` uses */
+  landGross: number;
+  /**
+   * Cost and return AT THE RESIDUAL land value, which is the case every screen
+   * uses when no asking price is being tested. These were previously computed
+   * only for an asking price, so callers that needed them without one re-derived
+   * them by hand — each with its own copy of the acquisition-cost rule.
+   */
+  totalCost: number;
+  profit: number;
+  poc: number;
   sdlt: number;
   askingGross: number | null;
   totalCostAtAsking: number | null;

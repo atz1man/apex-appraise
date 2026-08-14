@@ -880,6 +880,11 @@ export function autoAppraise(j: AutoAppraisalInput): AutoAppraisalResult {
   const targetProfit = (gdv * j.targetProfitPct) / 100;
   const remainder = gdv - saleCosts - build - fees - cont - other - finance - targetProfit;
   const residualNet = remainder / (1 + j.acqPct / 100);
+  // the land cost implied by that residual, on the same basis the residual used
+  const landGross = residualNet * (1 + j.acqPct / 100);
+  const totalCost = saleCosts + build + fees + cont + other + finance + landGross;
+  const profit = gdv - totalCost;
+  const poc = totalCost > 0 ? profit / totalCost : 0;
   const sdlt = sdltCommercial(j.asking > 0 ? j.asking : Math.max(residualNet, 0));
 
   let askingGross: number | null = null;
@@ -911,6 +916,10 @@ export function autoAppraise(j: AutoAppraisalInput): AutoAppraisalResult {
     finance,
     targetProfit,
     residualNet,
+    landGross,
+    totalCost,
+    profit,
+    poc,
     sdlt,
     askingGross,
     totalCostAtAsking,

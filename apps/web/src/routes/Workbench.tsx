@@ -10,7 +10,7 @@ type ApproachKey = 'sales' | 'cost' | 'income';
 
 const APPROACHES: Array<{ key: ApproachKey; wKey: keyof Weights; label: string; dot: string; sub: string }> = [
   { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: 'rgb(var(--brand-ink, 20 80 59))', sub: 'Supported £/ft² × subject area' },
-  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + depreciated build cost' },
+  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + build, fees and contingency' },
   { key: 'income', wKey: 'income', label: 'Income approach', dot: 'rgb(var(--ink-3, 154 160 154))', sub: 'Net rent capitalised at market yield' },
 ];
 
@@ -35,21 +35,70 @@ export default function Workbench() {
   const comps = compsData?.comps ?? [];
   const summary = compsData?.summary;
 
-  // hydrate once from the field inspection + comparable evidence
+  /**
+   * Each approach derived from its OWN evidence.
+   *
+   * The seed used to be `sales`, then `sales × 0.97` for cost and `sales × 0.99`
+   * for income — three headline figures multiplied off one number, under labels
+   * that told the valuer they were "Land + depreciated build cost" and "Net rent
+   * capitalised at market yield". The entire point of reconciling three
+   * approaches is that they are arrived at independently; agreement between
+   * numbers derived from each other is not corroboration, and the weighted result
+   * is saved as the inspection's reconciled value and carried into the Red Book.
+   *
+   * An approach that cannot be derived from what the file holds is left empty and
+   * says why, rather than being filled with something that looks like a valuation.
+   */
+  const supportedPsf: number = compsData?.summary.supportedPsf ?? 0;
+  const areaNia: number = appraisal?.result.nia ?? 0;
+  const buildCost: number = appraisal?.result.build ?? 0;
+  const feesCost: number = appraisal?.result.fees ?? 0;
+  const contCost: number = appraisal?.result.cont ?? 0;
+  const landResidual: number = appraisal?.result.residualNet ?? 0;
+  const capitalised: number = appraisal?.result.income?.netCapitalValue ?? 0;
+
+  type Derived = { value: number | null; why: string };
+  const salesDerived: Derived =
+    supportedPsf > 0 && areaNia > 0
+      ? { value: Math.round(supportedPsf * areaNia), why: '' }
+      : { value: null, why: 'No supported £/ft² yet — add comparable evidence.' };
+  /**
+   * Land plus what it costs to put the building there — construction, the
+   * professional fees that go with it, and contingency. No depreciation, since
+   * this product appraises schemes that have not been built. Finance and sale
+   * costs are deliberately excluded: they are costs of funding and transacting,
+   * not of replacing the asset.
+   */
+  const costDerived: Derived =
+    buildCost > 0
+      ? { value: Math.round(landResidual + buildCost + feesCost + contCost), why: '' }
+      : { value: null, why: 'No build cost in the appraisal yet.' };
+  const incomeDerived: Derived =
+    capitalised > 0
+      ? { value: Math.round(capitalised), why: '' }
+      : { value: null, why: 'No rental income on the appraisal to capitalise.' };
+  const derived: Record<ApproachKey, Derived> = { sales: salesDerived, cost: costDerived, income: incomeDerived };
+
+  // hydrate once from the field inspection + the derived approaches
   useEffect(() => {
     if (hydrated || !deal || inspLoading || compsLoading || apprLoading) return;
-    const supported = compsData?.summary.supportedPsf ?? 0;
-    const area = appraisal?.result.nia ?? 0;
-    const salesBase = Math.round(supported * area) || inspection?.reconciledValue || Math.round(deal.gdv) || 0;
-    setValues({ sales: salesBase, cost: Math.round(salesBase * 0.97), income: Math.round(salesBase * 0.99) });
+    setValues({
+      sales: derived.sales.value ?? 0,
+      cost: derived.cost.value ?? 0,
+      income: derived.income.value ?? 0,
+    });
     if (inspection) setWeights(inspection.approachWeights);
     setHydrated(true);
   }, [hydrated, deal, inspLoading, compsLoading, apprLoading, compsData, appraisal, inspection]);
 
-  const wSum = weights.salesComparison + weights.cost + weights.income;
-  const reconciled = wSum > 0
-    ? (values.sales * weights.salesComparison + values.cost * weights.cost + values.income * weights.income) / wSum
-    : 0;
+  /**
+   * An approach with no value carries no weight. Leaving it in the denominator
+   * at zero would drag the reconciliation toward nothing — a valuation pulled
+   * down by a method that was never applied.
+   */
+  const contributing = APPROACHES.filter((a) => values[a.key] > 0);
+  const wSum = contributing.reduce((t, a) => t + weights[a.wKey], 0);
+  const reconciled = wSum > 0 ? contributing.reduce((t, a) => t + values[a.key] * weights[a.wKey], 0) / wSum : 0;
 
   const save = trpc.inspections.save.useMutation({
     onSuccess: () => {
@@ -247,8 +296,15 @@ export default function Workbench() {
                     <span className="w-2 h-2 rounded-[2px]" style={{ background: a.dot }} />
                     <span className="text-[13px] font-semibold">{a.label}</span>
                   </div>
-                  <div className="fig mt-3 text-[21px] font-semibold tracking-[-1px]">{formatMoneyFull(values[a.key])}</div>
+                  <div className="fig mt-3 text-[21px] font-semibold tracking-[-1px]">
+                    {values[a.key] > 0 ? formatMoneyFull(values[a.key]) : '—'}
+                  </div>
                   <div className="mt-0.5 text-[11px] text-ink-3">{a.sub}</div>
+                  {/* an approach this file cannot support says so, and carries no
+                      weight in the reconciliation until somebody enters one */}
+                  {values[a.key] === 0 && derived[a.key].why && (
+                    <div className="mt-1.5 text-[11px] leading-[1.45] text-ink-3b">{derived[a.key].why}</div>
+                  )}
                   <div className="mt-3.5 flex flex-col gap-2.5">
                     <label className="block">
                       <span className="label-mono text-ink-3 block mb-1">Value (£)</span>

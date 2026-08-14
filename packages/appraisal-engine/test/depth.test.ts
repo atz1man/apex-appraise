@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  autoAppraise,
   dcfSensitivity,
   capitaliseIncome,
   computeAppraisal,
@@ -986,5 +987,57 @@ describe('dcfSensitivity', () => {
     const t0 = performance.now();
     dcfSensitivity(rack, dcf);
     expect(performance.now() - t0).toBeLessThan(250);
+  });
+});
+
+describe('autoAppraise reports cost and return at the residual', () => {
+  /**
+   * These used to exist only when an asking price was supplied, so every caller
+   * that wanted them without one re-derived them — each carrying its own copy of
+   * the acquisition-cost rule, and free to drift from the engine and each other.
+   */
+  const base = {
+    units: [{ label: 'Units', count: 20, area: 900, cap: 320 }],
+    efficiency: 85,
+    buildPerSqft: 150,
+    profFeePct: 10,
+    contingencyPct: 5,
+    cilPerSqm: 0,
+    s106: 0,
+    agentPct: 1.5,
+    legalPct: 0.5,
+    ltcPct: 65,
+    ratePct: 8,
+    periodMonths: 18,
+    salesMonths: 6,
+    arrangementFeePct: 1.5,
+    targetProfitPct: 20,
+    acqPct: 6.8,
+    asking: 0,
+  };
+
+  it('makes the residual reproduce the target profit it was solved for', () => {
+    const r = autoAppraise(base);
+    // the residual is defined as the land price that leaves exactly the target
+    expect(r.profit).toBeCloseTo(r.targetProfit, 6);
+    expect(r.totalCost).toBeCloseTo(r.gdv - r.targetProfit, 6);
+  });
+
+  it('grosses land for acquisition costs on the same basis the residual used', () => {
+    const r = autoAppraise(base);
+    expect(r.landGross).toBeCloseTo(r.residualNet * (1 + base.acqPct / 100), 6);
+    expect(r.totalCost).toBeCloseTo(
+      r.saleCosts + r.build + r.fees + r.cont + r.other + r.finance + r.landGross,
+      6,
+    );
+    expect(r.poc).toBeCloseTo(r.profit / r.totalCost, 10);
+  });
+
+  it('still answers for an asking price without disturbing the residual case', () => {
+    const r = autoAppraise({ ...base, asking: 1_000_000 });
+    expect(r.profitAtAsking).not.toBeNull();
+    // the residual-case figures describe the residual, not the asking price
+    expect(r.profit).toBeCloseTo(r.targetProfit, 6);
+    expect(r.profit).not.toBeCloseTo(r.profitAtAsking!, 2);
   });
 });

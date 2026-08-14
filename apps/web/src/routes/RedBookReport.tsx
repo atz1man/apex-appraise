@@ -307,7 +307,20 @@ export default function RedBookReport() {
         label: 'Whole property',
         count: 1,
         area: nia,
-        rentPsf: inv && inv.totalArea > 0 && nia > 0 ? inv.netRent / inv.totalArea : nia > 0 ? (mv * 0.042) / nia : 0,
+        /**
+         * With no rental evidence the rent is implied from Market Value at the
+         * SAME yield the capitalisation below uses. This was hardcoded to 4.2%
+         * while the capitalisation used the firm's own figure — so on any
+         * instruction with a different yield the cross-check derived rent at one
+         * rate and capitalised it at another, and then reported the disagreement
+         * it had manufactured as evidence about the valuation.
+         */
+        rentPsf:
+          inv && inv.totalArea > 0 && nia > 0
+            ? inv.netRent / inv.totalArea
+            : nia > 0
+              ? (mv * (invYieldPct / 100)) / nia
+              : 0,
       },
     ],
     // the rate above is already NET, so no further deductions are taken

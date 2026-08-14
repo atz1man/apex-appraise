@@ -64,10 +64,13 @@ function compute(s: { blendedPsf: number; buildPsf: number; gia: number; targetP
     acqPct: ASSUMPTIONS.acqPct,
     asking: 0,
   });
-  const land = r.residualNet * (1 + ASSUMPTIONS.acqPct / 100);
-  const totalCost = r.saleCosts + r.build + r.fees + r.cont + r.other + r.finance + land;
-  const profit = r.gdv - totalCost;
-  return { residual: r.residualNet, gdv: r.gdv, totalCost, profit, poc: totalCost > 0 ? profit / totalCost : 0 };
+  /**
+   * Straight from the engine. This screen used to re-add the cost lines and
+   * regross the land itself, with its own copy of the acquisition-cost rule — so
+   * a scenario table could quietly disagree with the appraisal it was varying,
+   * and the two would have looked equally authoritative.
+   */
+  return { residual: r.residualNet, gdv: r.gdv, totalCost: r.totalCost, profit: r.profit, poc: r.poc };
 }
 
 /** dc-prototype money format: £2.41m / £625k. */
