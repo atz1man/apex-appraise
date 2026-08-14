@@ -23,6 +23,22 @@ async function main() {
     // the real client IP arrives in a header from our own proxy; without this
     // Fastify reports the proxy's address and every rate limit shares one bucket
     trustProxy: true,
+    /**
+     * tRPC batches a page's queries into ONE request whose path is every
+     * procedure name joined by commas. Fastify's default cap on a route parameter
+     * is 100 characters, so a page asking for enough at once is refused with a
+     * bare 414 — and because the batch is atomic, EVERY panel on that page loses
+     * its data together rather than one of them failing visibly.
+     *
+     * Settings crossed it at 106 characters:
+     *   org.get,billing.config,org.members,org.policy,org.ssoConfig,
+     *   xero.status,bank.status,org.apiKeys,org.errors
+     *
+     * The limit is worth naming rather than nudging: it is length-dependent, so
+     * the next procedure added to any busy screen re-breaks it silently, and the
+     * failure looks like a backend outage rather than a routing limit.
+     */
+    maxParamLength: 5000,
   });
   await registerSecurity(app);
   await app.register(fastifyTRPCPlugin, {

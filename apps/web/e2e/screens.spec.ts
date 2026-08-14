@@ -222,6 +222,62 @@ test.describe('internal screens', () => {
     await expect(page.getByText('No. 1148207')).toHaveCount(0);
   });
 
+  test('a page may ask for everything it needs in one batch', async ({ page }) => {
+    /**
+     * tRPC joins a page's queries into ONE request path, comma-separated. Fastify
+     * caps a route parameter at 100 characters by default, so Settings — which
+     * asks for nine things at once, 106 characters of procedure names — was
+     * refused with a bare 414, and because a batch is atomic EVERY panel lost its
+     * data together. It read as a backend outage rather than a routing limit.
+     *
+     * The assertion is on the limit itself, not on the current batch: the next
+     * procedure added to any busy screen would otherwise re-break it silently.
+     */
+    const statuses: number[] = [];
+    page.on('response', (res) => {
+      if (res.url().includes('/trpc/')) statuses.push(res.status());
+    });
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: 'Organisation' })).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(statuses.length, 'settings made no tRPC calls at all').toBeGreaterThan(0);
+    expect(statuses, 'a batched tRPC request was refused as URI Too Long').not.toContain(414);
+
+    // and a deliberately long batch is accepted rather than rejected on length
+    const status = await page.evaluate(async () => {
+      const procs = Array.from({ length: 14 }, (_, i) => `org.get`).join(',');
+      const res = await fetch(`/trpc/${procs}?batch=1&input=%7B%7D`, {
+        headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+      });
+      return res.status;
+    });
+    expect(status, 'a long procedure batch is still rejected on length').not.toBe(414);
+  });
+
+  test('the funding pack refuses to certify a portfolio it has not examined', async ({ page }) => {
+    /**
+     * A brand-new workspace used to get the whole lender-facing document —
+     * facility £0, utilisation 0%, loan to GDV 0% — under the exceptions heading
+     * "No covenants are set, so none are tested. Nothing is drawn ahead of works."
+     * That is a clean bill of health over nothing examined, on a page somebody
+     * forwards to a lender.
+     */
+    const stamp = Date.now();
+    await page.goto('/register');
+    await page.getByLabel(/Organisation name/i).fill(`Pack Co ${stamp}`);
+    await page.getByLabel(/Your name/i).fill('Pat Pack');
+    await page.getByLabel(/^Email/i).fill(`pack-${stamp}@test.co.uk`);
+    await page.getByLabel(/^Password/i).fill('super-secret-9');
+    await page.getByLabel(/Confirm password/i).fill('super-secret-9');
+    await page.getByRole('button', { name: /Create|Start/ }).click();
+    await expect(page.getByText('Add your first deal')).toBeVisible();
+
+    await page.goto('/portfolio/pack');
+    await expect(page.getByRole('heading', { name: 'No schemes to report on yet' })).toBeVisible();
+    await expect(page.getByText(/Nothing is drawn ahead of works/)).toHaveCount(0);
+    await expect(page.getByText('Portfolio funding pack')).toHaveCount(0);
+  });
+
   test('integrations catalogue with statuses', async ({ page }) => {
     await page.goto('/integrations');
     await expect(page.getByText('Connect your data sources')).toBeVisible();

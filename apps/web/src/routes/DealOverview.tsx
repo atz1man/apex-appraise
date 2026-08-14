@@ -247,12 +247,20 @@ export default function DealOverview() {
               {STAGES.map((s, i) => {
                 const done = i < stageIdx;
                 const current = i === stageIdx;
+                /**
+                 * The token, not the literal. `brand[700]` is the LIGHT brand
+                 * green; painted on the dark surface it read at 1.84:1, well under
+                 * AA, so completed stage names were barely visible in dark mode.
+                 * `--brand-ink` carries the same value in light and a lifted one
+                 * in dark, which makes this a no-op for light and a fix for dark.
+                 */
+                const brandInk = 'rgb(var(--brand-ink))';
                 return (
                   <Fragment key={s.key}>
                     {i > 0 && (
                       <div
                         className="flex-1 min-w-[18px] h-[2px] mt-[13px]"
-                        style={{ background: i <= stageIdx ? brand[700] : neutral.borderStrong }}
+                        style={{ background: i <= stageIdx ? brandInk : neutral.borderStrong }}
                       />
                     )}
                     <div className="flex flex-col items-center gap-1.5 shrink-0 px-1" style={{ width: 96 }}>
@@ -260,9 +268,9 @@ export default function DealOverview() {
                         className="inline-flex items-center justify-center w-7 h-7 rounded-full"
                         style={
                           done
-                            ? { background: brand[700] }
+                            ? { background: brandInk }
                             : current
-                              ? { background: 'rgb(var(--surface, 255 255 255))', border: `2px solid ${brand[700]}` }
+                              ? { background: 'rgb(var(--surface, 255 255 255))', border: `2px solid ${brandInk}` }
                               : { background: neutral.sunken2, border: `1px solid ${neutral.borderStrong}` }
                         }
                       >
@@ -271,13 +279,13 @@ export default function DealOverview() {
                             <path d="M4 12l5 5L20 7" />
                           </svg>
                         ) : (
-                          <span className="fig text-[10.5px] font-semibold" style={{ color: current ? brand[700] : neutral.ink3 }}>{i + 1}</span>
+                          <span className="fig text-[10.5px] font-semibold" style={{ color: current ? brandInk : neutral.ink3 }}>{i + 1}</span>
                         )}
                       </span>
                       <span
                         className="text-[10.5px] text-center leading-tight whitespace-nowrap"
                         style={{
-                          color: current ? neutral.ink : done ? brand[700] : neutral.ink3,
+                          color: current ? neutral.ink : done ? brandInk : neutral.ink3,
                           fontWeight: current ? 700 : done ? 600 : 500,
                         }}
                       >

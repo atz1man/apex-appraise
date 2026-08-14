@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
-import { Spinner } from '../components/ui';
+import { Button, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS } from '../components/paper';
 
 /**
@@ -68,6 +68,32 @@ export default function FundingPack() {
   const breaching = exposure.positions.filter((p) => (p.covenants?.breaches.length ?? 0) > 0);
   const overdrawn = exposure.positions.filter((p) => p.drawdown?.status === 'overspending');
   const total = pages.length;
+
+  /**
+   * A pack over no schemes is not a pack.
+   *
+   * With an empty portfolio this rendered the whole lender-facing document —
+   * facility £0, utilisation 0%, loan to GDV 0% — under the exceptions heading
+   * "No covenants are set, so none are tested. Nothing is drawn ahead of works."
+   * That is a clean bill of health issued over nothing examined, and it is the
+   * sort of page somebody forwards. It says what it is instead.
+   */
+  if (t.deals === 0) {
+    return (
+      <div className="light min-h-screen bg-frame grid place-items-center px-6">
+        <div className="max-w-[440px] text-center">
+          <h1 className="text-[20px] font-semibold tracking-[-0.5px]">No schemes to report on yet</h1>
+          <p className="mt-2.5 text-[13px] leading-[1.6] text-ink-2b">
+            The funding pack reports facility, drawdown and covenant position across the schemes in your portfolio. Appraise a deal and it
+            will appear here — an empty pack would state a position that has not been examined.
+          </p>
+          <Button to="/board" className="mt-5">
+            Go to the pipeline
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="light min-h-screen bg-frame">
