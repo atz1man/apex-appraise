@@ -8,6 +8,7 @@ import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
+import { captureError } from '../errors.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
 import { signFileUrl } from '../uploads.js';
@@ -470,13 +471,48 @@ export const orgRouter = router({
     }),
 
   /**
-   * Workspace audit trail — every recorded action across the org's deals,
-   * newest first. Admin-only; feeds the Settings audit-log panel.
+   * A screen that broke in someone's browser.
+   *
+   * Client faults were invisible: a render crash blanked the page and the only
+   * person who knew was the customer looking at it. This lands them in the same
+   * error log as server faults, folded per workspace on (path, message) like
+   * everything else — and `captureError` strips the ids out of the path, because
+   * this is the one caller whose path is a customer's URL rather than a
+   * procedure name.
+   *
+   * Deliberately `authedProcedure`, not admin: the person whose screen just broke
+   * is whoever happened to be using it, and a viewer's crash is as worth knowing
+   * about as an administrator's. Not public either — an anonymous write into a
+   * 500-row capped table is a way to evict every real fault from it.
    */
+  reportClientError: authedProcedure
+    .input(
+      z.object({
+        message: z.string().min(1).max(500),
+        stack: z.string().max(2000).optional(),
+        componentStack: z.string().max(2000).optional(),
+        path: z.string().max(300),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await captureError(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        method: 'CLIENT',
+        path: input.path,
+        // not an HTTP failure: 0 marks it as a fault in the browser
+        statusCode: 0,
+        code: 'CLIENT_RENDER',
+        message: input.message,
+        stack: [input.stack, input.componentStack].filter(Boolean).join('\n\n') || null,
+      });
+      return { recorded: true };
+    }),
+
   /**
-   * Recent server faults. Admin-only and org-wide: an error is either this
-   * workspace's or it happened before a principal was known, and an analyst has
-   * no way to act on either.
+   * Recent faults, server and browser. Admin-only and org-wide: an error is
+   * either this workspace's or it happened before a principal was known, and an
+   * analyst has no way to act on either.
    */
   errors: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }).default({}))
@@ -683,6 +719,10 @@ export const orgRouter = router({
     return { ok: true };
   }),
 
+  /**
+   * Workspace audit trail — every recorded action across the org's deals,
+   * newest first. Admin-only; feeds the Settings audit-log panel.
+   */
   auditLog: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).default({}))
     .query(async ({ ctx, input }) => {

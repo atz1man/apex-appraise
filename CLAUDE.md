@@ -45,6 +45,11 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 - Rebuild containers before verifying new API procedures (`docker compose up -d --build`) —
   stale images make zod silently strip unknown mutation keys and "succeed" confusingly.
+- Run the API suite in the container, not just on the host — `docker compose run --rm --no-deps
+  --entrypoint sh api -c 'sed -i "s/postgresql/sqlite/" prisma/schema.prisma && npx prisma generate
+  && npx vitest run'`. The image is Node 22 and this Mac is Node 25: `10 ** -4` differs between
+  them, which once let the Red Book narrative guard accept a transposed Market Value in
+  production while its test was green locally.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
 - New Prisma model ⇒ add it to the seed wipe list, or stale rows accumulate across reseeds.

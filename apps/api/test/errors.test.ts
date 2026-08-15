@@ -70,6 +70,35 @@ describe('capture', () => {
     expect(rows[0]!.count).toBe(3);
   });
 
+  it('folds identifiers out of the path, so one bug is one row and no token is stored', async () => {
+    /**
+     * Faults from a browser carry the customer's own URL, and this app's routes
+     * carry ids. Without this, a screen broken on fifty deals writes fifty rows
+     * and evicts real faults from a capped table — and `/terms/<signing token>`
+     * stores a live credential in the table redaction exists to keep clean.
+     */
+    const token = 'a3f9c1d4e7b20518aa6c3d9f1e4b7c2d0918f6a3b5c7d9e1';
+    await captureError(prisma, {
+      orgId: T.orgId,
+      method: 'CLIENT',
+      path: `/terms/${token}`,
+      statusCode: 0,
+      code: 'CLIENT_RENDER',
+      message: 'signing page blew up',
+    });
+    const row = await prisma.errorEvent.findFirstOrThrow({ where: { message: 'signing page blew up' } });
+    expect(row.path).toBe('/terms/:id');
+    expect(row.path).not.toContain(token);
+
+    // and the same fault on two different deals is one row, not two
+    await captureError(prisma, { orgId: T.orgId, method: 'CLIENT', path: '/deal/clx1234567890abcdefghij/report', statusCode: 0, message: 'report blew up' });
+    await captureError(prisma, { orgId: T.orgId, method: 'CLIENT', path: '/deal/clz0987654321zyxwvutsr/report', statusCode: 0, message: 'report blew up' });
+    const folded = await prisma.errorEvent.findMany({ where: { message: 'report blew up' } });
+    expect(folded).toHaveLength(1);
+    expect(folded[0]!.path).toBe('/deal/:id/report');
+    expect(folded[0]!.count).toBe(2);
+  });
+
   it('never throws, whatever it is handed', async () => {
     // reporting a fault must not cause one
     await expect(
@@ -95,6 +124,30 @@ describe('who can read them', () => {
     await captureError(prisma, { orgId: other.orgId, method: 'GET', path: '/theirs', statusCode: 500, message: 'their problem' });
     const rows = (await callerFor(T.principal).org.errors({ limit: 50 } as never)) as Array<{ path: string }>;
     expect(rows.map((r) => r.path)).not.toContain('/theirs');
+  });
+
+  it('shows each firm the SAME bug, instead of only the firm that hit it first', async () => {
+    /**
+     * Folding used to be global. Two firms hitting one bug produced one row,
+     * owned by whoever got there first — so the second firm's admin read an
+     * empty error log while their customers were looking at the failure. A log
+     * that is silent for everyone but the first reporter is worse than none,
+     * because it is trusted.
+     *
+     * Asserted for BOTH principals: a shared bug must be visible from each side.
+     */
+    const other = await makeTenant('Shared-Bug');
+    const shared = { method: 'CLIENT', path: '/board', statusCode: 0, code: 'CLIENT_RENDER', message: 'deals.map is not a function' };
+    await captureError(prisma, { ...shared, orgId: T.orgId });
+    await captureError(prisma, { ...shared, orgId: other.orgId });
+
+    for (const tenant of [T, other]) {
+      const rows = (await callerFor(tenant.principal).org.errors({ limit: 50 } as never)) as Array<{ message: string; count: number }>;
+      const mine = rows.filter((r) => r.message === shared.message);
+      expect(mine).toHaveLength(1);
+      // each side sees its OWN occurrence, not a count of the other's traffic
+      expect(mine[0]!.count).toBe(1);
+    }
   });
 });
 

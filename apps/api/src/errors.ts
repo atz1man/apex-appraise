@@ -40,6 +40,30 @@ export function redact(text: string): string {
   return SECRET_PATTERNS.reduce((acc, [re, to]) => acc.replace(re, to), text);
 }
 
+/**
+ * Identifiers are folded out of the path before anything is stored.
+ *
+ * Server faults arrive as `trpc/deals.create` — bounded, one row per bug. Faults
+ * from a browser arrive as whatever the customer had open, and this app's routes
+ * carry ids: `/deal/<cuid>/report`. A screen that breaks on every deal would then
+ * write one row per deal, and a 500-row table would evict real faults to make
+ * room for fifty copies of one.
+ *
+ * The sharper reason is `/terms/<48-hex signing token>`. That path holds a live
+ * credential — precisely what `redact` exists to keep out of a table that gets
+ * pasted into tickets — arriving through a door redaction does not watch, because
+ * redaction runs on the message and the stack, not on the path.
+ */
+const ID_SEGMENT =
+  /^(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|\d+)$/i;
+
+export function normalisePath(path: string): string {
+  return path
+    .split('/')
+    .map((segment) => (ID_SEGMENT.test(segment) ? ':id' : segment))
+    .join('/');
+}
+
 export interface CapturedError {
   orgId?: string | null;
   userId?: string | null;
@@ -57,14 +81,21 @@ export interface CapturedError {
  * Deduplication is on (path, message) rather than on the stack: the same bug
  * reached from a hundred requests is one thing to fix, and a hundred rows of it
  * would bury the other ninety-nine bugs underneath.
+ *
+ * Folding is per workspace. Globally, the first firm to hit a bug owns the only
+ * row for it — every other firm's occurrences increment a row their own admin
+ * cannot read (the list is scoped to their orgId), so their error log says they
+ * are fine while their screens are broken. Which is the failure this whole
+ * module exists to end.
  */
 export async function captureError(prisma: PrismaClient, e: CapturedError): Promise<void> {
   try {
     const message = redact(e.message).slice(0, MAX_MESSAGE);
-    const path = e.path.split('?')[0]!.slice(0, 300);
+    const path = normalisePath(e.path.split('?')[0]!).slice(0, 300);
     const stack = e.stack ? redact(e.stack).slice(0, MAX_STACK) : null;
+    const orgId = e.orgId ?? null;
 
-    const existing = await prisma.errorEvent.findFirst({ where: { path, message } });
+    const existing = await prisma.errorEvent.findFirst({ where: { path, message, orgId } });
     if (existing) {
       await prisma.errorEvent.update({
         where: { id: existing.id },
@@ -75,7 +106,7 @@ export async function captureError(prisma: PrismaClient, e: CapturedError): Prom
 
     await prisma.errorEvent.create({
       data: {
-        orgId: e.orgId ?? null,
+        orgId,
         userId: e.userId ?? null,
         method: e.method,
         path,

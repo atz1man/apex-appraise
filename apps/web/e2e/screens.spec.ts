@@ -11,6 +11,23 @@ async function loginInternal(page: Page) {
   await expect(page.getByText('Deal tools')).toBeVisible();
 }
 
+/**
+ * How many times the workspace's error log has recorded a render fault on this
+ * route — read through the same admin procedure Settings uses.
+ */
+async function clientFaultCount(page: Page, path: string): Promise<number> {
+  return page.evaluate(async (p) => {
+    const input = encodeURIComponent(JSON.stringify({ json: { limit: 200 } }));
+    const r = await fetch(`/trpc/org.errors?input=${input}`, {
+      headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+    });
+    if (!r.ok) return 0;
+    const j = await r.json();
+    const rows = (j.result?.data?.json ?? []) as Array<{ path: string; code: string | null; count: number }>;
+    return rows.filter((row) => row.path === p && row.code === 'CLIENT_RENDER').reduce((n, row) => n + row.count, 0);
+  }, path);
+}
+
 async function northgateId(page: Page): Promise<string> {
   return page.evaluate(async () => {
     const r = await fetch('/trpc/deals.list', {
@@ -310,6 +327,67 @@ test.describe('internal screens', () => {
     // each approach says what is missing rather than showing a figure
     await expect(page.getByText('No supported £/ft² yet — add comparable evidence.')).toBeVisible();
     await expect(page.getByText('No build cost in the appraisal yet.')).toBeVisible();
+  });
+
+  test('a page that cannot load its data says so', async ({ page }) => {
+    /**
+     * A failed QUERY used to be silent, while a failed mutation toasted. The
+     * asymmetry meant a page whose data would not load rendered as though there
+     * were simply nothing to show — a different statement, and a false one. It is
+     * how a 414 on Settings went unnoticed: nine panels lost their data at once
+     * and the page merely looked empty.
+     */
+    await page.route('**/trpc/**deals.list**', (route) => route.fulfill({ status: 500, body: 'boom' }));
+    await page.goto('/board');
+    await expect(page.getByText(/Couldn't load this page's data/)).toBeVisible({ timeout: 15_000 });
+    await page.unroute('**/trpc/**deals.list**');
+  });
+
+  test('a screen that crashes says so instead of going blank', async ({ page }) => {
+    /**
+     * There was no error boundary at all, so any render-time exception unmounted
+     * the application. A blank page is the worst failure message available: it is
+     * indistinguishable from a network fault, a bad URL, or the product being
+     * broken, and a valuer seeing one mid-instruction cannot tell whether their
+     * work was saved.
+     *
+     * The fault is induced through the real path — a well-formed response whose
+     * payload is the wrong shape, so the crash happens inside React's render
+     * where a boundary is the only thing that can catch it.
+     */
+    await page.route('**/trpc/**deals.list**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        // tRPC-shaped envelope, but `deals` is not an array — the board maps it
+        body: JSON.stringify([{ result: { data: { json: { deals: 'not-an-array', total: 0 } } } }]),
+      });
+    });
+    /**
+     * Read first: the log folds repeats into one row, so a second run of this
+     * test increments rather than inserts. Asserting the row is PRESENT would
+     * pass on the previous run's leftovers without anything being reported now.
+     */
+    const before = await clientFaultCount(page, '/board');
+
+    await page.goto('/board');
+
+    await expect(page.getByRole('heading', { name: 'This screen stopped working' })).toBeVisible({ timeout: 15_000 });
+    // and it offers a way out rather than a dead end
+    await expect(page.getByRole('button', { name: 'Reload the page' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to the hub' })).toBeVisible();
+
+    /**
+     * The screen claims the fault was reported. Asserting the claim is not
+     * asserting the fact — so this checks the server's own error log, the one an
+     * admin reads in Settings, actually gained the occurrence.
+     */
+    await expect(page.getByText(/reported to your workspace/)).toBeVisible();
+    await expect
+      .poll(() => clientFaultCount(page, '/board'), { timeout: 10_000 })
+      .toBeGreaterThan(before);
+
+    await page.unroute('**/trpc/**deals.list**');
   });
 
   test('integrations catalogue with statuses', async ({ page }) => {
@@ -1995,7 +2073,14 @@ test('a new signup reaches the appraisal form in one click, on its own deal', as
    * the self-hosted and CI case.
    */
   await page.getByRole('button', { name: /Generate appraisal/i }).click();
-  await expect(page.getByText('Auto-generated appraisal')).toBeVisible({ timeout: 60_000 });
+  /**
+   * 90s, not 60s: this is a live model call, and every other live-LLM assertion
+   * in this file is written to the same budget. At 60s it went red once on a
+   * loaded machine and passed on rerun in 12s — a red that says nothing about
+   * the product teaches people to rerun until green, which is worse than a slow
+   * test. The overall test budget is 120s, so this still fails rather than hangs.
+   */
+  await expect(page.getByText('Auto-generated appraisal')).toBeVisible({ timeout: 90_000 });
 
   /**
    * But it must not let the reader believe those figures came from their text.

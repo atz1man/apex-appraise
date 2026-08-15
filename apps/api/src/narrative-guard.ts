@@ -56,11 +56,24 @@ const significantDigits = (n: number) => {
   return Math.max(1, s.length);
 };
 
+/**
+ * Rounded by the language's own decimal rules, not by float arithmetic.
+ *
+ * This was `Math.round(n * 10 ** (digits - mag)) / 10 ** (digits - mag)`, and it
+ * DISAGREED WITH ITSELF ACROSS NODE VERSIONS: `10 ** -4` is 0.0001 on Node 25 and
+ * 0.00009999999999999999 on Node 22, which is what the production image runs.
+ * 8,575,000 to 3 s.f. therefore came out as 8,580,000 on the machine the tests
+ * pass on and 8,570,000 inside the container — so the guard accepted "£8,570,000"
+ * as the engine's Market Value in production, the exact transposed digit it
+ * exists to stop, while its test went green on the developer's laptop.
+ *
+ * `toPrecision` is specified decimal rounding on the exact value of the double.
+ * It cannot drift between engines, which is the property this needs more than it
+ * needs arithmetic.
+ */
 const roundToSigFigs = (n: number, digits: number) => {
   if (n === 0) return 0;
-  const mag = Math.ceil(Math.log10(Math.abs(n)));
-  const factor = 10 ** (digits - mag);
-  return Math.round(n * factor) / factor;
+  return Number.parseFloat(n.toPrecision(digits));
 };
 
 /**

@@ -3,7 +3,11 @@ import { Suspense, lazy, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { BrandMark } from './components/ui';
+
+/** message → last time it was shown, so a failed batch does not stack toasts */
+const recentQueryErrors = new Map<string, number>();
 
 /** Expired/invalid session anywhere → clean sign-out and back to login. */
 function handleAuthError(err: unknown): boolean {
@@ -96,7 +100,53 @@ export default function App() {
       new QueryClient({
         defaultOptions: { queries: { retry: 1, staleTime: 5_000 } },
         queryCache: new QueryCache({
-          onError: (err) => void handleAuthError(err),
+          /**
+           * A failed QUERY used to be silent. Mutations already toast — the
+           * asymmetry meant a page whose data would not load rendered as though
+           * there were simply nothing to show, which is a different statement
+           * and a false one. That is exactly how a 414 on Settings went
+           * unnoticed: nine panels lost their data at once and the page looked
+           * merely empty.
+           *
+           * react-query retries once before this fires, so anything reaching
+           * here has already failed twice.
+           */
+          onError: (err) => {
+            if (handleAuthError(err)) return;
+            /**
+             * A deliberate refusal is the API working, not a fault. A revoked
+             * signing link answers NOT_FOUND and its page already explains that
+             * in its own words — a toast on top says the same thing twice, in
+             * vaguer language, and trains people to ignore the toast that
+             * matters. This mirrors the server's rule for what it records: only
+             * the unexpected.
+             */
+            const code = (err as { data?: { code?: string } })?.data?.code;
+            const HANDLED = [
+              'NOT_FOUND',
+              'FORBIDDEN',
+              'BAD_REQUEST',
+              'CONFLICT',
+              'TOO_MANY_REQUESTS',
+              'UNPROCESSABLE_CONTENT',
+              // signed out on a public page: handleAuthError only acts when
+              // there IS a session to expire, so anything reaching here is the
+              // API correctly refusing an anonymous read, not a fault
+              'UNAUTHORIZED',
+            ];
+            if (code && HANDLED.includes(code)) return;
+            const message = err instanceof Error ? err.message : 'Something went wrong';
+            /**
+             * Deduped within a short window: one batched request carrying nine
+             * queries fails as nine errors, and nine identical toasts would be
+             * worse than none.
+             */
+            const now = Date.now();
+            const last = recentQueryErrors.get(message) ?? 0;
+            if (now - last < 8_000) return;
+            recentQueryErrors.set(message, now);
+            toastGlobal('error', `Couldn't load this page's data — ${message}`);
+          },
         }),
         // every failed mutation surfaces as a toast — no more silent failures
         mutationCache: new MutationCache({
@@ -112,6 +162,8 @@ export default function App() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
+        {/* a render fault must not leave a blank page — see ErrorBoundary */}
+        <ErrorBoundary>
         <Suspense fallback={<Splash />}>
         <div key={location.pathname} className="page-enter">
         <Routes>
@@ -155,6 +207,7 @@ export default function App() {
         </Routes>
         </div>
         </Suspense>
+        </ErrorBoundary>
         </ToastProvider>
       </QueryClientProvider>
     </trpc.Provider>

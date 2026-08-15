@@ -548,15 +548,16 @@ const TOE_FIELDS: Array<[string, string, string]> = [
 ];
 
 /**
- * Server faults. Admin-only, and empty most of the time — which is the point: a
- * panel that is normally blank is read the moment it is not.
+ * Faults, from the server and from customers' browsers (`CLIENT`). Admin-only,
+ * and empty most of the time — which is the point: a panel that is normally
+ * blank is read the moment it is not.
  */
 function ErrorsPanel() {
   const { data, isLoading } = trpc.org.errors.useQuery({ limit: 25 });
   if (isLoading) return null;
   if (!data?.length) return null;
   return (
-    <Panel title="Server faults" right={<StatusChip status="amber" label={`${data.length}`} />}>
+    <Panel title="Recorded faults" right={<StatusChip status="amber" label={`${data.length}`} />}>
       <div className="flex flex-col gap-2">
         {data.map((e) => (
           <div key={e.id} className="text-[12px]">

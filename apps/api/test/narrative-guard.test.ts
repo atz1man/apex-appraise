@@ -44,6 +44,18 @@ describe('a draft that used the figures it was given', () => {
     expect(unsupportedFigures({ marketCommentary: 'Against a GDV of £8.6m the market is active.' }, facts)).toEqual([]);
   });
 
+  it('rounds the same way whatever engine it runs on', () => {
+    /**
+     * Both directions of one rounding step, pinned. The arithmetic behind this
+     * used to disagree between Node versions — `10 ** -4` differs — so 8,575,000
+     * to three significant figures was 8,580,000 where the tests ran and
+     * 8,570,000 in the production container. The guard then ACCEPTED the
+     * transposed digit it exists to catch, in the image customers use.
+     */
+    expect(unsupportedFigures({ marketCommentary: 'a GDV of £8.58m' }, facts)).toEqual([]);
+    expect(unsupportedFigures({ marketCommentary: 'a GDV of £8.57m' }, facts)).toHaveLength(1);
+  });
+
   it('ignores prose that is not a valuation figure', () => {
     const sections = {
       marketCommentary: 'Marketing periods are typically six to eight weeks and volumes over twelve months were stable.',
