@@ -277,7 +277,7 @@ async function runNonTextSweep(page: Page) {
   for (const theme of ['light', 'dark'] as const) {
     for (const [name, path] of routes) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
       await setTheme(page, theme);
       // border-color is transitioned, so a computed read straight after focus()
       // returns a value mid-animation — the audit measured the UNFOCUSED border

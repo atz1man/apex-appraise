@@ -8,6 +8,8 @@ import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
+import { exportWorkspace } from '../org-export.js';
+import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
@@ -71,7 +73,10 @@ export const orgRouter = router({
         recordFailure(`register:${email}`);
         throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
       }
-      const org = await ctx.prisma.organisation.create({ data: { name: input.orgName } });
+      // the clock starts here, and it is the only place a trial is ever granted
+      const org = await ctx.prisma.organisation.create({
+        data: { name: input.orgName, trialEndsAt: trialEndFrom(new Date()) },
+      });
       const user = await ctx.prisma.user.create({
         data: {
           orgId: org.id,
@@ -740,58 +745,25 @@ export const orgRouter = router({
 
   /**
    * GDPR data portability: one JSON file with everything the workspace owns.
-   * Secrets (password hashes, integration credentials) are excluded; BigInt
-   * pence values become plain numbers so the file is portable JSON.
+   *
+   * The table list comes from the schema, not from a list kept here — see
+   * org-export.ts for what the hand-kept version had quietly lost. Credentials
+   * are removed by field name on the way out, and pence stay pence.
    */
   exportData: adminProcedure.query(async ({ ctx }) => {
     const orgId = ctx.principal.orgId;
-    const p = ctx.prisma;
-    const [org, users, deals, appraisals, comparables, scenarios, inspections, units, milestones, tenancies, contractors, packages, photos, documents, tasks, activity, investors, holdings, cashflows, payments, benchmarks, integrations] =
-      await Promise.all([
-        p.organisation.findUnique({ where: { id: orgId } }),
-        p.user.findMany({ where: { orgId }, select: { id: true, name: true, email: true, initials: true, role: true, principalType: true, createdAt: true } }),
-        p.deal.findMany({ where: { orgId } }),
-        p.appraisal.findMany({ where: { orgId } }),
-        p.comparable.findMany({ where: { orgId } }),
-        p.scenario.findMany({ where: { orgId } }),
-        p.inspection.findMany({ where: { orgId } }),
-        p.unit.findMany({ where: { orgId } }),
-        p.salesMilestone.findMany({ where: { unit: { orgId } } }),
-        p.tenancy.findMany({ where: { orgId } }),
-        p.contractor.findMany({ where: { orgId } }),
-        p.costPackage.findMany({ where: { orgId } }),
-        p.sitePhoto.findMany({ where: { orgId } }),
-        p.document.findMany({ where: { orgId } }),
-        p.task.findMany({ where: { orgId } }),
-        p.activityEvent.findMany({ where: { orgId } }),
-        p.investor.findMany({ where: { orgId } }),
-        p.holding.findMany({ where: { investor: { orgId } } }),
-        p.cashflow.findMany({ where: { investor: { orgId } } }),
-        p.payment.findMany({ where: { orgId } }),
-        p.benchmarkPoint.findMany({ where: { orgId, source: 'contributed' } }),
-        p.integrationConnection.findMany({ where: { orgId }, select: { id: true, provider: true, status: true, lastSync: true } }),
-      ]);
-    // Deep-convert BigInt (pence) → Number for a portable plain-JSON file
-    const jsonSafe = (v: unknown): unknown => {
-      if (typeof v === 'bigint') return Number(v);
-      if (Array.isArray(v)) return v.map(jsonSafe);
-      if (v && typeof v === 'object' && !(v instanceof Date)) {
-        return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, jsonSafe(x)]));
-      }
-      return v;
-    };
-    await p.activityEvent.create({
-      data: { orgId, dealId: deals[0]?.id ?? '', actor: ctx.principal.name, action: 'exported workspace data', target: `${deals.length} deals` },
+    const file = await exportWorkspace(ctx.prisma, orgId);
+    const anyDeal = await ctx.prisma.deal.findFirst({ where: { orgId }, select: { id: true } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId,
+        dealId: anyDeal?.id ?? '',
+        actor: ctx.principal.name,
+        action: 'exported workspace data',
+        target: `${Object.keys(file.data).length} tables`,
+      },
     });
-    return jsonSafe({
-      exportedAt: new Date().toISOString(),
-      exportedBy: ctx.principal.name,
-      organisation: org ? { id: org.id, name: org.name, plan: org.plan, createdAt: org.createdAt } : null,
-      users, deals, appraisals, comparables, scenarios, inspections, units,
-      salesMilestones: milestones, tenancies, contractors, costPackages: packages,
-      sitePhotos: photos, documents, tasks, activity, investors, holdings,
-      cashflows, payments, benchmarkPoints: benchmarks, integrations,
-    }) as Record<string, unknown>;
+    return { ...file, exportedBy: ctx.principal.name } as Record<string, unknown>;
   }),
 
   /**

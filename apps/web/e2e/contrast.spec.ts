@@ -146,7 +146,7 @@ const signIn = async (page: Page, email?: string) => {
     await page.getByLabel('Password').fill('demo');
   }
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
 };
 
 /** The whole sweep, so it can be run at more than one viewport. */
@@ -211,7 +211,16 @@ async function runTextSweep(page: Page, browser: Browser, viewport: { width: num
     for (const theme of ['light', 'dark'] as const) {
       for (const [name, path] of list) {
         await p.goto(path);
-        await p.waitForLoadState('networkidle').catch(() => {});
+        /**
+         * Bounded, because `.catch()` alone never fires: waitForLoadState has no
+         * default timeout, so a page that never goes idle waits FOREVER and the
+         * test dies at its own 600s limit with a stack pointing at the next line.
+         * Site pack calls live UK open-data APIs, and when one of them hangs this
+         * sweep — which is about colour, not about the Land Registry — would take
+         * the whole browser suite down with it. Five seconds, then audit whatever
+         * has rendered.
+         */
+        await p.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
         await setTheme(p, theme);
         // Freeze animation rather than waiting a fixed interval for it: colour
         // transitions are what make a read return the PREVIOUS theme's value,
@@ -241,6 +250,10 @@ async function runTextSweep(page: Page, browser: Browser, viewport: { width: num
         ['forgot password', '/forgot'],
         ['reset password', '/reset?token=sweep'],
         ['landing', '/welcome'],
+        // the two pages a prospect reads before trusting the product with a
+        // client's file — long-form body text, which is where contrast slips
+        ['privacy notice', '/privacy'],
+        ['terms of service', '/terms'],
         ['signing page', `/terms/${signToken}`],
         ['not found', '/no-such-page'],
       ],

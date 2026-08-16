@@ -55,6 +55,10 @@ const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const SitePack = lazy(() => import('./routes/SitePack'));
 const WhatsNew = lazy(() => import('./routes/WhatsNew'));
+// public, and deliberately not behind Protected: a privacy notice you have to
+// sign in to read is not a privacy notice
+const Privacy = lazy(() => import('./routes/Legal').then((m) => ({ default: m.Privacy })));
+const Terms = lazy(() => import('./routes/Legal').then((m) => ({ default: m.Terms })));
 
 /** Branded splash while a route chunk loads — calm, no layout jank. */
 function Splash() {
@@ -173,6 +177,11 @@ export default function App() {
           <Route path="/reset" element={<ResetPassword />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
+          <Route path="/privacy" element={<Privacy />} />
+          {/* static "/terms" is the terms of service; "/terms/:token" below is a
+              client signing a specific engagement — React Router ranks the static
+              path first, so the two do not collide */}
+          <Route path="/terms" element={<Terms />} />
           {/* The root is the front door for BOTH audiences. A signed-in user gets
               their workspace; a stranger gets the product and its pricing, rather
               than being bounced to a login form with demo credentials on it —

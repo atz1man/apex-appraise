@@ -1,6 +1,7 @@
 import { TRPCError, initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import type { Context } from './context.js';
+import { assertTrialLive } from './trial.js';
 
 const t = initTRPC.context<Context>().create({ transformer: superjson });
 
@@ -13,9 +14,18 @@ export const authedProcedure = t.procedure.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, principal: ctx.principal } });
 });
 
-/** Internal team only — portals must never reach these procedures. */
-export const internalProcedure = authedProcedure.use(({ ctx, next }) => {
+/**
+ * Internal team only — portals must never reach these procedures.
+ *
+ * This is also where a lapsed trial stops. On the MUTATIONS only: an expired
+ * workspace stays fully readable, exportable and printable, and only loses the
+ * ability to write. Enforced here rather than in each router because a rule
+ * repeated in forty places is forty chances to forget it — and the one that gets
+ * forgotten is always the one that mattered.
+ */
+export const internalProcedure = authedProcedure.use(async ({ ctx, next, type, path }) => {
   if (ctx.principal.principalType !== 'internal') throw new TRPCError({ code: 'FORBIDDEN' });
+  if (type === 'mutation') await assertTrialLive(ctx.prisma, ctx.principal.orgId, path);
   return next({ ctx });
 });
 

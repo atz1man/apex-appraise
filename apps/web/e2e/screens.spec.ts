@@ -2820,3 +2820,28 @@ test('a locked-out user can reset their password, once, without being enumerated
   const signedIn = await call('auth.login', { email, password: 'brand-new-pw-1' });
   expect(signedIn.body.result?.data?.json?.token, 'new password should sign in').toBeTruthy();
 });
+
+test('the legal pages are real pages, reachable without an account', async ({ page }) => {
+  /**
+   * They were two footer links pointing at `#footer`, on a product that asks a
+   * firm to upload its clients' documents. A privacy notice you cannot read
+   * before signing up is not one, so these are public routes and this test
+   * reaches them the way a prospect would.
+   */
+  await page.goto('/welcome');
+  await page.getByRole('link', { name: 'Privacy', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Privacy notice' })).toBeVisible();
+
+  // the parts that must be accurate rather than decorative. Scoped to the
+  // sub-processor table: 'Anthropic' also appears in the prose above it, and a
+  // strict-mode violation reads exactly like a missing element.
+  await expect(page.getByRole('cell', { name: 'Anthropic', exact: true })).toBeVisible();
+  await expect(page.getByText(/no advertising, no analytics service and no tracking cookie/i)).toBeVisible();
+
+  await page.goto('/terms');
+  await expect(page.getByRole('heading', { name: 'Terms of service' })).toBeVisible();
+  // the trial's ending, stated where somebody buying can read it
+  await expect(page.getByText(/becomes\s+read-only/i)).toBeVisible();
+  // and the line the whole product depends on being true
+  await expect(page.getByText(/It is not a valuer/i)).toBeVisible();
+});

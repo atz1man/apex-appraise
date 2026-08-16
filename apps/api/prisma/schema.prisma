@@ -19,6 +19,9 @@ model Organisation {
   name      String
   logoUrl   String     @default("") // firm mark on client-facing documents
   plan      String     @default("TRIAL") // TRIAL | STARTER | GROWTH | ENTERPRISE
+  // When the trial stops. Null on a paid plan, and null on the demo workspace.
+  // A trial with no clock is a free tier nobody decided to offer.
+  trialEndsAt DateTime?
   stripeCustomerId String?
   stripeSubscriptionId String?
   // Contributing a client's appraisal ratios to a shared pool is a decision a

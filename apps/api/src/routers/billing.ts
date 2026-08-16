@@ -4,6 +4,7 @@ import { APP_URL } from '../email.js';
 import { PLANS, ensurePrice, stripeConfigured, stripeFetch, stripePublishableKey } from '../stripe.js';
 import { adminProcedure, authedProcedure, internalProcedure, router } from '../trpc.js';
 import { usageFor } from '../entitlements.js';
+import { trialStateOf } from '../trial.js';
 
 /** Admin-only guard on top of internal. */
 
@@ -17,6 +18,9 @@ export const billingRouter = router({
       mode: stripePublishableKey()?.startsWith('pk_test') ? ('test' as const) : ('live' as const),
       plan: org?.plan ?? 'TRIAL',
       plans: PLANS,
+      // the clock, so the UI can say how long is left instead of the customer
+      // finding out when a save is refused
+      trial: org ? trialStateOf(org) : { endsAt: null, expired: false, daysLeft: null },
       // what the workspace has used against what it may use — so the UI can warn
       // before someone hits a wall mid-task rather than after
       usage: await usageFor(ctx.prisma, ctx.principal.orgId, org?.plan ?? 'TRIAL'),

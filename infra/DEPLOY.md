@@ -59,3 +59,68 @@ Stripe keys the buyer portal runs in clearly-labelled demo mode (payments settle
   in front if you scale the API horizontally.
 - CI (GitHub Actions) runs the engine's 48 golden tests, both typechecks, and a full
   Postgres schema/seed validation on every push.
+
+## Going live: the four things only the owner can do
+
+Everything below is already built and exercised in demo/sandbox mode. Each item is
+a credential or a decision, and the product states honestly what it cannot do
+until each one is supplied — it does not pretend.
+
+### 1. Deploy (blocked today)
+
+`flyctl auth login` on this machine, then:
+
+```bash
+fly deploy -c infra/fly.api.toml
+fly deploy -c infra/fly.web.toml
+```
+
+The API applies migrations on boot (`infra/entrypoint.sh`), so the trial-expiry
+migration lands with the deploy. Existing TRIAL workspaces are given a fresh 14
+days at that moment rather than being retro-expired.
+
+### 2. Email — nothing reaches a real inbox until this is set
+
+Without `SMTP_URL`, invites, password resets and welcome mail go to an in-memory
+demo mailbox. Self-serve signup does not work for a real customer in that state.
+
+```bash
+fly secrets set -a apex-appraise-api \
+  SMTP_URL='smtp://apikey:SG.xxxx@smtp.sendgrid.net:587' \
+  EMAIL_FROM='Apex Appraise <no-reply@apexappraise.co.uk>' \
+  APP_URL='https://apex-appraise-web.fly.dev'
+```
+
+Then add SPF and DKIM records for the sending domain, or the mail will send and
+land in spam — which looks identical to it not sending. The demo mailbox disables
+itself the moment `SMTP_URL` is set (`email.ts`), so a production instance cannot
+serve messages out of it.
+
+### 3. Stripe — sandbox keys cannot take money
+
+The keys in `.env` are `sk_test`/`pk_test`. Checkout, plan sync and buyer payments
+are all proven against them; going live is a key swap plus tax settings.
+
+```bash
+fly secrets set -a apex-appraise-api \
+  STRIPE_SECRET_KEY='sk_live_...' \
+  STRIPE_PUBLISHABLE_KEY='pk_live_...' \
+  STRIPE_WEBHOOK_SECRET='whsec_...'
+```
+
+In the Stripe dashboard: turn on Tax if charging VAT, and set the customer portal
+so subscribers can cancel without emailing support. The billing panel shows a
+STRIPE TEST MODE chip whenever the publishable key starts `pk_test`, so a live
+instance still running sandbox keys is visible rather than silent.
+
+### 4. Identify the operating company
+
+`apps/web/src/legal/entity.ts` holds the company name, number, registered office,
+VAT number and ICO registration, with `confirmed: false`. While it is false, the
+privacy notice and terms publish with a banner saying they are not yet in force.
+Fill the fields, set `confirmed: true`, and have a solicitor read both pages —
+the liability section deliberately states that its limit is still being settled
+rather than inventing one.
+
+A UK controller also needs an ICO registration (ico.org.uk, ~£52/yr) before
+processing customer data commercially.

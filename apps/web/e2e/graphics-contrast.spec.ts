@@ -259,7 +259,7 @@ async function runGraphicsSweep(page: Page, minMarks: number) {
   for (const theme of ['light', 'dark'] as const) {
     for (const [name, path, tab] of routes) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
       if (tab) {
         await page.getByRole('button', { name: tab, exact: true }).click().catch(() => {});
       }
@@ -365,7 +365,7 @@ test('report graphics hold up light-pinned and in print media', async ({ page })
     for (const [name, path] of routes) {
       await page.emulateMedia({ media: 'screen' });
       await page.goto(path);
-      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
       await setTheme(page, theme);
       await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
       await page.emulateMedia({ media });

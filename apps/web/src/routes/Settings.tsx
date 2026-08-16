@@ -849,10 +849,46 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
       right={
         <span className="flex items-center gap-2">
           {data.mode === 'test' && data.configured && <StatusChip status="amber" label="STRIPE TEST MODE" />}
+          {data.trial.daysLeft != null && (
+            <StatusChip
+              status={data.trial.expired ? 'red' : data.trial.daysLeft <= 3 ? 'amber' : 'neutral'}
+              label={data.trial.expired ? 'TRIAL ENDED' : `${data.trial.daysLeft} DAYS LEFT`}
+            />
+          )}
           <StatusChip status={data.plan === 'TRIAL' ? 'neutral' : 'green'} label={data.plan} />
         </span>
       }
     >
+      {/*
+        The clock, said out loud. A trial that ends is only fair if the end is
+        visible beforehand — and when it has ended, the sentence people need is
+        what they can still do, not what they have lost.
+      */}
+      {data.trial.endsAt && (
+        <div
+          className="mb-4 rounded-[12px] border p-3 text-[12.5px] leading-[1.6]"
+          style={{
+            borderColor: data.trial.expired ? 'rgb(var(--status-red, 178 58 46) / 0.4)' : 'rgb(var(--border-strong))',
+            background: data.trial.expired ? 'rgb(var(--status-red-bg, 253 242 240))' : 'transparent',
+          }}
+        >
+          {data.trial.expired ? (
+            <>
+              <strong className="font-semibold">Your trial has ended.</strong> Everything here stays readable, printable
+              and exportable — choose a plan below to start editing again. Nothing has been deleted.
+            </>
+          ) : (
+            <>
+              <strong className="font-semibold">
+                {data.trial.daysLeft} day{data.trial.daysLeft === 1 ? '' : 's'} left of your trial
+              </strong>{' '}
+              — it ends on{' '}
+              {new Date(data.trial.endsAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              , after which the workspace becomes read-only until you subscribe.
+            </>
+          )}
+        </div>
+      )}
       {/* Usage against allowance, shown whether or not Stripe is wired up: the
           limits are enforced by the API regardless, so hiding them behind billing
           configuration would let someone meet a wall they were never shown. */}

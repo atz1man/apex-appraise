@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { computeAppraisal } from '@apex/appraisal-engine';
 import { fM } from '../lib/format';
 import { BrandMark, Icon } from '../components/ui';
+import { TRIAL_DAYS } from '../legal/entity';
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1002,7 +1003,8 @@ export default function Landing() {
           ))}
         </div>
         <div className="mt-6 text-center text-[12px] text-ink-2">
-          14-day trial on every plan · cancel any time · prices exclude VAT
+          {TRIAL_DAYS}-day trial with Starter allowances · read-only after it ends, never deleted · cancel any time ·
+          prices exclude VAT
         </div>
       </div>
 
@@ -1044,8 +1046,8 @@ export default function Landing() {
             {(
               [
                 ['Product', [['Platform', '#platform'], ['Features', '#features'], ['Pricing', '#pricing'], ["What's new", '/whats-new']]],
-                ['Company', [['Customers', '#customers'], ['Security', '#footer'], ['Contact', DEMO_MAILTO]]],
-                ['Legal', [['Privacy', '#footer'], ['Terms', '#footer']]],
+                ['Company', [['Customers', '#customers'], ['Contact', DEMO_MAILTO]]],
+                ['Legal', [['Privacy', '/privacy'], ['Terms', '/terms']]],
               ] as Array<[string, Array<[string, string]>]>
             ).map(([heading, links]) => (
               <div key={heading}>
