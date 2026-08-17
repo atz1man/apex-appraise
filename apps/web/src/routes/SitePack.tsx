@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
@@ -58,6 +58,37 @@ export default function SitePack() {
   });
 
   const ok = data?.status === 'ok' ? data : null;
+
+  /**
+   * A panel that missed the server's deadline is still being fetched behind the
+   * request, and lands in the shared cache when it arrives. So the page asks
+   * once more, shortly — which is why the first open of a slow site fills in
+   * rather than staying half-drawn, and why nobody waits eleven seconds for the
+   * Environment Agency before seeing the sold prices that arrived in 400ms.
+   */
+  useEffect(() => {
+    if (!ok?.incomplete) return;
+    const t = setTimeout(() => void refetch(), 4_000);
+    return () => clearTimeout(t);
+  }, [ok?.incomplete, ok?.fetchedAt, refetch]);
+
+  /**
+   * When the data was actually fetched, said out loud on anything served from
+   * the shared cache. Without it the screen implies every panel was pulled the
+   * moment it was opened — which on a site pack that now answers in a fraction
+   * of a second would be a claim about the Land Registry, not about us.
+   */
+  const asAtNote = (asAt?: string) => {
+    if (!asAt) return null;
+    const ageMs = Date.now() - new Date(asAt).getTime();
+    if (ageMs < 60_000) return null; // fetched during this request; nothing to caveat
+    const d = new Date(asAt);
+    return ` Data as at ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}.`;
+  };
+
+  /** "still coming" and "refused" are different statements to a valuer. */
+  const stateNote = (status: string, source: string) =>
+    status === 'slow' ? `Still fetching from ${source} — this panel fills in shortly.` : `${source} unreachable right now.`;
   const soldItems = ok?.soldPrices.status === 'ok' ? ok.soldPrices.items : [];
   const keyOf = (s: { address: string; date: string; price: number }) => `${s.address}|${s.date}|${s.price}`;
   const toggle = (k: string) =>
@@ -200,7 +231,7 @@ export default function SitePack() {
                 }
               >
                 {ok.soldPrices.status !== 'ok' ? (
-                  <EmptyState>HM Land Registry is unreachable right now — try again shortly.</EmptyState>
+                  <EmptyState>{stateNote(ok.soldPrices.status, 'HM Land Registry')}</EmptyState>
                 ) : soldItems.length === 0 ? (
                   <EmptyState>No sold-price records within ~1km of {ok.geo.postcode} in the Price Paid dataset.</EmptyState>
                 ) : (
@@ -313,7 +344,10 @@ export default function SitePack() {
                       </span>
                     ))}
                   </div>
-                  <div className="mt-2 text-[10.5px] text-ink-3">Source: planning.data.gov.uk (OGL). Screening only — not a legal search.</div>
+                  <div className="mt-2 text-[10.5px] text-ink-3">
+                    Source: planning.data.gov.uk (OGL). Screening only — not a legal search.
+                    {ok.constraints.status === 'ok' && asAtNote((ok.constraints as { asAt?: string }).asAt)}
+                  </div>
                 </Panel>
 
                 <Panel title="EPC register" right={<StatusChip status={ok.epc.status === 'ok' ? 'green' : 'neutral'} label={ok.epc.status === 'ok' ? 'LIVE' : 'NOT CONFIGURED'} />}>
@@ -343,9 +377,32 @@ export default function SitePack() {
                   )}
                 </Panel>
 
-                <Panel title="Live flood warnings" right={<StatusChip status={ok.floodWarnings.items.length ? 'red' : 'green'} label={ok.floodWarnings.items.length ? 'ACTIVE' : 'NONE'} />}>
+                {/*
+                  The chip used to read NONE — a green all-clear — whenever the
+                  feed failed, because it was driven by an empty item list rather
+                  than by whether anything had been checked. "No warnings" and
+                  "not checked" are the same picture and opposite facts, on the
+                  panel a valuer would quote to a lender.
+                */}
+                <Panel
+                  title="Live flood warnings"
+                  right={
+                    <StatusChip
+                      status={ok.floodWarnings.status !== 'ok' ? 'neutral' : ok.floodWarnings.items.length ? 'red' : 'green'}
+                      label={
+                        ok.floodWarnings.status === 'slow'
+                          ? 'CHECKING'
+                          : ok.floodWarnings.status !== 'ok'
+                            ? 'UNAVAILABLE'
+                            : ok.floodWarnings.items.length
+                              ? 'ACTIVE'
+                              : 'NONE'
+                      }
+                    />
+                  }
+                >
                   {ok.floodWarnings.status !== 'ok' ? (
-                    <div className="text-[11.5px] text-ink-3">Environment Agency feed unreachable right now.</div>
+                    <div className="text-[11.5px] text-ink-3">{stateNote(ok.floodWarnings.status, 'The Environment Agency feed')}</div>
                   ) : ok.floodWarnings.items.length === 0 ? (
                     <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-ink font-medium">
                       No live flood warnings within 10km of the site.
@@ -360,12 +417,15 @@ export default function SitePack() {
                       ))}
                     </div>
                   )}
-                  <div className="mt-2 text-[10.5px] text-ink-3">Source: Environment Agency real-time flood monitoring (OGL).</div>
+                  <div className="mt-2 text-[10.5px] text-ink-3">
+                    Source: Environment Agency real-time flood monitoring (OGL).
+                    {ok.floodWarnings.status === 'ok' && asAtNote((ok.floodWarnings as { asAt?: string }).asAt)}
+                  </div>
                 </Panel>
 
                 <Panel title="Walkable amenities · 800m">
                   {ok.amenities.status !== 'ok' ? (
-                    <div className="text-[11.5px] text-ink-3">OpenStreetMap amenity lookup unreachable right now.</div>
+                    <div className="text-[11.5px] text-ink-3">{stateNote(ok.amenities.status, 'The OpenStreetMap amenity lookup')}</div>
                   ) : ok.amenities.items.length === 0 ? (
                     <div className="text-[11.5px] text-ink-3">No stations, schools, supermarkets or pharmacies mapped within 800m.</div>
                   ) : (
@@ -391,7 +451,10 @@ export default function SitePack() {
                       </div>
                     </>
                   )}
-                  <div className="mt-2 text-[10.5px] text-ink-3">Source: OpenStreetMap contributors (ODbL).</div>
+                  <div className="mt-2 text-[10.5px] text-ink-3">
+                    Source: OpenStreetMap contributors (ODbL).
+                    {ok.amenities.status === 'ok' && asAtNote((ok.amenities as { asAt?: string }).asAt)}
+                  </div>
                 </Panel>
 
                 <Panel title="Counterparty check" right={<StatusChip status={companySearch.data?.status === 'not-configured' ? 'neutral' : 'green'} label={companySearch.data?.status === 'not-configured' ? 'KEY NEEDED' : 'COMPANIES HOUSE'} />}>

@@ -2845,3 +2845,40 @@ test('the legal pages are real pages, reachable without an account', async ({ pa
   // and the line the whole product depends on being true
   await expect(page.getByText(/It is not a valuer/i)).toBeVisible();
 });
+
+test('site pack paints what has arrived, and never calls an unchecked flood risk clear', async ({ page }) => {
+  /**
+   * The screen took 25 seconds, because five parallel sources meant the page
+   * waited for the slowest — 11s for the Environment Agency, 6s for Overpass to
+   * fail — and asked all of them again on every open.
+   *
+   * Two guarantees are asserted here, and the second matters more than the speed:
+   * a panel that has not arrived says so, and the flood chip does NOT read "NONE"
+   * for a check that never completed. That chip is driven by an empty item list,
+   * so before this it announced a green all-clear whenever the feed was down —
+   * on the one panel a valuer would quote to a lender.
+   */
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await northgateId(page);
+
+  const started = Date.now();
+  await page.goto(`/deal/${id}/sitepack`);
+  // something real is on screen well before the slowest upstream could answer
+  await expect(page.getByText('Sold prices').first()).toBeVisible({ timeout: 20_000 });
+  const painted = Date.now() - started;
+  expect(painted, `site pack painted in ${painted}ms`).toBeLessThan(20_000);
+
+  const floodChip = page.locator('text=/^(ACTIVE|NONE|CHECKING|UNAVAILABLE)$/').first();
+  await expect(floodChip).toBeVisible();
+  const label = (await floodChip.textContent())?.trim();
+
+  // whatever state it is in, the label must match the panel's own words
+  const body = await page.locator('body').innerText();
+  if (label === 'NONE') {
+    expect(body, 'NONE claims a completed check found nothing').toContain('No live flood warnings within 10km');
+  } else if (label === 'CHECKING') {
+    expect(body).toContain('Still fetching');
+  }
+});

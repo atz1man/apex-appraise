@@ -801,3 +801,17 @@ model IntegrationConnection {
   lastSync DateTime?
   config   String @default("{}") // provider credentials (JSON) — server-side only, never returned to clients
 }
+
+/// Public open-data responses, cached so a valuer does not wait on the Land
+/// Registry twice for the same street. Deliberately NOT org-scoped: every row is
+/// published public record keyed by postcode or rounded coordinates, identical
+/// for every firm, and containing nothing a workspace owns. That also keeps it
+/// out of the GDPR cascade and the workspace export, where it does not belong.
+model OpenDataCache {
+  key       String   @id
+  source    String
+  payload   String   // JSON, as everywhere else in this schema
+  fetchedAt DateTime @default(now())
+
+  @@index([fetchedAt])
+}
