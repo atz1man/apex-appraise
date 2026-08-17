@@ -61,8 +61,16 @@ function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string,
   ws.addRow([]);
 }
 
+/**
+ * Which row holds each sheet's column headings, remembered as it is written so
+ * the print setup can repeat it on every page without anyone maintaining a list
+ * of row numbers alongside the code that produces them.
+ */
+const headerRowOf = new WeakMap<Ws, number>();
+
 function headerRow(ws: Ws, cells: string[]) {
   const row = ws.addRow(cells);
+  headerRowOf.set(ws, row.number);
   row.eachCell({ includeEmpty: true }, (c, col) => {
     if (col > cells.length) return;
     c.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -87,6 +95,49 @@ const body = (c: ExcelJSNS.Cell) => {
   c.font = { name: 'Arial', size: 10 };
   c.border = { bottom: thin };
 };
+
+/**
+ * Print setup, applied to EVERY sheet by walking the finished workbook.
+ *
+ * Two of nine sheets had it and seven did not, which is what a per-sheet call
+ * always converges on: the ones added later get forgotten, and nobody notices
+ * until a valuer prints the residual appraisal for a client meeting and it
+ * arrives as four pages of orphaned columns with no headings on any of them.
+ * Walking the workbook means a sheet added tomorrow is covered by construction.
+ *
+ * A4, fit to one page wide and as many as it takes tall — never fit-to-height,
+ * which silently shrinks a long cashflow to unreadable. Column headings repeat
+ * on every page, and the footer carries the firm, the deal and "Page 1 of 3",
+ * because a loose page from a printed appraisal is otherwise unattributable.
+ */
+function applyPrintSetup(ws: Ws, firmName: string, dealName: string) {
+  const headerRow = headerRowOf.get(ws);
+  /**
+   * Orientation follows TOTAL WIDTH, not column count. The cashflow and the
+   * summary both have six columns; the cashflow's are wide enough to need a
+   * landscape page and the summary's are not, so counting columns put the one
+   * genuinely wide sheet in portrait. A4 fits roughly 90 characters portrait at
+   * this font, so anything past 70 gets the wider page rather than being scaled
+   * down to fit one.
+   */
+  const declared = (ws.columns ?? []).reduce((n, c) => n + (typeof c?.width === 'number' ? c.width : 10), 0);
+  const widest = declared || (ws.columnCount || 0) * 12;
+  ws.pageSetup = {
+    paperSize: 9, // A4
+    // wide tables (cashflow, phases) are unreadable squeezed into portrait
+    orientation: widest > 70 ? 'landscape' : 'portrait',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
+    ...(headerRow ? { printTitlesRow: `${headerRow}:${headerRow}` } : {}),
+  };
+  ws.headerFooter = {
+    oddFooter: `&L&"Arial,Regular"&8${firmName} · ${dealName}&R&"Arial,Regular"&8Page &P of &N`,
+    evenFooter: `&L&"Arial,Regular"&8${firmName} · ${dealName}&R&"Arial,Regular"&8Page &P of &N`,
+  };
+}
 
 export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSNS.Workbook> {
   const { dealName, address, input, R, jv, monthLabel } = opts;
@@ -430,8 +481,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     }
 
     rr.views = [{ state: 'frozen', ySplit: 5 }];
-    rr.pageSetup = { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
-  }
+    }
 
   // ---- Residual appraisal ----
   const ra = wb.addWorksheet('Residual appraisal', { properties: { tabColor: { argb: BRAND } } });
@@ -528,7 +578,6 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   }
 
   cf.views = [{ state: 'frozen', ySplit: 5 }];
-  cf.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
   // ---- JV returns ----
   const jvs = wb.addWorksheet('JV returns', { properties: { tabColor: { argb: 'FF9B79C0' } } });
@@ -628,6 +677,9 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     const r = a.addRow([k, v]);
     r.eachCell((c) => body(c));
   });
+
+  // every sheet, including any added after this was written
+  for (const ws of wb.worksheets) applyPrintSetup(ws, firmName, dealName);
 
   return wb;
 }

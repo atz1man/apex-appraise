@@ -415,3 +415,102 @@ describe('buildAppraisalWorkbook — with a growth-explicit DCF', async () => {
     expect(withoutDcf.investmentValue).toBeCloseTo(R4.investmentValue, 6);
   });
 });
+
+describe('buildAppraisalWorkbook — fit to print', async () => {
+  const R5 = computeAppraisal(referenceCase, { withCash: true });
+  const jv5 = jvWaterfall(R5.equity, R5.profit, R5.holdYears, referenceCase.jv!);
+  const wb5 = await buildAppraisalWorkbook({
+    dealName: 'Golden Fixture Works',
+    address: 'Bournemouth',
+    firm: { name: 'Marchmont & Co' },
+    input: referenceCase,
+    R: R5,
+    jv: jv5,
+    monthLabel,
+  });
+
+  /**
+   * Asserted over EVERY sheet rather than a chosen one. Two of the nine had
+   * print setup and seven did not, which is the failure mode of per-sheet
+   * configuration: whatever is added next is the thing that gets forgotten, and
+   * nobody finds out until a valuer prints the residual appraisal for a client
+   * meeting and it arrives as orphaned columns with no headings.
+   */
+  it('sets every sheet to one page wide, however many sheets there are', () => {
+    expect(wb5.worksheets.length).toBeGreaterThan(5);
+    for (const ws of wb5.worksheets) {
+      expect(ws.pageSetup.fitToPage, `${ws.name} is not fit-to-page`).toBe(true);
+      expect(ws.pageSetup.fitToWidth, `${ws.name} spills sideways`).toBe(1);
+      // never fit-to-height: it silently shrinks a long cashflow to unreadable
+      expect(ws.pageSetup.fitToHeight, `${ws.name} would be squashed vertically`).toBe(0);
+      expect(ws.pageSetup.paperSize, `${ws.name} is not A4`).toBe(9);
+    }
+  });
+
+  it('repeats the column headings on every page of a table that runs on', () => {
+    // the cashflow is the sheet that actually spans pages
+    const cf = wb5.getWorksheet('Cashflow')!;
+    expect(cf.pageSetup.printTitlesRow, 'a page-two cashflow with no headings is unreadable').toMatch(/^\d+:\d+$/);
+
+    // and the repeated row is the real heading row, not a guess
+    const [from] = cf.pageSetup.printTitlesRow!.split(':').map(Number);
+    expect(String(cf.getRow(from).getCell(1).value ?? '')).toBeTruthy();
+    expect(cf.getRow(from).getCell(1).font?.bold).toBe(true);
+  });
+
+  it('puts the firm, the deal and the page number on every printed page', () => {
+    /**
+     * A loose page from a printed appraisal is otherwise unattributable — and
+     * these are documents that get put in front of lenders.
+     */
+    for (const ws of wb5.worksheets) {
+      expect(ws.headerFooter?.oddFooter, `${ws.name} has no footer`).toContain('Marchmont & Co');
+      expect(ws.headerFooter?.oddFooter).toContain('Golden Fixture Works');
+      expect(ws.headerFooter?.oddFooter).toContain('Page &P of &N');
+    }
+  });
+
+  it('turns wide tables landscape and keeps narrow ones portrait', () => {
+    expect(wb5.getWorksheet('Cashflow')!.pageSetup.orientation).toBe('landscape');
+    expect(wb5.getWorksheet('Summary')!.pageSetup.orientation).toBe('portrait');
+  });
+});
+
+describe('buildAppraisalWorkbook — the file a client actually opens', async () => {
+  const R6 = computeAppraisal(referenceCase, { withCash: true });
+  const jv6 = jvWaterfall(R6.equity, R6.profit, R6.holdYears, referenceCase.jv!);
+
+  /**
+   * Written to a real .xlsx and read back, because setting a property on an
+   * in-memory workbook and shipping a file that carries it are different claims.
+   * exceljs serialises page setup into the sheet XML; if that ever silently
+   * stopped, every assertion above would still pass while every printed
+   * appraisal came out sprawling.
+   */
+  it('carries its print setup through a round trip to disk', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const built = await buildAppraisalWorkbook({
+      dealName: 'Golden Fixture Works',
+      address: 'Bournemouth',
+      firm: { name: 'Marchmont & Co' },
+      input: referenceCase,
+      R: R6,
+      jv: jv6,
+      monthLabel,
+    });
+    const buf = await built.xlsx.writeBuffer();
+    expect(buf.byteLength, 'an empty workbook would pass every other assertion').toBeGreaterThan(5_000);
+
+    const reopened = new ExcelJS.Workbook();
+    await reopened.xlsx.load(buf as ArrayBuffer);
+
+    expect(reopened.worksheets.length).toBe(built.worksheets.length);
+    for (const ws of reopened.worksheets) {
+      expect(ws.pageSetup.fitToWidth, `${ws.name} lost its fit-to-width in the file`).toBe(1);
+      expect(ws.pageSetup.paperSize, `${ws.name} lost A4 in the file`).toBe(9);
+      expect(ws.headerFooter?.oddFooter, `${ws.name} lost its footer in the file`).toContain('Page &P of &N');
+    }
+    // and the sheet that spans pages still repeats its headings
+    expect(reopened.getWorksheet('Cashflow')!.pageSetup.printTitlesRow).toMatch(/^\d+:\d+$/);
+  });
+});
