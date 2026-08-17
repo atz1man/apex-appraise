@@ -1562,7 +1562,14 @@ test('the appraisal report prints an investment section without desyncing pagina
    * reads clean while chromium quietly prints a second sheet. Measure the box.
    */
   const measure = () =>
-    page.evaluate(() => {
+    page.evaluate(async () => {
+      /**
+       * Measure settled type. The fonts arrive from Google with `display=swap`,
+       * so without this the heights are whatever face happened to be painted at
+       * that instant — which is why this guard failed on one machine and passed
+       * on another with the same code, and reported it as a layout defect.
+       */
+      await document.fonts.ready;
       const pages = [...document.querySelectorAll('.a4-page')];
       return {
         count: pages.length,
@@ -2616,7 +2623,14 @@ test('the report prints phase cost overrides and states what it could not fit', 
 
   // height, not scrollHeight: an over-full page grows past A4 rather than clipping
   const measure = () =>
-    page.evaluate(() => {
+    page.evaluate(async () => {
+      /**
+       * Measure settled type. The fonts arrive from Google with `display=swap`,
+       * so without this the heights are whatever face happened to be painted at
+       * that instant — which is why this guard failed on one machine and passed
+       * on another with the same code, and reported it as a layout defect.
+       */
+      await document.fonts.ready;
       const pages = [...document.querySelectorAll('.a4-page')];
       return {
         count: pages.length,

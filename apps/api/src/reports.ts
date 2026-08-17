@@ -1,12 +1,43 @@
 import type { FastifyInstance } from 'fastify';
 import jwt from 'jsonwebtoken';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { JWT_SECRET, prisma } from './context.js';
 import { recordAudit } from './audit.js';
 import { SHARE_REFUSAL_MESSAGE, hashShareToken, shareRefusal } from './share.js';
 import { verifyDownloadToken, type DownloadKind } from './download-token.js';
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
+
+/**
+ * Wait for the document's typography to settle before printing it.
+ *
+ * The report fonts are fetched from Google Fonts with `display=swap`, which
+ * renders text in a fallback face first and swaps when the webfont lands.
+ * Nothing waited for that, so a PDF could be — and intermittently was — printed
+ * mid-swap: a client-facing valuation in the wrong typeface, with different
+ * metrics and therefore different pagination from the same report viewed on
+ * screen. It showed up first as an A4 overflow that reproduced on one machine
+ * and not another, which is exactly what a font race looks like from the outside.
+ *
+ * Returns whether the intended faces are actually in use, so a render that fell
+ * back is recorded rather than shipped silently. It does NOT block the PDF: a
+ * valuation in a substitute typeface is cosmetically wrong, not factually wrong,
+ * and refusing to produce it would be the worse trade for the person waiting.
+ */
+async function typographySettled(page: Page): Promise<{ loaded: boolean; missing: string[] }> {
+  try {
+    return await page.evaluate(async () => {
+      await document.fonts.ready;
+      const wanted = ['Schibsted Grotesk', 'JetBrains Mono'];
+      const missing = wanted.filter((f) => !document.fonts.check(`12px "${f}"`));
+      return { loaded: missing.length === 0, missing };
+    });
+  } catch {
+    // never let a typography check be the reason a report fails to render
+    return { loaded: true, missing: [] };
+  }
+}
+
 
 let browserPromise: Promise<Browser> | null = null;
 // CHROMIUM_PATH lets the Docker image use the system chromium (apk) instead of
@@ -81,6 +112,8 @@ export function registerReports(app: FastifyInstance) {
       await page.goto(`${WEB_URL}/deal/${share.dealId}/${route}`, { waitUntil: 'networkidle' });
       await page.waitForSelector('.a4-page', { timeout: 15_000 });
       await page.emulateMedia({ media: 'print' });
+      const type = await typographySettled(page);
+      if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
       const pdf = await page.pdf({ format: 'A4', printBackground: true });
 
       await prisma.reportShare.update({
@@ -139,6 +172,8 @@ export function registerReports(app: FastifyInstance) {
       await page.goto(`${WEB_URL}/portfolio/pack`, { waitUntil: 'networkidle' });
       await page.waitForSelector('.a4-page', { timeout: 15_000 });
       await page.emulateMedia({ media: 'print' });
+      const type = await typographySettled(page);
+      if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
       const pdf = await page.pdf({ format: 'A4', printBackground: true });
       await recordAudit(prisma, {
         orgId: user.orgId,
@@ -215,6 +250,8 @@ export function registerReports(app: FastifyInstance) {
         await page.goto(`${WEB_URL}/deal/${dealId}/${route}`, { waitUntil: 'networkidle' });
         await page.waitForSelector('.a4-page', { timeout: 15_000 });
         await page.emulateMedia({ media: 'print' });
+        const type = await typographySettled(page);
+        if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
         const pdf = await page.pdf({ format: 'A4', printBackground: true });
         await prisma.activityEvent.create({
           data: { orgId: user.orgId, dealId, actor: user.name, action: 'generated PDF', target: `${KIND_LABEL[kind]} — ${deal.name}` },
