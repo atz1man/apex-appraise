@@ -1567,6 +1567,19 @@ test('the appraisal report prints an investment section without desyncing pagina
       return {
         count: pages.length,
         overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
+        /**
+         * Which page, how tall, and what is on it. A bare count told CI "1" and
+         * left the reader to guess — and this test fires precisely when the
+         * layout is font-metric sensitive, which is the case where you need to
+         * know WHICH section grew rather than that something did.
+         */
+        tooTall: pages
+          .map((p, i) => ({
+            page: i + 1,
+            height: Math.round(p.getBoundingClientRect().height),
+            starts: (p.querySelector('h2, h3, .eyebrow')?.textContent ?? '').slice(0, 48),
+          }))
+          .filter((p) => p.height > 1123),
         feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
       };
     });
@@ -1580,7 +1593,7 @@ test('the appraisal report prints an investment section without desyncing pagina
   // the reported value stays the capitalisation, and the page says so
   await expect(page.getByText(/the reported value remains the capitalisation/)).toBeVisible();
   const withInv = await measure();
-  expect(withInv.overflowing).toBe(0);
+  expect(withInv.overflowing, `pages past A4: ${JSON.stringify(withInv.tooTall)}`).toBe(0);
   // footers run 2..N contiguously and agree with the number of pages rendered
   expect(withInv.feet).toEqual(
     Array.from({ length: withInv.count - 1 }, (_, i) => `${i + 2}/${withInv.count}`),
@@ -1592,7 +1605,7 @@ test('the appraisal report prints an investment section without desyncing pagina
   await expect(page.getByText('Investment valuation')).toHaveCount(0);
   await expect(page.getByText('4 · Sensitivity — profit on cost')).toBeVisible();
   const noInv = await measure();
-  expect(noInv.overflowing).toBe(0);
+  expect(noInv.overflowing, `pages past A4: ${JSON.stringify(noInv.tooTall)}`).toBe(0);
   // TWO sheets separate them now: the investment valuation and, since the scheme
   // carries a DCF, its growth × exit-yield grid
   await expect(page.getByText('DCF sensitivity')).toHaveCount(0);
@@ -2608,6 +2621,19 @@ test('the report prints phase cost overrides and states what it could not fit', 
       return {
         count: pages.length,
         overflowing: pages.filter((p) => p.getBoundingClientRect().height > 1123).length,
+        /**
+         * Which page, how tall, and what is on it. A bare count told CI "1" and
+         * left the reader to guess — and this test fires precisely when the
+         * layout is font-metric sensitive, which is the case where you need to
+         * know WHICH section grew rather than that something did.
+         */
+        tooTall: pages
+          .map((p, i) => ({
+            page: i + 1,
+            height: Math.round(p.getBoundingClientRect().height),
+            starts: (p.querySelector('h2, h3, .eyebrow')?.textContent ?? '').slice(0, 48),
+          }))
+          .filter((p) => p.height > 1123),
         feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
       };
     });
