@@ -71,6 +71,16 @@ server {
     try_files $uri =404;
   }
 
+  # Self-hosted typefaces. Their names carry no content hash — the service worker
+  # precaches them by path and index.html preloads them by path, both of which
+  # need a name that survives a build — so they are cached hard and REPLACED BY
+  # RENAMING. Changing the bytes under an existing name would leave year-old
+  # copies in browsers that already hold one; ship a new face as a new filename.
+  location ^~ /fonts/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+  }
+
   # Static icons/manifest: a day is plenty (stable names, contents rarely change)
   location ~* \.(png|webp|svg|webmanifest|txt)$ {
     add_header Cache-Control "public, max-age=86400";

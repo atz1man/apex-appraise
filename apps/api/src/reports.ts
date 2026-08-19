@@ -11,13 +11,20 @@ const WEB_URL = process.env.WEB_URL ?? 'http://localhost:5273';
 /**
  * Wait for the document's typography to settle before printing it.
  *
- * The report fonts are fetched from Google Fonts with `display=swap`, which
- * renders text in a fallback face first and swaps when the webfont lands.
- * Nothing waited for that, so a PDF could be — and intermittently was — printed
- * mid-swap: a client-facing valuation in the wrong typeface, with different
- * metrics and therefore different pagination from the same report viewed on
- * screen. It showed up first as an A4 overflow that reproduced on one machine
- * and not another, which is exactly what a font race looks like from the outside.
+ * The report fonts use `display=swap`, which renders text in a fallback face
+ * first and swaps when the webfont lands. Nothing waited for that, so a PDF
+ * could be — and intermittently was — printed mid-swap: a client-facing
+ * valuation in the wrong typeface, with different metrics and therefore
+ * different pagination from the same report viewed on screen. It showed up
+ * first as an A4 overflow that reproduced on one machine and not another,
+ * which is exactly what a font race looks like from the outside.
+ *
+ * The fonts came from Google until self-hosting took that third party out from
+ * between this renderer and the typeface of a signed valuation. Same-origin and
+ * preloaded, the swap window is now short enough to be hard to catch — which is
+ * an argument for keeping this wait, not for removing it. A race that fires once
+ * a quarter on a document carrying a RICS registration is worse than one that
+ * fires daily, because nobody is looking when it does.
  *
  * Returns whether the intended faces are actually in use, so a render that fell
  * back is recorded rather than shipped silently. It does NOT block the PDF: a
