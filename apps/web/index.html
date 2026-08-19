@@ -29,12 +29,13 @@
       content="From the front door to the signed report — one workfile. Every figure traceable to its evidence."
     />
     <meta name="twitter:image" content="/og.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Typefaces are served by this app, not by Google: a signed valuation must
+         not depend on a third party being reachable at render time, the offline
+         field app cannot cache a cross-origin font, and the privacy notice says
+         "Nobody else." Preloaded so first paint uses the intended face rather
+         than swapping into it. @font-face lives in src/index.css. -->
+    <link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>
