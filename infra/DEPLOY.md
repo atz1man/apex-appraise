@@ -21,10 +21,33 @@ export EMAIL_FROM="Apex Appraise <no-reply@yourdomain.co.uk>"
 export APP_URL="https://app.yourdomain.co.uk"   # used in email links
 export STRIPE_SECRET_KEY=sk_live_...            # live buyer card payments
 export STRIPE_WEBHOOK_SECRET=whsec_...          # POST /webhooks/stripe
+export TILE_URL="https://.../{z}/{x}/{y}.png?key=..."   # map tiles — READ THE NOTE BELOW
+export TILE_ATTRIBUTION="&copy; Your provider"  # the credit line that provider requires
+export TILE_USER_AGENT="YourFirm/1.0 (ops@yourfirm.co.uk)"  # who to contact about our traffic
 
 # 3. run
 docker compose up -d --build
 ```
+
+### Map tiles need a decision before you sell this
+
+Tiles are fetched and re-served by the API, never by the visitor's browser, so no mapping
+provider learns who your valuers are or which sites they opened. That part is settled.
+
+What is **not** settled is where the tiles come from. Unset, `TILE_URL` points at
+OpenStreetMap's public tile servers, which are donation-funded and whose usage policy
+forbids heavy use by a distributed application without prior permission from the Operations
+Working Group. That default is right for local development and a demo; it is **not** a
+licence to run a commercial product off it. Before you take paying customers, either:
+
+  - point `TILE_URL` at a provider you pay (MapTiler, Mapbox, Ordnance Survey — OS Maps is
+    the natural fit for a UK product), and set `TILE_ATTRIBUTION` to the credit line their
+    terms require; or
+  - ask the OSM Operations Working Group for permission, and abide by whatever they say.
+
+Set `TILE_USER_AGENT` either way. The policy asks for a User-Agent that identifies the
+application so somebody can contact you about a problem; the default names this repository,
+which is no use to anyone once you are running your own deployment.
 
 The app is served on port **8080** (put Caddy/Traefik or a cloud load balancer with TLS in
 front and point it at `:8080`). Postgres data and uploaded files live in named Docker volumes

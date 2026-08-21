@@ -13,6 +13,8 @@ import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
 import { assertCanAddMember, usageFor } from '../entitlements.js';
+import { signDownloadToken } from '../download-token.js';
+import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
 import { recordAudit } from '../audit.js';
@@ -43,6 +45,21 @@ const DEFAULT_INTEGRATIONS = [
 ];
 
 export const orgRouter = router({
+  /**
+   * What a map needs to draw itself: where to fetch tiles, and who to credit.
+   *
+   * Both come from the server because both are deployment facts, not compile-time
+   * ones — an owner who points TILE_URL at a provider they pay must not have to
+   * rebuild the front end, and the attribution line has to follow whatever they
+   * pointed it at. The token is what lets an <img> load a tile at all; see
+   * download-token.ts for why the credential travels in the URL.
+   */
+  mapConfig: internalProcedure.query(({ ctx }) => ({
+    tileUrl: `/tiles/{z}/{x}/{y}.png?t=${encodeURIComponent(signDownloadToken({ sub: ctx.principal.userId, kind: 'tiles' }))}`,
+    attribution: TILE_ATTRIBUTION,
+    maxZoom: 19,
+  })),
+
   /**
    * The demo mailbox: what would have been emailed, when no SMTP is configured.
    *

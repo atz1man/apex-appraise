@@ -137,11 +137,13 @@ export function Privacy() {
           way: a postcode goes out, published records come back. No client or workspace data is sent to them.
         </p>
         <p>
-          One of those lookups is made by your browser rather than by our server: the map tiles behind a site map. That
-          provider therefore sees your IP address and roughly which location you were looking at, the way any embedded
-          map does. Every other source is queried server-side, where the provider sees us and not you. Nothing else on
-          any page is loaded from a third party — the typefaces, icons and scripts are all served by this application,
-          which is checked on every build.
+          All of them are queried by our server, not by your browser — including the tiles behind a site map, which
+          this application fetches and re-serves rather than pointing your browser at a mapping provider. So those
+          providers see us and never you. Loading any page of this product contacts nothing but this product: the
+          typefaces, icons, scripts and map tiles are every one of them served from here, and a browser test fails the
+          build if that stops being true. The single exception is paying: entering card details loads Stripe’s own
+          payment form, because card numbers should reach Stripe and never us. Nothing else you do here reaches anyone
+          else’s server.
         </p>
       </Section>
 
