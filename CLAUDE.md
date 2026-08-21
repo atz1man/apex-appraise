@@ -24,9 +24,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (107; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (199; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/web && npx playwright test` — e2e (57, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (108, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x docker compose up -d --build` — production stack: nginx :8080 → api → Postgres 16.
 
@@ -39,6 +39,13 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 - UK conventions: £, RICS, SDLT, CIL, GIA/NIA, en-GB dates.
 - Money stored as integer pence in the DB.
 - Design tokens only — no raw hex in components (tokens come from `@apex/ui-tokens`).
+- Typefaces are SELF-HOSTED (`apps/web/public/fonts`, `@font-face` in `src/index.css`) — never
+  re-add a Google Fonts `<link>`. A signed valuation is printed server-side, the field app has to
+  render offline, and the privacy notice says "Nobody else"; `e2e/typography.spec.ts` enforces it.
+- NOTHING is loaded from a third party by the browser — typefaces, icons, scripts and map
+  tiles are all served by this app; open data and tiles are fetched server-side. The only
+  exception is Stripe's payment form, which must see a card number. `e2e/third-party.spec.ts`
+  fails the build if a page contacts anyone else.
 - Provenance on every figure (extraction citations, audit events).
 
 ## Gotchas (hard-won — do not re-learn)

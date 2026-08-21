@@ -136,6 +136,15 @@ export function Privacy() {
           Public data sources are queried for site information — {DATA_SOURCES.join(', ')} — but the traffic runs one
           way: a postcode goes out, published records come back. No client or workspace data is sent to them.
         </p>
+        <p>
+          All of them are queried by our server, not by your browser — including the tiles behind a site map, which
+          this application fetches and re-serves rather than pointing your browser at a mapping provider. So those
+          providers see us and never you. Loading any page of this product contacts nothing but this product: the
+          typefaces, icons, scripts and map tiles are every one of them served from here, and a browser test fails the
+          build if that stops being true. The single exception is paying: entering card details loads Stripe’s own
+          payment form, because card numbers should reach Stripe and never us. Nothing else you do here reaches anyone
+          else’s server.
+        </p>
       </Section>
 
       <Section heading="How long it is kept">

@@ -1,3 +1,60 @@
+/* ---------------------------------------------------------------------------
+   Self-hosted typefaces. These were loaded from Google Fonts, which put a third
+   party between this product and three things that must not depend on one:
+
+     - A SIGNED VALUATION. Report PDFs are printed by headless chromium on the
+       server, so the typeface of a client-facing, RICS-registered document —
+       and therefore its metrics and pagination — depended on Google being
+       reachable from the render host at that moment.
+     - THE OFFLINE FIELD APP. The service worker only caches same-origin
+       requests, so the cross-origin font was skipped by design. An inspection
+       opened on a site with no signal opened in a fallback face.
+     - THE PRIVACY NOTICE. Every page load handed Google the visitor's IP and
+       user agent, on a notice that names three companies and then says
+       "Nobody else."
+
+   Both families ship one VARIABLE file per subset covering the whole weight
+   range, which is why four files serve seven weights. Only latin and latin-ext
+   are carried: this is a UK product, and latin-ext covers the European names
+   and addresses that actually turn up on a British construction project.
+   Cyrillic, Greek and Vietnamese were dropped rather than vendored unused.
+
+   Both are SIL Open Font License 1.1 — see OFL-*.txt alongside the .woff2
+   files, which the licence requires to travel with them.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/schibsted-grotesk-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/schibsted-grotesk-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

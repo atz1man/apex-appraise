@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { type Geo, geocodePostcode, isNotFound } from './opendata.js';
 
 /**
  * Caching for the public open-data lookups behind the site pack.
@@ -133,8 +134,16 @@ export async function cached<T>(
     await write(prisma, opts, value);
     return { value, fetchedAt: new Date(), fromCache: false };
   } catch (err) {
-    // remember the outage, never the emptiness
-    coolingOff.set(opts.key, Date.now() + COOLOFF_MS);
+    /**
+     * Remember the outage, never the emptiness — and a 404 is emptiness. The
+     * cool-off exists to stop us hammering an upstream that is DOWN, and an
+     * upstream that answered "no such thing" has proved it is up. Treating that
+     * as an outage also lost the reason: the second look inside the cool-off
+     * throws SourceCoolingOff rather than the original 404, so a genuinely bad
+     * postcode reported "isn't a recognised postcode" the first time and "the
+     * lookup is unavailable" on exactly the retry that message asks for.
+     */
+    if (!isNotFound(err)) coolingOff.set(opts.key, Date.now() + COOLOFF_MS);
     throw err;
   }
 }
@@ -168,4 +177,46 @@ export async function pruneOpenDataCache(prisma: PrismaClient, olderThanMs = 60 
   const cutoff = new Date(Date.now() - olderThanMs);
   const { count } = await prisma.openDataCache.deleteMany({ where: { fetchedAt: { lt: cutoff } } }).catch(() => ({ count: 0 }));
   return count;
+}
+
+/**
+ * Where a deal is, and — when it cannot be placed — WHY.
+ *
+ * The subject's own geocode was the one uncached, unguarded call sitting in
+ * front of five cached and deadlined ones, and every failure of it was reported
+ * as `bad-postcode`: a confident claim about the customer's data. So a
+ * postcodes.io outage told a valuer that the site postcode they had typed
+ * correctly "isn't a recognised UK postcode", and blanked the whole site pack —
+ * sold prices, flood risk, constraints, EPC — behind that sentence.
+ *
+ * This is the flood-chip lesson again: "there is nothing there" and "we could
+ * not look" are the same picture and opposite facts. postcodes.io answers 404
+ * for a postcode that does not exist, which is a fact about the postcode;
+ * anything else — a timeout, a 5xx, a refused connection — is a fact about
+ * postcodes.io, and the two must not print the same sentence.
+ *
+ * Cached for the same reason the rest of the pack is: coordinates for a postcode
+ * are effectively permanent, so asking again on every open bought nothing and
+ * cost a round trip in front of everything else.
+ */
+export type Located =
+  | { status: 'located'; geo: Geo; fetchedAt: Date }
+  /** the deal has no postcode to look up */
+  | { status: 'no-postcode' }
+  /** the upstream answered, and this postcode is not a real one */
+  | { status: 'bad-postcode'; postcode: string }
+  /** we could not ask — say so, and never dress it as the customer's mistake */
+  | { status: 'unavailable'; postcode: string };
+
+export async function locate(prisma: PrismaClient, postcode: string | null | undefined): Promise<Located> {
+  const clean = (postcode ?? '').trim();
+  if (!clean) return { status: 'no-postcode' };
+  try {
+    const hit = await cached(prisma, { key: `geocode:${clean.replace(/\s+/g, '').toUpperCase()}`, source: 'postcodes.io', ttlMs: TTL.geo }, () =>
+      geocodePostcode(clean),
+    );
+    return { status: 'located', geo: hit.value, fetchedAt: hit.fetchedAt };
+  } catch (e) {
+    return isNotFound(e) ? { status: 'bad-postcode', postcode: clean } : { status: 'unavailable', postcode: clean };
+  }
 }

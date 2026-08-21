@@ -15,6 +15,7 @@ import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { adminProcedure, internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
+import { locate } from '../opendata-cache.js';
 import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
@@ -1133,7 +1134,7 @@ export const autoAppraisalRouter = router({
 
 export const comparablesRouter = router({
   list: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    await assertDeal(ctx, input);
+    const deal = await assertDeal(ctx, input);
     const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
     const summary = weightedComparables(
       comps.map((c: any) => ({
@@ -1142,7 +1143,18 @@ export const comparablesRouter = router({
         adjustments: { size: c.adjSize, condition: c.adjCondition, date: c.adjDate, location: c.adjLocation },
       })),
     );
-    return { comps, summary };
+    /**
+     * The subject's coordinates, resolved HERE rather than by the browser.
+     *
+     * The Comparables screen used to fetch api.postcodes.io directly from the
+     * visitor's browser, which put a third party between a valuer and their own
+     * evidence map three ways over: it handed that provider the visitor's IP, it
+     * missed the cache this deal's comps already use, and it failed for anyone
+     * behind an ad blocker or a corporate proxy — silently, since the map was
+     * gated on the result and simply vanished.
+     */
+    const subject = await locate(ctx.prisma, (deal as any)?.postcode);
+    return { comps, summary, subject };
   }),
 
   upsert: internalProcedure

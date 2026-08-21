@@ -35,6 +35,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       EPC_BEARER_TOKEN: ${EPC_BEARER_TOKEN:-}
       NODE_ENV: production
+      # Demo data is opt-in on a production build. CI and a demo instance say so;
+      # a real deployment leaves it unset and boots with no accounts it did not
+      # create. See apps/api/prisma/seed.ts for why the default runs this way.
+      SEED_DEMO: ${SEED_DEMO:-}
       PORT: 4100
       # The browser suite logs in on every test from a single IP, so the honest
       # production limits would fail it for the wrong reason. The limiter itself

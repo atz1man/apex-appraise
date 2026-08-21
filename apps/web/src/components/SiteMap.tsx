@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { trpc } from '../lib/trpc';
 
 export interface MapPin {
   lat: number;
@@ -25,20 +26,42 @@ const icon = (kind: 'subject' | 'comp') =>
   });
 
 /**
- * Real interactive map — Leaflet + OpenStreetMap tiles (no API key, no billing).
- * Subject site gets the brand house pin; comparables get mint dots with popups.
+ * Real interactive map. Subject site gets the brand house pin; comparables get
+ * mint dots with popups.
+ *
+ * Tiles come from THIS application, not from tile.openstreetmap.org directly.
+ * Pointing the browser at a public tile server told that server the IP address
+ * of every valuer and the coordinates of every site they opened — the last
+ * third-party request left on any page, on a privacy notice that says "Nobody
+ * else." The API proxies and caches them under a User-Agent that identifies us,
+ * which is what OSM's tile policy asks for and what a browser cannot provide.
  */
 export function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height?: number }) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  /**
+   * The tile URL carries a short-lived token, so the map waits for it. Without
+   * this gate Leaflet would fire a screenful of unauthorised tile requests on
+   * first paint and cache the failures.
+   */
+  const { data: mapConfig } = trpc.org.mapConfig.useQuery(undefined, {
+    /**
+     * Just under the token's own half-hour life. The tile URL carries the token,
+     * so a new token is a new URL and a whole screen of browser-cached tiles
+     * stops matching — refetching them from us costs a round trip each. Rotating
+     * once per session rather than every ten minutes keeps that rare, and the
+     * proxy's cache means even then nothing extra reaches the tile server.
+     */
+    staleTime: 25 * 60_000,
+  });
 
   useEffect(() => {
-    if (!el.current || pins.length === 0) return;
+    if (!el.current || pins.length === 0 || !mapConfig) return;
     const map = L.map(el.current, { scrollWheelZoom: false, attributionControl: true });
     mapRef.current = map;
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    L.tileLayer(mapConfig.tileUrl, {
+      maxZoom: mapConfig.maxZoom,
+      attribution: mapConfig.attribution,
     }).addTo(map);
     const group = L.featureGroup(
       pins.map((p) =>
@@ -53,7 +76,7 @@ export function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height?: numbe
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins)]);
+  }, [JSON.stringify(pins), mapConfig?.tileUrl]);
 
   if (pins.length === 0) return null;
   return <div ref={el} style={{ height }} className="rounded-[12px] overflow-hidden border border-border-strong z-0" />;

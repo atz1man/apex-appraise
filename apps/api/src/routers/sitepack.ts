@@ -7,11 +7,10 @@ import {
   fetchEpc,
   fetchFloodWarnings,
   fetchSoldPrices,
-  geocodePostcode,
   matchPsf,
 } from '../opendata.js';
 import { companiesHouseConfigured, companyProfile, searchCompanies } from '../companieshouse.js';
-import { TTL, cached, coordKey } from '../opendata-cache.js';
+import { TTL, cached, coordKey, locate } from '../opendata-cache.js';
 import { getIntegrationCreds } from '../integration-creds.js';
 import { internalProcedure, router } from '../trpc.js';
 
@@ -35,12 +34,18 @@ export const sitePackRouter = router({
         await ctx.prisma.deal.update({ where: { id: deal.id }, data: { postcode: input.postcode } });
       }
 
-      let geo;
-      try {
-        geo = await geocodePostcode(postcode);
-      } catch {
-        return { status: 'bad-postcode' as const, dealName: deal.name, address: deal.address, postcode };
+      /**
+       * `locate` distinguishes "that postcode does not exist" from "we could not
+       * reach postcodes.io", which this used to collapse into `bad-postcode` —
+       * so an outage at a free geocoder blanked every panel below and told the
+       * valuer their own postcode was wrong. It is also cached now: this was the
+       * one uncached blocking call standing in front of five cached ones.
+       */
+      const located = await locate(ctx.prisma, postcode);
+      if (located.status !== 'located') {
+        return { status: located.status, dealName: deal.name, address: deal.address, postcode };
       }
+      const geo = located.geo;
 
       const epcCreds = await getIntegrationCreds(ctx.prisma, ctx.principal.orgId, 'EPC Register');
       const cc = coordKey(geo.latitude, geo.longitude);
