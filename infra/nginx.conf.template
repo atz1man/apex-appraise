@@ -51,6 +51,17 @@ server {
     proxy_read_timeout 120s;
   }
 
+  # Map tiles, proxied by the API so no visitor's browser talks to a tile server.
+  # ^~ because the .png regex location below would otherwise win and try to serve
+  # these off the web image's disk, where no tile has ever existed.
+  location ^~ /tiles/ {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
+    # the API answers these with immutable max-age; nginx must not overwrite it
+    proxy_read_timeout 30s;
+  }
+
   location /webhooks/ {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;

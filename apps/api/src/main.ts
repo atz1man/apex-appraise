@@ -6,6 +6,7 @@ import { createContext } from './context.js';
 import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
 import { registerReports } from './reports.js';
+import { registerTiles } from './tiles.js';
 import { registerWebhooks } from './webhooks.js';
 import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
@@ -79,6 +80,7 @@ async function main() {
   });
   await registerUploads(app);
   registerReports(app);
+  registerTiles(app);
   registerWebhooks(app);
   registerPublicApi(app);
   registerAdmin(app);

@@ -24,7 +24,7 @@ import { JWT_SECRET } from './context.js';
 export const DOWNLOAD_TOKEN_TTL = '2m';
 const AUDIENCE = 'apex.report-download';
 
-export type DownloadKind = 'appraisal' | 'redbook' | 'engagement' | 'portfolio' | 'file';
+export type DownloadKind = 'appraisal' | 'redbook' | 'engagement' | 'portfolio' | 'file' | 'tiles';
 
 export interface DownloadClaims {
   sub: string;
@@ -43,11 +43,22 @@ export interface DownloadClaims {
  */
 export const FILE_TOKEN_TTL = '30m';
 
+/**
+ * Map tiles are the same problem in a different shape: Leaflet loads them as
+ * <img> elements, which cannot carry an Authorization header either. A tile
+ * token names no deal and no file — it says only "someone signed in is looking
+ * at a map", which is all the tile proxy needs to know and all it should learn.
+ *
+ * It has to outlive a session someone leaves open on a map, hence the same half
+ * hour as files rather than the two minutes a report click needs.
+ */
+export const TILE_TOKEN_TTL = FILE_TOKEN_TTL;
+
 export function signDownloadToken(claims: DownloadClaims): string {
   return jwt.sign({ kind: claims.kind, dealId: claims.dealId, key: claims.key }, JWT_SECRET, {
     subject: claims.sub,
     audience: AUDIENCE,
-    expiresIn: claims.kind === 'file' ? FILE_TOKEN_TTL : DOWNLOAD_TOKEN_TTL,
+    expiresIn: claims.kind === 'file' || claims.kind === 'tiles' ? FILE_TOKEN_TTL : DOWNLOAD_TOKEN_TTL,
   });
 }
 

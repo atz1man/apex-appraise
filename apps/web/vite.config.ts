@@ -12,6 +12,8 @@ export default defineConfig({
       // public read-only report links, same as nginx does in production
       '/shared': { target: 'http://localhost:4100', changeOrigin: true },
       '/api': { target: 'http://localhost:4100', changeOrigin: true },
+      // map tiles are proxied by the API, so no browser talks to a tile server
+      '/tiles': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {
