@@ -51,9 +51,16 @@ which is no use to anyone once you are running your own deployment.
 
 The app is served on port **8080** (put Caddy/Traefik or a cloud load balancer with TLS in
 front and point it at `:8080`). Postgres data and uploaded files live in named Docker volumes
-(`pgdata`, `uploads`) — snapshot those for backups. The API pushes the schema and seeds the
-demo org on first boot; **change the demo passwords or delete the demo users before going
-live** (`Settings → Members`, or reseed with your own data).
+(`pgdata`, `uploads`) — snapshot those for backups. The API applies migrations on first boot.
+
+**It does not create any accounts.** A production build (`NODE_ENV=production`, which is what
+this compose file sets) seeds demo data only when `SEED_DEMO=1` is set — so a real deployment
+comes up with an empty database and you register the first workspace through the app at
+`/register`. That used to run the other way: the demo org was seeded on day one of going live,
+putting `arthur@apexappraise.co.uk`, `investor@demo.co.uk` and `buyer@demo.co.uk` on the
+internet with the password `demo`, and this runbook asked you to remember to remove them.
+
+Set `SEED_DEMO=1` only where sample deals are the point — a sales demo, or CI.
 
 ## Option B — Fly.io (sketch)
 

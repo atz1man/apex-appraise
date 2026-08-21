@@ -97,6 +97,9 @@ jobs:
           # a throwaway signing key: this stack is created and destroyed inside
           # this job, and no real secret should ever be needed to run the tests
           JWT_SECRET: ci-ephemeral-not-a-real-secret
+          # the suite signs in as the seeded demo users, so this stack asks for
+          # them explicitly — a production build does not seed them
+          SEED_DEMO: '1'
         run: |
           # --env-file /dev/null so a stray .env can never leak real credentials
           # into a CI run, and so the suite is proven to pass WITHOUT them

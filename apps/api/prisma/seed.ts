@@ -22,6 +22,30 @@ async function main() {
    * A fresh database still seeds, which is what a new deployment and CI need.
    * Anything else requires someone to say so out loud with SEED_FORCE=1.
    */
+  /**
+   * REFUSES to invent demo logins on a production database.
+   *
+   * The guard below protects a POPULATED database. A first production deploy has
+   * an EMPTY one, which is exactly the case that guard lets through — so the API
+   * entrypoint seeded the demo org on day one of going live, creating
+   * arthur@apexappraise.co.uk, investor@demo.co.uk and buyer@demo.co.uk with the
+   * password `demo`, reachable from the internet. The runbook said to go and
+   * change them afterwards, which is the same as hoping.
+   *
+   * So production must ask for demo data out loud. CI and the demo instance do
+   * (SEED_DEMO=1 in docker-compose); a real deployment does not, and gets a clean
+   * database with no accounts it did not create. The direction matters more than
+   * the mechanism: forgetting the flag costs a demo its sample deals, while the
+   * old default cost a live system three known passwords.
+   */
+  if (process.env.NODE_ENV === 'production' && process.env.SEED_DEMO !== '1') {
+    console.log(
+      '[seed] NODE_ENV=production and SEED_DEMO is not 1 — not seeding demo data. ' +
+        'Register the first workspace through the app. Set SEED_DEMO=1 only for a demo instance.',
+    );
+    return;
+  }
+
   const existingOrgs = await prisma.organisation.count();
   if (existingOrgs > 0 && process.env.SEED_FORCE !== '1') {
     console.log(
