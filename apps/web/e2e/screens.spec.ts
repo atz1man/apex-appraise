@@ -51,11 +51,33 @@ test.describe('internal screens', () => {
     await expect(page.getByText(/Proceed|Caution|Decline/).first()).toBeVisible();
   });
 
-  test('comparables derives a supported rate', async ({ page }) => {
+  test('comparables derives a supported rate, and locates the subject server-side', async ({ page }) => {
     const id = await northgateId(page);
+    /**
+     * This screen used to geocode the subject by calling api.postcodes.io from
+     * the visitor's browser: it handed a third party their IP, missed the cache
+     * the same deal's comps already use, and — because the map was gated on the
+     * result — silently disappeared for anyone behind an ad blocker or a
+     * corporate proxy. The API resolves it now.
+     */
+    const thirdParty: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('postcodes.io')) thirdParty.push(r.url());
+    });
+
     await page.goto(`/deal/${id}/comparables`);
     await expect(page.getByText('Sales comparison — adjustment grid')).toBeVisible();
     await expect(page.getByText('Weighted supported value')).toBeVisible();
+    await expect(page.getByText('Location of evidence')).toBeVisible();
+
+    expect(thirdParty, 'the browser geocoded the subject itself').toEqual([]);
+
+    /**
+     * Whatever the geocoder did, the panel never claims the postcode is missing
+     * on a deal that has one — that sentence sent valuers to re-enter data that
+     * was already correct whenever postcodes.io was merely unreachable.
+     */
+    await expect(page.getByText(/No site postcode on this deal yet/)).toHaveCount(0);
   });
 
   test('scenarios compares three options with best-per-row', async ({ page }) => {

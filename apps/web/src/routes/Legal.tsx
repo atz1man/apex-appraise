@@ -137,11 +137,11 @@ export function Privacy() {
           way: a postcode goes out, published records come back. No client or workspace data is sent to them.
         </p>
         <p>
-          Two of those lookups are made by your browser rather than by our server: the tiles behind a site map, and the
-          postcode-to-coordinates lookup behind the comparables map. Those two providers therefore see your IP address
-          and roughly which location you were looking at, the way any embedded map does. Every other source is queried
-          server-side, where the provider sees us and not you. Nothing else on any page is loaded from a third party —
-          the typefaces, icons and scripts are all served by this application, which is checked on every build.
+          One of those lookups is made by your browser rather than by our server: the map tiles behind a site map. That
+          provider therefore sees your IP address and roughly which location you were looking at, the way any embedded
+          map does. Every other source is queried server-side, where the provider sees us and not you. Nothing else on
+          any page is loaded from a third party — the typefaces, icons and scripts are all served by this application,
+          which is checked on every build.
         </p>
       </Section>
 

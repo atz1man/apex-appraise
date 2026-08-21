@@ -10,7 +10,15 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
  * test that reached the real APIs would be slow, flaky, and would prove the
  * opposite of what it claims on the day one of them was down.
  */
-vi.mock('../src/opendata.js', () => ({
+vi.mock('../src/opendata.js', async (importOriginal) => ({
+  /**
+   * Spread the real module first: the caching layer classifies failures with
+   * this module's own isNotFound, and a mock that replaced it wholesale left
+   * that classifier undefined — so the one code path that decides whether to
+   * blame the customer's postcode or our own outage would have thrown instead
+   * of running, in the suite meant to cover it.
+   */
+  ...(await importOriginal<typeof import('../src/opendata.js')>()),
   geocodePostcode: vi.fn(async () => ({ postcode: 'BH8 8EW', latitude: 50.7312, longitude: -1.8765, district: 'Bournemouth', region: 'South West' })),
   fetchSoldPrices: vi.fn(async () => [
     { price: 425000, date: '2026-02-01', address: '1 Test Street', postcode: 'BH8 8EW', propertyType: 'terraced', newBuild: false, estateType: 'freehold', source: 'HM Land Registry Price Paid Data (OGL)' },
