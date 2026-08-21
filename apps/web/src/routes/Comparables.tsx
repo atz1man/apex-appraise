@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
@@ -34,22 +34,14 @@ export default function Comparables() {
   // local overlay of adjustment edits for live recompute; persisted onBlur via upsert
   const [edits, setEdits] = useState<Record<string, Partial<Record<AdjKey, number>>>>({});
 
-  // subject coordinates from the deal's postcode (postcodes.io — free, no key)
-  const [subjectCoords, setSubjectCoords] = useState<{ lat: number; lng: number } | null>(null);
-  useEffect(() => {
-    const pc = deal?.postcode?.replace(/\s+/g, '');
-    if (!pc) return;
-    let cancelled = false;
-    fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j?.result) setSubjectCoords({ lat: j.result.latitude, lng: j.result.longitude });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [deal?.postcode]);
+  /**
+   * The subject's coordinates come from the API, which geocodes and caches them
+   * alongside this deal's comps. They used to be fetched from api.postcodes.io by
+   * the browser, which handed a third party the visitor's IP and left the map
+   * blank for anyone behind an ad blocker or a corporate proxy.
+   */
+  const subject = data?.subject;
+  const subjectCoords = subject?.status === 'located' ? { lat: subject.geo.latitude, lng: subject.geo.longitude } : null;
 
   const comps = useMemo(() => (data?.comps ?? []).map((c) => ({ ...c, ...edits[c.id] })), [data, edits]);
 
@@ -65,6 +57,45 @@ export default function Comparables() {
       ),
     [comps],
   );
+
+  const locatedComps = useMemo(
+    () => comps.filter((c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null),
+    [comps],
+  );
+
+  const mappable = useMemo(
+    () => [
+      ...(subjectCoords
+        ? [{ lat: subjectCoords.lat, lng: subjectCoords.lng, label: deal?.name ?? 'Subject', sub: deal?.address, kind: 'subject' as const }]
+        : []),
+      ...locatedComps.map((c) => ({ lat: c.lat, lng: c.lng, label: c.address, sub: c.meta || undefined, kind: 'comp' as const })),
+    ],
+    [subjectCoords, locatedComps, deal?.name, deal?.address],
+  );
+
+  /**
+   * Why the subject is not on the map — four different facts that used to share
+   * one sentence telling the valuer to add a postcode. Only the first of these
+   * is actually about a missing postcode; the others sent people to correct data
+   * that was already correct.
+   */
+  const subjectNote = !subject
+    ? 'Locating the site…'
+    : subject.status === 'no-postcode'
+      ? (
+          <>
+            No site postcode on this deal yet — add one on the{' '}
+            <Link to={`/deal/${dealId}/sitepack`} className="text-brand-ink font-semibold hover:text-brand-ink">
+              Site pack
+            </Link>{' '}
+            to place the subject.
+          </>
+        )
+      : subject.status === 'bad-postcode'
+        ? `“${subject.postcode}” isn’t a recognised UK postcode, so the subject can’t be placed.`
+        : subject.status === 'unavailable'
+          ? 'The postcode lookup is unavailable, so the subject can’t be placed right now — the deal is fine.'
+          : '';
 
   const supported = comps.length ? Math.round(summary.supportedPsf) : 0;
   const avgGross = summary.avgGrossAdjustment;
@@ -244,26 +275,29 @@ export default function Comparables() {
 
             {/* real map — OpenStreetMap tiles, geocoded pins */}
             <Panel title={<span className="text-[14px] font-semibold">Location of evidence</span>}>
-              {subjectCoords ? (
+              {/**
+                * The map is drawn whenever ANYTHING can be placed on it.
+                *
+                * It used to be gated entirely on the subject, so a subject that
+                * could not be geocoded threw away every located comparable with
+                * it — hiding the evidence the valuer is actually weighing, and
+                * printing one sentence ("add the site postcode") for four
+                * different situations, only one of which it described.
+                */}
+              {mappable.length ? (
                 <>
-                  <SiteMap
-                    height={260}
-                    pins={[
-                      { lat: subjectCoords.lat, lng: subjectCoords.lng, label: deal?.name ?? 'Subject', sub: deal?.address, kind: 'subject' as const },
-                      ...comps
-                        .filter((c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null)
-                        .map((c) => ({ lat: c.lat, lng: c.lng, label: c.address, sub: c.meta || undefined, kind: 'comp' as const })),
-                    ]}
-                  />
-                  <div className="mt-2 flex items-center gap-4 text-[11px] text-ink-2">
-                    <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'rgb(var(--brand-ink, 20 80 59))' }} /> Subject</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: PIN }} /> Comparables ({comps.filter((c) => c.lat != null).length} of {comps.length} geolocated)</span>
+                  <SiteMap height={260} pins={mappable} />
+                  <div className="mt-2 flex items-center gap-4 text-[11px] text-ink-2 flex-wrap">
+                    {subjectCoords ? (
+                      <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: 'rgb(var(--brand-ink, 20 80 59))' }} /> Subject</span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block" style={{ background: PIN }} /> Comparables ({locatedComps.length} of {comps.length} geolocated)</span>
                   </div>
+                  {/* the subject is missing from a map that still has comps on it — say why */}
+                  {subjectCoords ? null : <div className="mt-2 text-[11px] text-ink-3">{subjectNote}</div>}
                 </>
               ) : (
-                <div className="text-[12px] text-ink-3 py-6 text-center">
-                  Add the site postcode on the <Link to={`/deal/${dealId}/sitepack`} className="text-brand-ink font-semibold hover:text-brand-ink">Site pack</Link> to place the evidence on a live map.
-                </div>
+                <div className="text-[12px] text-ink-3 py-6 text-center">{subjectNote}</div>
               )}
             </Panel>
           </div>

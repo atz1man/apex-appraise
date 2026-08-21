@@ -10,12 +10,31 @@
 
 const TIMEOUT_MS = 12_000;
 
+/**
+ * A refusal that carries its status code.
+ *
+ * "The postcode does not exist" and "the geocoder is down" arrive here as the
+ * same thrown Error, and callers were reduced to one catch block that had to
+ * pick a story — which is how a postcodes.io outage came to tell valuers that
+ * their site's postcode was not a real one. Keeping the code lets a caller say
+ * which of the two actually happened.
+ */
+export class HttpError extends Error {
+  constructor(readonly status: number, url: string) {
+    super(`HTTP ${status} from ${new URL(url).host}`);
+    this.name = 'HttpError';
+  }
+}
+
+/** The upstream answered, and the answer was "that does not exist". */
+export const isNotFound = (e: unknown) => e instanceof HttpError && (e.status === 404 || e.status === 400);
+
 async function getJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, { headers: { accept: 'application/json', ...headers }, signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new HttpError(res.status, url);
     return (await res.json()) as T;
   } finally {
     clearTimeout(timer);

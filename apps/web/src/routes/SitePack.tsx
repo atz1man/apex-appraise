@@ -194,6 +194,19 @@ export default function SitePack() {
           <div className="mt-8">
             <EmptyState>“{data.postcode}” isn’t a recognised UK postcode — check it and try again.</EmptyState>
           </div>
+        ) : data?.status === 'unavailable' ? (
+          /**
+           * Not the same sentence as bad-postcode, deliberately. This screen used
+           * to tell a valuer their postcode was wrong whenever the geocoder was
+           * merely unreachable — sending them to correct data that was already
+           * correct. The postcode is theirs; the outage is ours.
+           */
+          <div className="mt-8">
+            <EmptyState>
+              The postcode lookup is unavailable right now, so “{data.postcode}” could not be placed. Nothing is wrong
+              with the deal — try again shortly.
+            </EmptyState>
+          </div>
         ) : ok ? (
           <>
             {/* location strip */}
