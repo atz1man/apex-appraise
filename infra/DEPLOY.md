@@ -81,9 +81,51 @@ In the Stripe dashboard add an endpoint `https://<your-host>/webhooks/stripe` su
 `payment_intent.succeeded`, and set its signing secret as `STRIPE_WEBHOOK_SECRET`. Without
 Stripe keys the buyer portal runs in clearly-labelled demo mode (payments settle instantly).
 
-## Ops notes
+## Ops: backups, restores and monitoring
 
-- Health check: `GET /health` on the API (`:4100` inside the network).
+Three scripts, each of which exits non-zero when it fails, so `cron`'s `MAILTO` reaches you
+even before you configure anything cleverer.
+
+```bash
+# nightly backup — Postgres + uploaded files, verified before it replaces anything
+0 2 * * * cd /opt/apex-appraise && ./infra/backup.sh /var/backups/apex >> /var/log/apex-backup.log 2>&1
+
+# monthly: prove the newest backup actually restores, into a throwaway database
+0 4 1 * * cd /opt/apex-appraise && ./infra/restore-check.sh /var/backups/apex >> /var/log/apex-restore-check.log 2>&1
+
+# every 5 minutes, FROM ANOTHER MACHINE — a watchdog on the box dies with the box
+*/5 * * * * cd /opt/apex-appraise && ALERT_WEBHOOK=https://hooks.slack.com/... ./infra/watchdog.sh https://app.yourdomain.co.uk >> /var/log/apex-watchdog.log 2>&1
+```
+
+**Run `./infra/restore-check.sh` once, by hand, the day you set backups up.** It restores the
+newest dump into a scratch database, counts the rows, and drops it. Until it has passed once,
+you have a backup process, not a backup — `pg_dump` exiting 0 only means it wrote a file.
+
+Offsite is one variable, and until you set it the backups live on the disk they are protecting:
+
+```bash
+export BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'   # or aws s3 cp "$1" s3://…
+```
+
+`BACKUP_DB_URL` makes both scripts talk to a managed Postgres (RDS, Fly Postgres, Neon)
+instead of the compose `db` service.
+
+### Health endpoints — the two are not interchangeable
+
+- `GET /health` — **liveness.** Is the process alive? No dependencies, always 200 while it can
+  answer. Point a supervisor here: restarting the API because *Postgres* blipped fixes nothing
+  and turns an outage into a crash loop.
+- `GET /ready` — **readiness.** Can it serve a request? Checks the database with a 3s timeout
+  and returns **503 with the reason** when it cannot. Point load balancers, uptime monitors and
+  the Fly health check here.
+
+There used to be only `/health`, and it returned `{ok: true}` without touching anything — so it
+stayed green while the database was unreachable and every request in the product was failing.
+A monitor that cannot go red is worse than no monitor: it is the thing you check first at 3am.
+
+## Other ops notes
+
+
 - Financial mutations and document access are audit-logged (`ActivityEvent`).
 - Login throttling is in-memory per instance — put a rate limiter (or Redis-backed store)
   in front if you scale the API horizontally.
