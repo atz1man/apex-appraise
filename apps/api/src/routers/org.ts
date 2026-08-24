@@ -477,6 +477,80 @@ export const orgRouter = router({
     return { dealId: deal.id };
   }),
 
+  /**
+   * Take someone's access away.
+   *
+   * This workspace could revoke an API key, a webhook, an SSO connection and
+   * itself entirely — everything except a person. So a firm could invite a
+   * colleague and never un-invite them: someone who left in March still held
+   * every deal, every valuation and every client document their old employer
+   * had uploaded, for as long as the workspace existed.
+   *
+   * It is also why a seat count could only ever go up. `assertCanAddMember`
+   * enforces the plan's limit on invite, so a firm that lost two people went on
+   * paying for them or stopped being able to hire.
+   *
+   * A DELETE rather than the soft `revokedAt` used for API keys, and the audit
+   * trail is why that is safe: ActivityEvent stores `actor` as the display name
+   * as it stood and `userId` with no foreign key, precisely so history outlives
+   * the person — the model says so in its own comment. Signed valuations keep
+   * their provenance too, because EngagementTerms records valuerName and
+   * valuerReg as text, not as a pointer to a row. Deleting also means access
+   * ends on the very next request, since the principal is re-read from the
+   * database every time: a flag would have needed a new check in context.ts,
+   * and a control that depends on somebody remembering to check it is the kind
+   * that quietly stops controlling anything.
+   *
+   * Their deals are left behind, unassigned — losing the owner of a scheme must
+   * not lose the scheme. Nothing here does that: Deal.owner is optional and its
+   * foreign key is ON DELETE SET NULL, so the database is what guarantees it.
+   * There was an explicit updateMany here until deleting it changed no test.
+   *
+   * Portal logins are out of scope on purpose. An investor's or a buyer's
+   * account occupies no seat, never appears in the members list, and belongs to
+   * a relationship that outlives whoever signs into it; ending one is a
+   * different act and must not happen because a user id was mis-typed here.
+   *
+   * What it does NOT do is revoke the API keys they created. Those are
+   * workspace credentials — an integration built on one keeps running for
+   * everybody, and silently killing a firm's Xero sync because the person who
+   * set it up has left would be a worse surprise than the one it prevents. But
+   * a leaver may well hold a copy, so the count comes back with the removal and
+   * the admin is told to go and look. Informing beats both guessing options.
+   *
+   * No last-admin guard, deliberately: adminProcedure means the caller is an
+   * admin, and the self-check below stops them removing themselves, so at least
+   * one admin always survives. A guard that cannot fire is theatre.
+   */
+  removeMember: adminProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, orgId: ctx.principal.orgId, principalType: 'internal' },
+      });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (user.id === ctx.principal.userId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'You cannot remove yourself — ask another admin, or delete the whole workspace in Data & privacy.',
+        });
+      }
+
+      const apiKeysCreated = await ctx.prisma.apiKey.count({
+        where: { orgId: ctx.principal.orgId, createdById: user.id, revokedAt: null },
+      });
+      await ctx.prisma.user.delete({ where: { id: user.id } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'removed a team member',
+        target: `${user.name} (${user.email})`,
+        ip: ctx.ip,
+      });
+      return { ok: true, apiKeysCreated };
+    }),
+
   setRole: adminProcedure
     .input(z.object({ userId: z.string(), role: z.enum(['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER']) }))
     .mutation(async ({ ctx, input }) => {

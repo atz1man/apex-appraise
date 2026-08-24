@@ -81,6 +81,18 @@ test('settings: org panel, members, invite (admin)', async ({ page }) => {
   await page.getByLabel('Email', { exact: true }).fill(`temp-${stamp}@apexappraise.co.uk`);
   await page.getByRole('button', { name: 'Send invite' }).click();
   await expect(page.getByText(/won.t be shown again/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+  /**
+   * And out again. A members table you can only add to is how a firm ends up
+   * paying for people who left — and it is also why this test used to leave a
+   * new analyst in the seed database on every run.
+   */
+  const row = page.getByRole('row', { name: /Temp Analyst/ });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: 'Remove…' }).click();
+  await row.getByRole('button', { name: 'Remove Temp' }).click();
+  await expect(page.getByRole('row', { name: /Temp Analyst/ })).toHaveCount(0);
 });
 
 test('site pack renders with live-data controls and provenance', async ({ page }) => {

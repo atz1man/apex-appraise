@@ -262,6 +262,35 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
       toast.success('Role updated');
     },
   });
+  /**
+   * Removal is irreversible and it is the control an admin reaches for in a
+   * hurry — someone has just left, or an account has just been compromised. So
+   * it arms in place rather than opening a dialog that could be dismissed by
+   * accident, and it spells out the consequences before it is armed, not after.
+   */
+  const [removing, setRemoving] = useState<string | null>(null);
+  const remove = trpc.org.removeMember.useMutation({
+    onSuccess: (res, vars) => {
+      const gone = (members ?? []).find((m) => m.id === vars.userId);
+      setRemoving(null);
+      utils.org.members.invalidate();
+      utils.billing.config.invalidate(); // the seat count on the Billing tab moves too
+      toast.success(gone ? `${gone.name} removed — their access has ended` : 'Member removed');
+      /**
+       * Their API keys are not revoked with them — those are workspace
+       * credentials and killing one would take a live integration down. But a
+       * leaver may hold a copy, so say so instead of letting the admin assume
+       * the door is fully shut.
+       */
+      if (res.apiKeysCreated > 0) {
+        toast.push(
+          'info',
+          `They created ${res.apiKeysCreated} API key${res.apiKeysCreated === 1 ? '' : 's'} that ${res.apiKeysCreated === 1 ? 'is' : 'are'} still live — review them under Integrations.`,
+        );
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   return (
     <Panel
@@ -274,6 +303,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
       {isLoading ? (
         <SkeletonRows rows={4} height={30} />
       ) : (
+        <>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -282,6 +312,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Email</th>
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Joined</th>
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Role</th>
+                {isAdmin && <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-right"><span className="sr-only">Remove</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -316,12 +347,46 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                         <StatusChip status={roleTone(m.role)} label={m.role} />
                       )}
                     </td>
+                    {isAdmin && (
+                      <td className="py-2.5 px-2 border-t border-border-faint text-right whitespace-nowrap">
+                        {isSelf ? null : removing === m.id ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              loading={remove.isPending}
+                              onClick={() => remove.mutate({ userId: m.id })}
+                            >
+                              Remove {m.name.split(' ')[0]}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={remove.isPending}
+                            onClick={() => setRemoving(m.id)}
+                          >
+                            Remove…
+                          </Button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        {isAdmin && (
+          <p className="mt-3 text-[12px] text-ink-2b leading-relaxed max-w-[560px]">
+            Removing someone ends their access immediately and frees their seat. Any deals they owned stay
+            in the workspace, unassigned, and the activity trail keeps everything they did. API keys they
+            created are not revoked — those belong to the workspace, so review them under Integrations.
+          </p>
+        )}
+        </>
       )}
     </Panel>
   );
