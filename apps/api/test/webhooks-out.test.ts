@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  CLAIM_LEASE_MS,
   FAILURE_LIMIT,
   MAX_ATTEMPTS,
   RETRY_DELAYS,
@@ -209,6 +210,124 @@ describe('delivery', () => {
     await drainWebhooks(prisma, { deliver: async () => ({ status: 200 }) });
     const recovered = await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: made.id } });
     expect(recovered.failureCount).toBe(0);
+  });
+
+  /**
+   * Every API process runs the drain on the same fifteen-second timer. With one
+   * process that is fine. With two — a scaled-out deployment, or just the
+   * overlap in the middle of a rolling restart — both selected the same due rows
+   * and both posted them, and the receiver was told twice that one appraisal had
+   * been approved. For an integration that books something on the strength of
+   * that, twice is not a cosmetic difference.
+   */
+  it('is delivered once when two processes drain at the same moment', async () => {
+    const t = await makeTenant('Hooks7');
+    await addEndpoint(t, 'https://a.example.com/once-only', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+
+    const posts: string[] = [];
+    const instance = () =>
+      drainWebhooks(prisma, {
+        deliver: async (_url, body, headers) => {
+          posts.push(headers['apex-delivery']!);
+          return { status: 200 };
+        },
+      });
+
+    const [a, b] = await Promise.all([instance(), instance()]);
+
+    expect(posts, 'both processes posted the same event').toHaveLength(1);
+    expect(a.sent + b.sent).toBe(1);
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    expect(row.attempts, 'the attempt was counted twice against the receiver').toBe(1);
+    expect(row.status).toBe('delivered');
+  });
+
+  /**
+   * The race above depends on where the two processes happen to interleave, and
+   * a test that only sometimes reaches the window is a test that only sometimes
+   * means anything. This one puts the drain in the window on purpose: the
+   * competing process claims the row in the gap between this drain's SELECT and
+   * its own claim — which is precisely the gap the compare-and-set exists to
+   * close, and the one a wider `where` would leave open.
+   */
+  it('gives up a row that was claimed between selecting it and claiming it', async () => {
+    const t = await makeTenant('Hooks9');
+    await addEndpoint(t, 'https://a.example.com/contended', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+    const now = new Date();
+
+    let raced = false;
+    const contended = new Proxy(prisma, {
+      get(target, prop, receiver) {
+        if (prop !== 'webhookDelivery') return Reflect.get(target, prop, receiver);
+        return new Proxy(target.webhookDelivery, {
+          get(dTarget, dProp, dReceiver) {
+            if (dProp !== 'findMany') return Reflect.get(dTarget, dProp, dReceiver);
+            return async (...args: unknown[]) => {
+              const rows = await (dTarget.findMany as (...a: unknown[]) => Promise<unknown[]>)(...args);
+              if (!raced) {
+                raced = true;
+                // the other process gets there first
+                await prisma.webhookDelivery.updateMany({
+                  where: { orgId: t.orgId, status: 'pending' },
+                  data: { nextAttemptAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
+                });
+              }
+              return rows;
+            };
+          },
+        });
+      },
+    });
+
+    const posts: string[] = [];
+    await drainWebhooks(contended, {
+      now: () => now,
+      deliver: async (_url, _body, headers) => {
+        posts.push(headers['apex-delivery']!);
+        return { status: 200 };
+      },
+    });
+
+    expect(posts, 'posted a row another process had already taken').toHaveLength(0);
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    expect(row.status).toBe('pending');
+    expect(row.attempts).toBe(0);
+  });
+
+  it('holds a claimed delivery against a second pass, then releases it', async () => {
+    const t = await makeTenant('Hooks8');
+    await addEndpoint(t, 'https://a.example.com/slow', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+    const start = Date.now();
+
+    // a process claims the row and then dies before recording anything
+    await prisma.webhookDelivery.updateMany({
+      where: { orgId: t.orgId, status: 'pending' },
+      data: { nextAttemptAt: new Date(start + CLAIM_LEASE_MS) },
+    });
+
+    // the drain is global by design, so assert on THIS row rather than on the
+    // totals it happened to return
+    const mine = () => prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    const ok = { deliver: async () => ({ status: 200 }) };
+
+    await drainWebhooks(prisma, { ...ok, now: () => new Date(start + 15_000) });
+    expect(
+      (await mine()).status,
+      'another process took a delivery that was already in flight',
+    ).toBe('pending');
+
+    /**
+     * And the recovery: the lease runs out, the row is due again with its
+     * attempt count untouched, and the event goes out. A crash mid-POST costs a
+     * minute, not the event.
+     */
+    await drainWebhooks(prisma, { ...ok, now: () => new Date(start + CLAIM_LEASE_MS) });
+    const row = await mine();
+    expect(row.status, 'the event was stranded by a claim nobody completed').toBe('delivered');
+    expect(row.attempts, 'the abandoned claim was counted as an attempt').toBe(1);
   });
 
   it('never lets a delivery failure escape into the caller', async () => {
