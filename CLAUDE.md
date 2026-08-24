@@ -28,7 +28,8 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/web && npx playwright test` — e2e (108, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
-- `JWT_SECRET=x docker compose up -d --build` — production stack: nginx :8080 → api → Postgres 16.
+- `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
+  api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
 
 Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, buyer@demo.co.uk.
 

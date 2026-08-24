@@ -122,9 +122,12 @@ compliance in it, so it is not made here.
 
 ## Adding a migration
 
-`--from-migrations` needs a reachable shadow database, and the compose Postgres
-publishes no port — so use the schema-to-schema diff instead. It needs no database
-at all and is deterministic:
+`--from-migrations` needs a reachable shadow database. The compose Postgres does
+publish one, on `127.0.0.1:55432` — the section above uses it — but the
+schema-to-schema diff below needs no database at all and is deterministic, which
+makes it the better default. (This paragraph used to say the compose Postgres
+published no port, which contradicted both the compose file and the procedure
+above it.)
 
 ```bash
 # 1. edit apps/api/prisma/schema.prisma, then sync your dev sqlite

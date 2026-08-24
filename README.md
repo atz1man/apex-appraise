@@ -52,8 +52,12 @@ Without `ANTHROPIC_API_KEY` the API uses a deterministic demo extraction.
 ## Production deployment (Docker + PostgreSQL)
 
 ```bash
-JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
-# web on :8080, API on :4100, Postgres 16 with a persistent volume
+JWT_SECRET=$(openssl rand -hex 32) \
+POSTGRES_PASSWORD=$(openssl rand -hex 32) \
+docker compose up --build
+# web on :8080 — the only port published to the outside. The API (4100) and
+# Postgres (55432) bind to the loopback address: nginx is the front door, and
+# the security headers, tile proxy and download routes are enforced there.
 ```
 
 The committed Prisma schema pins `sqlite` for zero-infra local dev;
@@ -105,7 +109,8 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 All optional vars degrade gracefully to a clearly-labelled demo mode when unset.
 
-- `PORT` (default 4100), `JWT_SECRET` (**required in production**), `DATABASE_URL` (Postgres, via Docker)
+- `PORT` (default 4100), `JWT_SECRET` (**required in production**), `POSTGRES_PASSWORD` (**required**; the compose stack builds `DATABASE_URL` from it)
+- `RATE_LIMIT_PER_MIN` (default 600) and `AUTH_RATE_LIMIT_PER_MIN` (default 10) — raise them only for a test run, never in the deployed file
 - `ANTHROPIC_API_KEY` — live LLM extraction for Auto-Appraisal
 - `SMTP_URL` + `EMAIL_FROM` + `APP_URL` — invite/welcome email delivery (logged to console otherwise)
 - `STRIPE_SECRET_KEY` — live buyer card payments (PaymentIntents); demo mode settles instantly

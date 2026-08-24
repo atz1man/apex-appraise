@@ -13,7 +13,8 @@ curl -fsSL https://get.docker.com | sh
 
 # 2. clone and configure
 git clone https://github.com/atz1man/apex-appraise.git && cd apex-appraise
-export JWT_SECRET="$(openssl rand -hex 32)"     # REQUIRED — keep it safe
+export JWT_SECRET="$(openssl rand -hex 32)"        # REQUIRED — keep it safe
+export POSTGRES_PASSWORD="$(openssl rand -hex 32)" # REQUIRED — the database password
 # optional integrations (all degrade gracefully to demo mode when unset):
 export ANTHROPIC_API_KEY=...                    # live AI extraction in Auto-Appraisal
 export SMTP_URL="smtp://user:pass@host:587"     # invite + welcome email delivery
