@@ -72,13 +72,14 @@ export function signDownloadToken(claims: DownloadClaims): string {
 export function verifyDownloadToken(
   token: string,
   want: { kind: DownloadKind; dealId?: string; key?: string },
-): { userId: string } | null {
+): { userId: string; issuedAt?: number } | null {
   try {
     const claims = jwt.verify(token, JWT_SECRET, { audience: AUDIENCE }) as {
       sub?: string;
       kind?: string;
       dealId?: string;
       key?: string;
+      iat?: number;
     };
     if (!claims.sub) return null;
     if (claims.kind !== want.kind) return null;
@@ -87,7 +88,10 @@ export function verifyDownloadToken(
     if ((claims.dealId ?? null) !== (want.dealId ?? null)) return null;
     // a file token names the one file it may fetch
     if ((claims.key ?? null) !== (want.key ?? null)) return null;
-    return { userId: claims.sub };
+    // returned so a caller that already has the user row can apply the session
+    // cutoff (see User.sessionsValidFrom); a token minted before a password
+    // change should not outlive it just because it names one file
+    return { userId: claims.sub, issuedAt: claims.iat };
   } catch {
     return null;
   }

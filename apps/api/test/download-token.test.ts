@@ -27,7 +27,7 @@ beforeAll(async () => {
 describe('a download token', () => {
   it('opens exactly the document it was minted for', () => {
     const token = signDownloadToken({ sub: 'user-1', kind: 'appraisal', dealId: 'deal-1' });
-    expect(verifyDownloadToken(token, { kind: 'appraisal', dealId: 'deal-1' })).toEqual({ userId: 'user-1' });
+    expect(verifyDownloadToken(token, { kind: 'appraisal', dealId: 'deal-1' })).toEqual({ userId: 'user-1', issuedAt: expect.any(Number) });
   });
 
   it('will not open a different deal', () => {
@@ -85,7 +85,7 @@ describe('minting one', () => {
       kind: 'appraisal',
       dealId: A.dealId,
     } as never)) as { token: string };
-    expect(verifyDownloadToken(token, { kind: 'appraisal', dealId: A.dealId })).toEqual({ userId: A.userId });
+    expect(verifyDownloadToken(token, { kind: 'appraisal', dealId: A.dealId })).toEqual({ userId: A.userId, issuedAt: expect.any(Number) });
     expect(verifyDownloadToken(token, { kind: 'appraisal', dealId: B.dealId })).toBeNull();
   });
 
@@ -97,14 +97,14 @@ describe('minting one', () => {
     const { token } = (await callerFor(A.principal).appraisal.downloadToken({ kind: 'portfolio' } as never)) as {
       token: string;
     };
-    expect(verifyDownloadToken(token, { kind: 'portfolio' })).toEqual({ userId: A.userId });
+    expect(verifyDownloadToken(token, { kind: 'portfolio' })).toEqual({ userId: A.userId, issuedAt: expect.any(Number) });
   });
 });
 
 describe('file tokens', () => {
   it('name the single file they may fetch', () => {
     const token = signDownloadToken({ sub: 'user-1', kind: 'file', key: '123-cost-plan.pdf' });
-    expect(verifyDownloadToken(token, { kind: 'file', key: '123-cost-plan.pdf' })).toEqual({ userId: 'user-1' });
+    expect(verifyDownloadToken(token, { kind: 'file', key: '123-cost-plan.pdf' })).toEqual({ userId: 'user-1', issuedAt: expect.any(Number) });
     // the keys are `<Date.now()>-<original filename>`, so a neighbouring file is
     // a very short guess away — the token has to be the thing that stops it
     expect(verifyDownloadToken(token, { kind: 'file', key: '124-cost-plan.pdf' })).toBeNull();
