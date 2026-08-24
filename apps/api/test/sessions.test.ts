@@ -141,6 +141,36 @@ describe('every surface uses the same verifier', () => {
     ).toBeNull();
   });
 
+  /**
+   * internalWriter is the upload routes' copy of the internalProcedure chain,
+   * and it carries all three rules at once. Asserted together, because what
+   * went wrong twice was one rule arriving and the others being assumed.
+   */
+  it('carries the whole chain: token, internal, live trial', async () => {
+    const { internalWriter, GuardError } = await import('../src/http-guards.js');
+    const t = await makeTenant('Chain');
+    const call = (token: string) =>
+      internalWriter({ headers: { authorization: `Bearer ${token}` } }, 'uploads.document', prisma);
+
+    // 1. no token at all
+    await expect(
+      internalWriter({ headers: {} }, 'uploads.document', prisma),
+    ).rejects.toBeInstanceOf(GuardError);
+
+    // 2. a portal login is not a member of the firm
+    await expect(call(tokenFor(t.investorPrincipal.userId))).rejects.toBeInstanceOf(GuardError);
+
+    // 3. a member of the firm, on a live workspace
+    await expect(call(tokenFor(t.userId))).resolves.toMatchObject({ userId: t.userId });
+
+    // 4. the same member, once the trial has lapsed
+    await prisma.organisation.update({
+      where: { id: t.orgId },
+      data: { plan: 'TRIAL', trialEndsAt: new Date(Date.now() - 86_400_000) },
+    });
+    await expect(call(tokenFor(t.userId))).rejects.toThrow(/trial ended/i);
+  });
+
   it('refuses a portal login on the upload routes, cutoff or no cutoff', async () => {
     /**
      * This surface's own rule, kept when the verifier was shared out: an
