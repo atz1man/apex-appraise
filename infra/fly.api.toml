@@ -40,10 +40,15 @@ primary_region = "lhr"
   [[http_service.checks]]
     interval = "30s"
     timeout = "5s"
-    # first boot pushes the schema and seeds the demo org
+    # first boot applies migrations
     grace_period = "90s"
     method = "GET"
-    path = "/health"
+    # /ready, not /health. /health answers 200 while the process is alive, which
+    # is also true of a process that cannot reach Postgres and is failing every
+    # request — Fly would have kept that machine in rotation. /ready checks the
+    # database and returns 503 when it cannot, so an unreachable database takes
+    # the machine out instead of quietly serving errors.
+    path = "/ready"
 
 [[mounts]]
   source = "uploads"

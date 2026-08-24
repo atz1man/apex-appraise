@@ -7,6 +7,7 @@ import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
 import { registerReports } from './reports.js';
 import { registerTiles } from './tiles.js';
+import { registerHealth } from './health.js';
 import { registerWebhooks } from './webhooks.js';
 import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
@@ -84,7 +85,7 @@ async function main() {
   registerWebhooks(app);
   registerPublicApi(app);
   registerAdmin(app);
-  app.get('/health', async () => ({ ok: true, service: 'apex-api' }));
+  registerHealth(app, prisma);
   /**
    * Webhook delivery runs on a timer in-process. No queue server: one more piece
    * of infrastructure to operate is a worse trade at this size than a table and a
