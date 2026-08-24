@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   FAILURE_LIMIT,
   MAX_ATTEMPTS,
+  RETRY_DELAYS,
   drainWebhooks,
   emitWebhook,
   newWebhookSecret,
@@ -122,13 +123,75 @@ describe('delivery', () => {
     await addEndpoint(t, 'https://a.example.com/down', ['deal.created']);
     await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
 
+    /**
+     * Time has to move. This loop used to call drain four times in a row with no
+     * clock at all and see four attempts — which passed only because the retry
+     * schedule was not applied to anything. It was the bug written down as the
+     * expected behaviour.
+     */
+    let clock = Date.now();
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-      await drainWebhooks(prisma, { deliver: async () => ({ status: 500 }) });
+      await drainWebhooks(prisma, { deliver: async () => ({ status: 500 }), now: () => new Date(clock) });
+      clock += RETRY_DELAYS[i + 1] !== undefined ? RETRY_DELAYS[i + 1]! * 1000 : 0;
     }
     const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
     expect(row.attempts).toBe(MAX_ATTEMPTS);
     expect(row.status).toBe('failed');
     expect((await drainWebhooks(prisma, { deliver: async () => ({ status: 200 }) })).sent).toBe(0);
+  });
+
+  /**
+   * The schedule is the point. The drain runs every 15 seconds, so without a due
+   * time every pass re-tried every pending row: four attempts spent in about 45
+   * seconds rather than the ~36 minutes RETRY_DELAYS describes. A receiver that
+   * restarted lost the event outright — and burned four of its twenty failures
+   * on the way, which is a fifth of the way to being parked for a blip.
+   */
+  it('waits the scheduled delay before retrying, rather than hammering every pass', async () => {
+    const t = await makeTenant('Hooks5');
+    await addEndpoint(t, 'https://a.example.com/restarting', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+
+    const start = Date.now();
+    const fail = { deliver: async () => ({ status: 500 }) };
+
+    // first attempt is due immediately
+    expect((await drainWebhooks(prisma, { ...fail, now: () => new Date(start) })).failed).toBe(1);
+
+    // the 15-second timer comes round again, twice, and must find nothing due
+    for (const t2 of [15_000, 29_000]) {
+      const r = await drainWebhooks(prisma, { ...fail, now: () => new Date(start + t2) });
+      expect(r.failed, `retried after ${t2 / 1000}s, before the 30s delay was up`).toBe(0);
+    }
+
+    // at 30 seconds it is due
+    expect((await drainWebhooks(prisma, { ...fail, now: () => new Date(start + 30_000) })).failed).toBe(1);
+
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    expect(row.attempts, 'attempts should have advanced exactly twice in 30 seconds').toBe(2);
+    // and the third is scheduled five minutes out, not immediately
+    expect(row.nextAttemptAt.getTime() - (start + 30_000)).toBe(RETRY_DELAYS[2]! * 1000);
+  });
+
+  /**
+   * A refused connection or a timeout is the likelier failure of the two, and it
+   * takes a different branch of the drain — one that did not back off at all.
+   */
+  it('backs off a connection that throws, not just an HTTP error', async () => {
+    const t = await makeTenant('Hooks6');
+    await addEndpoint(t, 'https://a.example.com/refused', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+
+    const start = Date.now();
+    const boom = { deliver: async () => { throw new Error('ECONNREFUSED'); } };
+    await drainWebhooks(prisma, { ...boom, now: () => new Date(start) });
+
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    expect(row.attempts).toBe(1);
+    expect(row.nextAttemptAt.getTime() - start, 'a thrown delivery was left due immediately').toBe(RETRY_DELAYS[1]! * 1000);
+
+    // and the very next pass of the timer leaves it alone
+    expect((await drainWebhooks(prisma, { ...boom, now: () => new Date(start + 15_000) })).failed).toBe(0);
   });
 
   it('parks an endpoint that keeps failing, and a success clears the count', async () => {

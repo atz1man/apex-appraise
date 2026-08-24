@@ -66,10 +66,22 @@ export function verifySignature(
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
-/** Retry schedule in seconds. Fast twice, then back off — a receiver that is
- *  briefly down should not need a human, and one that is properly down should
- *  not be hammered. */
+/**
+ * Retry schedule in seconds, indexed by attempt number. Fast twice, then back
+ * off — a receiver that is briefly down should not need a human, and one that is
+ * properly down should not be hammered.
+ *
+ * This existed for a long time as a comment attached to an array nothing read.
+ * The drain selected every pending row on every pass and ran on a 15-second
+ * timer, so all four attempts were spent in about 45 seconds rather than the
+ * ~36 minutes described here: a receiver that restarted lost the event outright,
+ * and burned four of its twenty failures doing it. `nextAttemptAt` on the
+ * delivery is what makes the schedule real.
+ */
 export const RETRY_DELAYS = [0, 30, 300, 1800];
+
+/** When attempt number `n` becomes due, relative to the failure before it. */
+export const retryDelayMs = (attempt: number) => (RETRY_DELAYS[attempt] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1]!) * 1000;
 export const MAX_ATTEMPTS = RETRY_DELAYS.length;
 /** consecutive failures after which an endpoint is parked */
 export const FAILURE_LIMIT = 20;
@@ -124,8 +136,15 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
       return { status: res.status };
     });
 
+  const now = opts.now?.() ?? new Date();
+
+  /**
+   * Only what is actually due. Without the nextAttemptAt bound this took every
+   * pending row on every pass, which is how a schedule measured in minutes was
+   * consumed in seconds.
+   */
   const pending = await prisma.webhookDelivery.findMany({
-    where: { status: 'pending', attempts: { lt: MAX_ATTEMPTS } },
+    where: { status: 'pending', attempts: { lt: MAX_ATTEMPTS }, nextAttemptAt: { lte: now } },
     orderBy: { createdAt: 'asc' },
     take: 50,
     include: { endpoint: true },
@@ -134,7 +153,7 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
   let sent = 0;
   let failed = 0;
   for (const d of pending) {
-    const timestamp = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
+    const timestamp = Math.floor(now.getTime() / 1000);
     const headers = {
       'content-type': 'application/json',
       'apex-signature': signatureHeader(d.endpoint.secret, timestamp, d.payload),
@@ -144,14 +163,17 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
     try {
       const { status } = await deliver(d.endpoint.url, d.payload, headers);
       const ok = status >= 200 && status < 300;
+      const nextAttempt = d.attempts + 1;
       await prisma.webhookDelivery.update({
         where: { id: d.id },
         data: {
           attempts: { increment: 1 },
           responseCode: status,
-          status: ok ? 'delivered' : d.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending',
-          deliveredAt: ok ? new Date() : null,
+          status: ok ? 'delivered' : nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
+          deliveredAt: ok ? now : null,
           error: ok ? null : `HTTP ${status}`,
+          // back off before the next one; harmless on a delivered or failed row
+          ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
         },
       });
       await prisma.webhookEndpoint.update({
@@ -167,12 +189,16 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
       ok ? sent++ : failed++;
     } catch (e) {
       failed++;
+      const nextAttempt = d.attempts + 1;
       await prisma.webhookDelivery.update({
         where: { id: d.id },
         data: {
           attempts: { increment: 1 },
-          status: d.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending',
+          status: nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
           error: e instanceof Error ? e.message.slice(0, 300) : 'delivery failed',
+          // a refused connection or a timeout backs off exactly like an HTTP error;
+          // it is the likelier failure of the two and was the one still hammering
+          nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)),
         },
       });
     }

@@ -454,9 +454,15 @@ model WebhookDelivery {
   error      String?
   createdAt  DateTime @default(now())
   deliveredAt DateTime?
+  /// when this delivery is next due. Set forward by the retry schedule on each
+  /// failure, so a receiver that is briefly down is retried later rather than
+  /// immediately — see RETRY_DELAYS in src/webhook-delivery.ts.
+  nextAttemptAt DateTime @default(now())
 
   @@index([orgId, createdAt])
   @@index([endpointId, status])
+  // the drain's own query: pending work that is actually due
+  @@index([status, nextAttemptAt])
 }
 
 // A workspace's link to a Xero organisation.
