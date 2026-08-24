@@ -205,7 +205,18 @@ export const authRouter = router({
         where: { id: user.id },
         // cleared in the same write that sets the password: single use is not a
         // policy, it is the absence of a second chance
-        data: { password: hashPassword(input.password), resetTokenHash: null, resetTokenExpiresAt: null },
+        // sessionsValidFrom cuts every token already issued for this account. A
+        // reset is the flow for someone who may have LOST control of the
+        // credential, so leaving the old sessions alive is the one outcome it
+        // must not have. There is no replacement token here on purpose: this
+        // procedure is public and unauthenticated, and handing out a session
+        // from it would make the reset link a sign-in link.
+        data: {
+          password: hashPassword(input.password),
+          resetTokenHash: null,
+          resetTokenExpiresAt: null,
+          sessionsValidFrom: new Date(),
+        },
       });
       // a reset is how someone locked out gets back in — leaving the lockout in
       // place would hand them a new password and still refuse the login
@@ -224,11 +235,21 @@ export const authRouter = router({
       if (!user || !verifyPassword(input.current, user.password)) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Current password is incorrect' });
       }
-      await ctx.prisma.user.update({ where: { id: user.id }, data: { password: hashPassword(input.next) } });
+      await ctx.prisma.user.update({
+        where: { id: user.id },
+        // every other session goes with the old password — a phone left on a
+        // train, a shared machine, whoever prompted the change in the first
+        // place
+        data: { password: hashPassword(input.next), sessionsValidFrom: new Date() },
+      });
       await recordAudit(ctx.prisma, {
         orgId: user.orgId, userId: user.id, actor: user.name,
         action: AUDIT.passwordChanged, target: user.email, ip: ctx.ip,
       });
-      return { ok: true };
+      // except this one. The browser doing the changing gets a replacement, so
+      // "change your password" does not also mean "and then sign in again" —
+      // a security step that costs the user something is a security step people
+      // put off.
+      return { ok: true, token: jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' }) };
     }),
 });

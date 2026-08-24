@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
-import { clearSession, getPrincipal, trpc } from '../lib/trpc';
+import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, XeroPanel } from '../components/settings-integrations';
 import { Avatar, Button, FirmMark, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
@@ -401,11 +401,19 @@ function SecurityPanel() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const change = trpc.auth.changePassword.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       setCurrent('');
       setNext('');
       setConfirm('');
-      toast.success('Password changed');
+      /**
+       * Changing the password ends every session on the account, so this tab's
+       * own token has just been invalidated too. Swapping in the replacement is
+       * what stops the next request 401-ing and dumping the user back at the
+       * login screen a second after they did the right thing.
+       */
+      const principal = getPrincipal();
+      if (principal) setSession(res.token, principal);
+      toast.success('Password changed — you’re signed out everywhere else');
     },
   });
 
