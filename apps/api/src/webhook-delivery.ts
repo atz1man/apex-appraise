@@ -122,6 +122,30 @@ export async function pruneWebhookDeliveries(
   return count;
 }
 
+/**
+ * How long a claimed delivery is held before anyone may try it again.
+ *
+ * The drain selects what is due and then posts it, and every API process runs
+ * that loop on the same fifteen-second timer. With one process that is fine.
+ * With two — a scaled-out deployment, or just the overlap in the middle of a
+ * rolling restart — both select the same rows and both post them, and the
+ * receiver is charged twice for one approved appraisal.
+ *
+ * The claim is a compare-and-set on nextAttemptAt: push it into the future in
+ * an updateMany that still requires the row to be pending and due, and take the
+ * row only if the update matched. Two processes race, one gets a count of 1 and
+ * the other gets 0 and moves on. No queue server, no advisory lock, no new
+ * column — the row's own due-time is the lease, and the index that makes the
+ * drain's query fast is the index that makes the claim fast.
+ *
+ * A minute, against a ten-second delivery timeout: long enough that no attempt
+ * outlives its own claim, short enough that a process killed mid-POST holds the
+ * event up for a minute rather than for ever. The recovery path is the ordinary
+ * one — the lease runs out and the row is due again, with its attempt count
+ * unchanged, so nothing is lost and nothing is double-counted.
+ */
+export const CLAIM_LEASE_MS = 60_000;
+
 export interface EmitOptions {
   /** injected in tests; real callers use fetch */
   deliver?: (url: string, body: string, headers: Record<string, string>) => Promise<{ status: number }>;
@@ -179,7 +203,7 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
    * pending row on every pass, which is how a schedule measured in minutes was
    * consumed in seconds.
    */
-  const pending = await prisma.webhookDelivery.findMany({
+  const candidates = await prisma.webhookDelivery.findMany({
     where: { status: 'pending', attempts: { lt: MAX_ATTEMPTS }, nextAttemptAt: { lte: now } },
     orderBy: { createdAt: 'asc' },
     take: 50,
@@ -188,7 +212,14 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
 
   let sent = 0;
   let failed = 0;
-  for (const d of pending) {
+  for (const d of candidates) {
+    // Claim it, or leave it to whoever did. See CLAIM_LEASE_MS.
+    const { count } = await prisma.webhookDelivery.updateMany({
+      where: { id: d.id, status: 'pending', nextAttemptAt: { lte: now } },
+      data: { nextAttemptAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
+    });
+    if (count !== 1) continue;
+
     const timestamp = Math.floor(now.getTime() / 1000);
     const headers = {
       'content-type': 'application/json',
