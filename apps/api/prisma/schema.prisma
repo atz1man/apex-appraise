@@ -53,6 +53,12 @@ model User {
   // a working reset link, and this table is exactly what leaks.
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
+  /// Sessions issued before this moment are dead. Bumped whenever the password
+  /// changes, because a sign-in token stays valid for twelve hours on its own
+  /// signature and nothing else — so without this, changing a phished password
+  /// left the phisher signed in for the rest of the day. Compared against the
+  /// JWT's `iat` in context.ts.
+  sessionsValidFrom   DateTime @default(now())
   deals     Deal[]
   createdAt DateTime @default(now())
 }
