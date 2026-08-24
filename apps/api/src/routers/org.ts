@@ -83,11 +83,11 @@ export const orgRouter = router({
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
       // reuse the login throttle so registration can't be hammered either
-      const lock = checkLockout(`register:${email}`);
+      const lock = await checkLockout(ctx.prisma, `register:${email}`);
       if (lock.locked) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many attempts — try again later' });
       const existing = await ctx.prisma.user.findUnique({ where: { email } });
       if (existing) {
-        recordFailure(`register:${email}`);
+        await recordFailure(ctx.prisma, `register:${email}`);
         throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
       }
       // the clock starts here, and it is the only place a trial is ever granted
