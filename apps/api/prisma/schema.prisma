@@ -807,6 +807,37 @@ model IntegrationConnection {
 /// published public record keyed by postcode or rounded coordinates, identical
 /// for every firm, and containing nothing a workspace owns. That also keeps it
 /// out of the GDPR cascade and the workspace export, where it does not belong.
+/// Login lockouts and reset-request throttles, shared across API instances.
+///
+/// These lived in two process-local Maps. Two consequences, and the second bites
+/// first:
+///
+///  - A second API instance means a second, independent set of counters, so an
+///    attacker rotating across instances gets five guesses PER INSTANCE before
+///    anything locks — and the lock only applies on the instance that saw them.
+///  - Neither Map was ever pruned. A key was removed on a SUCCESSFUL login and
+///    never otherwise, so failed logins for addresses that do not exist grew them
+///    without bound. That is a memory-exhaustion vector on a single instance,
+///    which is the shape this product actually ships in today.
+///
+/// Not org-scoped: an email is throttled before anyone knows which workspace it
+/// belongs to, and pinning it to one would let an attacker escape the limit by
+/// guessing a different workspace. Carries no customer data — a key, a count and
+/// two timestamps — which is why it is not in the workspace export.
+model AuthThrottle {
+  /// "login:<email>", "reset:<email>", "register:<email>"
+  key         String    @id
+  count       Int       @default(0)
+  /// when the current counting window opened
+  windowStart DateTime  @default(now())
+  /// set once a lockout is in force; null when merely counting
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  // the sweeper deletes rows that can no longer affect a decision
+  @@index([updatedAt])
+}
+
 model OpenDataCache {
   key       String   @id
   source    String

@@ -37,7 +37,7 @@ export const authRouter = router({
       const audit = (action: string, target: string) =>
         user ? recordAudit(ctx.prisma, { orgId: user.orgId, userId: user.id, actor: user.name, action, target, ip: ctx.ip }) : undefined;
 
-      const lock = checkLockout(email);
+      const lock = await checkLockout(ctx.prisma, email);
       if (lock.locked) {
         await audit(AUDIT.lockedOut, email);
         throw new TRPCError({
@@ -68,11 +68,11 @@ export const authRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid email or password' });
       }
       if (!user || !verifyPassword(input.password, user.password)) {
-        recordFailure(email);
+        await recordFailure(ctx.prisma, email);
         await audit(AUDIT.signInFailed, email);
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid email or password' });
       }
-      recordSuccess(email);
+      await recordSuccess(ctx.prisma, email);
       await audit(AUDIT.signIn, email);
       const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
       return {
@@ -171,7 +171,7 @@ export const authRouter = router({
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
-      if (tooManyResetRequests(email)) return { ok: true };
+      if (await tooManyResetRequests(ctx.prisma, email)) return { ok: true };
 
       const user = await ctx.prisma.user.findUnique({ where: { email } });
       if (user) {
@@ -209,7 +209,7 @@ export const authRouter = router({
       });
       // a reset is how someone locked out gets back in — leaving the lockout in
       // place would hand them a new password and still refuse the login
-      recordSuccess(user.email);
+      await recordSuccess(ctx.prisma, user.email);
       await recordAudit(ctx.prisma, {
         orgId: user.orgId, userId: user.id, actor: user.name,
         action: AUDIT.passwordReset, target: user.email, ip: ctx.ip,

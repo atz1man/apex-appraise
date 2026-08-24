@@ -127,8 +127,24 @@ A monitor that cannot go red is worse than no monitor: it is the thing you check
 
 
 - Financial mutations and document access are audit-logged (`ActivityEvent`).
-- Login throttling is in-memory per instance — put a rate limiter (or Redis-backed store)
-  in front if you scale the API horizontally.
+- Login lockouts and reset throttles live in Postgres (`AuthThrottle`), so they hold across
+  however many API instances you run. They used to be per-process Maps, which meant five
+  password guesses *per instance* and a lockout the other machine had never heard of.
+- The HTTP rate limiter (`@fastify/rate-limit`) is still per-instance, and that is a
+  deliberate trade rather than an oversight. It is a volumetric backstop, not the auth
+  control — the auth control is the table above, and it is shared. If you scale out and want
+  volumetric limiting to be shared too, the right layer is nginx, which already sits in front
+  of every instance and needs no new infrastructure:
+
+  ```nginx
+  # in the http{} block
+  limit_req_zone $binary_remote_addr zone=apex:10m rate=30r/s;
+  # then inside the location blocks you want protected
+  limit_req zone=apex burst=60 nodelay;
+  ```
+
+  Not enabled by default: the right rate depends on your traffic, and a limit guessed here
+  would throttle a busy firm rather than an attacker.
 - CI (GitHub Actions) runs the engine's 48 golden tests, both typechecks, and a full
   Postgres schema/seed validation on every push.
 

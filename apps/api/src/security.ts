@@ -66,6 +66,20 @@ export async function registerSecurity(app: FastifyInstance) {
     },
   });
 
+  /**
+   * A volumetric backstop, per instance, and deliberately not the auth control.
+   *
+   * The thing an attacker actually wants to defeat — five password guesses, three
+   * reset mails — is the AuthThrottle table, which is shared across instances and
+   * cannot be multiplied by asking a different machine. This limiter exists to
+   * blunt crude floods, and per-instance is an acceptable weakening of that:
+   * N instances means N times the flood budget, which is still a bound, and the
+   * alternative is a database round trip on every single request including the
+   * ones a flood consists of.
+   *
+   * If shared volumetric limiting is wanted, nginx already sits in front of every
+   * instance and does it without a new service — see infra/DEPLOY.md.
+   */
   await app.register(rateLimit, {
     global: true,
     timeWindow: '1 minute',

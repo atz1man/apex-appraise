@@ -57,6 +57,7 @@ async function main() {
 
   // wipe (idempotent seed)
   const tables = [
+    'AuthThrottle',
     'BankTransaction', 'BankAccount', 'BankConnection',
     'WebhookDelivery', 'WebhookEndpoint', 'ApiKey', 'ReportShare', 'ErrorEvent', 'XeroDealMap', 'XeroConnection', 'SsoConnection',
     'Payment', 'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
