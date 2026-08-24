@@ -51,6 +51,10 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 ## Gotchas (hard-won — do not re-learn)
 
+- Run the e2e suite against a dev stack started with the CI limits:
+  `RATE_LIMIT_PER_MIN=5000 AUTH_RATE_LIMIT_PER_MIN=1000 pnpm dev`. Plain `pnpm dev` uses the
+  production defaults (600/10) and the suite signs in on every test from one IP, so ~39 specs
+  fail on the rate limiter and look like real regressions. CI sets these in the browser job.
 - Rebuild containers before verifying new API procedures (`docker compose up -d --build`) —
   stale images make zod silently strip unknown mutation keys and "succeed" confusingly.
 - Run the API suite in the container, not just on the host — `docker compose run --rm --no-deps
