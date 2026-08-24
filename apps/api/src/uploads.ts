@@ -1,13 +1,12 @@
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import jwt from 'jsonwebtoken';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { JWT_SECRET, prisma } from './context.js';
+import { issuedBefore, prisma, principalFromAuthHeader } from './context.js';
 import { signDownloadToken, verifyDownloadToken } from './download-token.js';
 
 const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
@@ -21,16 +20,24 @@ export function uploadPathFor(url: string): string | null {
   return path.join(UPLOAD_DIR, key);
 }
 
-async function principalFrom(req: FastifyRequest) {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return null;
-  try {
-    const payload = jwt.verify(auth.slice(7), JWT_SECRET) as { sub: string };
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-    return user && user.principalType === 'internal' ? user : null;
-  } catch {
-    return null;
-  }
+/**
+ * Who is asking, for the upload routes.
+ *
+ * These are plain Fastify routes rather than tRPC procedures, so they do not go
+ * through createContext — and this function used to verify the session token
+ * itself, in a second copy of the same six lines. The copy then fell behind:
+ * when sessions gained a cutoff (User.sessionsValidFrom, see context.ts), tRPC
+ * honoured it and this did not. Changing a phished password shut the attacker
+ * out of the application while leaving them the data room: every client
+ * document readable, and uploads into it still accepted.
+ *
+ * One verifier now, shared. The `internal` check stays here because it is this
+ * surface's own rule — an investor or buyer portal login has no business
+ * writing to a firm's document store.
+ */
+export async function principalFrom(req: Pick<FastifyRequest, 'headers'>, db = prisma) {
+  const principal = await principalFromAuthHeader(db, req.headers.authorization);
+  return principal?.principalType === 'internal' ? principal : null;
 }
 
 const safeName = (name: string) => name.replace(/[^\w.\- ()£]/g, '_');
@@ -103,7 +110,13 @@ export async function registerUploads(app: FastifyInstance) {
       const claim = verifyDownloadToken(req.query.t, { kind: 'file', key });
       if (claim) {
         const u = await prisma.user.findUnique({ where: { id: claim.userId } });
-        allowed = !!u && u.orgId === owner;
+        /**
+         * The session cutoff applies here too. A file token lives half an hour
+         * — long enough to matter, and this branch already has the row in hand,
+         * so honouring it costs nothing. Tokens are minted at render time, so
+         * `iat` is when the page was drawn.
+         */
+        allowed = !!u && u.orgId === owner && !issuedBefore(claim.issuedAt, u.sessionsValidFrom);
       }
     }
     // the same 404 either way: whether a file exists is not something to confirm
@@ -148,7 +161,7 @@ export async function registerUploads(app: FastifyInstance) {
         sizeBytes: BigInt(stored.bytes),
         url: `/uploads/files/${stored.key}`,
         extraction: 'STORED',
-        addedById: user.id,
+        addedById: user.userId,
       },
     });
     await prisma.activityEvent.create({

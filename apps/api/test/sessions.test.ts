@@ -109,6 +109,51 @@ describe('a token outlives nothing it should not', () => {
   });
 });
 
+/**
+ * The upload routes are plain Fastify, not tRPC, so they never went through
+ * createContext — and they verified the session token in a second copy of the
+ * same six lines. The copy fell behind the moment sessions gained a cutoff:
+ * tRPC honoured it, this did not. Changing a phished password shut the attacker
+ * out of the application and left them the data room.
+ */
+describe('every surface uses the same verifier', () => {
+  it('the upload routes honour the cutoff too', async () => {
+    const t = await makeTenant('Uploads');
+    await prisma.user.update({ where: { id: t.userId }, data: { password: hash('upload-pass-1') } });
+    const stolen = await existingSession(t.userId);
+
+    const { principalFrom } = await import('../src/uploads.js');
+    const asHeader = (token: string) =>
+      principalFrom({ headers: { authorization: `Bearer ${token}` } }, prisma);
+
+    expect(await asHeader(stolen), 'precondition: the stolen token reached the data room').toMatchObject({
+      userId: t.userId,
+    });
+
+    await callerFor({ ...t.principal, userId: t.userId }).auth.changePassword({
+      current: 'upload-pass-1',
+      next: 'a-better-one-1',
+    });
+
+    expect(
+      await asHeader(stolen),
+      'the revoked session could still read and write the firm’s documents',
+    ).toBeNull();
+  });
+
+  it('refuses a portal login on the upload routes, cutoff or no cutoff', async () => {
+    /**
+     * This surface's own rule, kept when the verifier was shared out: an
+     * investor or buyer portal login has no business writing to a firm's
+     * document store.
+     */
+    const t = await makeTenant('Portals');
+    const { principalFrom } = await import('../src/uploads.js');
+    const token = tokenFor(t.investorPrincipal.userId);
+    expect(await principalFrom({ headers: { authorization: `Bearer ${token}` } }, prisma)).toBeNull();
+  });
+});
+
 describe('the cutoff comparison', () => {
   /**
    * `iat` is whole seconds and the cutoff is not, so the two are compared in
