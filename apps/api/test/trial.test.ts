@@ -78,7 +78,8 @@ describe('an expired trial', () => {
 
   /**
    * The test above proves assertTrialLive refuses; it does not prove the routes
-   * ask it. Read the source for that, the way cascade.test.ts reads the schema —
+   * ask it — and asking is now one call, internalWriter(), which carries the
+   * whole internalProcedure chain (see src/http-guards.ts). Read the source for that, the way cascade.test.ts reads the schema —
    * a rule about two places agreeing cannot be enforced from inside one of them.
    * Fastify's inject() would be the stronger tool, but these handlers close over
    * the module-level Prisma client, so an injected request would write to the
@@ -88,7 +89,7 @@ describe('an expired trial', () => {
     const src = readFileSync(new URL('../src/uploads.ts', import.meta.url), 'utf8');
     const posts = [...src.matchAll(/app\.post\('([^']+)'[\s\S]*?(?=\n  app\.(?:post|get)\(|\n\}\n)/g)];
     expect(posts.length, 'found no POST routes — this test is looking at the wrong thing').toBe(3);
-    const missing = posts.filter(([body]) => !body.includes('assertWritable')).map(([, route]) => route);
+    const missing = posts.filter(([body]) => !body.includes('internalWriter')).map(([, route]) => route);
     expect(missing, `these accept writes on a lapsed trial: ${missing.join(', ')}`).toEqual([]);
   });
 

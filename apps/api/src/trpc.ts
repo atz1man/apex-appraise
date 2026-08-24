@@ -22,6 +22,13 @@ export const authedProcedure = t.procedure.use(({ ctx, next }) => {
  * ability to write. Enforced here rather than in each router because a rule
  * repeated in forty places is forty chances to forget it — and the one that gets
  * forgotten is always the one that mattered.
+ *
+ * IF YOU ADD A RULE HERE, ADD IT TO src/http-guards.ts TOO. The upload routes are
+ * plain Fastify and cannot use this chain; internalWriter() is their copy of it.
+ * They have already fallen out of this middleware twice — once for the session
+ * cutoff, once for the trial — and both times it was invisible because there was
+ * nowhere the two could be compared. test/trial.test.ts fails if an upload route
+ * stops asking.
  */
 export const internalProcedure = authedProcedure.use(async ({ ctx, next, type, path }) => {
   if (ctx.principal.principalType !== 'internal') throw new TRPCError({ code: 'FORBIDDEN' });
