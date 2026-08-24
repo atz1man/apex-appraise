@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { TRIAL_DAYS, allowedWhileExpired, trialEndFrom, trialStateOf } from '../src/trial.js';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
@@ -53,6 +54,49 @@ describe('an expired trial', () => {
     await expect(callerFor(T.principal).deals.create({ name: 'After the trial', address: '1 Test Street, Poole', assetType: 'RESIDENTIAL' } as never)).rejects.toThrow(
       /trial ended on .*choose a plan/is,
     );
+  });
+
+  /**
+   * The rule lives in internalProcedure, on the mutations, because — as trpc.ts
+   * puts it — "a rule repeated in forty places is forty chances to forget it".
+   * The upload routes are plain Fastify and were outside it, so a lapsed
+   * workspace could go on filling the data room with documents and site photos,
+   * and go on consuming the disk that holds them.
+   */
+  it('refuses an upload, which is a write however it arrives', async () => {
+    await setTrial(T.orgId, daysFromNow(-1));
+    const { principalFrom } = await import('../src/uploads.js');
+    const { assertTrialLive } = await import('../src/trial.js');
+    expect(principalFrom, 'the upload routes still resolve a principal').toBeTruthy();
+
+    await expect(assertTrialLive(prisma, T.orgId, 'uploads.document')).rejects.toThrow(
+      /trial ended on .*choose a plan/is,
+    );
+    await expect(assertTrialLive(prisma, T.orgId, 'uploads.photo')).rejects.toThrow(/trial ended/i);
+    await expect(assertTrialLive(prisma, T.orgId, 'uploads.logo')).rejects.toThrow(/trial ended/i);
+  });
+
+  /**
+   * The test above proves assertTrialLive refuses; it does not prove the routes
+   * ask it. Read the source for that, the way cascade.test.ts reads the schema —
+   * a rule about two places agreeing cannot be enforced from inside one of them.
+   * Fastify's inject() would be the stronger tool, but these handlers close over
+   * the module-level Prisma client, so an injected request would write to the
+   * development database rather than the throwaway one.
+   */
+  it('every upload route asks before it writes', () => {
+    const src = readFileSync(new URL('../src/uploads.ts', import.meta.url), 'utf8');
+    const posts = [...src.matchAll(/app\.post\('([^']+)'[\s\S]*?(?=\n  app\.(?:post|get)\(|\n\}\n)/g)];
+    expect(posts.length, 'found no POST routes — this test is looking at the wrong thing').toBe(3);
+    const missing = posts.filter(([body]) => !body.includes('assertWritable')).map(([, route]) => route);
+    expect(missing, `these accept writes on a lapsed trial: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('does not put uploads on the list of things allowed while expired', () => {
+    // the allowances are for paying, signing in, and leaving — not for writing
+    for (const path of ['uploads.document', 'uploads.photo', 'uploads.logo']) {
+      expect(allowedWhileExpired(path), `${path} was waved through`).toBe(false);
+    }
   });
 
   it('still lets the firm read everything it owns', async () => {
