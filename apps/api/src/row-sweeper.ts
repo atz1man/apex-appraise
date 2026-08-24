@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { pruneAuthThrottles } from './auth/password.js';
 import { pruneOpenDataCache } from './opendata-cache.js';
+import { pruneWebhookDeliveries } from './webhook-delivery.js';
 
 /**
  * The two tables that only ever grow.
@@ -24,14 +25,24 @@ import { pruneOpenDataCache } from './opendata-cache.js';
  * for two months — which is the goal — accumulates two months of rows that
  * stopped being able to affect a decision after twenty-four hours.
  */
+/**
+ * WebhookDelivery is the third. It grew without bound too, and its largest
+ * column is a verbatim copy of the deal figures we sent — which nothing reads
+ * once the delivery is terminal. See DELIVERY_RETENTION_MS.
+ */
 export interface SweepResult {
   cache: number;
   throttles: number;
+  deliveries: number;
 }
 
 export async function sweepExpiredRows(prisma: PrismaClient): Promise<SweepResult> {
-  const [cache, throttles] = await Promise.all([pruneOpenDataCache(prisma), pruneAuthThrottles(prisma)]);
-  return { cache, throttles };
+  const [cache, throttles, deliveries] = await Promise.all([
+    pruneOpenDataCache(prisma),
+    pruneAuthThrottles(prisma),
+    pruneWebhookDeliveries(prisma),
+  ]);
+  return { cache, throttles, deliveries };
 }
 
 /** Hourly. The throttle cutoff is a day, so this is frequent enough to keep the
@@ -51,7 +62,7 @@ export function startRowSweeper(
   const run = () => {
     void sweepExpiredRows(prisma).then(
       (r) => {
-        if (r.cache || r.throttles) opts.onSweep?.(r);
+        if (r.cache || r.throttles || r.deliveries) opts.onSweep?.(r);
       },
       (e: unknown) => opts.onError?.(e),
     );

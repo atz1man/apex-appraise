@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { recordFailure, tooManyResetRequests } from '../src/auth/password.js';
 import { SWEEP_INTERVAL_MS, startRowSweeper, sweepExpiredRows } from '../src/row-sweeper.js';
+import { DELIVERY_RETENTION_MS } from '../src/webhook-delivery.js';
 import { prisma, resetDatabase } from './harness.js';
 
 /**
@@ -99,11 +100,76 @@ describe('when the sweep runs', () => {
     const broken = {
       openDataCache: { deleteMany: () => Promise.reject(new Error('database gone')) },
       authThrottle: { deleteMany: () => Promise.reject(new Error('database gone')) },
+      webhookDelivery: { deleteMany: () => Promise.reject(new Error('database gone')) },
     } as unknown as Parameters<typeof sweepExpiredRows>[0];
-    await expect(sweepExpiredRows(broken)).resolves.toEqual({ cache: 0, throttles: 0 });
+    await expect(sweepExpiredRows(broken)).resolves.toEqual({ cache: 0, throttles: 0, deliveries: 0 });
   });
 
   it('runs hourly by default — often enough to keep a day-long cutoff flat', () => {
     expect(SWEEP_INTERVAL_MS).toBe(60 * 60 * 1000);
+  });
+});
+
+/**
+ * The third table with no retention, and the one that mattered for a reason
+ * other than size. WebhookDelivery.payload is a verbatim copy of what we sent,
+ * and for these events that means deal figures. org.webhookDeliveries — the
+ * only thing that reads this table after delivery — selects the event, status,
+ * attempts, response code and timestamps, and never the body. So the payloads
+ * were a permanent copy of client-confidential numbers kept for nobody.
+ */
+describe('delivery records do not accumulate for ever', () => {
+  const makeDelivery = async (status: string, ageMs: number) => {
+    const org = await prisma.organisation.create({ data: { name: 'Retention Ltd', plan: 'TRIAL' } });
+    const endpoint = await prisma.webhookEndpoint.create({
+      data: {
+        orgId: org.id,
+        url: 'https://a.example.com/hook',
+        secret: 'whsec_x',
+        events: 'deal.created',
+        createdById: 'nobody',
+      },
+    });
+    const row = await prisma.webhookDelivery.create({
+      data: {
+        orgId: org.id,
+        endpointId: endpoint.id,
+        event: 'deal.created',
+        payload: JSON.stringify({ gdv: 4_278_000_00 }),
+        status,
+      },
+    });
+    await prisma.webhookDelivery.update({
+      where: { id: row.id },
+      data: { createdAt: new Date(Date.now() - ageMs) },
+    });
+    return row.id;
+  };
+
+  const gone = async (id: string) => (await prisma.webhookDelivery.findUnique({ where: { id } })) === null;
+
+  it('drops a delivered record once it has aged out', async () => {
+    const old = await makeDelivery('delivered', DELIVERY_RETENTION_MS + DAY);
+    const recent = await makeDelivery('delivered', DAY);
+    await sweepExpiredRows(prisma);
+    expect(await gone(old), 'the payload we sent was still on disk a month later').toBe(true);
+    expect(await gone(recent), 'a record still useful for diagnosing an integration was thrown away').toBe(false);
+  });
+
+  it('drops a failed one too — a failure is finished, not outstanding', async () => {
+    const id = await makeDelivery('failed', DELIVERY_RETENTION_MS + DAY);
+    await sweepExpiredRows(prisma);
+    expect(await gone(id)).toBe(true);
+  });
+
+  it('never touches one still pending, however old it looks', async () => {
+    /** Deleting the queue is not a way to tidy the queue. */
+    const id = await makeDelivery('pending', DELIVERY_RETENTION_MS * 12);
+    await sweepExpiredRows(prisma);
+    expect(await gone(id), 'the sweeper deleted work that had not been done yet').toBe(false);
+  });
+
+  it('keeps a month, which is well past useful for diagnosing an integration', () => {
+    expect(DELIVERY_RETENTION_MS).toBe(30 * 24 * 60 * 60 * 1000);
   });
 });

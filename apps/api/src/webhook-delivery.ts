@@ -86,6 +86,42 @@ export const MAX_ATTEMPTS = RETRY_DELAYS.length;
 /** consecutive failures after which an endpoint is parked */
 export const FAILURE_LIMIT = 20;
 
+/**
+ * How long a delivery record is kept.
+ *
+ * The table had no retention at all: every row we ever queued stayed, and the
+ * biggest column in it is `payload` — a verbatim copy of what we sent, which
+ * for these events means deal figures. Nothing reads that column once the
+ * delivery is terminal. The diagnostic view (org.webhookDeliveries) selects
+ * event, status, attempts, response code and timestamps, and never the body.
+ * So it was a permanent copy of client-confidential numbers kept for nobody.
+ *
+ * Thirty days is well past useful for "why did my integration stop working",
+ * and the view only ever shows the hundred most recent anyway.
+ */
+export const DELIVERY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Drop delivery records that have finished and aged out.
+ *
+ * Terminal rows only. A row still marked pending is outstanding work however
+ * old it looks, and deleting the queue is not a way to tidy the queue.
+ *
+ * No index for this query on purpose: with the sweep running, the table stays
+ * within a month of traffic, and an index maintained on every insert to speed
+ * up an hourly delete is the wrong trade.
+ */
+export async function pruneWebhookDeliveries(
+  prisma: PrismaClient,
+  olderThanMs = DELIVERY_RETENTION_MS,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const { count } = await prisma.webhookDelivery
+    .deleteMany({ where: { status: { in: ['delivered', 'failed'] }, createdAt: { lt: cutoff } } })
+    .catch(() => ({ count: 0 }));
+  return count;
+}
+
 export interface EmitOptions {
   /** injected in tests; real callers use fetch */
   deliver?: (url: string, body: string, headers: Record<string, string>) => Promise<{ status: number }>;
