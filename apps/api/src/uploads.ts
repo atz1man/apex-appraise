@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { issuedBefore, prisma, principalFromAuthHeader } from './context.js';
+import { assertTrialLive } from './trial.js';
 import { signDownloadToken, verifyDownloadToken } from './download-token.js';
 
 const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
@@ -47,6 +48,22 @@ const safeName = (name: string) => name.replace(/[^\w.\- ()£]/g, '_');
  * (apps/api/uploads/, gitignored); swap the write for S3 presigned uploads in prod —
  * the URL contract (`/uploads/files/<key>`) stays the same.
  */
+
+/**
+ * An expired trial is read-only, and these routes are writes.
+ *
+ * trpc.ts puts that rule in internalProcedure, on the mutations, and says why:
+ * "a rule repeated in forty places is forty chances to forget it". These three
+ * POSTs are not tRPC procedures, so they were outside it — a workspace whose
+ * trial had lapsed could go on filling the data room with documents and site
+ * photos indefinitely, and go on consuming the disk that stores them.
+ *
+ * The GET stays open. Read-only means readable.
+ */
+async function assertWritable(orgId: string, what: string) {
+  await assertTrialLive(prisma, orgId, `uploads.${what}`);
+}
+
 /**
  * Which organisation owns a stored file.
  *
@@ -131,6 +148,11 @@ export async function registerUploads(app: FastifyInstance) {
   app.post('/uploads/document', async (req, reply) => {
     const user = await principalFrom(req);
     if (!user) return reply.code(401).send({ error: 'unauthorised' });
+    try {
+      await assertWritable(user.orgId, 'document');
+    } catch (e) {
+      return reply.code(403).send({ error: e instanceof Error ? e.message : 'forbidden' });
+    }
     const parts = req.parts();
     let dealId = '';
     let category = 'Legal';
@@ -178,6 +200,11 @@ export async function registerUploads(app: FastifyInstance) {
   app.post('/uploads/logo', async (req, reply) => {
     const user = await principalFrom(req);
     if (!user) return reply.code(401).send({ error: 'unauthorised' });
+    try {
+      await assertWritable(user.orgId, 'logo');
+    } catch (e) {
+      return reply.code(403).send({ error: e instanceof Error ? e.message : 'forbidden' });
+    }
     if (user.role !== 'ADMIN') return reply.code(403).send({ error: 'admin access required' });
     const ALLOWED: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
     const MAX_BYTES = 2 * 1024 * 1024;
@@ -202,6 +229,11 @@ export async function registerUploads(app: FastifyInstance) {
   app.post('/uploads/photo', async (req, reply) => {
     const user = await principalFrom(req);
     if (!user) return reply.code(401).send({ error: 'unauthorised' });
+    try {
+      await assertWritable(user.orgId, 'photo');
+    } catch (e) {
+      return reply.code(403).send({ error: e instanceof Error ? e.message : 'forbidden' });
+    }
     const parts = req.parts();
     let dealId = '';
     let contractorId: string | null = null;
