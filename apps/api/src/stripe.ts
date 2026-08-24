@@ -7,7 +7,9 @@
 const API = 'https://api.stripe.com/v1';
 
 export const stripeConfigured = () => Boolean(process.env.STRIPE_SECRET_KEY);
-export const stripePublishableKey = () => process.env.STRIPE_PUBLISHABLE_KEY ?? null;
+// `||`: compose sends `${STRIPE_PUBLISHABLE_KEY:-}`, and '' is not null — a
+// caller checking for null would have been handed an empty string instead
+export const stripePublishableKey = () => process.env.STRIPE_PUBLISHABLE_KEY || null;
 
 export async function stripeFetch<T = any>(
   path: string,

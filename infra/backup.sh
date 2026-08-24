@@ -28,6 +28,30 @@ now() { date -u +%FT%TZ; }
 mkdir -p "$BACKUP_DIR"
 
 # ---------------------------------------------------------------------------
+# Can compose even read its own file?
+#
+# docker-compose.yml requires JWT_SECRET and POSTGRES_PASSWORD, and compose
+# interpolates the WHOLE file for any command — `exec` included. cron runs with
+# almost no environment, so the operator's shell `export`s are not there, and
+# every call below would fail with an interpolation error a long way from its
+# cause. Checked once, up front, with the fix named.
+#
+# The answer is a .env file in the repo root, which compose reads automatically;
+# see infra/DEPLOY.md. Skipped entirely when BACKUP_DB_URL is set, because that
+# path never touches compose.
+# ---------------------------------------------------------------------------
+if [ -z "${BACKUP_DB_URL:-}" ]; then
+  if ! COMPOSE_ERR="$(docker compose config --quiet 2>&1)"; then
+    echo "$(now) FAILED: docker compose cannot read its configuration." >&2
+    echo "  $COMPOSE_ERR" >&2
+    echo "  cron has no shell exports. Put JWT_SECRET and POSTGRES_PASSWORD in" >&2
+    echo "  a .env file in the repo root (compose reads it automatically), or" >&2
+    echo "  set BACKUP_DB_URL to dump a managed database directly." >&2
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Dump, verify, THEN publish.
 #
 # The previous version wrote `pg_dump ... > "$OUT"`, which creates and truncates

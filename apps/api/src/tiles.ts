@@ -27,10 +27,16 @@ import { verifyDownloadToken } from './download-token.js';
  */
 
 /** Where tiles come from. Point this at a paid provider for production use. */
-const TILE_URL = process.env.TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+/**
+ * `||`, not `??`. docker-compose passes these through as `${TILE_URL:-}`, so an
+ * operator who has not set one gets an EMPTY STRING rather than an absent
+ * variable — and `??` only catches absent. The fallback below would have been
+ * unreachable in the one environment that matters.
+ */
+const TILE_URL = process.env.TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 export const TILE_ATTRIBUTION =
-  process.env.TILE_ATTRIBUTION ?? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  process.env.TILE_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /**
  * Who to contact about our traffic. The policy asks for something that identifies
@@ -38,7 +44,7 @@ export const TILE_ATTRIBUTION =
  * configurable and the default names the repository rather than inventing an
  * address nobody reads.
  */
-const TILE_USER_AGENT = process.env.TILE_USER_AGENT ?? 'ApexAppraise/0.1 (+https://github.com/atz1man/apex-appraise)';
+const TILE_USER_AGENT = process.env.TILE_USER_AGENT || 'ApexAppraise/0.1 (+https://github.com/atz1man/apex-appraise)';
 
 const MAX_ZOOM = 19;
 
