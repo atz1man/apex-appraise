@@ -28,7 +28,7 @@ export function registerAdmin(app: FastifyInstance) {
     const admin = await prisma.user.findUnique({ where: { email: DEMO_ADMIN_EMAIL } });
     if (admin) {
       await prisma.$transaction([
-        ...orgCascadeDeletes(prisma, admin.orgId),
+        ...(await orgCascadeDeletes(prisma, admin.orgId)),
         // Market benchmark rows carry no orgId, so the org cascade skips them;
         // clear them too or every reset would duplicate the pseudo-market.
         prisma.benchmarkPoint.deleteMany({ where: { source: 'illustrative' } }),

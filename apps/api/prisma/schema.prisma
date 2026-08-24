@@ -837,7 +837,9 @@ model IntegrationConnection {
 /// guessing a different workspace. Carries no customer data — a key, a count and
 /// two timestamps — which is why it is not in the workspace export.
 model AuthThrottle {
-  /// "login:<email>", "reset:<email>", "register:<email>"
+  /// "login:<email>", "reset:<email>", "login:register:<email>" — the last is
+  /// what registration throttling produces, since it passes "register:<email>"
+  /// as the subject and checkLockout prefixes it. See throttleKeysFor().
   key         String    @id
   count       Int       @default(0)
   /// when the current counting window opened
