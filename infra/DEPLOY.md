@@ -117,6 +117,12 @@ would otherwise surface as a confusing failure inside `pg_dump`. That is what
 the `.env` file above is for. Set `BACKUP_DB_URL` (backup) or `SERVER_URL`
 (restore-check) instead if your database is managed and compose is not involved.
 
+On a managed database (RDS, Fly, Neon) both scripts take the connection instead
+of the compose service — `BACKUP_DB_URL` for each. Pass the full URL including
+its parameters; the restore check swaps only the database name and keeps the
+rest, so an `sslmode=require` or `channel_binding=require` you set is still
+there when it connects to the scratch database.
+
 **Run `./infra/restore-check.sh` once, by hand, the day you set backups up.** It restores the
 newest dump into a scratch database, counts the rows, and drops it. Until it has passed once,
 you have a backup process, not a backup — `pg_dump` exiting 0 only means it wrote a file.

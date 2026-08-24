@@ -43,10 +43,22 @@ fi
 # Route every psql/pg_restore call the same way, so the docker and managed cases
 # differ in one place rather than six.
 if [ -n "${BACKUP_DB_URL:-}" ]; then
-  SERVER_URL="${BACKUP_DB_URL%/*}"
-  psql_srv() { psql -v ON_ERROR_STOP=1 -d "$SERVER_URL/postgres" "$@"; }
-  restore_into() { pg_restore --no-owner --no-acl --exit-on-error -d "$SERVER_URL/$CHECK_DB" "$LATEST"; }
-  psql_chk() { psql -v ON_ERROR_STOP=1 -d "$SERVER_URL/$CHECK_DB" "$@"; }
+  # Swap the database name, KEEP the query string.
+  #
+  # This was `${BACKUP_DB_URL%/*}`, which strips everything after the last "/" —
+  # the database name and the parameters with it. Every managed Postgres this
+  # runbook names wants some: sslmode=require on RDS and Fly, and Neon adds
+  # channel_binding=require. Dropping them does not usually fail, because libpq
+  # negotiates TLS anyway under its default sslmode=prefer. It quietly connects
+  # on weaker terms than the operator asked for, which is worse than failing.
+  DB_QUERY=""
+  case "$BACKUP_DB_URL" in *\?*) DB_QUERY="?${BACKUP_DB_URL#*\?}" ;; esac
+  DB_BASE="${BACKUP_DB_URL%%\?*}"
+  SERVER_URL="${DB_BASE%/*}"
+  srv_url() { printf '%s/%s%s' "$SERVER_URL" "$1" "$DB_QUERY"; }
+  psql_srv() { psql -v ON_ERROR_STOP=1 -d "$(srv_url postgres)" "$@"; }
+  restore_into() { pg_restore --no-owner --no-acl --exit-on-error -d "$(srv_url "$CHECK_DB")" "$LATEST"; }
+  psql_chk() { psql -v ON_ERROR_STOP=1 -d "$(srv_url "$CHECK_DB")" "$@"; }
 else
   # same reason as backup.sh: compose interpolates the whole file for `exec`,
   # and this runs from cron, where the operator's exports do not exist
