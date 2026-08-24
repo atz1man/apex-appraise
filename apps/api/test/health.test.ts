@@ -57,8 +57,27 @@ describe('readiness', () => {
     expect(res.statusCode, 'a monitor reading only the status code would have seen "up"').toBe(503);
     const body = res.json();
     expect(body.ok).toBe(false);
-    expect(body.checks.database.ok).toBe(false);
-    expect(body.checks.database.error).toContain('ECONNREFUSED');
+    expect(body.checks.database).toMatchObject({ ok: false, reason: 'unreachable' });
+  });
+
+  /**
+   * nginx serves /ready to anyone, so the body is public. An earlier version of
+   * this handler returned the driver's own message, which on a real outage reads
+   * "Can't reach database server at `db`:`5432`" — the internal host and port,
+   * handed to whoever asked. main.ts already had the rule for every other route:
+   * a 5xx never explains itself to the caller.
+   */
+  it('never hands an anonymous caller the database host, port or credentials', async () => {
+    const leaky = db(async () => {
+      throw new Error("Can't reach database server at `db-primary.internal`:`5432` (user `pgadmin_svc`, password `hunter2`)");
+    });
+    const res = await (await app(leaky)).inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(503);
+    for (const secret of ['db-primary.internal', '5432', 'pgadmin_svc', 'hunter2', 'reach database server']) {
+      expect(res.body, `the readiness body leaked "${secret}"`).not.toContain(secret);
+    }
+    // and it still says enough to act on
+    expect(res.json().checks.database.reason).toBe('unreachable');
   });
 
   /**
@@ -71,7 +90,7 @@ describe('readiness', () => {
     const res = await (await app(hung())).inject({ method: 'GET', url: '/ready' });
     const took = Date.now() - started;
     expect(res.statusCode).toBe(503);
-    expect(res.json().checks.database.error).toMatch(/no answer/);
+    expect(res.json().checks.database.reason).toBe('timeout');
     expect(took, 'the probe hung with the database').toBeLessThan(6_000);
   });
 });

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -35,18 +35,45 @@ import type { PrismaClient } from '@prisma/client';
 /** A readiness probe must not become the slow query that takes the site down. */
 const DB_TIMEOUT_MS = 3_000;
 
-type Check = { ok: true; ms: number } | { ok: false; ms: number; error: string };
+/**
+ * The public reason is COARSE, on purpose.
+ *
+ * nginx serves /ready to anyone, because that is the point of a readiness probe.
+ * The first version of this handler put the driver's own message in the body,
+ * which on a real outage is not "the database is down" but
+ *
+ *     Can't reach database server at `db`:`5432`
+ *
+ * — the internal host and port of the database, handed to whoever asked, at
+ * precisely the moment the service is least able to cope with attention. Prisma
+ * also names the schema path and the connecting user in other failure modes.
+ *
+ * main.ts already settled this for every other route: "a 5xx never explains
+ * itself to the caller: the detail is in the error table". A 503 from here is a
+ * 5xx like any other, and this endpoint had quietly exempted itself. The
+ * distinction an operator actually needs — refused versus never answered — costs
+ * nothing to keep, so it is kept; the driver's text goes to the log.
+ */
+type Reason = 'unreachable' | 'timeout';
+type Check = { ok: true; ms: number } | { ok: false; ms: number; reason: Reason };
 
-async function checkDatabase(prisma: PrismaClient): Promise<Check> {
+async function checkDatabase(prisma: PrismaClient, log: FastifyBaseLogger): Promise<Check> {
   const started = Date.now();
+  const timeout = Symbol('timeout');
   try {
-    await Promise.race([
-      prisma.$queryRaw`SELECT 1`,
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`no answer in ${DB_TIMEOUT_MS}ms`)), DB_TIMEOUT_MS)),
+    const raced = await Promise.race([
+      prisma.$queryRaw`SELECT 1`.then(() => 'ok' as const),
+      new Promise<typeof timeout>((resolve) => setTimeout(() => resolve(timeout), DB_TIMEOUT_MS)),
     ]);
+    if (raced === timeout) {
+      log.error({ ms: Date.now() - started }, 'readiness: database did not answer');
+      return { ok: false, ms: Date.now() - started, reason: 'timeout' };
+    }
     return { ok: true, ms: Date.now() - started };
   } catch (e) {
-    return { ok: false, ms: Date.now() - started, error: e instanceof Error ? e.message : 'unknown error' };
+    // the detail an engineer needs, in the place only an engineer can read
+    log.error({ err: e }, 'readiness: database unreachable');
+    return { ok: false, ms: Date.now() - started, reason: 'unreachable' };
   }
 }
 
@@ -57,8 +84,8 @@ export function registerHealth(app: FastifyInstance, prisma: PrismaClient) {
   app.get('/health', async () => ({ ok: true, service: 'apex-api', uptimeSeconds: Math.round((Date.now() - startedAt) / 1000) }));
 
   // READINESS. This one is allowed to say no.
-  app.get('/ready', async (_req, reply) => {
-    const database = await checkDatabase(prisma);
+  app.get('/ready', async (req, reply) => {
+    const database = await checkDatabase(prisma, req.log);
     const body = {
       ok: database.ok,
       service: 'apex-api',

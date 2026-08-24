@@ -80,8 +80,9 @@ server {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
     include /etc/nginx/client-ip.conf;
-    # never let a cache stand between a monitor and the truth
-    add_header Cache-Control "no-store";
+    # `always`, or nginx applies this only to 2xx/3xx — and the response that
+    # most needs never to be cached is the 503
+    add_header Cache-Control "no-store" always;
   }
 
   location /webhooks/ {
