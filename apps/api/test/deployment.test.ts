@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -103,5 +103,63 @@ describe('the stack comes back on its own', () => {
      */
     expect(compose).toMatch(/healthcheck:[\s\S]*?\/ready/);
     expect(compose.match(/condition: service_healthy/g) ?? []).toHaveLength(2);
+  });
+});
+
+/**
+ * "Unset" and "empty" are not the same thing, and compose turns one into the
+ * other.
+ *
+ * `SOME_KEY: ${SOME_KEY:-}` gives the container an EMPTY STRING when the
+ * operator has not set the variable — not an absent one. `??` only catches
+ * absent. So every `process.env.X ?? 'a sensible default'` paired with an
+ * empty-default in compose was a fallback that could never fire in the one
+ * environment it was written for.
+ *
+ * It had bitten twice. EMAIL_FROM meant a firm with SMTP configured and no From
+ * address sent every invite with an empty From header. TILE_* was worse in a
+ * different way — those were not passed to the container at all, so the runbook
+ * told an operator to choose a tile provider and the choice did nothing.
+ */
+describe('an unset variable reaches the code as one', () => {
+  const emptyDefaulted = [...compose.matchAll(/^\s*([A-Z][A-Z0-9_]*):\s*\$\{\1:-\}\s*$/gm)].map((m) => m[1]!);
+
+  const sources = () => {
+    const dir = new URL('../src/', import.meta.url);
+    const walk = (u: URL): string[] =>
+      readdirSync(u, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(new URL(`${e.name}/`, u))
+          : e.name.endsWith('.ts')
+            ? [readFileSync(new URL(e.name, u), 'utf8')]
+            : [],
+      );
+    return walk(dir).join('\n');
+  };
+
+  it('found the empty-defaulted variables to check', () => {
+    // a regex matching nothing would make the assertion below vacuous
+    expect(emptyDefaulted.length).toBeGreaterThan(3);
+    expect(emptyDefaulted).toContain('EMAIL_FROM');
+  });
+
+  it.each([['??']])('never falls back with %s on one of them', () => {
+    const src = sources();
+    const offenders = emptyDefaulted.filter((key) =>
+      // `process.env.KEY ?? <something that is not empty>`
+      new RegExp(`process\\.env\\.${key}\\s*\\?\\?\\s*(?!['"\`]{2})`).test(src),
+    );
+    expect(
+      offenders,
+      `these use ?? against a compose empty-default, so the fallback can never fire: ${offenders.join(', ')}. Use || instead.`,
+    ).toEqual([]);
+  });
+
+  it('passes the tile settings to the container the runbook tells you to set', () => {
+    // the runbook says this choice has to be made before selling the product;
+    // it was documented and never wired up
+    for (const key of ['TILE_URL', 'TILE_ATTRIBUTION', 'TILE_USER_AGENT']) {
+      expect(emptyDefaulted, `${key} is documented in infra/DEPLOY.md but not passed to the API`).toContain(key);
+    }
   });
 });

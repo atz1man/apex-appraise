@@ -48,6 +48,15 @@ if [ -n "${BACKUP_DB_URL:-}" ]; then
   restore_into() { pg_restore --no-owner --no-acl --exit-on-error -d "$SERVER_URL/$CHECK_DB" "$LATEST"; }
   psql_chk() { psql -v ON_ERROR_STOP=1 -d "$SERVER_URL/$CHECK_DB" "$@"; }
 else
+  # same reason as backup.sh: compose interpolates the whole file for `exec`,
+  # and this runs from cron, where the operator's exports do not exist
+  if ! COMPOSE_ERR="$(docker compose config --quiet 2>&1)"; then
+    echo "FAILED: docker compose cannot read its configuration." >&2
+    echo "  $COMPOSE_ERR" >&2
+    echo "  Put JWT_SECRET and POSTGRES_PASSWORD in a .env file in the repo root," >&2
+    echo "  or set SERVER_URL to reach a managed database directly." >&2
+    exit 1
+  fi
   psql_srv() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U apex -d postgres "$@"; }
   restore_into() { docker compose exec -T db pg_restore --no-owner --no-acl --exit-on-error -U apex -d "$CHECK_DB" < "$LATEST"; }
   psql_chk() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U apex -d "$CHECK_DB" "$@"; }

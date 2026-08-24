@@ -15,7 +15,14 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-const FROM = () => process.env.EMAIL_FROM ?? 'Apex Appraise <no-reply@apexappraise.co.uk>';
+/**
+ * `||`, not `??`. compose passes EMAIL_FROM as `${EMAIL_FROM:-}`, so in the
+ * deployed stack an unset variable arrives as an empty string — which `??`
+ * accepts. Every message from a firm that configured SMTP but not a From
+ * address went out with an empty From header, and this default, which reads
+ * like the safety net, could never fire where it was needed.
+ */
+const FROM = () => process.env.EMAIL_FROM || 'Apex Appraise <no-reply@apexappraise.co.uk>';
 
 /**
  * Demo mailbox — the last few messages, in memory, ONLY when no SMTP is

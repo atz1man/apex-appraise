@@ -13,18 +13,30 @@ curl -fsSL https://get.docker.com | sh
 
 # 2. clone and configure
 git clone https://github.com/atz1man/apex-appraise.git && cd apex-appraise
-export JWT_SECRET="$(openssl rand -hex 32)"        # REQUIRED — keep it safe
-export POSTGRES_PASSWORD="$(openssl rand -hex 32)" # REQUIRED — the database password
-# optional integrations (all degrade gracefully to demo mode when unset):
-export ANTHROPIC_API_KEY=...                    # live AI extraction in Auto-Appraisal
-export SMTP_URL="smtp://user:pass@host:587"     # invite + welcome email delivery
-export EMAIL_FROM="Apex Appraise <no-reply@yourdomain.co.uk>"
-export APP_URL="https://app.yourdomain.co.uk"   # used in email links
-export STRIPE_SECRET_KEY=sk_live_...            # live buyer card payments
-export STRIPE_WEBHOOK_SECRET=whsec_...          # POST /webhooks/stripe
-export TILE_URL="https://.../{z}/{x}/{y}.png?key=..."   # map tiles — READ THE NOTE BELOW
-export TILE_ATTRIBUTION="&copy; Your provider"  # the credit line that provider requires
-export TILE_USER_AGENT="YourFirm/1.0 (ops@yourfirm.co.uk)"  # who to contact about our traffic
+# Secrets go in a .env file in the repo root, NOT in your shell. compose reads
+# it automatically, and so does every later `docker compose exec` — including
+# the ones the backup and restore-check cron jobs make, which run with almost
+# no environment and cannot see your exports. .env is gitignored.
+cat >> .env <<'ENV'
+JWT_SECRET=REPLACE_ME          # openssl rand -hex 32 — keep it safe
+POSTGRES_PASSWORD=REPLACE_ME   # openssl rand -hex 32 — the database password
+ENV
+$EDITOR .env   # paste real values in; both are REQUIRED and the stack will not start without them
+# Optional integrations — same file, same reason. Each degrades gracefully to a
+# clearly-labelled demo mode when unset, which is exactly why they belong here
+# and not in a shell: a later rebuild without them does not fail, it quietly
+# turns live AI extraction and real payments back off.
+cat >> .env <<'ENV'
+ANTHROPIC_API_KEY=                       # live AI extraction in Auto-Appraisal
+SMTP_URL=smtp://user:pass@host:587       # invite + welcome email delivery
+EMAIL_FROM=Apex Appraise <no-reply@yourdomain.co.uk>
+APP_URL=https://app.yourdomain.co.uk     # used in email links
+STRIPE_SECRET_KEY=                       # live buyer card payments
+STRIPE_WEBHOOK_SECRET=                   # POST /webhooks/stripe
+TILE_URL=                                # map tiles — READ THE NOTE BELOW
+TILE_ATTRIBUTION=                        # the credit line that provider requires
+TILE_USER_AGENT=YourFirm/1.0 (ops@yourfirm.co.uk)   # who to contact about our traffic
+ENV
 
 # 3. run
 docker compose up -d --build
@@ -97,6 +109,13 @@ even before you configure anything cleverer.
 # every 5 minutes, FROM ANOTHER MACHINE — a watchdog on the box dies with the box
 */5 * * * * cd /opt/apex-appraise && ALERT_WEBHOOK=https://hooks.slack.com/... ./infra/watchdog.sh https://app.yourdomain.co.uk >> /var/log/apex-watchdog.log 2>&1
 ```
+
+These run from cron, which has no shell environment, so both scripts begin by
+checking that `docker compose` can read its own configuration — it interpolates
+the whole file for `exec`, so a missing `JWT_SECRET` or `POSTGRES_PASSWORD`
+would otherwise surface as a confusing failure inside `pg_dump`. That is what
+the `.env` file above is for. Set `BACKUP_DB_URL` (backup) or `SERVER_URL`
+(restore-check) instead if your database is managed and compose is not involved.
 
 **Run `./infra/restore-check.sh` once, by hand, the day you set backups up.** It restores the
 newest dump into a scratch database, counts the rows, and drops it. Until it has passed once,
