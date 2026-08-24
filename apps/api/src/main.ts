@@ -8,8 +8,7 @@ import { registerUploads } from './uploads.js';
 import { registerReports } from './reports.js';
 import { registerTiles } from './tiles.js';
 import { registerHealth } from './health.js';
-import { pruneOpenDataCache } from './opendata-cache.js';
-import { pruneAuthThrottles } from './auth/password.js';
+import { startRowSweeper } from './row-sweeper.js';
 import { registerWebhooks } from './webhooks.js';
 import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
@@ -94,21 +93,14 @@ async function main() {
    * loop, and the retry schedule lives in the delivery module either way.
    */
   /**
-   * Sweep the two tables that only ever grow: cached open-data rows, and the
-   * auth throttles that replaced the process-local Maps.
-   *
-   * pruneOpenDataCache had existed since the caching work with a comment saying
-   * "called on boot rather than on a timer" — and nothing called it, so the cache
-   * had no expiry at all beyond its TTL being ignored for storage purposes. Both
-   * run here now, and neither is allowed to stop the API: a sweeper that fails is
-   * a table that grows, which is tomorrow's problem, while an API that will not
-   * boot is today's.
+   * Sweep the two tables that only ever grow. On boot AND on a timer: AuthThrottle
+   * is keyed by the email a stranger typed, so a boot-only sweep bounded its size
+   * by how often we happened to deploy. See row-sweeper.ts.
    */
-  void Promise.all([pruneOpenDataCache(prisma), pruneAuthThrottles(prisma)])
-    .then(([cache, throttles]) => {
-      if (cache || throttles) app.log.warn({ cache, throttles }, 'pruned expired rows on boot');
-    })
-    .catch((e: unknown) => app.log.error(e, 'row sweep failed'));
+  startRowSweeper(prisma, {
+    onSweep: (r) => app.log.warn(r, 'pruned expired rows'),
+    onError: (e) => app.log.error(e, 'row sweep failed'),
+  });
 
   const drain = setInterval(() => {
     void drainWebhooks(prisma).catch((e: unknown) => app.log.error(e, 'webhook drain failed'));
