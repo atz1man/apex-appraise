@@ -55,6 +55,7 @@ describe('every org-scoped model is accounted for', () => {
 
 import { callerFor, makeTenant, prisma, resetDatabase } from './harness.js';
 import { orgCascadeDeletes } from '../src/org-delete.js';
+import { recordFailure, throttleKeysFor, tooManyResetRequests } from '../src/auth/password.js';
 
 describe('deleting a workspace actually empties it', () => {
   it('leaves no row anywhere carrying that org id', async () => {
@@ -88,7 +89,7 @@ describe('deleting a workspace actually empties it', () => {
       kind: 'appraisal',
     } as never);
 
-    await prisma.$transaction(orgCascadeDeletes(prisma, doomed.orgId));
+    await prisma.$transaction(await orgCascadeDeletes(prisma, doomed.orgId));
 
     // nothing left of the deleted workspace, in any table
     for (const model of ['deal', 'appraisal', 'reportShare', 'errorEvent', 'activityEvent', 'user'] as const) {
@@ -105,4 +106,70 @@ describe('deleting a workspace actually empties it', () => {
     expect(await prisma.reportShare.count({ where: { orgId: survivor.orgId } })).toBe(1);
     expect(survivorShare).toBeTruthy();
   }, 120_000);
+});
+
+/**
+ * The one table the structural test above cannot see.
+ *
+ * AuthThrottle is keyed by the email address someone typed and carries no
+ * orgId, so "every model with an orgId is in the cascade" says nothing about
+ * it — and a firm that exercised its right to erasure was left with its
+ * people's addresses in a lockout table.
+ */
+describe('erasure reaches the table with no org id', () => {
+  it('takes the lockout rows for its people with it', async () => {
+    const doomed = await makeTenant('Erasure');
+    const bystander = await makeTenant('Bystander');
+    const [gone, kept] = await Promise.all([
+      prisma.user.findFirstOrThrow({ where: { orgId: doomed.orgId, principalType: 'internal' } }),
+      prisma.user.findFirstOrThrow({ where: { orgId: bystander.orgId, principalType: 'internal' } }),
+    ]);
+
+    /**
+     * Deliberately chosen so one address is a SUFFIX of the other. A
+     * `key endsWith email` filter reads as the obvious way to do this and
+     * would, on these two, delete the surviving firm's rows as well —
+     * emails are unique but they are not suffix-free.
+     */
+    const stamp = Date.now();
+    await prisma.user.update({ where: { id: gone.id }, data: { email: `bob-${stamp}@erasure.test` } });
+    await prisma.user.update({ where: { id: kept.id }, data: { email: `xbob-${stamp}@erasure.test` } });
+    const goneEmail = `bob-${stamp}@erasure.test`;
+    const keptEmail = `xbob-${stamp}@erasure.test`;
+
+    // every shape the module writes, for both firms
+    for (const email of [goneEmail, keptEmail]) {
+      await recordFailure(prisma, email);
+      await recordFailure(prisma, `register:${email}`);
+      await tooManyResetRequests(prisma, email);
+    }
+    expect(await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(goneEmail) } } })).toBe(3);
+
+    await prisma.$transaction(await orgCascadeDeletes(prisma, doomed.orgId));
+
+    expect(
+      await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(goneEmail) } } }),
+      'a deleted workspace left its people’s email addresses in the lockout table',
+    ).toBe(0);
+    expect(
+      await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(keptEmail) } } }),
+      'deleting one firm cleared another firm’s lockouts',
+    ).toBe(3);
+  });
+
+  it('knows every key shape the throttle can write', async () => {
+    /**
+     * The list is hand-written, so it is checked against what the module
+     * actually produces rather than against itself. Registration is the one
+     * that catches people out: it passes "register:<email>" as the subject and
+     * checkLockout prefixes it, so the row lands under "login:register:...".
+     */
+    const email = `shapes-${Date.now()}@erasure.test`;
+    await recordFailure(prisma, email);
+    await recordFailure(prisma, `register:${email}`);
+    await tooManyResetRequests(prisma, email);
+
+    const written = await prisma.authThrottle.findMany({ where: { key: { contains: email } }, select: { key: true } });
+    expect(written.map((r) => r.key).sort()).toEqual([...throttleKeysFor(email)].sort());
+  });
 });

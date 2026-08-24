@@ -871,7 +871,7 @@ export const orgRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Type the workspace name exactly to confirm deletion' });
       }
       // Children first (no orgId of their own), then org-scoped rows, then the org
-      await ctx.prisma.$transaction(orgCascadeDeletes(ctx.prisma, orgId));
+      await ctx.prisma.$transaction(await orgCascadeDeletes(ctx.prisma, orgId));
       return { deleted: true };
     }),
 });

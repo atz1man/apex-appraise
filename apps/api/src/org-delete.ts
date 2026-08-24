@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { throttleKeysFor } from './auth/password.js';
 
 /**
  * Deletes for everything an organisation owns: children first (rows with no
@@ -11,8 +12,19 @@ import type { Prisma, PrismaClient } from '@prisma/client';
  * quietly leaves rows behind. That is not a rule anyone can be trusted to
  * remember — test/cascade.test.ts reads the schema and fails the build when a new
  * model is missing.
+ *
+ * AuthThrottle is the exception that rule cannot catch. It is keyed by the email
+ * address someone typed and carries no orgId at all, so the structural test
+ * cannot see it — and a firm that exercised its right to erasure was left with
+ * its people's addresses sitting in a lockout table. Async for that one reason:
+ * the keys are built from the emails, so they have to be read first.
  */
-export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.PrismaPromise<unknown>[] {
+export async function orgCascadeDeletes(
+  prisma: PrismaClient,
+  orgId: string,
+): Promise<Prisma.PrismaPromise<unknown>[]> {
+  const users = await prisma.user.findMany({ where: { orgId }, select: { email: true } });
+  const throttleKeys = users.flatMap((u) => throttleKeysFor(u.email));
   return [
     prisma.salesMilestone.deleteMany({ where: { unit: { orgId } } }),
     prisma.holding.deleteMany({ where: { investor: { orgId } } }),
@@ -54,6 +66,9 @@ export function orgCascadeDeletes(prisma: PrismaClient, orgId: string): Prisma.P
     prisma.integrationConnection.deleteMany({ where: { orgId } }),
     prisma.orgPolicy.deleteMany({ where: { orgId } }),
     prisma.deal.deleteMany({ where: { orgId } }),
+    // exact keys rather than a suffix match on the address: one person's email
+    // can be the tail of another's, and this runs across every tenant's rows
+    prisma.authThrottle.deleteMany({ where: { key: { in: throttleKeys } } }),
     prisma.user.deleteMany({ where: { orgId } }),
     prisma.organisation.delete({ where: { id: orgId } }),
   ];

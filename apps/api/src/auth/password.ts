@@ -128,6 +128,21 @@ export async function tooManyResetRequests(db: ThrottleStore, email: string): Pr
  * had. Called on boot beside the open-data sweeper, for the same reason: a table
  * that only grows eventually stops being a feature.
  */
+/**
+ * Every key shape this module can write for one address.
+ *
+ * Three, not the two the schema comment claimed: registration throttling calls
+ * checkLockout with "register:<email>" as its subject, and checkLockout then
+ * prefixes it, so the row lands under "login:register:<email>". Ugly, and
+ * harmless while it is written down — but it means a caller enumerating keys by
+ * hand would have missed a third of them.
+ *
+ * Exported so deleting a workspace can take these with it. They are keyed by
+ * email and carry no orgId, so the structural cascade test cannot see them and
+ * the org cascade would otherwise leave an ex-customer's address behind.
+ */
+export const throttleKeysFor = (email: string) => [`login:${email}`, `reset:${email}`, `login:register:${email}`];
+
 export async function pruneAuthThrottles(db: ThrottleStore, olderThanMs = 24 * 60 * 60 * 1000): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanMs);
   const { count } = await db.authThrottle.deleteMany({ where: { updatedAt: { lt: cutoff } } }).catch(() => ({ count: 0 }));
