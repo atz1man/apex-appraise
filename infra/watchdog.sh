@@ -39,7 +39,15 @@ CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' --max-time "$TIMEOUT" "${URL%
 CODE="${CODE:-000}"
 BODY="$(tr -d '\n' < "$BODY_FILE" 2>/dev/null | head -c 400 || true)"
 
-if [ "$CODE" = "200" ]; then
+if [ "$CODE" = "200" ] && ! grep -q '"service":"apex-api"' <<<"$BODY"; then
+  # A 200 that is not the API answering. The usual cause is a proxy serving the
+  # SPA's index.html for /ready — which is what nginx did before /ready had a
+  # location block, and it makes this watchdog report "up" forever with the API
+  # and the database both dead. Checking the body means a misroute reads as an
+  # outage rather than as good news.
+  STATE=down
+  DETAIL="200 but not the API — something is answering /ready instead of it (proxy misroute?)"
+elif [ "$CODE" = "200" ]; then
   STATE=up
   DETAIL="ready"
 elif [ "$CODE" = "000" ]; then
