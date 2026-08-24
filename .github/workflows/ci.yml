@@ -100,6 +100,15 @@ jobs:
           # the suite signs in as the seeded demo users, so this stack asks for
           # them explicitly — a production build does not seed them
           SEED_DEMO: '1'
+          # a throwaway database password, for the same reason as the signing key
+          POSTGRES_PASSWORD: ci-ephemeral-not-a-real-password
+          # The suite signs in on every test from one IP, so the honest
+          # production limits would fail it for the wrong reason. They live HERE
+          # rather than in docker-compose.yml, so the file people deploy is not
+          # loosened to suit the test run. The limiter itself is covered
+          # directly by apps/api/test/security.test.ts.
+          RATE_LIMIT_PER_MIN: '5000'
+          AUTH_RATE_LIMIT_PER_MIN: '1000'
         run: |
           # --env-file /dev/null so a stray .env can never leak real credentials
           # into a CI run, and so the suite is proven to pass WITHOUT them

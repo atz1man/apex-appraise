@@ -5,9 +5,13 @@ services:
     # PG 18 to match production (flyio/postgres-flex). Two major versions of skew
     # between test and prod is a class of bug nobody can see until it ships.
     image: postgres:18-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: apex
-      POSTGRES_PASSWORD: apex
+      # Required, exactly like JWT_SECRET, and for a stronger reason: this port is
+      # published. A default of "apex" plus a published port is a database open to
+      # whoever finds the host.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment}
       POSTGRES_DB: apex
     volumes:
       # PG18's image wants the mount one level up — it puts the cluster in a
@@ -18,7 +22,12 @@ services:
       # published so `prisma migrate diff --from-migrations` has a reachable shadow
       # database — without one the documented schema-change procedure cannot run.
       # 55432, not 5432, so it never fights a postgres already on the host.
-      - '55432:5432'
+      #
+      # Bound to the loopback address, not to every interface. That reason above
+      # is a DEVELOPER's reason, and it is fully served by a port the machine's
+      # own tooling can reach; the bare "55432:5432" it replaces also served
+      # anyone who could route to the host.
+      - '127.0.0.1:55432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U apex']
       interval: 5s
@@ -30,7 +39,7 @@ services:
       context: .
       dockerfile: infra/api.Dockerfile
     environment:
-      DATABASE_URL: postgresql://apex:apex@db:5432/apex
+      DATABASE_URL: postgresql://apex:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment}@db:5432/apex
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the environment}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       EPC_BEARER_TOKEN: ${EPC_BEARER_TOKEN:-}
@@ -40,11 +49,15 @@ services:
       # create. See apps/api/prisma/seed.ts for why the default runs this way.
       SEED_DEMO: ${SEED_DEMO:-}
       PORT: 4100
-      # The browser suite logs in on every test from a single IP, so the honest
-      # production limits would fail it for the wrong reason. The limiter itself
-      # is covered directly by apps/api/test/security.test.ts.
-      RATE_LIMIT_PER_MIN: 5000
-      AUTH_RATE_LIMIT_PER_MIN: 1000
+      # These default to the limiter's own production numbers (see num() in
+      # apps/api/src/security.ts). They were pinned at 5000/1000 here so the
+      # browser suite — which signs in on every test from a single IP — would
+      # not trip them, which meant the file people deploy shipped with
+      # brute-force protection a hundred times looser than the code intends.
+      # The suite sets them in its own environment now; a deployment gets the
+      # honest ones.
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-600}
+      AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-10}
       WEB_URL: http://web:80
       APP_URL: ${APP_URL:-http://localhost:8080}
       SMTP_URL: ${SMTP_URL:-}
@@ -52,11 +65,25 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - '4100:4100'
+      # loopback only: nginx on :8080 is the front door, and it is where the
+      # security headers and the tile and download routes are enforced. A
+      # published 4100 is a way around all of it. Still reachable from the host
+      # for the manual verification in docs/COMPLIANCE.md.
+      - '127.0.0.1:4100:4100'
+    healthcheck:
+      # /ready, not /health: liveness answers "the process is up", which a
+      # container that cannot reach its database also answers. node, not curl,
+      # because the image has node and does not have curl.
+      test: ['CMD', 'node', '-e', "require('http').get('http://127.0.0.1:4100/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     volumes:
       - uploads:/app/apps/api/uploads
 
@@ -64,8 +91,13 @@ services:
     build:
       context: .
       dockerfile: infra/web.Dockerfile
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        # nginx resolves `api` once at startup and caches it; bringing the front
+        # door up before the thing behind it means the first visitors get a 502
+        # from a proxy that has given up looking.
+        condition: service_healthy
     ports:
       - '8080:80'
 
