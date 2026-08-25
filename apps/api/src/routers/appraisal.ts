@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { unsupportedFigures } from '../narrative-guard.js';
+import { demoFallbacksAllowed } from '../demo-mode.js';
 import { z } from 'zod';
 import {
   autoAppraise,
@@ -991,6 +992,27 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
       message: `AI extraction unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Use manual entry, or fix the API key/credits.`,
     });
   }
+  /**
+   * No key. What follows is the built-in worked example, not a reading of the
+   * user's documents — right for a demo, dangerous in production, and the
+   * absence of a key is not consent to it.
+   *
+   * The screen that shows this warns about it in an amber panel above the
+   * figures. The warning does not survive the data: "Open full appraisal" saves
+   * these units into a real Appraisal row, with their `source` citations —
+   * "Drawing A-102", "Cost plan summary" — naming documents this deal has never
+   * had. From there they reach the appraisal screen, the report and the Red
+   * Book, none of which know the numbers were invented, and `sample` is not a
+   * column so nothing downstream can find out.
+   */
+  if (!demoFallbacksAllowed()) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        'AI extraction is not configured on this server. Use Manual entry to enter the scheme — this server will not invent one for you.',
+    });
+  }
+
   // demo fallback: deterministic sample keyed off the notes where possible
   const s106Match = notes.match(/S106[^£]*£([\d,]+)/i);
   const cilMatch = notes.match(/CIL[^£]*£(\d+)\s*per\s*sqm/i);

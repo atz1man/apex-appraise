@@ -175,7 +175,7 @@ describe('paying without a payment processor', () => {
     const t = await makeTenant('NoStripe');
     const { payment, principal: buyer } = await duePayment(t);
 
-    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_MODE: undefined }, async () => {
       await expect(callerFor(buyer as never).buyer.pay(payment.id)).rejects.toThrow(/contact the developer/i);
     });
 
@@ -189,7 +189,7 @@ describe('paying without a payment processor', () => {
     const t = await makeTenant('DemoStripe');
     const { payment, principal: buyer } = await duePayment(t);
 
-    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: '1' }, async () => {
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_MODE: '1' }, async () => {
       const out = (await callerFor(buyer as never).buyer.pay(payment.id)) as { mode: string };
       expect(out.mode).toBe('demo');
     });
@@ -200,7 +200,7 @@ describe('paying without a payment processor', () => {
     const t = await makeTenant('DevStripe');
     const { payment, principal: buyer } = await duePayment(t);
 
-    await withEnv({ NODE_ENV: 'test', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+    await withEnv({ NODE_ENV: 'test', STRIPE_SECRET_KEY: undefined, DEMO_MODE: undefined }, async () => {
       expect(((await callerFor(buyer as never).buyer.pay(payment.id)) as { mode: string }).mode).toBe('demo');
     });
   });
@@ -210,11 +210,11 @@ describe('paying without a payment processor', () => {
     const { payment, principal: buyer } = await duePayment(t);
     const mode = async () => ((await callerFor(buyer as never).buyer.myUnit()) as { stripeMode: string }).stripeMode;
 
-    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_MODE: undefined }, async () => {
       // not "demo" — the portal used to promise instant settlement it would not do
       expect(await mode()).toBe('unavailable');
     });
-    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: '1' }, async () => {
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_MODE: '1' }, async () => {
       expect(await mode()).toBe('demo');
     });
     await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: 'sk_test_x' }, async () => {
