@@ -53,7 +53,14 @@ const setSpecial = async (text: string) => {
   const terms = (await caller().engagement.get(T.dealId as never)) as Record<string, unknown>;
   const { id, status, issuedAt, acceptedAt, acceptedBy, signToken, signTokenExpiresAt,
     signedName, signedAt, signedIp, createdAt, updatedAt, dealId, orgId, ...editable } = terms as never;
-  await caller().engagement.save({ dealId: T.dealId, terms: { ...editable, specialAssumptions: text } } as never);
+  // the stamp it just read, which is what the form does — the terms are now
+  // guarded against a second editor, and a fixture that skips the stamp is not
+  // exercising the same procedure a person does
+  await caller().engagement.save({
+    dealId: T.dealId,
+    terms: { ...editable, specialAssumptions: text },
+    expectedUpdatedAt: updatedAt,
+  } as never);
   const row = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: T.dealId } });
   expect(row.specialAssumptions, 'the fixture did not actually save the clause').toBe(text);
 };

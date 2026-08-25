@@ -91,6 +91,16 @@ export default function Engagement() {
   const { data: saved, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
 
   const [terms, setTerms] = useState<Terms | null>(null);
+  /**
+   * The stamp of the terms this page loaded, so a save can be refused rather
+   * than silently restoring nineteen fields somebody else has since changed.
+   *
+   * Held in state and refreshed from the SAVE's own response — never re-read
+   * from the query. `a48b7b3` found a drawer doing the latter: it re-read the
+   * stamp from the list, which had not refetched yet, so the same person's
+   * second edit was refused as a conflict with themselves.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
   const [acceptedBy, setAcceptedBy] = useState('');
 
@@ -117,6 +127,7 @@ export default function Engagement() {
         valuerName: saved.valuerName,
         valuerReg: saved.valuerReg,
       });
+      setStamp(saved.updatedAt ? new Date(saved.updatedAt) : null);
     }
   }, [saved, terms]);
 
@@ -125,8 +136,9 @@ export default function Engagement() {
     utils.documents.activity.invalidate(dealId);
   };
   const save = trpc.engagement.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       setDirty(false);
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       invalidate();
       toast.success('Terms saved');
     },
@@ -205,7 +217,7 @@ export default function Engagement() {
             >
               Download PDF
             </Button>
-            <Button onClick={() => save.mutate({ dealId, terms })} loading={save.isPending} disabled={!dirty || locked}>
+            <Button onClick={() => save.mutate({ dealId, terms, expectedUpdatedAt: stamp ?? undefined })} loading={save.isPending} disabled={!dirty || locked}>
               {dirty ? 'Save terms' : 'Saved'}
             </Button>
           </>

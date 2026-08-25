@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { internalProcedure, publicProcedure, router } from '../trpc.js';
 import { AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
 import { toPence, P, moneyLabel } from '../mappers.js';
+import { assertUnchanged } from '../optimistic.js';
 
 /** How long a signing link stays live unless the valuer chooses otherwise. */
 const DEFAULT_LINK_DAYS = 30;
@@ -167,7 +168,30 @@ export const engagementRouter = router({
   }),
 
   save: internalProcedure
-    .input(z.object({ dealId: z.string(), terms: zTerms }))
+    .input(
+      z.object({
+        dealId: z.string(),
+        terms: zTerms,
+        /**
+         * The stamp of the terms the caller loaded.
+         *
+         * The form holds nineteen fields, reads them once and posts every one of
+         * them back — the same shape as the appraisal workfile (`b39f174`), the
+         * phone/desk handoff (`81c398b`) and the sales drawer (`a48b7b3`). So a
+         * director adding "assuming planning permission is granted" could have it
+         * removed by an analyst who loaded the page first and never saw it, with
+         * no version and nothing to say it happened. `238d265` established that
+         * this document is what the Red Book narrative is checked AGAINST, so the
+         * valuation would then be measured by terms nobody meant.
+         *
+         * Demanded rather than checked-when-present, for the reason `save` on the
+         * appraisal gives: an optional stamp silently reopens the hole for
+         * whoever forgets next. Creating the first draft needs none — there is
+         * nothing yet to have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const existing = await ctx.prisma.engagementTerms.findFirst({
@@ -177,6 +201,15 @@ export const engagementRouter = router({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'These terms have been accepted by the client and can no longer be edited. Withdraw them to start a revision.',
+        });
+      }
+      if (existing) {
+        await assertUnchanged({
+          what: 'set of terms',
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          lastActor: async () => null,
+          advice: 'Reload to see the current terms before saving yours — nothing you can see here has been lost.',
         });
       }
       const data = {
@@ -207,7 +240,10 @@ export const engagementRouter = router({
           target: `basis ${input.terms.basisOfValue || '—'} · cap ${moneyLabel(data.liabilityCap)}`,
         },
       });
-      return { id: row.id, status: row.status };
+      // the stamp comes from THIS save, never from a refetch: `a48b7b3` found a
+      // drawer re-reading it from the list, which refused its own user's second
+      // edit as a conflict with themselves
+      return { id: row.id, status: row.status, updatedAt: row.updatedAt };
     }),
 
   /** Freeze and date the terms — this is the version the client sees. */
