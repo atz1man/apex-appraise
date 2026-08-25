@@ -34,6 +34,21 @@ import {
 } from '../open-banking.js';
 import { openFor, sealFor } from '../sealed-fields.js';
 
+/**
+ * A deal-scoped read has to refuse a deal that is not yours.
+ *
+ * Every one of these is already org-scoped, so nothing leaked — but answering a
+ * foreign deal id with an empty envelope instead of NOT_FOUND is a different
+ * sentence, and the wrong one. `cost.packages` was fixed for exactly this, with
+ * a note saying "its siblings all refuse". Three siblings did not, and the
+ * isolation sweep that now walks the whole router is what found them.
+ */
+async function assertOwnDeal(ctx: { prisma: any; principal: { orgId: string } }, dealId: string) {
+  const deal = await ctx.prisma.deal.findFirst({ where: { id: dealId, orgId: ctx.principal.orgId } });
+  if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+  return deal;
+}
+
 // ---------- Construction cost monitoring ----------
 
 const pkgOut = (pk: any) => ({
@@ -217,8 +232,11 @@ export const photosRouter = router({
 export const tasksRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string().optional(), aspect: z.string().optional() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.task.findMany({
+    .query(async ({ ctx, input }) => {
+      // dealId is optional — the calendar lists across every deal — so this
+      // refuses only when one is named, and named wrongly
+      if (input.dealId) await assertOwnDeal(ctx, input.dealId);
+      return ctx.prisma.task.findMany({
         where: {
           orgId: ctx.principal.orgId,
           ...(input.dealId ? { dealId: input.dealId } : {}),
@@ -226,8 +244,8 @@ export const tasksRouter = router({
         },
         orderBy: [{ done: 'asc' }, { due: 'asc' }],
         include: { deal: { select: { name: true } } },
-      }),
-    ),
+      });
+    }),
 
   create: internalProcedure
     .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().default('AO'), due: z.string().optional() }))
@@ -259,6 +277,7 @@ export const documentsRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string(), category: z.string().optional() }))
     .query(async ({ ctx, input }) => {
+      await assertOwnDeal(ctx, input.dealId);
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
         orderBy: { addedAt: 'desc' },
@@ -416,13 +435,14 @@ export const documentsRouter = router({
       return ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
     }),
 
-  activity: internalProcedure.input(z.string()).query(({ ctx, input }) =>
-    ctx.prisma.activityEvent.findMany({
+  activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    await assertOwnDeal(ctx, input);
+    return ctx.prisma.activityEvent.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { at: 'desc' },
       take: 20,
-    }),
-  ),
+    });
+  }),
 
   /**
    * "Ask the workfile" — AI Q&A over the deal's readable documents. The model
