@@ -586,8 +586,8 @@ function PortalMock() {
           [
             ['Capital called', '£850k'],
             ['Distributions', '£312k'],
-            ['Net IRR', '18.4%'],
-            ['MOIC', '1.6×'],
+            ['Portfolio IRR', '18.4%'],
+            ['DPI', '1.6×'],
           ] as Array<[string, string]>
         ).map(([label, value]) => (
           <div key={label} className="rounded-[12px] bg-sunken border border-border-strong px-3.5 py-3">
@@ -866,11 +866,11 @@ export default function Landing() {
           flip
           eyebrow="Client & investor portals"
           title="Give investors the numbers, not a PDF."
-          body="LP statements, distributions, capital calls and net IRR / MOIC per investor — computed from the same JV waterfall that runs the appraisal. One set of figures, from the deal team to the boardroom."
+          body="LP statements, distributions, capital calls and per-investor returns — computed from that investor's own drawn and distributed capital, not from a house average. One set of figures, from the deal team to the boardroom."
           checks={[
             'Per-investor positions & statements',
             'Capital calls & distribution notices',
-            'Net IRR and MOIC from the live waterfall',
+            'Portfolio IRR and DPI from each investor’s own capital',
           ]}
           mock={<PortalMock />}
           onPeek={() => setTourAt(1)}

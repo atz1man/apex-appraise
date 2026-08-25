@@ -15,6 +15,8 @@ import { hashPassword } from './auth/password.js';
 const hash = (s: string) => hashPassword(s);
 /** pounds → integer pence */
 const p = (pounds: number) => BigInt(Math.round(pounds * 100));
+/** a date relative to the seed run, for fixtures that go stale on a fixed one */
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
 export async function seedDemo(prisma: PrismaClient): Promise<string> {
   // ENTERPRISE, not the TRIAL default: this workspace is the showcase, with 11
@@ -520,6 +522,16 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       ['dist', 'Final distribution', 'Parkstone Mews', '2026-04-02', 2_040_000],
       ['call', 'Capital call — drawdown 3', 'Harbour Reach', '2026-02-18', -1_100_000],
       ['call', 'Capital call — drawdown 2', 'Harbour Reach', '2025-11-06', -1_600_000],
+      /**
+       * One drawdown notice still ahead of its due date, so the portal's
+       * capital call panel has something real to show. It used to be hardcoded
+       * in the router — the same deal, amount and due date for every investor
+       * of every firm — and by the time anybody looked that fixed date had
+       * passed, so an LP was reading an OVERDUE demand for money nobody had
+       * issued. Relative to the seed run, because a fixed date goes stale the
+       * same way.
+       */
+      ['call', 'Capital call — drawdown 4', 'Harbour Reach', inDays(30), -900_000],
     ];
     for (const [kind, label, dealName, date, amount] of cfRows) {
       await prisma.cashflow.create({

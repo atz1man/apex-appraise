@@ -164,13 +164,31 @@ export default function InvestorPortal() {
                   <div className="label-mono text-ink-3">Distributed</div>
                   <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px] text-brand-ink">{fM(pos.distributed)}</div>
                 </div>
+                {/*
+                  These two were constants — 21.4% and 1.42×, printed for every
+                  investor of every firm. They are computed now, and each is
+                  named for what the data supports: a capital-weighted IRR over
+                  the deals with one recorded, and distributions per pound
+                  drawn. Neither is a "net IRR", which would be after fees and
+                  carry over a full dated ledger this product does not hold.
+                */}
                 <div className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <div className="label-mono text-ink-3">Net IRR</div>
-                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px]">{formatPct(pos.netIrr, 1)}</div>
+                  <div className="label-mono text-ink-3">Portfolio IRR</div>
+                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px]">
+                    {pos.portfolioIrr != null ? formatPct(pos.portfolioIrr, 1) : '—'}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-3">
+                    {pos.portfolioIrr != null ? 'capital-weighted, realised deals' : 'no deal has returned yet'}
+                  </div>
                 </div>
                 <div className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <div className="label-mono text-ink-3">Net MOIC</div>
-                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px]">{pos.netMoic.toFixed(2)}×</div>
+                  <div className="label-mono text-ink-3">DPI</div>
+                  <div className="fig mt-1.5 text-[22px] font-semibold tracking-[-1px]">
+                    {pos.dpi != null ? `${pos.dpi.toFixed(2)}×` : '—'}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-3">
+                    {pos.dpi != null ? 'distributed per £1 called' : 'nothing called yet'}
+                  </div>
                 </div>
               </div>
             )}
@@ -187,7 +205,8 @@ export default function InvestorPortal() {
                         <Th>Deal</Th>
                         <Th right>Committed</Th>
                         <Th right>Distributed</Th>
-                        <Th right>Net IRR</Th>
+                        {/* the deal's own recorded IRR — not an LP net-of-fees figure */}
+                        <Th right>Deal IRR</Th>
                         <Th className="pl-4">Stage</Th>
                       </tr>
                     </thead>
@@ -271,7 +290,7 @@ export default function InvestorPortal() {
                       </span>
                     </div>
                     <p className="mt-2.5 text-[12.5px] leading-[1.5] m-0" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
-                      {inv.openCapitalCall.label} — {inv.openCapitalCall.deal}.
+                      {inv.openCapitalCall.label}{inv.openCapitalCall.deal ? ` — ${inv.openCapitalCall.deal}` : ''}.
                     </p>
                     <div className="mt-3 flex items-baseline justify-between">
                       <span className="text-[11px]" style={{ color: statusTokens.amber.text }}>

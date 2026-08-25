@@ -8,4 +8,5 @@ export * from './cash.js';
 export * from './benchmarks.js';
 export * from './rollups.js';
 export * from './deposits.js';
+export * from './lp.js';
 export * from './format.js';

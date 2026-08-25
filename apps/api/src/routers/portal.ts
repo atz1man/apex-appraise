@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
-import { depositSchedule } from '@apex/appraisal-engine';
+import { depositSchedule, dpi, weightedIrr } from '@apex/appraisal-engine';
 import { randomBytes } from 'node:crypto';
 import { adminProcedure, buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
 import { hashPassword } from '../auth/password.js';
@@ -22,40 +22,87 @@ async function investorPosition(prisma: any, investorId: string, orgId: string) 
   });
   if (!inv) throw new TRPCError({ code: 'NOT_FOUND' });
   const sh = inv.sharePct / 100;
+  /** an LP's share of a pooled figure, exact to the penny — £900,000 × 0.55 is
+   *  495000.00000000006 in binary floating point, and that reaches exports */
+  const share = (pounds: number) => Math.round(pounds * sh * 100) / 100;
   const holdings = inv.holdings.map((h: any) => ({
     dealName: h.deal.name,
     dealAddress: h.deal.address,
     stage: h.deal.stage,
     assetType: h.deal.assetType,
-    committed: P(h.committed) * sh,
-    called: P(h.called) * sh,
-    distributed: P(h.distributed) * sh,
+    committed: share(P(h.committed)),
+    called: share(P(h.called)),
+    distributed: share(P(h.distributed)),
     irr: h.irr,
   }));
   const committed = holdings.reduce((a: number, h: any) => a + h.committed, 0);
   const called = holdings.reduce((a: number, h: any) => a + h.called, 0);
   const distributed = holdings.reduce((a: number, h: any) => a + h.distributed, 0);
+  /**
+   * The two headline figures were CONSTANTS: `netIrr: 0.214, netMoic: 1.42`,
+   * shown to every investor of every firm. Measured on the demo workspace, for
+   * an LP whose real numbers are the two lines above: called £3,788,400,
+   * distributed £2,640,000 — 0.70× back so far, reported as 1.42×.
+   *
+   * Each is now computed in the engine from that same data, and named for what
+   * it is. A "net IRR" is after fees and carry over an LP's full dated cashflow
+   * ledger; this product holds no such ledger per investor (the Cashflow rows
+   * are a statement list, and on this fixture they account for £1.485m of the
+   * £3.788m actually called). So it reports the capital-weighted IRR across the
+   * deals that have one recorded, and says so.
+   */
+  const now = new Date();
+  /**
+   * An open capital call is a drawdown notice with a due date still ahead.
+   *
+   * This was hardcoded — "Harbour Reach · Capital call — drawdown 4 · £900,000
+   * × your share · due 2026-07-24" — so every investor of every firm saw a
+   * demand for money on a scheme they may hold nothing in. Measured on
+   * 25 August 2026, that constant due date had passed: an LP was looking at an
+   * OVERDUE demand for £495,000 that nobody had issued.
+   *
+   * A capital call is a legal demand for cash under the LPA. Where there is no
+   * outstanding notice on the record, the portal shows nothing.
+   */
+  const openCall = inv.cashflows.find((c: any) => c.kind === 'call' && c.date > now);
+  // Cashflow carries a dealId but no relation, so the name is fetched only when
+  // there is a notice to name — no query on the ordinary case
+  const openCallDeal = openCall?.dealId
+    ? await prisma.deal.findFirst({ where: { id: openCall.dealId, orgId }, select: { name: true } })
+    : null;
+
   return {
     id: inv.id,
     name: inv.name,
     initials: inv.initials,
     contactFirst: inv.contactFirst,
     sharePct: inv.sharePct,
-    position: { committed, called, distributed, netIrr: 0.214, netMoic: 1.42 },
+    position: {
+      committed,
+      called,
+      distributed,
+      /** capital-weighted across the deals with an IRR recorded; null while none has */
+      portfolioIrr: weightedIrr(holdings.map((h: any) => ({ committed: h.committed, irr: h.irr }))),
+      /** distributions per pound drawn; null before anything is called */
+      dpi: dpi(distributed, called),
+    },
     holdings,
     cashflows: inv.cashflows.map((c: any) => ({
       kind: c.kind,
       label: c.label,
-      amount: P(c.amount) * sh,
+      amount: share(P(c.amount)),
       date: c.date,
     })),
     documents: J<Array<{ name: string; date: string; size: string }>>(inv.documents, []),
-    openCapitalCall: {
-      deal: 'Harbour Reach',
-      label: 'Capital call — drawdown 4',
-      amount: 900_000 * sh,
-      due: '2026-07-24',
-    },
+    openCapitalCall: openCall
+      ? {
+          deal: openCallDeal?.name ?? null,
+          label: openCall.label,
+          // calls are held negative from the LP's side; a demand is shown positive
+          amount: share(Math.abs(P(openCall.amount))),
+          due: openCall.date,
+        }
+      : null,
   };
 }
 
