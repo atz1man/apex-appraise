@@ -216,6 +216,12 @@ export default function DealOverview() {
   const hasCost = (cost?.packages.length ?? 0) > 0;
   const salesRollup = sales?.rollup;
   const hasSales = (salesRollup?.total ?? 0) > 0;
+  /**
+   * Null variance means no appraisal is saved, so there is no baseline. It used
+   * to fall through `?? 0` to `0 > 0` — false — and the panel chipped the deal
+   * "On track", which is a claim made out of an absence.
+   */
+  const costMeasured = costRollup?.variance != null;
   const costOver = (costRollup?.variance ?? 0) > 0;
   // Secured units as dated events for the velocity mini-chart
   const velocityPoints = (sales?.units ?? [])
@@ -482,30 +488,38 @@ export default function DealOverview() {
                 <SkeletonRows rows={3} />
               </Panel>
             ) : hasCost && costRollup ? (
-              <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>} right={<StatusChip status={costOver ? 'red' : 'green'} label={costOver ? 'Over' : 'On track'} />}>
+              <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>} right={
+                  costMeasured ? (
+                    <StatusChip status={costOver ? 'red' : 'green'} label={costOver ? 'Over' : 'On track'} />
+                  ) : (
+                    <StatusChip status="neutral" label="No appraisal" />
+                  )
+                }>
                 <div className="flex items-end justify-between">
                   <div>
                     <div className="label-mono text-ink-3">Variance to appraisal</div>
-                    <div className="fig mt-1 text-[19px] font-semibold tracking-[-0.8px]" style={{ color: varTone(costRollup.variance) }}>
-                      {formatDelta(costRollup.variance)}
+                    {/* null with no appraisal saved: there is no baseline, and a
+                        variance of zero would be a claim rather than a figure */}
+                    <div className="fig mt-1 text-[19px] font-semibold tracking-[-0.8px]" style={{ color: costRollup.variance != null ? varTone(costRollup.variance) : neutral.ink3 }}>
+                      {costRollup.variance != null ? formatDelta(costRollup.variance) : '—'}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="label-mono text-ink-3">Profit impact</div>
-                    <div className="fig mt-1 text-[13px] font-semibold" style={{ color: varTone(-costRollup.profitImpact) }}>
-                      {formatDelta(costRollup.profitImpact)}
+                    <div className="fig mt-1 text-[13px] font-semibold" style={{ color: costRollup.profitImpact != null ? varTone(-costRollup.profitImpact) : neutral.ink3 }}>
+                      {costRollup.profitImpact != null ? formatDelta(costRollup.profitImpact) : '—'}
                     </div>
                   </div>
                 </div>
                 <div className="mt-3">
                   <div className="flex justify-between text-[11.5px] text-ink-2b">
-                    <span>Appraised {fM(costRollup.appraised)}</span>
+                    <span>{costRollup.appraisedBuild != null ? `Appraised ${fM(costRollup.appraisedBuild)}` : 'No appraised cost'}</span>
                     <span className="fig font-semibold text-ink">Forecast {fM(costRollup.forecast)}</span>
                   </div>
                   <div className="mt-1.5">
                     <ProgressBar
-                      pct={costRollup.appraised > 0 ? (costRollup.forecast / costRollup.appraised) * 100 : 0}
-                      color={costOver ? statusTokens.red.dot : brand[700]}
+                      pct={costRollup.appraisedBuild ? (costRollup.forecast / costRollup.appraisedBuild) * 100 : 0}
+                      color={costMeasured && costOver ? statusTokens.red.dot : brand[700]}
                       height={7}
                     />
                   </div>

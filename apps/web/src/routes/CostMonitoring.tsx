@@ -102,6 +102,8 @@ export default function CostMonitoring() {
   const packages = cost?.packages ?? [];
   const rollup = cost?.rollup;
   const over = (rollup?.variance ?? 0) > 0;
+  /** no appraisal saved means no baseline — a variance of zero would be a claim */
+  const hasBaseline = rollup?.appraisedBuild != null;
 
   const gradOf = useMemo(() => {
     const m = new Map<string, string>();
@@ -113,7 +115,7 @@ export default function CostMonitoring() {
   const openTasks = (tasks ?? []).filter((t) => !t.done).length;
 
   // programme & drawdown — progress-weighted spend
-  const weightedProgress = rollup && rollup.appraised > 0 ? packages.reduce((a, p) => a + p.budget * p.progressPct, 0) / rollup.appraised : 0;
+  const weightedProgress = rollup && rollup.packageBudgets > 0 ? packages.reduce((a, p) => a + p.budget * p.progressPct, 0) / rollup.packageBudgets : 0;
   const drawdown = rollup && rollup.forecast > 0 ? (rollup.spent / rollup.forecast) * 100 : 0;
   const retentionHeld = packages.reduce((a, p) => a + p.committed * (p.retentionPct / 100), 0);
   const certificates = packages.reduce((a, p) => a + p.certificates, 0);
@@ -238,26 +240,50 @@ export default function CostMonitoring() {
           <>
         {/* KPI strip */}
         <div className="mt-5 flex gap-3 flex-wrap">
-          <StatCard label="Appraised cost" value={packages.length ? fM(rollup!.appraised) : '—'} sub={cost?.hasAppraisal ? 'from current appraisal' : 'no appraisal saved'} />
+          {/*
+            "Appraised cost" is the appraisal's construction cost. It used to be
+            the sum of the package budget fields — the packages measured against
+            themselves — while this very subtitle claimed it came from the
+            appraisal. Measured: £9.71m of packages shown as the appraised cost
+            of a scheme appraised at £6.86m.
+          */}
+          <StatCard
+            label="Appraised cost"
+            value={hasBaseline ? fM(rollup!.appraisedBuild!) : '—'}
+            sub={hasBaseline ? 'construction, current appraisal' : 'no appraisal saved'}
+          />
+          <StatCard
+            label="Package budgets"
+            value={packages.length ? fM(rollup!.packageBudgets) : '—'}
+            sub={
+              hasBaseline && packages.length
+                ? rollup!.unallocated! >= 0
+                  ? `${fM(rollup!.unallocated!)} not yet packaged`
+                  : `${fM(-rollup!.unallocated!)} over the appraised cost`
+                : undefined
+            }
+          />
           <StatCard label="Committed" value={packages.length ? fM(rollup!.committed) : '—'} />
           <StatCard label="Forecast final" value={packages.length ? fM(rollup!.forecast) : '—'} />
-          <div className="flex-1 min-w-[150px] rounded-card shadow-rest px-4 py-3.5" style={{ background: packages.length ? (over ? statusTokens.red.bg : statusTokens.green.bg) : 'rgb(var(--surface, 255 255 255))', border: `1px solid ${neutral.borderStrong}` }}>
-            <div className="label-mono" style={{ color: packages.length ? varTone(rollup!.variance) : neutral.ink3 }}>Variance to appraisal</div>
-            <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px]" style={{ color: packages.length ? varTone(rollup!.variance) : neutral.ink3 }}>
-              {packages.length ? formatDelta(rollup!.variance) : '—'}
+          <div className="flex-1 min-w-[150px] rounded-card shadow-rest px-4 py-3.5" style={{ background: hasBaseline && packages.length ? (over ? statusTokens.red.bg : statusTokens.green.bg) : 'rgb(var(--surface, 255 255 255))', border: `1px solid ${neutral.borderStrong}` }}>
+            <div className="label-mono" style={{ color: hasBaseline && packages.length ? varTone(rollup!.variance!) : neutral.ink3 }}>Variance to appraisal</div>
+            <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px]" style={{ color: hasBaseline && packages.length ? varTone(rollup!.variance!) : neutral.ink3 }}>
+              {hasBaseline && packages.length ? formatDelta(rollup!.variance!) : '—'}
             </div>
+            {!hasBaseline && <div className="mt-0.5 text-[11px] text-ink-3">save an appraisal to measure against</div>}
           </div>
           <StatCard
             label="Profit impact"
-            value={packages.length ? formatDelta(rollup!.profitImpact) : '—'}
-            tone={packages.length ? (rollup!.profitImpact < 0 ? statusTokens.red.text : rollup!.profitImpact > 0 ? statusTokens.green.text : undefined) : undefined}
+            value={hasBaseline && packages.length ? formatDelta(rollup!.profitImpact!) : '—'}
+            sub={hasBaseline && rollup!.contingency ? `after ${fM(rollup!.contingency)} contingency` : undefined}
+            tone={hasBaseline && packages.length ? (rollup!.profitImpact! < 0 ? statusTokens.red.text : rollup!.profitImpact! > 0 ? statusTokens.green.text : undefined) : undefined}
           />
           <StatCard label="Open actions" value={String(openTasks)} tone={openTasks > 0 ? undefined : statusTokens.green.text} />
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
           {/* Cost report */}
-          <Panel title="Cost report — packages & contractors" right={<span className="text-[11.5px] text-ink-3">Forecast vs appraised budget</span>}>
+          <Panel title="Cost report — packages & contractors" right={<span className="text-[11.5px] text-ink-3">Forecast vs package budget</span>}>
             {packages.length === 0 ? (
               <EmptyState>No cost packages for this deal yet — packages appear once the build cost plan is broken out.</EmptyState>
             ) : (
@@ -331,11 +357,12 @@ export default function CostMonitoring() {
                   <tr className="bg-sunken">
                     <Td className="font-bold text-[13px]">Total construction</Td>
                     <Td />
-                    <Td right fig className="font-semibold text-ink-2b">{fM(rollup!.appraised)}</Td>
+                    {/* the packages' own budgets — the appraisal baseline is the KPI above */}
+                    <Td right fig className="font-semibold text-ink-2b">{fM(rollup!.packageBudgets)}</Td>
                     <Td right fig className="font-semibold text-ink-2b">{fM(rollup!.committed)}</Td>
                     <Td right fig className="font-semibold text-ink-2b">{fM(rollup!.spent)}</Td>
                     <Td right fig className="font-bold">{fM(rollup!.forecast)}</Td>
-                    <Td right fig className="font-bold" style={{ color: varTone(rollup!.variance) }}>{formatDelta(rollup!.variance)}</Td>
+                    <Td right fig className="font-bold" style={{ color: varTone(rollup!.forecast - rollup!.packageBudgets) }}>{formatDelta(rollup!.forecast - rollup!.packageBudgets)}</Td>
                     <Td />
                   </tr>
                 </tfoot>

@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { computeAppraisal, costRollup } from '@apex/appraisal-engine';
+import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
@@ -76,20 +78,20 @@ export const costRouter = router({
       where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
     });
     const out = packages.map(pkgOut);
-    const appraised = out.reduce((a, r) => a + r.budget, 0);
-    const committed = out.reduce((a, r) => a + r.committed, 0);
-    const spent = out.reduce((a, r) => a + r.spent, 0);
-    const forecast = out.reduce((a, r) => a + r.forecast, 0);
+    /**
+     * The baseline is the CURRENT APPRAISAL's construction cost.
+     *
+     * It used to be the sum of the packages' own budget fields — so the report
+     * measured the packages against themselves while four separate labels on
+     * the page said it came from the appraisal. The appraisal row was fetched
+     * on this very request and used for nothing but a boolean. Measured on
+     * Harbour Reach: £9,877,000 forecast against a £6,855,195 appraised build,
+     * reported as £167,000 over.
+     */
+    const engine = appraisal ? computeAppraisal(appraisalRowToEngineInput(appraisal)) : null;
     return {
       packages: out,
-      rollup: {
-        appraised,
-        committed,
-        spent,
-        forecast,
-        variance: forecast - appraised, // + = over budget
-        profitImpact: appraised - forecast, // mirrors variance onto profit
-      },
+      rollup: costRollup(out, { appraisedBuild: engine?.build ?? null, contingency: engine?.cont ?? null }),
       hasAppraisal: !!appraisal,
     };
   }),
