@@ -10,6 +10,7 @@ import { Suspense, lazy, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
+import { OfflineBanner } from './components/OfflineBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BrandMark } from './components/ui';
 
@@ -190,6 +191,8 @@ export default function App() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
+        {/* every screen, because the field app is the one that needs it — see OfflineBanner */}
+        <OfflineBanner />
         {/* a render fault must not leave a blank page — see ErrorBoundary */}
         <ErrorBoundary>
         <Suspense fallback={<Splash />}>
