@@ -233,6 +233,65 @@ describe('enforcement', () => {
     );
   });
 
+  /**
+   * Enforcement closed the login door and left the reset door open. Anyone could
+   * make the product email "reset your password" to a firm that does not use
+   * passwords, and the person following that link set one — walked through the
+   * whole flow to a dead end, because login refuses enforced orgs before it
+   * looks at a hash.
+   *
+   * The hash was stored all the same: a credential nobody's identity provider
+   * knows about, sitting dormant until enforcement is switched off for an
+   * outage, at which point it becomes a working way in.
+   */
+  it('issues no reset token to a workspace that requires SSO', async () => {
+    const user = await prisma.user.findFirstOrThrow({ where: { orgId: A.orgId, principalType: 'internal' } });
+    await connect(A, { enforced: true, domains: user.email.split('@')[1]! });
+
+    await expect(anonymous().auth.requestPasswordReset({ email: user.email } as never)).resolves.toEqual({ ok: true });
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.resetTokenHash, 'a reset token was minted for an account that cannot use one').toBeNull();
+
+    // and the person is told why, rather than left waiting for a mail that never comes
+    const { readMailbox } = await import('../src/email.js');
+    const last = readMailbox().find((m) => m.to === user.email);
+    expect(last?.subject).toMatch(/Signing in/i);
+    expect(last?.text).toMatch(/single sign-on/i);
+    expect(last?.text, 'a reset link was sent anyway').not.toMatch(/\/reset\?token=/);
+  });
+
+  it('answers a stranger identically, so this does not become an oracle', async () => {
+    // an enforced workspace must not be detectable by asking for a reset
+    await connect(A, { enforced: true });
+    await expect(anonymous().auth.requestPasswordReset({ email: emailFor(A) } as never)).resolves.toEqual({ ok: true });
+    await expect(
+      anonymous().auth.requestPasswordReset({ email: 'nobody@nowhere.test' } as never),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('refuses a token minted before enforcement was switched on', async () => {
+    /**
+     * The window this closes: the link is sent while passwords are allowed, and
+     * enforcement goes on before it is clicked. Checked at the write, not only
+     * at the issue.
+     */
+    const user = await prisma.user.findFirstOrThrow({ where: { orgId: A.orgId, principalType: 'internal' } });
+    const { newResetToken } = await import('../src/auth/password.js');
+    const { token, hash, expiresAt } = newResetToken();
+    await prisma.user.update({ where: { id: user.id }, data: { resetTokenHash: hash, resetTokenExpiresAt: expiresAt } });
+
+    await connect(A, { enforced: true, domains: user.email.split('@')[1]! });
+
+    await expect(
+      anonymous().auth.resetPassword({ token, password: 'a-brand-new-one' } as never),
+    ).rejects.toThrow(/single sign-on/i);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.password, 'a password was set on an SSO-only workspace').toBe(user.password);
+    expect(after.resetTokenHash, 'the dead token was left live, inviting a retry').toBeNull();
+  });
+
   it('never authenticates an account with no password', async () => {
     const conn = await connect(A);
     const sso = await resolveUser(prisma, conn, { subject: 's', email: emailFor(A), name: 'Sam Surveyor' });
