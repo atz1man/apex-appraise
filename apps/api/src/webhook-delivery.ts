@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { planHasFeature } from '@apex/types/plan';
 
 /**
  * Outbound webhooks.
@@ -166,6 +167,19 @@ export async function emitWebhook(
   payload: unknown,
 ): Promise<number> {
   try {
+    /**
+     * The plan is re-checked at DELIVERY, not only when the endpoint was added.
+     *
+     * Endpoints are not deleted by a downgrade — the workspace keeps them, and
+     * they resume the moment it is back on a plan that includes them. But a
+     * Starter workspace that once subscribed to Enterprise must not keep
+     * receiving deal figures on someone else's server; that is the feature it
+     * stopped paying for. Nothing is queued, so nothing accumulates to be
+     * flushed later either.
+     */
+    const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { plan: true } });
+    if (!planHasFeature(org?.plan ?? '', 'publicApi')) return 0;
+
     const endpoints = await prisma.webhookEndpoint.findMany({ where: { orgId, active: true } });
     const wanted = endpoints.filter((e) => e.events.split(',').map((x) => x.trim()).includes(event));
     if (!wanted.length) return 0;

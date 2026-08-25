@@ -213,3 +213,6 @@ export const zWhatIfResponse = z.object({
   changes: z.record(z.unknown()),
   reply: z.string(),
 });
+
+// ---- Plans: what each tier switches on (see ./plan.ts) ----
+export * from './plan.js';

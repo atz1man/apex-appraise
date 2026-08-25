@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P } from '../mappers.js';
-import { buyerProcedure, internalProcedure, investorProcedure, router } from '../trpc.js';
+import { buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
@@ -52,6 +52,20 @@ async function investorPosition(prisma: any, investorId: string, orgId: string) 
   };
 }
 
+/**
+ * "Buyer + investor portals" is a Growth line on the pricing page.
+ *
+ * Gated at the PORTAL procedures — the external logins are the thing sold. The
+ * firm's own investor register (investors.list / investors.get, internal
+ * procedures) is not gated: that is the customer's data about their own funders,
+ * and a downgrade must not put a paywall between a firm and its own records.
+ *
+ * A portal login is never deleted by a downgrade, so nobody has to be re-invited
+ * when the plan comes back.
+ */
+const investorPortalProcedure = investorProcedure.use(requiresFeature('portals'));
+const buyerPortalProcedure = buyerProcedure.use(requiresFeature('portals'));
+
 export const investorsRouter = router({
   /** Internal team: list + inspect any investor. */
   list: internalProcedure.query(async ({ ctx }) => {
@@ -61,7 +75,7 @@ export const investorsRouter = router({
   get: internalProcedure.input(z.string()).query(({ ctx, input }) => investorPosition(ctx.prisma, input, ctx.principal.orgId)),
 
   /** Investor portal: strictly the logged-in investor's own position. */
-  myPosition: investorProcedure.query(({ ctx }) => {
+  myPosition: investorPortalProcedure.query(({ ctx }) => {
     if (!ctx.principal.investorId) throw new TRPCError({ code: 'FORBIDDEN' });
     return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId);
   }),
@@ -73,7 +87,7 @@ export const investorsRouter = router({
    * to a demo address, to every investor of every firm. An LP writing to that
    * address reaches nobody, and the firm never learns they tried.
    */
-  myContact: investorProcedure.query(async ({ ctx }) => {
+  myContact: investorPortalProcedure.query(async ({ ctx }) => {
     const [org, admin] = await Promise.all([
       ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId }, select: { name: true } }),
       ctx.prisma.user.findFirst({
@@ -116,7 +130,7 @@ async function ensurePayments(prisma: any, orgId: string, unit: { id: string; re
 
 export const buyerRouter = router({
   /** Buyer sees only their own unit, its milestones, buyer-visible documents and payments. */
-  myUnit: buyerProcedure.query(async ({ ctx }) => {
+  myUnit: buyerPortalProcedure.query(async ({ ctx }) => {
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const unit = await ctx.prisma.unit.findFirst({
       where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId },
@@ -163,7 +177,7 @@ export const buyerRouter = router({
    * /webhooks/stripe callback marks it paid). Without keys it settles instantly in
    * demo mode — clearly labelled in the UI. Never fabricates a "live" result.
    */
-  pay: buyerProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  pay: buyerPortalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const payment = await ctx.prisma.payment.findFirst({
       where: { id: input, orgId: ctx.principal.orgId, unitId: ctx.principal.buyerUnitId },
@@ -228,7 +242,7 @@ export const buyerRouter = router({
    * Stripe server-side and settle the ledger — works without webhooks (the
    * webhook route stays as belt-and-braces for production).
    */
-  confirmPayment: buyerProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  confirmPayment: buyerPortalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const payment = await ctx.prisma.payment.findFirst({
       where: { id: input, orgId: ctx.principal.orgId, unitId: ctx.principal.buyerUnitId },
@@ -255,7 +269,7 @@ export const buyerRouter = router({
   }),
 
   /** Buyer signs a buyer-visible document on their own development (DocuSign in prod). */
-  sign: buyerProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  sign: buyerPortalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const unit = await ctx.prisma.unit.findFirst({ where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId } });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });

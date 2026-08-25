@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
-import { Button, Panel, StatusChip } from './ui';
+import { Button, Panel, PlanLocked, StatusChip } from './ui';
+import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 /**
  * The three surfaces that make Apex something other systems talk to: API keys,
@@ -42,6 +43,15 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
     },
   });
 
+  /**
+   * The public API is an Enterprise feature, so MINTING is what the plan gates —
+   * the list and the Revoke buttons below stay live on every plan. A workspace
+   * that downgrades still has keys out in the world, and a paywall between an
+   * admin and the revoke button turns a billing change into a security incident.
+   */
+  const { has } = usePlanFeatures();
+  const canMint = has('publicApi');
+
   if (!isAdmin) return null;
 
   return (
@@ -70,35 +80,46 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
-          <input
-            className="min-w-[220px]"
-            placeholder="e.g. Finance system"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Key name"
-          />
-        </label>
-        {/*
-          There was an "Allow writes" checkbox here. Every route under /api/v1 is
-          a GET that asks for the read scope, and none asks for write — so
-          ticking it granted a permission nothing consumes, and a firm that
-          ticked it went away believing they had a key that could change their
-          data. The scope machinery is kept: when a write endpoint exists, offer
-          it again. apps/api/test/api-scopes.test.ts fails if the two drift.
-        */}
-        <Button
-          size="sm"
-          className="mb-1"
-          disabled={!name.trim()}
-          loading={create.isPending}
-          onClick={() => create.mutate({ name: name.trim(), write: false })}
-        >
-          Create key
-        </Button>
-      </div>
+      {!canMint && (
+        <div className="mt-3">
+          <PlanLocked feature={featureName('publicApi')} plan={featurePlanName('publicApi')}>
+            New keys and webhook endpoints are created from {featurePlanName('publicApi')} upwards. Keys already issued
+            are listed below and can still be revoked — they resume working the moment the plan includes the API again.
+          </PlanLocked>
+        </div>
+      )}
+
+      {canMint && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
+            <input
+              className="min-w-[220px]"
+              placeholder="e.g. Finance system"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Key name"
+            />
+          </label>
+          {/*
+            There was an "Allow writes" checkbox here. Every route under /api/v1 is
+            a GET that asks for the read scope, and none asks for write — so
+            ticking it granted a permission nothing consumes, and a firm that
+            ticked it went away believing they had a key that could change their
+            data. The scope machinery is kept: when a write endpoint exists, offer
+            it again. apps/api/test/api-scopes.test.ts fails if the two drift.
+          */}
+          <Button
+            size="sm"
+            className="mb-1"
+            disabled={!name.trim()}
+            loading={create.isPending}
+            onClick={() => create.mutate({ name: name.trim(), write: false })}
+          >
+            Create key
+          </Button>
+        </div>
+      )}
 
       {!!keys?.length && (
         <div className="mt-3 flex flex-col gap-1.5">

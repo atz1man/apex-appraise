@@ -7,9 +7,11 @@ import {
   spendAgainstProgramme,
   testCovenants,
 } from '@apex/appraisal-engine';
-import { prisma } from './context.js';
+import type { PrismaClient } from '@prisma/client';
+import { prisma as defaultPrisma } from './context.js';
 import { appraisalRowToEngineInput } from './mappers.js';
 import { hasScope, principalFromApiKey, type ApiPrincipal } from './api-keys.js';
+import { FEATURE_COPY, cheapestPlanWith, planHasFeature } from './entitlements.js';
 
 /**
  * The public API.
@@ -35,21 +37,62 @@ const fail = (reply: FastifyReply, status: number, code: string, message: string
   return { error: { code, message } };
 };
 
-/** Resolve the key, or answer 401 in the one shape every error uses. */
-async function authenticate(req: FastifyRequest, reply: FastifyReply): Promise<ApiPrincipal | null> {
-  const principal = await principalFromApiKey(prisma, req.headers.authorization);
+/**
+ * Resolve the key, or ANSWER — this function sends its own refusals.
+ *
+ * It used to set a status and hand the body back through `fail()`, which nobody
+ * returned: one route replaced it with a generic object and the other three
+ * returned `undefined`, which Fastify 5 serialises as an empty body. So an
+ * integrator with a bad key got a bare 401 and no explanation of what was
+ * wanted, and the carefully worded message below had never once been delivered.
+ * Sending here means there is one copy of each refusal and no way to drop it.
+ *
+ * The PLAN is re-checked as well as the key, because a key is minted once and
+ * used for years. The gate on createApiKey stops a Starter workspace getting a
+ * key; this stops a workspace that had one and downgraded from carrying on.
+ * Without it the Enterprise line on the pricing page would hold for exactly as
+ * long as it took someone to subscribe, mint a key and drop to Starter.
+ *
+ * 402 rather than 403 for that one: this is not "you may not", it is "your
+ * subscription does not include this", and an integrator reading 403 goes
+ * hunting for a scope they are missing. The key is untouched and starts working
+ * again the moment the plan does.
+ */
+async function authenticate(db: PrismaClient, req: FastifyRequest, reply: FastifyReply): Promise<ApiPrincipal | null> {
+  const principal = await principalFromApiKey(db, req.headers.authorization);
   if (!principal) {
     // WWW-Authenticate so a generic HTTP client knows what was wanted
     reply.header('www-authenticate', 'Bearer realm="apex", error="invalid_token"');
-    fail(reply, 401, 'unauthorised', 'Provide a valid API key as: Authorization: Bearer apex_live_…');
+    await reply
+      .code(401)
+      .send({ error: { code: 'unauthorised', message: 'Provide a valid API key as: Authorization: Bearer apex_live_…' } });
     return null;
   }
+
+  const org = await db.organisation.findUnique({ where: { id: principal.orgId }, select: { plan: true } });
+  if (!planHasFeature(org?.plan ?? '', 'publicApi')) {
+    const need = cheapestPlanWith('publicApi');
+    await reply.code(402).send({
+      error: {
+        code: 'plan_required',
+        message: `${FEATURE_COPY.publicApi} is included from ${need.charAt(0) + need.slice(1).toLowerCase()}. This key is still valid and will work again when the workspace is on a plan that includes it.`,
+      },
+    });
+    return null;
+  }
+
   return principal;
 }
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
-export function registerPublicApi(app: FastifyInstance) {
+/**
+ * `db` is injectable so the routes can be exercised over real HTTP against a
+ * throwaway database. Without the seam nothing could reach these handlers at all,
+ * which is how three of the four spent their life answering an EMPTY 401 body:
+ * the credential logic was unit-tested, the RESPONSE never was.
+ */
+export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defaultPrisma) {
   /**
    * A description of the surface, at its root. Cheap to serve and it saves the
    * first question every integrator asks.
@@ -74,12 +117,12 @@ export function registerPublicApi(app: FastifyInstance) {
   }));
 
   app.get<{ Querystring: { limit?: string; cursor?: string; stage?: string } }>('/api/v1/deals', async (req, reply) => {
-    const principal = await authenticate(req, reply);
-    if (!principal) return reply.sent ? undefined : { error: { code: 'unauthorised', message: 'unauthorised' } };
+    const principal = await authenticate(db, req, reply);
+    if (!principal) return reply; // authenticate() has already answered
     if (!hasScope(principal, 'read')) return fail(reply, 403, 'forbidden', 'This key does not carry the read scope');
 
     const limit = Math.min(MAX_LIMIT, Math.max(1, Number(req.query.limit) || DEFAULT_LIMIT));
-    const deals = await prisma.deal.findMany({
+    const deals = await db.deal.findMany({
       where: {
         orgId: principal.orgId,
         ...(req.query.stage ? { stage: req.query.stage } : {}),
@@ -111,16 +154,16 @@ export function registerPublicApi(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/api/v1/deals/:id', async (req, reply) => {
-    const principal = await authenticate(req, reply);
-    if (!principal) return undefined;
+    const principal = await authenticate(db, req, reply);
+    if (!principal) return reply; // authenticate() has already answered
     if (!hasScope(principal, 'read')) return fail(reply, 403, 'forbidden', 'This key does not carry the read scope');
 
-    const deal = await prisma.deal.findFirst({ where: { id: req.params.id, orgId: principal.orgId } });
+    const deal = await db.deal.findFirst({ where: { id: req.params.id, orgId: principal.orgId } });
     // the same 404 for "not yours" as for "not there": an API key must not be a
     // way to discover which deal ids exist elsewhere
     if (!deal) return fail(reply, 404, 'not_found', 'No such deal');
 
-    const appraisal = await prisma.appraisal.findFirst({
+    const appraisal = await db.appraisal.findFirst({
       where: { dealId: deal.id, orgId: principal.orgId, isCurrent: true },
     });
     const result = appraisal ? computeAppraisal(appraisalRowToEngineInput(appraisal)) : null;
@@ -152,16 +195,16 @@ export function registerPublicApi(app: FastifyInstance) {
   });
 
   app.get('/api/v1/exposure', async (req, reply) => {
-    const principal = await authenticate(req, reply);
-    if (!principal) return undefined;
+    const principal = await authenticate(db, req, reply);
+    if (!principal) return reply; // authenticate() has already answered
     if (!hasScope(principal, 'read')) return fail(reply, 403, 'forbidden', 'This key does not carry the read scope');
 
     const orgId = principal.orgId;
     const [deals, appraisals, packages, policy] = await Promise.all([
-      prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
-      prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
-      prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
-      prisma.orgPolicy.findUnique({ where: { orgId } }),
+      db.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
+      db.appraisal.findMany({ where: { orgId, isCurrent: true } }),
+      db.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
+      db.orgPolicy.findUnique({ where: { orgId } }),
     ]);
 
     const costBy = new Map<string, { drawn: number; budget: number; weighted: number }>();
@@ -234,11 +277,11 @@ export function registerPublicApi(app: FastifyInstance) {
   });
 
   app.get('/api/v1/webhooks', async (req, reply) => {
-    const principal = await authenticate(req, reply);
-    if (!principal) return undefined;
+    const principal = await authenticate(db, req, reply);
+    if (!principal) return reply; // authenticate() has already answered
     if (!hasScope(principal, 'read')) return fail(reply, 403, 'forbidden', 'This key does not carry the read scope');
 
-    const endpoints = await prisma.webhookEndpoint.findMany({
+    const endpoints = await db.webhookEndpoint.findMany({
       where: { orgId: principal.orgId },
       select: { id: true, url: true, events: true, active: true, createdAt: true, lastAttemptAt: true, failureCount: true },
     });

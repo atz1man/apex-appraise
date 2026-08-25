@@ -11,8 +11,8 @@ import { orgCascadeDeletes } from '../org-delete.js';
 import { exportWorkspace } from '../org-export.js';
 import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
-import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
-import { assertCanAddMember, usageFor } from '../entitlements.js';
+import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, requiresFeature, router } from '../trpc.js';
+import { assertCanAddMember, featuresFor, usageFor } from '../entitlements.js';
 import { signDownloadToken } from '../download-token.js';
 import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
@@ -43,6 +43,22 @@ const DEFAULT_INTEGRATIONS = [
   'Xero',
   'DocuSign',
 ];
+
+/**
+ * "Public API + webhooks" is an Enterprise line on the pricing page.
+ *
+ * Only the CREATION of a credential is gated. Listing, revoking and deleting stay
+ * open on every plan: a workspace that downgrades still has live keys and live
+ * endpoints out in the world, and the one thing it must always be able to do is
+ * take them back. A paywall in front of revocation would turn a billing change
+ * into a security incident.
+ *
+ * The credentials themselves are not deleted by a downgrade either. They simply
+ * stop being honoured — see authenticate() in src/public-api.ts and emitWebhook()
+ * in src/webhook-delivery.ts, which are the two places the plan is re-checked at
+ * use. Re-subscribing lights the same keys back up.
+ */
+const publicApiProcedure = adminProcedure.use(requiresFeature('publicApi'));
 
 export const orgRouter = router({
   /**
@@ -132,7 +148,21 @@ export const orgRouter = router({
       ctx.prisma.user.count({ where: { orgId: org.id, principalType: 'internal' } }),
       ctx.prisma.investor.count({ where: { orgId: org.id } }),
     ]);
-    return { id: org.id, name: org.name, logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId), createdAt: org.createdAt, counts: { deals, users, investors } };
+    return {
+      id: org.id,
+      name: org.name,
+      logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId),
+      createdAt: org.createdAt,
+      counts: { deals, users, investors },
+      /**
+       * The plan and what it switches on, so the app can show a locked surface
+       * with an upgrade route instead of a live button that answers FORBIDDEN.
+       * The server refusal is still the thing that protects the feature — this
+       * only decides what the screen looks like before it is asked.
+       */
+      plan: org.plan,
+      features: featuresFor(org.plan),
+    };
   }),
 
   /** Activation checklist — real completion state for the Hub's getting-started card. */
@@ -638,7 +668,7 @@ export const orgRouter = router({
     return rows.map((r) => ({ ...r, scopes: r.scopes.split(','), live: !r.revokedAt }));
   }),
 
-  createApiKey: adminProcedure
+  createApiKey: publicApiProcedure
     .input(z.object({ name: z.string().min(1).max(60), write: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
       const { key, prefix, keyHash } = mintApiKey();
@@ -685,7 +715,7 @@ export const orgRouter = router({
     return { endpoints: rows.map((r) => ({ ...r, events: r.events.split(',').filter(Boolean) })), available: WEBHOOK_EVENTS };
   }),
 
-  createWebhook: adminProcedure
+  createWebhook: publicApiProcedure
     .input(
       z.object({
         url: z.string().url().max(500),

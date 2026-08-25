@@ -15,7 +15,7 @@ import {
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
 import { locate } from '../opendata-cache.js';
 import { recordAudit } from '../audit.js';
@@ -78,6 +78,16 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     startMonth: input.startMonth ?? null,
   };
 }
+
+/**
+ * The AI Development Director — every language-model touchpoint in this file.
+ *
+ * Growth and above. Starter buys "Appraisal engine + reports" and the landing
+ * page says so in as many words: "or do it all by hand. Your call." The engine,
+ * the reports and every deterministic figure stay open on every plan; what a
+ * Starter subscriber does not get is the model reading the documents for them.
+ */
+const aiProcedure = internalProcedure.use(requiresFeature('aiDirector'));
 
 export const appraisalRouter = router({
   getCurrent: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
@@ -707,7 +717,7 @@ export const appraisalRouter = router({
    * only writes prose around them. Persisted onto the current appraisal so the
    * report renders the same narrative until it is redrafted.
    */
-  draftNarrative: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  draftNarrative: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
     const row = await ctx.prisma.appraisal.findFirst({
       where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
@@ -1157,7 +1167,7 @@ function indicative(extraction: Extraction, buildPerSqft: number) {
 }
 
 export const autoAppraisalRouter = router({
-  extract: internalProcedure
+  extract: aiProcedure
     .input(
       z
         .object({
@@ -1359,7 +1369,7 @@ export const scenariosRouter = router({
    * grid); the LLM only writes prose around them. Ephemeral — returned to the
    * caller, never persisted.
    */
-  draftRisk: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  draftRisk: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
     const rows = await ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
     const options = rows.slice(0, 3).map((s: any) => ({

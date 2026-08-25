@@ -11,7 +11,7 @@ import {
   type CohortPoint,
 } from '@apex/appraisal-engine';
 import { recordAudit } from '../audit.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 
 /**
  * Benchmarks built from what firms actually contribute.
@@ -48,9 +48,22 @@ const REGION_BY_COUNTY: Array<[RegExp, string]> = [
  */
 export type CohortBasis = 'contributed' | 'illustrative' | 'none';
 
+/**
+ * Benchmarking is a Growth feature, so READING the pool is gated — the reading is
+ * the thing being sold.
+ *
+ * The contribution procedures below are deliberately NOT gated. setContribution
+ * is a consent control, and turning it off withdraws points already given; a
+ * paywall in front of it would mean a firm that shared during its trial and then
+ * subscribed to Starter could no longer take its figures back out of other
+ * firms' medians. Consent has to be as easy to revoke as it was to give,
+ * whatever anybody is paying.
+ */
+const benchmarkProcedure = internalProcedure.use(requiresFeature('benchmarking'));
+
 export const benchmarksRouter = router({
   /** Percentile strips per metric, plus where this firm sits — when that can be said honestly. */
-  metrics: internalProcedure
+  metrics: benchmarkProcedure
     .input(z.object({ region: z.string(), useClass: z.string() }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.principal.orgId;
@@ -115,7 +128,7 @@ export const benchmarksRouter = router({
     }),
 
   /** Build-cost trend: the cohort median per quarter against this firm's own schemes. */
-  trend: internalProcedure
+  trend: benchmarkProcedure
     .input(z.object({ region: z.string(), useClass: z.string() }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.principal.orgId;
@@ -166,7 +179,7 @@ export const benchmarksRouter = router({
    * average price + annual growth, latest 12 published months. Genuinely
    * measured data, and distinct from the contributed appraisal cohorts above.
    */
-  hpi: internalProcedure.input(z.object({ region: z.string() })).query(async ({ input }) => {
+  hpi: benchmarkProcedure.input(z.object({ region: z.string() })).query(async ({ input }) => {
     const { fetchHpi } = await import('../opendata.js');
     try {
       return { status: 'ok' as const, ...(await fetchHpi(input.region)) };

@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
@@ -46,6 +46,16 @@ const pkgOut = (pk: any) => ({
   contractorId: pk.contractorId,
   contractor: pk.contractor ? { id: pk.contractor.id, name: pk.contractor.name, trade: pk.contractor.trade } : null,
 });
+
+/**
+ * The AI Development Director — every language-model touchpoint in this file.
+ *
+ * Growth and above. Starter buys "Appraisal engine + reports" and the landing
+ * page says so in as many words: "or do it all by hand. Your call." The engine,
+ * the reports and every deterministic figure stay open on every plan; what a
+ * Starter subscriber does not get is the model reading the documents for them.
+ */
+const aiProcedure = internalProcedure.use(requiresFeature('aiDirector'));
 
 export const costRouter = router({
   packages: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
@@ -416,7 +426,7 @@ export const documentsRouter = router({
    * reads the actual uploaded PDFs/images and answers ONLY from them; without
    * an ANTHROPIC_API_KEY it returns a deterministic demo answer instead.
    */
-  ask: internalProcedure
+  ask: aiProcedure
     .input(z.object({ dealId: z.string(), question: z.string().min(3).max(500) }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });

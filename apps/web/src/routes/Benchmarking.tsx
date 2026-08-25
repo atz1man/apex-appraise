@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { status as statusTokens, brand } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
-import { Button, EmptyState, Icon, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
+import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
+import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
 const USE_CLASSES: Array<[string, string]> = [
@@ -171,11 +172,21 @@ export default function Benchmarking() {
   const [region, setRegion] = useState('South West');
   const [useClass, setUseClass] = useState('INDUSTRIAL');
 
+  /**
+   * Benchmarking is a Growth feature. The pool queries are not merely hidden when
+   * the plan excludes them — they are not ASKED, because four requests that will
+   * each be refused is four error toasts and a spinner that resolves into nothing.
+   * The contribution panel below keeps running on every plan: opting out is how a
+   * firm withdraws figures it already gave, and consent is not something to sell.
+   */
+  const { has, loaded } = usePlanFeatures();
+  const locked = loaded && !has('benchmarking');
+
   const utils = trpc.useUtils();
-  const metricsQ = trpc.benchmarks.metrics.useQuery({ region, useClass });
-  const trendQ = trpc.benchmarks.trend.useQuery({ region, useClass });
+  const metricsQ = trpc.benchmarks.metrics.useQuery({ region, useClass }, { enabled: !locked });
+  const trendQ = trpc.benchmarks.trend.useQuery({ region, useClass }, { enabled: !locked });
   const contribQ = trpc.benchmarks.contributions.useQuery();
-  const hpiQ = trpc.benchmarks.hpi.useQuery({ region }, { staleTime: 10 * 60_000, retry: 0 });
+  const hpiQ = trpc.benchmarks.hpi.useQuery({ region }, { staleTime: 10 * 60_000, retry: 0, enabled: !locked });
   const dealsQ = trpc.deals.list.useQuery({});
   const [contribDealId, setContribDealId] = useState('');
   const contribute = trpc.benchmarks.contribute.useMutation({
@@ -311,6 +322,84 @@ export default function Benchmarking() {
         : 'No benchmark yet';
   const loading = metricsQ.isLoading || trendQ.isLoading;
 
+  /**
+   * Hoisted so it renders in BOTH the live page and the locked one.
+   *
+   * Turning this off withdraws figures the firm has already contributed to other
+   * firms' medians. If locking the page took the control with it, a workspace
+   * that shared during its trial and then subscribed to Starter would have no way
+   * to take its data back — the server allows it, and the screen has to offer it.
+   */
+  const contributionSection = (
+    <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
+      <h3 className="text-[13px] font-semibold">Data contribution</h3>
+      <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
+        Contributing shares three ratios from an appraisal — build £/ft², GDV £/ft² and profit on cost. Never the address, the
+        client, the deal name or any absolute figure. A cohort is only ever published once{' '}
+        {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
+        against your own schemes.
+      </p>
+      <label className="mt-3 flex items-start gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas cursor-pointer">
+        <input
+          type="checkbox"
+          className="mt-[2px]"
+          checked={optedIn}
+          disabled={!contribQ.data || setContribution.isPending}
+          onChange={(e) => setContribution.mutate({ enabled: e.target.checked })}
+        />
+        <span className="text-[11.5px] leading-[1.45] text-ink-2b">
+          <span className="font-semibold text-ink">Contribute this workspace's appraisals</span>
+          <br />
+          Off by default. Turning it off again withdraws everything already contributed.
+        </span>
+      </label>
+      {setContribution.data && setContribution.data.withdrawn > 0 && (
+        <div className="mt-2 rounded-[8px] bg-sunken px-2.5 py-1.5 text-[11px] text-ink-2b">
+          Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
+        </div>
+      )}
+      {setContribution.error && <div className="mt-2 text-[11px] text-status-red">{setContribution.error.message}</div>}
+      <div className="mt-3 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas">
+        {contribQ.data ? (
+          <>
+            <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-ink">{n0(contribQ.data.firms)}</span>
+            <span className="text-[11.5px] leading-[1.4] text-ink-2b">
+              {contribQ.data.firms === 1 ? 'firm contributing' : 'firms contributing'} · {n0(contribQ.data.total)} data points ·
+              yours {n0(contribQ.data.yours)}
+            </span>
+          </>
+        ) : (
+          <Spinner />
+        )}
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <select
+          className="flex-1 h-9 text-[12px]"
+          aria-label="Deal to contribute"
+          value={effectiveContribId}
+          onChange={(e) => setContribDealId(e.target.value)}
+        >
+          {(dealsQ.data?.deals ?? []).map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+        <Button
+          loading={contribute.isPending}
+          disabled={!effectiveContribId || !contribQ.data?.optedIn}
+          onClick={() => contribute.mutate(effectiveContribId)}
+        >
+          Contribute
+        </Button>
+      </div>
+      {contribute.data && (
+        <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
+          Contributed to {contribute.data.region} · {contribute.data.useClass.toLowerCase()} · {contribute.data.period}.
+        </div>
+      )}
+      {contribute.error && <div className="mt-2 text-[11px] text-status-red">{contribute.error.message}</div>}
+    </section>
+  );
+
   return (
     <div className="min-h-screen">
       <TopBar
@@ -350,7 +439,15 @@ export default function Benchmarking() {
           </div>
         </div>
 
-        {loading || !M ? (
+        {locked ? (
+          <div className="mt-6 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <PlanLocked feature={featureName('benchmarking')} plan={featurePlanName('benchmarking')}>
+              Percentile strips, the build-cost trend and the market comparison are drawn from appraisals contributed by
+              other firms. Your own deals and their figures are unaffected and stay where they are.
+            </PlanLocked>
+            <div className="flex flex-col gap-4">{contributionSection}</div>
+          </div>
+        ) : loading || !M ? (
           <div className="mt-10 flex justify-center">
             <Spinner />
           </div>
@@ -591,73 +688,7 @@ export default function Benchmarking() {
                   </div>
                 </section>
 
-                <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <h3 className="text-[13px] font-semibold">Data contribution</h3>
-                  <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
-                    Contributing shares three ratios from an appraisal — build £/ft², GDV £/ft² and profit on cost. Never the address, the
-                    client, the deal name or any absolute figure. A cohort is only ever published once{' '}
-                    {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
-                    against your own schemes.
-                  </p>
-                  <label className="mt-3 flex items-start gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-[2px]"
-                      checked={optedIn}
-                      disabled={!contribQ.data || setContribution.isPending}
-                      onChange={(e) => setContribution.mutate({ enabled: e.target.checked })}
-                    />
-                    <span className="text-[11.5px] leading-[1.45] text-ink-2b">
-                      <span className="font-semibold text-ink">Contribute this workspace's appraisals</span>
-                      <br />
-                      Off by default. Turning it off again withdraws everything already contributed.
-                    </span>
-                  </label>
-                  {setContribution.data && setContribution.data.withdrawn > 0 && (
-                    <div className="mt-2 rounded-[8px] bg-sunken px-2.5 py-1.5 text-[11px] text-ink-2b">
-                      Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
-                    </div>
-                  )}
-                  {setContribution.error && <div className="mt-2 text-[11px] text-status-red">{setContribution.error.message}</div>}
-                  <div className="mt-3 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas">
-                    {contribQ.data ? (
-                      <>
-                        <span className="fig text-[20px] font-semibold tracking-[-1px] text-brand-ink">{n0(contribQ.data.firms)}</span>
-                        <span className="text-[11.5px] leading-[1.4] text-ink-2b">
-                          {contribQ.data.firms === 1 ? 'firm contributing' : 'firms contributing'} · {n0(contribQ.data.total)} data points ·
-                          yours {n0(contribQ.data.yours)}
-                        </span>
-                      </>
-                    ) : (
-                      <Spinner />
-                    )}
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <select
-                      className="flex-1 h-9 text-[12px]"
-                      aria-label="Deal to contribute"
-                      value={effectiveContribId}
-                      onChange={(e) => setContribDealId(e.target.value)}
-                    >
-                      {(dealsQ.data?.deals ?? []).map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                    <Button
-                      loading={contribute.isPending}
-                      disabled={!effectiveContribId || !contribQ.data?.optedIn}
-                      onClick={() => contribute.mutate(effectiveContribId)}
-                    >
-                      Contribute
-                    </Button>
-                  </div>
-                  {contribute.data && (
-                    <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
-                      Contributed to {contribute.data.region} · {contribute.data.useClass.toLowerCase()} · {contribute.data.period}.
-                    </div>
-                  )}
-                  {contribute.error && <div className="mt-2 text-[11px] text-status-red">{contribute.error.message}</div>}
-                </section>
+                {contributionSection}
 
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <h3 className="text-[13px] font-semibold">Apply a benchmark</h3>
