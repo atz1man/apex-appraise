@@ -6,6 +6,18 @@ export const P = (pence: bigint | null | undefined): number => (pence == null ? 
 /** £ number → BigInt pence for persistence. */
 export const toPence = (pounds: number): bigint => BigInt(Math.round(pounds * 100));
 
+/**
+ * A money figure as it should read in an audit trail, in one place.
+ *
+ * The trail is read by an insurer or an RICS reviewer alongside the documents,
+ * so "£450,000" and "450000" being the same number is not the point — an event
+ * that reads differently from the report beside it invites the question of
+ * whether they are describing the same thing. Takes pence, because that is how
+ * money is stored; the pounds overload is for the inputs that arrive that way.
+ */
+export const moneyLabel = (pence: bigint | null | undefined): string =>
+  pence == null ? '—' : `£${Math.round(P(pence)).toLocaleString('en-GB')}`;
+
 const spendProfileMap: Record<string, SpendProfileKey> = {
   SCURVE: 'scurve',
   EVEN: 'even',

@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { computeAppraisal, costRollup } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
-import { J, P, toPence } from '../mappers.js';
+import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
@@ -180,7 +180,18 @@ export const costRouter = router({
       const c = await ctx.prisma.contractor.findFirst({ where: { id: input.contractorId, orgId: ctx.principal.orgId } });
       if (!c) throw new TRPCError({ code: 'NOT_FOUND' });
       const weeks = [...J<number[]>(c.weeks, []), input.hours];
-      return ctx.prisma.contractor.update({ where: { id: c.id }, data: { weeks: JSON.stringify(weeks) } });
+      const updated = await ctx.prisma.contractor.update({ where: { id: c.id }, data: { weeks: JSON.stringify(weeks) } });
+      // `upsertPackage` next door records; the hours that get valued against
+      // those packages did not, and a week logged twice looked like a busy week
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'logged a timesheet week',
+        target: `${c.name} (${c.trade}) · ${input.hours} hours, week ${weeks.length}`,
+        ip: ctx.ip,
+      });
+      return updated;
     }),
 });
 
@@ -214,7 +225,7 @@ export const photosRouter = router({
       const taken = new Date(input.takenAt + 'T00:00:00Z');
       const wc = new Date(taken);
       wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
-      return ctx.prisma.sitePhoto.create({
+      const photo = await ctx.prisma.sitePhoto.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
@@ -224,6 +235,21 @@ export const photosRouter = router({
           weekCommencing: wc,
         },
       });
+      // the site log is what a disputed valuation of works-in-progress is argued
+      // from, and `takenAt` is typed by hand — so when it was RECORDED, and by
+      // whom, is a different fact from when it was taken, and the only one of the
+      // two that cannot be backdated
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'added a site photo',
+          target: `${input.caption} · taken ${input.takenAt}`,
+        },
+      });
+      return photo;
     }),
 });
 
@@ -432,7 +458,21 @@ export const documentsRouter = router({
           message: 'That document has not been received yet — upload the file to change its status.',
         });
       }
-      return ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
+      const updated = await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
+      // `documents.expect` records the placeholder being raised. Marking the same
+      // document EXTRACTED is the claim that its figures have been read into the
+      // appraisal, which is a larger claim and recorded nothing.
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'changed a document’s status',
+          target: `${doc.name}: ${doc.extraction} → ${input.status}`,
+        },
+      });
+      return updated;
     }),
 
   activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
@@ -660,10 +700,32 @@ export const bankRouter = router({
         if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       }
       await ctx.prisma.bankAccount.update({ where: { id: account.id }, data: { dealId: input.dealId } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        dealId: input.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: input.dealId ? 'mapped a bank account to a deal' : 'unmapped a bank account',
+        target: `${account.name} ••••${account.last4}`,
+        ip: ctx.ip,
+      });
       return { ok: true };
     }),
 
-  sync: adminProcedure.mutation(({ ctx }) => syncBank(ctx.prisma, ctx.principal.orgId)),
+  sync: adminProcedure.mutation(async ({ ctx }) => {
+    const result = await syncBank(ctx.prisma, ctx.principal.orgId);
+    // `xero.sync` and `integrations.sync` both record. This one pulls a firm's
+    // real bank transactions, and recorded nothing.
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId,
+      userId: ctx.principal.userId,
+      actor: ctx.principal.name,
+      action: 'synced the bank feed',
+      target: `${result.accounts} accounts`,
+      ip: ctx.ip,
+    });
+    return result;
+  }),
 
   /** Money in, awaiting a human saying what it is. */
   unclassified: internalProcedure.query(async ({ ctx }) => {
@@ -691,6 +753,20 @@ export const bankRouter = router({
         where: { id: tx.id },
         // who said so: a drawdown figure in a lender pack should be attributable
         data: { classification: input.classification, classifiedById: ctx.principal.userId },
+      });
+      /**
+       * `classifiedById` above answers "who says this is a drawdown" for the
+       * CURRENT answer only. A transaction reclassified from equity to drawdown
+       * moves money between two lines of a lender pack, and the previous answer —
+       * and whoever gave it — was overwritten with nothing to say it had changed.
+       */
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'classified a bank transaction',
+        target: `${moneyLabel(tx.amount)} ${tx.description}: ${tx.classification} → ${input.classification}`,
+        ip: ctx.ip,
       });
       return { ok: true };
     }),
@@ -802,6 +878,16 @@ export const xeroRouter = router({
         where: { orgId: ctx.principal.orgId },
         data: { trackingCategoryId: input.id, trackingCategoryName: input.name },
       });
+      // which Xero dimension the cost monitor reads. Change it and every
+      // subsequent sync attributes the firm's spend differently.
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'set the Xero tracking category',
+        target: input.name,
+        ip: ctx.ip,
+      });
       return { ok: true };
     }),
 
@@ -814,6 +900,18 @@ export const xeroRouter = router({
         where: { orgId_trackingOptionId: { orgId: ctx.principal.orgId, trackingOptionId: input.trackingOptionId } },
         create: { orgId: ctx.principal.orgId, dealId: input.dealId, trackingOptionId: input.trackingOptionId, trackingOptionName: input.trackingOptionName },
         update: { dealId: input.dealId, trackingOptionName: input.trackingOptionName },
+      });
+      // remapping sends a whole scheme's committed and spent figures to a
+      // different deal on the next sync, and the cost report will simply show
+      // the new answer
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        dealId: input.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'mapped a Xero tracking option to a deal',
+        target: `${input.trackingOptionName} → ${deal.name}`,
+        ip: ctx.ip,
       });
       return { ok: true };
     }),
@@ -913,6 +1011,17 @@ export const integrationsRouter = router({
       const row = existing
         ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
         : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
+      // a credential for someone else's service, stored by this firm. `fde80d6`
+      // sealed these at rest; who put one there, and when, was still unrecorded.
+      // Never the key itself — the provider and the actor are the whole event.
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: existing ? 'replaced an integration key' : 'saved an integration key',
+        target: input.provider,
+        ip: ctx.ip,
+      });
       return { id: row.id, provider: row.provider, status: row.status };
     }),
 
@@ -927,16 +1036,38 @@ export const integrationsRouter = router({
         where: { id: conn.id },
         data: { status: 'NOT_CONNECTED', config: '{}' },
       });
+      // `bank.disconnect` and `xero.disconnect` both record; this one destroys a
+      // stored credential and did not
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'disconnected an integration',
+        target: input,
+        ip: ctx.ip,
+      });
       return { disconnected: true };
     }),
 
   connect: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
     if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
-    return ctx.prisma.integrationConnection.update({
+    const row = await ctx.prisma.integrationConnection.update({
       where: { id: conn.id },
       data: { status: 'CONNECTED', lastSync: new Date() },
     });
+    // not an OAuth redirect like `bank.connect` and `xero.connect`, which is why
+    // those two are exempt and this is not: it flips a data source ON, and the
+    // figures that then arrive are sourced to it
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId,
+      userId: ctx.principal.userId,
+      actor: ctx.principal.name,
+      action: 'connected an integration',
+      target: input,
+      ip: ctx.ip,
+    });
+    return row;
   }),
 
   /**

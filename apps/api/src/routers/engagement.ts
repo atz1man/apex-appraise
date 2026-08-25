@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { internalProcedure, publicProcedure, router } from '../trpc.js';
 import { AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
-import { toPence, P } from '../mappers.js';
+import { toPence, P, moneyLabel } from '../mappers.js';
 
 /** How long a signing link stays live unless the valuer chooses otherwise. */
 const DEFAULT_LINK_DAYS = 30;
@@ -189,6 +189,24 @@ export const engagementRouter = router({
         : await ctx.prisma.engagementTerms.create({
             data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, status: 'DRAFT' },
           });
+      /**
+       * `issue`, `accept`, `sign` and `withdraw` all record — the whole lifecycle
+       * after the draft. But `238d265` established that the terms are what the
+       * Red Book narrative is checked AGAINST: the special assumptions a
+       * valuation declares are the ones recorded here. So the document the
+       * valuation is measured by was the one document whose drafting left no
+       * trace, including the liability cap and the valuation date.
+       */
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: existing ? 'edited the terms of engagement' : 'drafted the terms of engagement',
+          target: `basis ${input.terms.basisOfValue || '—'} · cap ${moneyLabel(data.liabilityCap)}`,
+        },
+      });
       return { id: row.id, status: row.status };
     }),
 

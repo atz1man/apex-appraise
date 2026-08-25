@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { lettingsRollup, salesRollup } from '@apex/appraisal-engine';
 import { LETTING_MILESTONES, SALES_MILESTONES } from '@apex/types';
 import { depositsHeldAt } from '@apex/appraisal-engine';
-import { P, toPence } from '../mappers.js';
+import { P, moneyLabel, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertUnchanged } from '../optimistic.js';
 
@@ -95,9 +95,6 @@ const TENANCY_LABELS: Record<string, string> = {
 };
 
 /** pence → the way a timeline reads it, en-GB, or an em dash for nothing agreed */
-const moneyLabel = (pence: bigint | null) =>
-  pence == null ? '—' : `£${Math.round(P(pence)).toLocaleString('en-GB')}`;
-
 const record = (ctx: any, dealId: string, action: string, target: string) =>
   ctx.prisma.activityEvent.create({
     data: { orgId: ctx.principal.orgId, dealId, actor: ctx.principal.name, action, target },

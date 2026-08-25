@@ -1522,11 +1522,36 @@ export const comparablesRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { id, ...data } = input;
+      /**
+       * These ARE the evidence. A Red Book valuation is defended by its
+       * comparables and the adjustments made to them, and an adjustment is a
+       * judgement — the reviewer's question is never "what is the number" but
+       * "who decided that, and when". `sitePack.applyComps` records the comps it
+       * imports from open data; the ones a valuer types or edits by hand, which
+       * are the ones carrying a judgement, recorded nothing.
+       */
+      const note = (action: string, row: { address: string; basePsf: number }) =>
+        ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            userId: ctx.principal.userId,
+            actor: ctx.principal.name,
+            action,
+            target: `${row.address} · £${Math.round(row.basePsf).toLocaleString('en-GB')}/ft² base, adjustments ${
+              [input.adjSize, input.adjCondition, input.adjDate, input.adjLocation].map((n) => `${n > 0 ? '+' : ''}${n}%`).join(' ')
+            }`,
+          },
+        });
       if (id) {
         await assertOwned(ctx.prisma.comparable, id, ctx.principal.orgId);
-        return ctx.prisma.comparable.update({ where: { id }, data });
+        const updated = await ctx.prisma.comparable.update({ where: { id }, data });
+        await note('edited a comparable', updated);
+        return updated;
       }
-      return ctx.prisma.comparable.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.comparable.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      await note('added a comparable', created);
+      return created;
     }),
 
   /** Writes the supported £/ft² onto every unit cap of the current appraisal. */
@@ -1546,6 +1571,7 @@ export const comparablesRouter = router({
     });
     if (!appraisal) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to apply to' });
     const supported = Math.round(summary.supportedPsf);
+    const before = (JSON.parse(appraisal.units) as any[]).map((u) => u.cap);
     const units = (JSON.parse(appraisal.units) as any[]).map((u) => ({
       ...u,
       cap: supported,
@@ -1553,6 +1579,25 @@ export const comparablesRouter = router({
       source: `Comparables — supported £${supported}/ft²`,
     }));
     await ctx.prisma.appraisal.update({ where: { id: appraisal.id }, data: { units: JSON.stringify(units) } });
+    /**
+     * This overwrites the sale price of EVERY unit type on the current
+     * appraisal, which moves GDV, profit and the residual land value — the most
+     * consequential single write outside `save`, and the only one that left no
+     * trace. `sitePack.applyComps`, which does the same job from open data,
+     * records; this one, driven by a valuer's own adjusted comparables, did not.
+     */
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'applied comparables to the appraisal',
+        target: `${comps.length} comparables · every unit cap set to £${supported.toLocaleString('en-GB')}/ft² (was ${
+          [...new Set(before)].map((c) => `£${Math.round(Number(c)).toLocaleString('en-GB')}`).join(', ') || '—'
+        })`,
+      },
+    });
     return { supportedPsf: supported };
   }),
 });
@@ -1579,11 +1624,29 @@ export const scenariosRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { id, ...data } = input;
+      // a scheme option is what a promoter takes to a lender or a JV partner, and
+      // `draftRisk` right below records the commentary written ABOUT these — so
+      // the prose was traceable and the levers it describes were not
+      const note = (action: string, row: { name: string }) =>
+        ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            userId: ctx.principal.userId,
+            actor: ctx.principal.name,
+            action,
+            target: `${row.name} · £${input.blendedPsf}/ft² blended, £${input.buildPsf}/ft² build, ${input.gia.toLocaleString('en-GB')} ft² GIA, ${input.targetProfitPct}% target`,
+          },
+        });
       if (id) {
         await assertOwned(ctx.prisma.scenario, id, ctx.principal.orgId);
-        return ctx.prisma.scenario.update({ where: { id }, data });
+        const updated = await ctx.prisma.scenario.update({ where: { id }, data });
+        await note('edited a scheme option', updated);
+        return updated;
       }
-      return ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      await note('added a scheme option', created);
+      return created;
     }),
 
   /**

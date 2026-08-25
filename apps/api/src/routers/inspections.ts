@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { J, P, toPence } from '../mappers.js';
+import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
 import { assertUnchanged } from '../optimistic.js';
+import { recordAudit } from '../audit.js';
 
 const zRoom = z.object({
   name: z.string(),
@@ -102,10 +103,35 @@ export const inspectionsRouter = router({
         surveyorId: ctx.principal.userId,
         inspectedAt: new Date(),
       };
+      /**
+       * The surveyor's own record of what they saw, and the value they
+       * reconciled from it — the evidence a Red Book valuation rests on. The row
+       * stamps `surveyorId` and `inspectedAt`, but that is only ever the LATEST
+       * author: every earlier reconciled value was replaced with nothing to say
+       * by whom or when. `audit.ts` names an insurer, a lender's credit
+       * committee and an RICS review as the readers of this trail, and "who
+       * changed the valuation" as one of the four questions it exists to answer.
+       */
+      const note = async (action: string) => {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action,
+          target:
+            input.reconciledValue != null
+              ? `${input.rooms.length} rooms, reconciled at ${moneyLabel(toPence(input.reconciledValue))}`
+              : `${input.rooms.length} rooms, no reconciled value`,
+          ip: ctx.ip,
+        });
+      };
+
       if (!input.id) {
         const created = await ctx.prisma.inspection.create({
           data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId },
         });
+        await note(input.status === 'submitted' ? 'submitted an inspection' : 'started an inspection');
         return inspectionOut(created);
       }
 
@@ -127,6 +153,11 @@ export const inspectionsRouter = router({
       });
 
       const row = await ctx.prisma.inspection.update({ where: { id: existing.id }, data });
+      await note(
+        existing.status !== 'submitted' && input.status === 'submitted'
+          ? 'submitted an inspection'
+          : 'updated an inspection',
+      );
       return inspectionOut(row);
     }),
 });

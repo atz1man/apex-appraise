@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { portfolioRollup } from '@apex/appraisal-engine';
 import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
-import { P, toPence } from '../mappers.js';
+import { P, moneyLabel, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertCanAddDeal } from '../entitlements.js';
 import {
@@ -228,6 +228,19 @@ export const dealsRouter = router({
           roc: input.gdv > 0 && input.forecastProfit > 0 ? input.forecastProfit / Math.max(input.gdv - input.forecastProfit, 1) : 0,
           nextMilestone: input.nextMilestone,
           ownerId: ctx.principal.userId,
+        },
+      });
+      // its siblings both record — `setStage` writes "moved deal to", `update`
+      // writes what changed — so a deal's activity feed began at its first EDIT
+      // and never said who opened it or on what figures
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: created.id,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'created the deal',
+          target: `${created.name} · ${created.address} · GDV ${moneyLabel(created.gdv)}`,
         },
       });
       await emitWebhook(ctx.prisma, ctx.principal.orgId, 'deal.created', {

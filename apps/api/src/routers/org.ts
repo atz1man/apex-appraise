@@ -205,9 +205,22 @@ export const orgRouter = router({
 
   update: adminProcedure
     .input(z.object({ name: z.string().min(2).max(80) }))
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { name: input.name } }),
-    ),
+    .mutation(async ({ ctx, input }) => {
+      const before = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      const org = await ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { name: input.name } });
+      // this name is printed on every signed valuation and every terms of
+      // engagement, so a report produced last month names a firm that may no
+      // longer be called that. The trail is how the two are reconciled.
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'renamed the workspace',
+        target: `${before?.name ?? '—'} → ${input.name}`,
+        ip: ctx.ip,
+      });
+      return org;
+    }),
 
   /**
    * Firm-level standing wording. Everyone can read it (the report and the terms
@@ -334,6 +347,14 @@ export const orgRouter = router({
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       const mail = inviteEmail(input.name, org?.name ?? 'your team', email, tempPassword, APP_URL());
       const { emailed } = await sendMail(ctx.principal.orgId, email, mail.subject, mail.text);
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'invited a team member',
+        target: `${input.name} (${email}) as ${input.role}`,
+        ip: ctx.ip,
+      });
       return { tempPassword, emailed };
     }),
 
@@ -617,11 +638,22 @@ export const orgRouter = router({
       });
       if (!user) throw new TRPCError({ code: 'NOT_FOUND' });
       if (user.id === ctx.principal.userId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot change your own role' });
-      return ctx.prisma.user.update({
+      const updated = await ctx.prisma.user.update({
         where: { id: user.id },
         data: { role: input.role },
         select: { id: true, role: true },
       });
+      // the FROM as well as the to: "made an admin" and "made a viewer" are
+      // different events, and only one of them is a question an insurer asks
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'changed a team member’s role',
+        target: `${user.name} (${user.email}): ${user.role} → ${input.role}`,
+        ip: ctx.ip,
+      });
+      return updated;
     }),
 
   /**
