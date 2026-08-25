@@ -351,8 +351,8 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
     setTarget('');
     void utils.portalAccess.list.invalidate();
   };
-  const inviteInvestor = trpc.portalAccess.inviteInvestor.useMutation({ onSuccess: done, onError: (e) => toast.error(e.message) });
-  const inviteBuyer = trpc.portalAccess.inviteBuyer.useMutation({ onSuccess: done, onError: (e) => toast.error(e.message) });
+  const inviteInvestor = trpc.portalAccess.inviteInvestor.useMutation({ onSuccess: done });
+  const inviteBuyer = trpc.portalAccess.inviteBuyer.useMutation({ onSuccess: done });
   const pending = inviteInvestor.isPending || inviteBuyer.isPending;
 
   const revoke = trpc.portalAccess.revoke.useMutation({
@@ -362,7 +362,6 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
       void utils.portalAccess.list.invalidate();
       toast.success(gone ? `${gone.name} can no longer sign in` : 'Portal access revoked');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   const options = kind === 'investor'
@@ -580,7 +579,6 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
         );
       }
     },
-    onError: (e) => toast.error(e.message),
   });
 
   return (
@@ -756,7 +754,6 @@ function DataPrivacyPanel() {
       clearSession();
       navigate('/welcome');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   const exportAll = async () => {
@@ -976,7 +973,6 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
       utils.org.policy.invalidate();
       toast.success('Firm policy saved — new terms will draft from it');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   if (isLoading || !form) {

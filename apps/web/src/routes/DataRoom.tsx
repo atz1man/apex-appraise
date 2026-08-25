@@ -118,7 +118,8 @@ export default function DataRoom() {
   });
 
   // ---- Ask the workfile: AI Q&A over the deal's readable documents ----
-  const ask = trpc.documents.ask.useMutation();
+  // this screen shows the error where it happened; see App.tsx
+  const ask = trpc.documents.ask.useMutation({ meta: { inlineError: true } });
   const [question, setQuestion] = useState('');
   const [askHistory, setAskHistory] = useState<AskEntry[]>([]);
   const onAsk = async () => {

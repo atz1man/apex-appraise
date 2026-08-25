@@ -1774,8 +1774,12 @@ function ReviewRow({
     utils.appraisal.versions.invalidate(dealId);
     utils.appraisal.getCurrent.invalidate(dealId);
   };
-  const submit = trpc.appraisal.submitForReview.useMutation({ onSuccess: refresh });
-  const decide = trpc.appraisal.review.useMutation({ onSuccess: () => { setNote(''); refresh(); } });
+  const submit = trpc.appraisal.submitForReview.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true }, onSuccess: refresh });
+  const decide = trpc.appraisal.review.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true }, onSuccess: () => { setNote(''); refresh(); } });
 
   const r = version.review;
   const chip: Record<string, { label: string; status: 'green' | 'amber' | 'neutral' | 'red' }> = {

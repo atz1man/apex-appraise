@@ -190,11 +190,15 @@ export default function Benchmarking() {
   const dealsQ = trpc.deals.list.useQuery({});
   const [contribDealId, setContribDealId] = useState('');
   const contribute = trpc.benchmarks.contribute.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: () => {
       utils.benchmarks.invalidate();
     },
   });
   const setContribution = trpc.benchmarks.setContribution.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: () => {
       utils.benchmarks.invalidate();
     },

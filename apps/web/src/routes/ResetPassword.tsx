@@ -12,6 +12,8 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const reset = trpc.auth.resetPassword.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: () => navigate('/login?reset=1', { replace: true }),
     onError: (e) => setError(e.message),
   });

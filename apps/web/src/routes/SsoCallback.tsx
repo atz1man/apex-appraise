@@ -28,6 +28,8 @@ export default function SsoCallback() {
   const providerError = params.get('error_description') ?? params.get('error');
 
   const complete = trpc.auth.ssoComplete.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: (res) => {
       setSession(res.token, res.principal as StoredPrincipal);
       const t = res.principal.principalType;

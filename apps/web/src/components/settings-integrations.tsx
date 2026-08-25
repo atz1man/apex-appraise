@@ -30,6 +30,8 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
   const [minted, setMinted] = useState<{ name: string; key: string } | null>(null);
 
   const create = trpc.org.createApiKey.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: (k) => {
       setMinted({ name: k.name, key: k.key });
       setName('');

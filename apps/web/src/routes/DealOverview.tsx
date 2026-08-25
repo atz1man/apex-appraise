@@ -109,6 +109,8 @@ export default function DealOverview() {
     setEditing(true);
   };
   const saveDetails = trpc.deals.update.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: () => {
       setEditing(false);
       utils.deals.get.invalidate(dealId);
@@ -118,6 +120,8 @@ export default function DealOverview() {
   });
 
   const setStage = trpc.deals.setStage.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: () => {
       utils.deals.get.invalidate(dealId);
       utils.deals.list.invalidate();

@@ -130,21 +130,18 @@ export default function Engagement() {
       invalidate();
       toast.success('Terms saved');
     },
-    onError: (e) => toast.error(e.message),
   });
   const issue = trpc.engagement.issue.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Terms issued — send the client their signing link');
     },
-    onError: (e) => toast.error(e.message),
   });
   const revokeLink = trpc.engagement.revokeLink.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Link revoked — the client can no longer sign it');
     },
-    onError: (e) => toast.error(e.message),
   });
   const [copied, setCopied] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
@@ -155,14 +152,12 @@ export default function Engagement() {
       invalidate();
       toast.success('Client acceptance recorded');
     },
-    onError: (e) => toast.error(e.message),
   });
   const withdraw = trpc.engagement.withdraw.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Terms withdrawn — back to draft');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   const status = (saved?.status ?? 'DRAFT') as keyof typeof STATUS_TONE;

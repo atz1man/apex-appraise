@@ -99,7 +99,8 @@ export default function Scenarios() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: rows, isLoading } = trpc.scenarios.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.scenarios.upsert.useMutation({ onSuccess: () => utils.scenarios.list.invalidate(dealId) });
-  const draftRisk = trpc.scenarios.draftRisk.useMutation();
+  // this screen shows the error where it happened; see App.tsx
+  const draftRisk = trpc.scenarios.draftRisk.useMutation({ meta: { inlineError: true } });
 
   // local lever overlay for live recompute; persisted on slider release / input blur
   const [edits, setEdits] = useState<Record<string, Partial<Record<LeverKey, number>>>>({});

@@ -1,4 +1,11 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+declare module '@tanstack/react-query' {
+  interface Register {
+    /** Declared by a mutation whose screen shows its own error — see the cache handler below. */
+    mutationMeta: { inlineError?: boolean };
+  }
+}
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
@@ -154,10 +161,25 @@ export default function App() {
             toastGlobal('error', `Couldn't load this page's data — ${message}`);
           },
         }),
-        // every failed mutation surfaces as a toast — no more silent failures
+        /**
+         * Every failed mutation surfaces — once.
+         *
+         * This handler is the single owner of the error toast, which is what it
+         * was written to be: "no more silent failures". What it did not account
+         * for is that a screen may already be showing the failure where it
+         * happened, and react-query runs BOTH this and the mutation's own
+         * onError. Measured in a browser: one refused invite produced two
+         * identical toasts, and a form rendering its error inline showed the
+         * same sentence twice in two places.
+         *
+         * So a mutation whose screen displays its own error says so with
+         * `meta: { inlineError: true }` and this stays quiet. A toast is for a
+         * failure with nowhere else to appear.
+         */
         mutationCache: new MutationCache({
-          onError: (err) => {
+          onError: (err, _vars, _ctx, mutation) => {
             if (handleAuthError(err)) return;
+            if (mutation.meta?.inlineError) return;
             toastGlobal('error', err instanceof Error ? err.message : 'Something went wrong');
           },
         }),

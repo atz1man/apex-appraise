@@ -35,6 +35,8 @@ export default function Login() {
   );
 
   const ssoStart = trpc.auth.ssoStart.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     // straight out to the provider; we come back at /sso/callback
     onSuccess: (res) => {
       window.location.href = res.url;
@@ -51,6 +53,8 @@ export default function Login() {
   const passwordAllowed = !sso?.enforced;
 
   const login = trpc.auth.login.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: (res) => {
       setSession(res.token, res.principal as StoredPrincipal);
       const t = res.principal.principalType;

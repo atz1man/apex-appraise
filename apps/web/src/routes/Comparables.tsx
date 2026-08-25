@@ -29,7 +29,8 @@ export default function Comparables() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data, isLoading } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.comparables.upsert.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
-  const apply = trpc.comparables.applyToAppraisal.useMutation();
+  // this screen shows the error where it happened; see App.tsx
+  const apply = trpc.comparables.applyToAppraisal.useMutation({ meta: { inlineError: true } });
 
   // local overlay of adjustment edits for live recompute; persisted onBlur via upsert
   const [edits, setEdits] = useState<Record<string, Partial<Record<AdjKey, number>>>>({});
