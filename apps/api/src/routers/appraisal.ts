@@ -46,6 +46,34 @@ function fullResult(input: z.infer<typeof zAppraisalInput>) {
   return { result, jv };
 }
 
+/**
+ * The deal card's headline figures, which are the CURRENT appraisal's.
+ *
+ * The pipeline board, the Hub and the deal card all read these columns rather
+ * than running the engine, so anything that changes which version is current
+ * has to write them. `save` did. `restore` did not — so restoring a prudent
+ * appraisal to undo an optimistic one left the whole firm's pipeline showing
+ * the version that had just been replaced, until somebody happened to save
+ * again. Measured: current appraisal GDV £3,150,000, deal card £4,500,000, and
+ * `deals.exposure` — which recomputes from the appraisal row — disagreeing with
+ * the board about the same deal.
+ *
+ * One function, because a rule written in two places is one place away from
+ * being written in one.
+ */
+async function syncDealHeadline(prisma: any, dealId: string, result: { gdv: number; profit: number; poc: number; equity: number }) {
+  await prisma.deal.update({
+    where: { id: dealId },
+    data: {
+      gdv: toPence(result.gdv),
+      forecastProfit: toPence(result.profit),
+      roc: result.poc,
+      equityRequired: toPence(result.equity),
+      viability: result.poc >= 0.17 ? 'PROCEED' : result.poc >= 0.1 ? 'CAUTION' : 'DECLINE',
+    },
+  });
+}
+
 /** persistence payload for appraisal inputs (money £ → pence) */
 function inputToRow(input: z.infer<typeof zAppraisalInput>) {
   return {
@@ -266,17 +294,7 @@ export const appraisalRouter = router({
           data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
         });
       }
-      // reflect hardened headline figures onto the deal card (derived, engine-owned)
-      await ctx.prisma.deal.update({
-        where: { id: input.dealId },
-        data: {
-          gdv: toPence(result.gdv),
-          forecastProfit: toPence(result.profit),
-          roc: result.poc,
-          equityRequired: toPence(result.equity),
-          viability: result.poc >= 0.17 ? 'PROCEED' : result.poc >= 0.1 ? 'CAUTION' : 'DECLINE',
-        },
-      });
+      await syncDealHeadline(ctx.prisma, input.dealId, result);
       // audit trail on every financial mutation
       await ctx.prisma.activityEvent.create({
         data: {
@@ -717,14 +735,67 @@ export const appraisalRouter = router({
       where: { id: input.versionId, dealId: input.dealId, orgId: ctx.principal.orgId },
     });
     if (!version) throw new TRPCError({ code: 'NOT_FOUND' });
-    await ctx.prisma.appraisal.updateMany({
+    /**
+     * Stand the old version down and raise the restored one together, with the
+     * same compare-and-set `save` uses for a branch. These were two loose
+     * statements: two callers restoring at once both read the same current row,
+     * both flipped it and both created, leaving TWO rows marked current — after
+     * which "the current appraisal" is whichever findFirst happened to return.
+     *
+     * The current row is read OUTSIDE the transaction, exactly as `save` reads
+     * it, so the flip is a genuine compare-and-set against what this caller saw.
+     * Reading it inside would make the race impossible on SQLite by
+     * serialisation alone — which passes the test and leaves the guard that
+     * production actually needs unexercised.
+     */
+    const existingCurrent = await ctx.prisma.appraisal.findFirst({
       where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-      data: { isCurrent: false },
     });
-    const { id: _id, createdAt: _c, updatedAt: _u, ...copy } = version;
-    const restored = await ctx.prisma.appraisal.create({
-      data: { ...copy, isCurrent: true, label: `${version.label} (restored)` },
+    const restored = await ctx.prisma.$transaction(async (tx) => {
+      if (existingCurrent) {
+        const { count } = await tx.appraisal.updateMany({
+          where: { id: existingCurrent.id, isCurrent: true },
+          data: { isCurrent: false },
+        });
+        if (count !== 1) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Somebody else changed the current version a moment ago. Reload to see it, then restore from there.',
+          });
+        }
+      }
+      /**
+       * A restored version is a NEW version and starts as a draft.
+       *
+       * The review fields were copied along with everything else, so restoring
+       * an approved version produced a fresh row asserting it had been approved
+       * — by that person, on that date — when nobody had seen this row at all.
+       * `save` already refuses to carry an approval onto a branch, and the
+       * review tests state the rule: "a new version inherits no approval — it
+       * has to earn its own."
+       */
+      const {
+        id: _id,
+        createdAt: _c,
+        updatedAt: _u,
+        reviewStatus: _rs,
+        reviewedById: _rb,
+        reviewedAt: _ra,
+        reviewNote: _rn,
+        submittedById: _sb,
+        submittedAt: _sa,
+        ...copy
+      } = version;
+      return tx.appraisal.create({
+        data: { ...copy, isCurrent: true, label: `${version.label} (restored)` },
+      });
     });
+    /**
+     * The deal card is derived from whichever version is current, so restoring
+     * one has to move it. Without this the board kept the replaced version's
+     * GDV for good.
+     */
+    await syncDealHeadline(ctx.prisma, input.dealId, computeAppraisal(appraisalRowToEngineInput(restored)));
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
