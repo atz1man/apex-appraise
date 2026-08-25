@@ -25,7 +25,6 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
   const utils = trpc.useUtils();
   const { data: keys } = trpc.org.apiKeys.useQuery(undefined, { enabled: isAdmin });
   const [name, setName] = useState('');
-  const [write, setWrite] = useState(false);
   /** Shown once. The server hashes it and cannot produce it again. */
   const [minted, setMinted] = useState<{ name: string; key: string } | null>(null);
 
@@ -33,7 +32,6 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
     onSuccess: (k) => {
       setMinted({ name: k.name, key: k.key });
       setName('');
-      setWrite(false);
       void utils.org.apiKeys.invalidate();
     },
   });
@@ -83,17 +81,20 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
             aria-label="Key name"
           />
         </label>
-        <label className="flex items-center gap-2 text-[12px] pb-2">
-          <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
-          {/* most integrations read; a read-only key is a smaller thing to lose */}
-          Allow writes
-        </label>
+        {/*
+          There was an "Allow writes" checkbox here. Every route under /api/v1 is
+          a GET that asks for the read scope, and none asks for write — so
+          ticking it granted a permission nothing consumes, and a firm that
+          ticked it went away believing they had a key that could change their
+          data. The scope machinery is kept: when a write endpoint exists, offer
+          it again. apps/api/test/api-scopes.test.ts fails if the two drift.
+        */}
         <Button
           size="sm"
           className="mb-1"
           disabled={!name.trim()}
           loading={create.isPending}
-          onClick={() => create.mutate({ name: name.trim(), write })}
+          onClick={() => create.mutate({ name: name.trim(), write: false })}
         >
           Create key
         </Button>
