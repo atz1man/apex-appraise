@@ -875,6 +875,12 @@ export const appraisalRouter = router({
     const engineInput = appraisalRowToEngineInput(row);
     const { result } = fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>);
     const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    /**
+     * The instruction's own terms. A special assumption is what determines what
+     * the figure MEANS — "assuming planning is granted" can move a value by
+     * millions — and the narrative was denying them unconditionally.
+     */
+    const terms = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
     const summary = comps.length
       ? weightedComparables(
           comps.map((c: any) => ({
@@ -896,6 +902,7 @@ export const appraisalRouter = router({
       compCount: comps.length,
       supportedPsf: summary ? Math.round(summary.supportedPsf) : null,
       compAddresses: comps.map((c: any) => c.address),
+      specialAssumptions: statedSpecialAssumptions(terms?.specialAssumptions),
     });
     /**
      * Provenance from what actually produced the prose, not from what is
@@ -973,6 +980,27 @@ const NARRATIVE_TOOL = {
 const gbp = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`;
 
 /**
+ * The special assumptions actually stated in the terms of engagement, or null.
+ *
+ * The terms carry clause 11 as free text and the house-style default is the
+ * word "None." — so a firm that has not set one is not making one. Anything
+ * else is a stated special assumption, and the report has to say so: measured
+ * on a real instruction whose terms read "That full planning permission for 10
+ * dwellings is granted ... and that the site is free of contamination", the
+ * Red Book narrative printed "No special assumptions have been made."
+ *
+ * Two documents in the same product, on the same instruction, contradicting
+ * each other on the one clause that says what the valuation figure means.
+ */
+export function statedSpecialAssumptions(raw: string | null | undefined): string | null {
+  const text = (raw ?? '').trim();
+  if (!text) return null;
+  // "None", "None.", "none", "N/A" — a firm saying there are none, not making one
+  if (/^(none|n\/?a|nil|not applicable)\.?$/i.test(text)) return null;
+  return text;
+}
+
+/**
  * Draft the three report sections. The LLM is FORCED through a tool call so
  * output is schema-valid JSON by construction, and every number it may cite is
  * supplied (engine-computed) — it authors register, never arithmetic. Falls
@@ -990,6 +1018,12 @@ async function draftNarrativeSections(facts: {
   compCount: number;
   supportedPsf: number | null;
   compAddresses: string[];
+  /**
+   * The special assumptions from the terms of engagement, or null where the
+   * terms state none. Clause 11 of the signed terms, and the narrative used to
+   * deny them unconditionally — see the risk commentary below.
+   */
+  specialAssumptions: string | null;
 }): Promise<NarrativeSections & { source: 'model' | 'template' }> {
   const mv = Math.round(facts.gdv / 1000) * 1000; // Market Value — GDV to the nearest £1,000, as reported
   const psf = facts.nia > 0 ? Math.round(mv / facts.nia) : 0;
@@ -1008,8 +1042,11 @@ FACTS (use these figures verbatim — do not invent or recompute any number):
 - Forecast developer's profit: ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost)
 - Planning status: ${facts.planningStatus ?? 'not assessed'}
 - Comparable evidence: ${compLine}
+- Special assumptions agreed in the terms of engagement: ${facts.specialAssumptions ?? 'none stated'}
 
-RULES: each section 90-140 words; UK valuation-report register; third person ("the valuer", "the subject property") — no first person; plain prose, no markdown; each section MUST reference the deal's actual figures above (Market Value/GDV, supported £/ft², comparable count as relevant); valuationRationale MUST end with the Market Value opinion of ${gbp(mv)}.`;
+RULES: each section 90-140 words; UK valuation-report register; third person ("the valuer", "the subject property") — no first person; plain prose, no markdown; each section MUST reference the deal's actual figures above (Market Value/GDV, supported £/ft², comparable count as relevant); valuationRationale MUST end with the Market Value opinion of ${gbp(mv)}.
+
+DO NOT ASSERT WHAT IS NOT ABOVE. Specifically: do not state transaction volumes, marketing periods, demand levels, supply of comparable stock, or any other market condition — none of it has been measured, and this goes into a signed valuation. Do not declare the evidence base adequate; state its extent and leave the judgement to the valuer. State the special assumptions exactly as given, and say none are made only when the line above says none stated.`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -1066,12 +1103,41 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
     // the deterministic template — no model wrote a word of what follows, and
     // the AI-use disclosure has to be able to tell
     source: 'template' as const,
+    /**
+     * What this paragraph asserted, for every property, in every location, in
+     * every market: that the market "remains active, with steady occupier and
+     * investor demand and a limited supply of directly comparable stock", that
+     * "transaction volumes over the preceding twelve months have been stable",
+     * and that "marketing periods for well-presented accommodation are
+     * typically six to eight weeks". Nothing measured any of it. It printed the
+     * same sentences on a scheme with no comparables logged at all.
+     *
+     * What is left is what the product actually knows, and an explicit sentence
+     * saying the market appraisal is the valuer's to write. A gap a valuer can
+     * see is a gap they can fill; an invented paragraph reads as done.
+     */
     marketCommentary:
-      `The market for ${facts.assetType.toLowerCase().replace('_', ' ')} property in the locality of ${facts.subject} remains active, with steady occupier and investor demand and a limited supply of directly comparable stock. Pricing evidence is drawn from ${evidence}. Transaction volumes over the preceding twelve months have been stable and marketing periods for well-presented accommodation are typically six to eight weeks. Against a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft²` : ''}, the valuer considers current conditions to provide a reasonable evidential basis, and no material valuation uncertainty is reported as at the valuation date.`,
+      `Pricing evidence for this ${facts.assetType.toLowerCase().replace('_', ' ')} scheme at ${facts.subject} is drawn from ${evidence}. The appraisal indicates a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft² on ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area` : ''}. Local market conditions — occupier and investor demand, supply of comparable stock, transaction volumes and marketing periods — have not been assessed in this draft and are for the valuer to state.`,
     valuationRationale:
-      `Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches. ${facts.compCount ? `The ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'} analysed support${facts.compCount === 1 ? 's' : ''} £${facts.supportedPsf}/ft², which applied to ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area corroborates the appraisal-derived figure.` : 'In the absence of logged comparables, greatest weight is afforded to the residual development appraisal.'} The appraisal indicates a gross development value of ${gbp(facts.gdv)} and a forecast developer's profit of ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost), consistent with market-standard return requirements. Reconciling the approaches, the valuer's opinion of Market Value is ${gbp(mv)}.`,
+      `Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches. ${facts.compCount ? `The ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'} analysed support${facts.compCount === 1 ? 's' : ''} £${facts.supportedPsf}/ft², against ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area.` : 'In the absence of logged comparables, greatest weight is afforded to the residual development appraisal.'} The appraisal indicates a gross development value of ${gbp(facts.gdv)} and a forecast developer's profit of ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost). Reconciling the approaches, the valuer's opinion of Market Value is ${gbp(mv)}.`,
+    /**
+     * Two declarations here are required by VPS 3 and were both asserted rather
+     * than established.
+     *
+     * "The evidence base of N comparables is considered adequate for the class"
+     * fired on ANY count above zero — so one comparable was declared adequate
+     * evidence for a Market Value. Adequacy is the valuer's judgement; the
+     * report states the extent and leaves the conclusion to them.
+     *
+     * "No special assumptions have been made" was printed regardless of what the
+     * signed terms of engagement say at clause 11.
+     */
     riskCommentary:
-      `Planning status is recorded as ${(facts.planningStatus ?? 'not assessed').toLowerCase()}, and the valuation assumes all stated consents remain in effect. The principal risks to the reported figure of ${gbp(mv)} are movement in local sales rates${facts.supportedPsf ? ` away from the supported £${facts.supportedPsf}/ft²` : ''}, build-cost inflation compressing the ${(facts.poc * 100).toFixed(1)}% profit on cost, and any extension of the sales period. The evidence base of ${facts.compCount || 'no'} comparable${facts.compCount === 1 ? '' : 's'} is ${facts.compCount ? 'considered adequate for the class' : 'limited, and the figure should be read accordingly'}. No special assumptions have been made and no material valuation uncertainty is declared.`,
+      `Planning status is recorded as ${(facts.planningStatus ?? 'not assessed').toLowerCase()}${facts.planningStatus ? ', and the valuation assumes all stated consents remain in effect' : ''}. The principal risks to the reported figure of ${gbp(mv)} are movement in local sales rates${facts.supportedPsf ? ` away from the supported £${facts.supportedPsf}/ft²` : ''}, build-cost inflation compressing the ${(facts.poc * 100).toFixed(1)}% profit on cost, and any extension of the sales period. ${facts.compCount ? `The evidence base is ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'}, and its adequacy for the class is for the valuer to confirm` : 'No comparables have been logged, so the figure is appraisal-led and should be read accordingly'}. ${
+        facts.specialAssumptions
+          ? `The following special assumption${/\band\b|;|\n/.test(facts.specialAssumptions) ? 's are' : ' is'} made, as agreed in the terms of engagement: ${facts.specialAssumptions.replace(/\s+/g, ' ').trim().replace(/[.;]+$/, '')}`
+          : 'No special assumptions have been made'
+      }. Material valuation uncertainty has not been assessed in this draft.`,
   };
 }
 
