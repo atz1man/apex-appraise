@@ -674,17 +674,42 @@ export const appraisalRouter = router({
       supportedPsf: summary ? Math.round(summary.supportedPsf) : null,
       compAddresses: comps.map((c: any) => c.address),
     });
+    /**
+     * Provenance from what actually produced the prose, not from what is
+     * configured.
+     *
+     * This read `process.env.ANTHROPIC_API_KEY ? NARRATIVE_MODEL : 'demo'`,
+     * which is a fact about the deployment rather than about the words on the
+     * page. Two ways it was wrong, both in the AI-use disclosure of a signed
+     * Red Book valuation — the section whose entire job is to be accurate about
+     * this:
+     *
+     *   with no key, the report declared "Artificial intelligence was used in
+     *   preparing this valuation" over prose a template wrote;
+     *
+     *   with a key, when the figure guard rejected the model's draft and the
+     *   template was used instead, the report NAMED the model that had not
+     *   written the sentences it was being credited with.
+     */
+    const { source, ...sections_ } = sections;
     const payload: NarrativePayload = {
-      ...sections,
+      ...sections_,
       generatedAt: new Date().toISOString(),
-      model: process.env.ANTHROPIC_API_KEY ? NARRATIVE_MODEL : 'demo',
+      model: source === 'model' ? NARRATIVE_MODEL : 'template',
     };
     await ctx.prisma.appraisal.update({ where: { id: row.id }, data: { narrative: JSON.stringify(payload) } });
+    /**
+     * The disclosure is derived from this event — aiDisclosure filters the audit
+     * trail on AI_ACTOR — so filing one for a template is how a valuation came
+     * to declare an AI use that never happened. The drafting is still recorded,
+     * under the person who asked for it, because the audit trail should say a
+     * narrative was produced either way.
+     */
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
         dealId: input,
-        actor: AI_ACTOR,
+        actor: source === 'model' ? AI_ACTOR : ctx.principal.name,
         action: 'drafted Red Book narrative for',
         target: deal.name,
       },
@@ -742,7 +767,7 @@ async function draftNarrativeSections(facts: {
   compCount: number;
   supportedPsf: number | null;
   compAddresses: string[];
-}): Promise<NarrativeSections> {
+}): Promise<NarrativeSections & { source: 'model' | 'template' }> {
   const mv = Math.round(facts.gdv / 1000) * 1000; // Market Value — GDV to the nearest £1,000, as reported
   const psf = facts.nia > 0 ? Math.round(mv / facts.nia) : 0;
   const compLine = facts.compCount
@@ -789,7 +814,7 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
           money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
           percents: [Number((facts.poc * 100).toFixed(1))],
         });
-        if (unsupported.length === 0) return parsed.data;
+        if (unsupported.length === 0) return { ...parsed.data, source: 'model' as const };
         narrativeRejections.push(...unsupported);
       } else {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI narrative drafting returned an unusable response — try again.' });
@@ -815,6 +840,9 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
     ? `${facts.compCount} adjusted comparable transaction${facts.compCount === 1 ? '' : 's'}, which support${facts.compCount === 1 ? 's' : ''} a rate of £${facts.supportedPsf}/ft²`
     : 'the current development appraisal, pending comparable evidence';
   return {
+    // the deterministic template — no model wrote a word of what follows, and
+    // the AI-use disclosure has to be able to tell
+    source: 'template' as const,
     marketCommentary:
       `The market for ${facts.assetType.toLowerCase().replace('_', ' ')} property in the locality of ${facts.subject} remains active, with steady occupier and investor demand and a limited supply of directly comparable stock. Pricing evidence is drawn from ${evidence}. Transaction volumes over the preceding twelve months have been stable and marketing periods for well-presented accommodation are typically six to eight weeks. Against a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft²` : ''}, the valuer considers current conditions to provide a reasonable evidential basis, and no material valuation uncertainty is reported as at the valuation date.`,
     valuationRationale:
