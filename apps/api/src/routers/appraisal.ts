@@ -127,6 +127,41 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
  */
 const aiProcedure = internalProcedure.use(requiresFeature('aiDirector'));
 
+/**
+ * The rule that gives approval its meaning.
+ *
+ * Editing an approved version in place would change what somebody signed off
+ * without anyone signing off on the change — and the version history would show
+ * no trace of it. The way forward is a new version, which starts as a draft and
+ * has to be approved on its own merits.
+ *
+ * This lived inside `save`, which is where the defect had been found rather than
+ * where the rule belongs, and `save` is not the only procedure that writes an
+ * appraisal row. `comparables.applyToAppraisal` sets every unit cap on the
+ * current version, and `draftNarrative` replaces the Red Book prose and its
+ * AI-use disclosure; neither asked. Measured on one approved valuation:
+ *
+ *     reviewStatus       approved  (unchanged)
+ *     GDV      £3,150,000  ->  £5,250,000
+ *     profit     £630,000  ->  £1,050,000
+ *     residual £1,197,577  ->  £2,731,285
+ *     versions           1  (no new version, no trace)
+ *
+ * The residual is what a developer bids on a site with. It more than doubled on
+ * a valuation a named valuer had signed, and the version still read approved.
+ *
+ * `approved-immutable.test.ts` walks the router for any OTHER mutation that
+ * writes an appraisal row, so the next one cannot arrive without answering this.
+ */
+function assertNotApproved(row: { reviewStatus: string | null; label: string }) {
+  if (row.reviewStatus === 'approved') {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `“${row.label}” has been approved and cannot be edited. Save your changes as a new version.`,
+    });
+  }
+}
+
 export const appraisalRouter = router({
   getCurrent: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
@@ -240,19 +275,7 @@ export const appraisalRouter = router({
           });
         });
       } else if (existing) {
-        /**
-         * The rule that gives approval its meaning. Editing an approved version in
-         * place would change what somebody signed off without anyone signing off
-         * on the change — and the version history would show no trace of it. The
-         * way forward is a new version, which starts as a draft and has to be
-         * approved on its own merits.
-         */
-        if (existing.reviewStatus === 'approved') {
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: `“${existing.label}” has been approved and cannot be edited. Save your changes as a new version.`,
-          });
-        }
+        assertNotApproved(existing);
         /**
          * Editing a version that is out for review takes it back off the reviewer's
          * desk. Left in review it would be approved in a state nobody read — the
@@ -881,6 +904,8 @@ export const appraisalRouter = router({
       orderBy: { updatedAt: 'desc' },
     });
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to draft a narrative from — save an appraisal first.' });
+    // the narrative IS the Red Book prose, and it carries the AI-use disclosure
+    assertNotApproved(row);
     const engineInput = appraisalRowToEngineInput(row);
     const { result } = fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>);
     const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
@@ -1570,6 +1595,7 @@ export const comparablesRouter = router({
       where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
     });
     if (!appraisal) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to apply to' });
+    assertNotApproved(appraisal);
     const supported = Math.round(summary.supportedPsf);
     const before = (JSON.parse(appraisal.units) as any[]).map((u) => u.cap);
     const units = (JSON.parse(appraisal.units) as any[]).map((u) => ({
