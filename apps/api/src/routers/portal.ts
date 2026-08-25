@@ -8,8 +8,7 @@ import { initialsOf } from '../names.js';
 import { APP_URL, portalInviteEmail, sendMail } from '../email.js';
 import { recordAudit } from '../audit.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
-import { settlePayment } from '../payments.js';
-import { stripeFetch } from '../stripe.js';
+import { intentFor, intentSucceeded, settlePayment } from '../payments.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
 async function investorPosition(prisma: any, investorId: string, orgId: string) {
@@ -193,62 +192,11 @@ export const buyerRouter = router({
     if (payment.status === 'PAID') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Already paid' });
     const unit = await ctx.prisma.unit.findFirst({ where: { id: payment.unitId } });
 
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (key) {
-      /**
-       * One PaymentIntent per payment, ever.
-       *
-       * This used to create a new intent on every call. A buyer who
-       * double-clicks, or reloads the page and tries again, produced a second
-       * intent for the same money; the row kept only the newest id, so the first
-       * was orphaned at Stripe while still being chargeable by a browser holding
-       * its client_secret. Two intents for one deposit is a buyer charged twice
-       * and a ledger showing one.
-       *
-       * Two defences, because they fail differently. Reusing a stored intent
-       * covers the sequential case — a reload, a retry after a declined card,
-       * which is what an intent is designed to survive. Stripe's own
-       * Idempotency-Key covers the concurrent one, where both calls read the row
-       * before either wrote to it: the second POST returns the FIRST intent
-       * rather than making another.
-       */
-      if (payment.stripeIntentId) {
-        const existing = await stripeFetch<{ client_secret: string; status: string }>(
-          `/payment_intents/${payment.stripeIntentId}`,
-          undefined,
-          'GET',
-        ).catch(() => null);
-        // a usable intent is reused; one Stripe has since cancelled is not, and
-        // falls through to a fresh one below
-        if (existing && existing.status !== 'canceled') {
-          return { mode: 'live' as const, clientSecret: existing.client_secret };
-        }
-      }
-
-      const body = new URLSearchParams({
-        amount: String(payment.amount),
-        currency: 'gbp',
-        description: `${payment.kind} — ${unit?.name ?? 'unit'}`,
-        'metadata[paymentId]': payment.id,
-        'automatic_payment_methods[enabled]': 'true',
-      });
-      const res = await fetch('https://api.stripe.com/v1/payment_intents', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${key}`,
-          'content-type': 'application/x-www-form-urlencoded',
-          // keyed on the payment, so two calls racing return one intent
-          'idempotency-key': `apex-intent-${payment.id}`,
-        },
-        body,
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        throw new TRPCError({ code: 'BAD_REQUEST', message: err?.error?.message ?? 'Stripe rejected the payment intent' });
-      }
-      const intent = (await res.json()) as { id: string; client_secret: string };
-      await ctx.prisma.payment.update({ where: { id: payment.id }, data: { stripeIntentId: intent.id } });
-      return { mode: 'live' as const, clientSecret: intent.client_secret };
+    if (process.env.STRIPE_SECRET_KEY) {
+      // the intent logic, and the reasons for it, live in src/payments.ts behind
+      // a transport seam so they can be exercised rather than only reviewed
+      const { clientSecret } = await intentFor(ctx.prisma, payment, `${payment.kind} — ${unit?.name ?? 'unit'}`);
+      return { mode: 'live' as const, clientSecret };
     }
 
     if (!demoFallbacksAllowed()) {
@@ -289,9 +237,8 @@ export const buyerRouter = router({
     });
     if (!payment?.stripeIntentId) throw new TRPCError({ code: 'NOT_FOUND' });
     if (payment.status === 'PAID') return { paid: true };
-    const { stripeFetch } = await import('../stripe.js');
-    const intent = await stripeFetch<{ status: string }>(`/payment_intents/${payment.stripeIntentId}`, undefined, 'GET');
-    if (intent.status !== 'succeeded') return { paid: false, stripeStatus: intent.status };
+    const { succeeded, status } = await intentSucceeded(payment.stripeIntentId);
+    if (!succeeded) return { paid: false, stripeStatus: status };
     /**
      * The webhook may be settling this same intent right now — that is what
      * "belt-and-braces" above means. Whichever arrives second writes nothing.
