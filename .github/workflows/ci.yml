@@ -27,6 +27,12 @@ jobs:
         run: pnpm --filter @apex/api test
       - name: Typecheck web
         run: pnpm --filter @apex/web lint
+      # The heavy dependencies must arrive on demand, not with the screen. A
+      # static import does not fail the build — it just moves a megabyte into a
+      # route chunk, and the person who pays is a valuer on a site with no
+      # signal. Checked against what Rollup actually emitted.
+      - name: Build the web app and check what each screen costs
+        run: pnpm --filter @apex/web build && pnpm --filter @apex/web check:bundle
 
   postgres-schema:
     runs-on: ubuntu-latest
