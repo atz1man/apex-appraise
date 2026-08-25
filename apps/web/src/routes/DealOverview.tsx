@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
@@ -84,6 +84,38 @@ export default function DealOverview() {
   const { data: ai } = trpc.appraisal.aiDisclosure.useQuery(dealId, { enabled: !!dealId });
   const { data: cost, isLoading: costLoading } = trpc.cost.packages.useQuery(dealId, { enabled: !!dealId });
   const { data: sales, isLoading: salesLoading } = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
+
+  /**
+   * Editing the details a person owns.
+   *
+   * Name, address, postcode, probability, next milestone — and deliberately not
+   * a single money figure. GDV, forecast profit, equity and return on cost are
+   * written by appraisal.save from engine output; a form that let a valuer type
+   * one over the top would put a number on the pipeline, in portfolio exposure
+   * and in the funding pack that no engine had produced. deals.update no longer
+   * accepts them either.
+   */
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: '', address: '', postcode: '', probability: 0, nextMilestone: '' });
+  const startEditing = () => {
+    if (!deal) return;
+    setDraft({
+      name: deal.name,
+      address: deal.address,
+      postcode: deal.postcode ?? '',
+      probability: deal.probability,
+      nextMilestone: deal.nextMilestone ?? '',
+    });
+    setEditing(true);
+  };
+  const saveDetails = trpc.deals.update.useMutation({
+    onSuccess: () => {
+      setEditing(false);
+      utils.deals.get.invalidate(dealId);
+      utils.deals.list.invalidate();
+      utils.documents.activity.invalidate(dealId);
+    },
+  });
 
   const setStage = trpc.deals.setStage.useMutation({
     onSuccess: () => {
@@ -211,6 +243,65 @@ export default function DealOverview() {
       <main className="max-w-[1480px] mx-auto px-4 sm:px-6 pb-14">
         {/* ===== Header block ===== */}
         <div className="mt-6 flex items-end justify-between gap-4 flex-wrap">
+          {editing ? (
+            <form
+              className="w-full flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveDetails.mutate({
+                  id: dealId,
+                  patch: {
+                    name: draft.name.trim(),
+                    address: draft.address.trim(),
+                    postcode: draft.postcode.trim(),
+                    probability: draft.probability,
+                    nextMilestone: draft.nextMilestone.trim(),
+                  },
+                });
+              }}
+            >
+              <label className="flex flex-col gap-1">
+                <span className="label-mono text-ink-3">Scheme name</span>
+                <input className="min-w-[220px]" aria-label="Scheme name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label-mono text-ink-3">Address</span>
+                <input className="min-w-[260px]" aria-label="Scheme address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label-mono text-ink-3">Postcode</span>
+                <input className="w-[110px] fig" aria-label="Scheme postcode" value={draft.postcode} onChange={(e) => setDraft({ ...draft, postcode: e.target.value })} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label-mono text-ink-3">Probability %</span>
+                <input
+                  className="w-[90px] fig"
+                  aria-label="Scheme probability"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.probability}
+                  onChange={(e) => setDraft({ ...draft, probability: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label-mono text-ink-3">Next milestone</span>
+                <input className="min-w-[200px]" aria-label="Next milestone" value={draft.nextMilestone} onChange={(e) => setDraft({ ...draft, nextMilestone: e.target.value })} />
+              </label>
+              <Button type="submit" loading={saveDetails.isPending} disabled={!draft.name.trim() || !draft.address.trim()}>
+                Save details
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              {saveDetails.error && <div className="w-full text-[12px] text-status-red">{saveDetails.error.message}</div>}
+              <div className="w-full text-[11.5px] text-ink-3">
+                {/* said out loud, because the absence of GDV here is the point */}
+                GDV, profit, equity and return on cost are computed by the appraisal engine and cannot be typed in.
+              </div>
+            </form>
+          ) : (
+            <>
           <div>
             <div className="eyebrow">Deal overview</div>
             <h1 className="mt-1.5 text-[22px] sm:text-[27px] font-bold tracking-[-0.8px] leading-tight">{deal.name}</h1>
@@ -223,6 +314,9 @@ export default function DealOverview() {
                   <span className="font-medium">{deal.owner.name}</span>
                 </span>
               )}
+              <button type="button" className="text-[12px] font-semibold text-brand-ink hover:underline" onClick={startEditing}>
+                Edit details
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-6">
@@ -238,6 +332,8 @@ export default function DealOverview() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* ===== Lifecycle strip ===== */}

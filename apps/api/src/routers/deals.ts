@@ -264,36 +264,63 @@ export const dealsRouter = router({
       return updated;
     }),
 
+  /**
+   * The details a person owns, and only those.
+   *
+   * This used to accept gdv, forecastProfit, equityRequired, roc and viability
+   * as well — every headline figure on the deal card. Those are ENGINE-OWNED:
+   * appraisal.save writes them from computeAppraisal output, under a comment
+   * that says so, and viability is derived from profit on cost by threshold.
+   * A caller could set a GDV by hand that no engine had produced, and it would
+   * stand on the pipeline, in portfolio exposure and in the funding pack until
+   * the next appraisal save silently overwrote it.
+   *
+   * That is the one rule this product does not bend: one shared calculation
+   * engine for every surface. It survived only because nothing in the app called
+   * this procedure, so nobody had walked through the door. Removing them breaks
+   * no caller for exactly the same reason.
+   *
+   * deals.create still takes an early GDV estimate, and that is different: there
+   * is no appraisal yet, and the first save takes ownership of the figure.
+   */
   update: internalProcedure
     .input(
       z.object({
         id: z.string(),
         patch: z.object({
-          name: z.string().optional(),
-          address: z.string().optional(),
+          name: z.string().min(1).max(120).optional(),
+          address: z.string().min(1).max(200).optional(),
           postcode: z.string().max(9).optional(),
           probability: z.number().int().min(0).max(100).optional(),
-          nextMilestone: z.string().optional(),
-          viability: z.enum(['PROCEED', 'CAUTION', 'DECLINE']).optional(),
-          gdv: z.number().min(0).optional(),
-          forecastProfit: z.number().optional(),
-          equityRequired: z.number().min(0).optional(),
-          roc: z.number().optional(),
+          nextMilestone: z.string().max(120).optional(),
         }),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-      const { gdv, forecastProfit, equityRequired, ...rest } = input.patch;
-      return ctx.prisma.deal.update({
-        where: { id: deal.id },
-        data: {
-          ...rest,
-          ...(gdv != null ? { gdv: toPence(gdv) } : {}),
-          ...(forecastProfit != null ? { forecastProfit: toPence(forecastProfit) } : {}),
-          ...(equityRequired != null ? { equityRequired: toPence(equityRequired) } : {}),
-        },
-      });
+      const updated = await ctx.prisma.deal.update({ where: { id: deal.id }, data: input.patch });
+
+      /**
+       * Recorded, because the address on a valuation workfile is not cosmetic:
+       * comparables, the site pack and the Red Book report all read it, and a
+       * valuer asked months later why a scheme moved street needs an answer.
+       * Only what actually changed.
+       */
+      const changed = (Object.keys(input.patch) as Array<keyof typeof input.patch>).filter(
+        (k) => input.patch[k] !== undefined && input.patch[k] !== (deal as Record<string, unknown>)[k],
+      );
+      if (changed.length) {
+        await ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: deal.id,
+            actor: ctx.principal.name,
+            action: 'edited deal details',
+            target: changed.join(', '),
+          },
+        });
+      }
+      return updated;
     }),
 });
