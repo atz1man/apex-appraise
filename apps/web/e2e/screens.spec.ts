@@ -458,8 +458,10 @@ test.describe('internal screens', () => {
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/redbook`);
     await page.getByRole('button', { name: 'Draft narrative with AI' }).click();
-    // live LLM drafting when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
-    await expect(page.getByText('AI-drafted — valuer to review').first()).toBeVisible({ timeout: 90_000 });
+    // live LLM drafting when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is
+    // instant. Wait on the commentary page itself, not on the AI marker — that
+    // marker is absent when a template drafted it, which is the point below.
+    await expect(page.locator('.a4-page', { hasText: 'Valuation commentary' })).toBeVisible({ timeout: 90_000 });
     // drafted prose gets its own sheet; scope to it — the AI-use disclosure on the
     // final page names the same sections, so unscoped text matches collide (M2)
     const commentary = page.locator('.a4-page', { hasText: 'Valuation commentary' });
@@ -467,8 +469,57 @@ test.describe('internal screens', () => {
     await expect(commentary.getByText('Market commentary')).toBeVisible();
     await expect(commentary.getByText('Risk commentary')).toBeVisible();
     await expect(page.getByText('Use of artificial intelligence')).toBeVisible();
-    await expect(page.getByText(/Report narrative — drafted the market commentary/)).toBeVisible();
-    await expect(page.getByText(/No artificial intelligence system computed, adjusted or approved any figure/)).toBeVisible();
+
+    /**
+     * The declaration must match what actually wrote the prose, and this test
+     * runs both ways: with ANTHROPIC_API_KEY a model drafts it, without one — CI,
+     * and any developer without a key — a deterministic template does.
+     *
+     * So assert the CORRESPONDENCE rather than one branch. It used to assert the
+     * AI branch unconditionally and passed in CI, where no model had run,
+     * because the disclosure was derived from whether a key was configured
+     * rather than from what produced the sections. It was the misstatement
+     * written down as the expectation.
+     */
+    /**
+     * Compare the page against the RECORD, not against itself.
+     *
+     * This test runs both ways — with ANTHROPIC_API_KEY a model drafts the
+     * sections, without one a deterministic template does — so it has to ask
+     * which happened rather than assume. `model` on the stored narrative is that
+     * answer: the name of whatever produced the prose now in the report, or
+     * 'template'.
+     *
+     * Two earlier versions of this assertion were wrong. The first demanded the
+     * AI branch unconditionally and passed in CI where no model had run, because
+     * the disclosure was derived from whether a key was configured rather than
+     * from what wrote the sections — the misstatement written down as the
+     * expectation. The second branched on what the page rendered, which cannot
+     * fail: flipping the page's behaviour just moves it to the other branch.
+     */
+    const model = await page.evaluate(async (dealId) => {
+      const r = await fetch(`/trpc/appraisal.aiDisclosure?input=${encodeURIComponent(JSON.stringify({ json: dealId }))}`, {
+        headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+      });
+      return ((await r.json()).result.data.json as { model: string | null }).model;
+    }, id);
+
+    const modelDrafted = !!model && model !== 'template' && model !== 'demo';
+    const foot = page.locator('.a4-page', { hasText: 'Valuation commentary' });
+    const markers = page.getByText('AI-drafted — valuer to review');
+
+    if (modelDrafted) {
+      await expect(markers.first(), `${model} drafted it and the sections were not flagged`).toBeVisible();
+      await expect(foot.getByText(/Commentary drafted with AI assistance/)).toBeVisible();
+      await expect(page.getByText(/Report narrative — drafted the market commentary/)).toBeVisible();
+    } else {
+      // the template wrote it. Nothing may say otherwise — not the margin, not
+      // the printed footer, whatever earlier AI use the deal's audit trail holds
+      await expect(markers, `template prose was labelled AI-drafted (model: ${model})`).toHaveCount(0);
+      await expect(foot.getByText(/Commentary prepared from the appraisal figures/)).toBeVisible();
+      await expect(foot.getByText(/drafted with AI assistance/)).toHaveCount(0);
+    }
+
     await expect(page.locator('.a4-page')).toHaveCount(7);
     await expect(page.getByText(/Page 7 of 7/)).toBeVisible();
   });
