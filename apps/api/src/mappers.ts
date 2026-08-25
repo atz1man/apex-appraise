@@ -47,6 +47,12 @@ export function appraisalRowToEngineInput(a: Appraisal): AppraisalInput {
       arrangementFeePct: a.arrangementFeePct,
       spendProfile: spendProfileMap[a.spendProfile] ?? 'scurve',
       absorptionUnitsPerMonth: a.absorptionUnitsPerMonth ?? undefined,
+      // a tranche only exists when both terms are set; an appraisal saved before
+      // these were persisted has neither, and none of its figures move
+      mezz:
+        a.mezzToPct != null && a.mezzRatePct != null
+          ? { toPct: a.mezzToPct, ratePct: a.mezzRatePct, drawFactorPct: a.drawFactorPct ?? 55 }
+          : undefined,
     },
     site: { mode: a.siteMode === 'PROFIT' ? 'profit' : 'residual', landFixed: P(a.landFixed), acqPct: a.acqPct },
     disposal: { agentPct: a.agentPct, legalPct: a.legalPct },

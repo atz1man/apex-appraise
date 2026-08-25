@@ -86,6 +86,14 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     contingencyPct: input.contingencyPct,
     ltcPct: input.finance.ltcPct,
     ratePct: input.finance.ratePct,
+    /**
+     * The mezzanine tranche. These columns existed and were written only by the
+     * seed — the appraisal page held the terms in component state, so changing
+     * the mezzanine rate did not even mark the appraisal dirty.
+     */
+    mezzToPct: input.finance.mezz?.toPct ?? null,
+    mezzRatePct: input.finance.mezz?.ratePct ?? null,
+    drawFactorPct: input.finance.mezz?.drawFactorPct ?? 55,
     periodMonths: Math.round(input.finance.periodMonths),
     salesMonths: Math.round(input.finance.salesMonths),
     arrangementFeePct: input.finance.arrangementFeePct,

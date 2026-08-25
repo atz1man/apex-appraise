@@ -10,4 +10,5 @@ export * from './rollups.js';
 export * from './deposits.js';
 export * from './lp.js';
 export * from './cost-report.js';
+export * from './stack.js';
 export * from './format.js';

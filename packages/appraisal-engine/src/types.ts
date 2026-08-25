@@ -50,6 +50,17 @@ export interface FinanceInput {
    * flat salesMonths spread. Omit for the classic even-spread model.
    */
   absorptionUnitsPerMonth?: number;
+  /**
+   * The mezzanine tranche, when the stack has one — see capitalStack().
+   *
+   * The ENGINE'S OWN FIGURES DO NOT USE THIS. `interest` is senior debt only,
+   * compounding monthly on the drawn balance, and profit, return on cost and
+   * the residual land value follow from that. The mezzanine is carried here so
+   * the stack has one shared definition and the terms persist; treating its
+   * cost as an appraisal input is a financial-modelling decision that has not
+   * been made. The panel that shows it says so.
+   */
+  mezz?: { toPct: number; ratePct: number; drawFactorPct: number };
 }
 
 export type SiteMode = 'residual' | 'profit';
