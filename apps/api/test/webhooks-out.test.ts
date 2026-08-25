@@ -27,6 +27,24 @@ const addEndpoint = (t: Tenant, url: string, events: string[]) =>
     secret: string;
   }>;
 
+/** A minimal but real appraisal — the engine needs enough to produce figures. */
+const baseAppraisal = (dealId: string) => ({
+  dealId,
+  source: 'manual',
+  input: {
+    units: [{ label: 'Houses', count: 10, area: 1000, cap: 400, conf: 'high', source: 'note' }],
+    efficiency: 90,
+    trades: [{ label: 'Build', rate: 150 }],
+    profFeePct: 11,
+    contingencyPct: 5,
+    otherCosts: [],
+    finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 3, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+    site: { mode: 'residual', landFixed: 0, acqPct: 6.8 },
+    disposal: { agentPct: 1.5, legalPct: 0.5 },
+    targetProfitOnGdvPct: 20,
+  },
+});
+
 describe('the signature', () => {
   const secret = newWebhookSecret();
   const body = JSON.stringify({ event: 'appraisal.approved', data: { gdv: 1000000 } });
@@ -343,5 +361,130 @@ describe('delivery', () => {
     ).resolves.toMatchObject({ sent: 0, failed: 1 });
     const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
     expect(row.error).toContain('ECONNREFUSED');
+  });
+});
+
+/**
+ * Four of the five declared events were never sent.
+ *
+ * WEBHOOK_EVENTS names five. org.createWebhook validates against that list and
+ * refuses anything else, with a comment saying exactly why: "an endpoint
+ * subscribed to nothing we emit would sit there looking healthy and never fire,
+ * which is worse than being told now."
+ *
+ * Only appraisal.approved was ever emitted. So a firm could subscribe to
+ * covenant.breached — the API would accept it, /api/v1 documents it — and the
+ * endpoint would sit there looking healthy and never fire, which is the outcome
+ * that comment calls worse. For a covenant monitor it is the worst of the four:
+ * silence from one reads as "no breaches".
+ */
+describe('every event we offer, we send', () => {
+  const drainOne = async (t: Tenant) => {
+    const rows = await prisma.webhookDelivery.findMany({ where: { orgId: t.orgId } });
+    return rows.map((r) => ({ event: r.event, data: JSON.parse(r.payload).data as Record<string, unknown> }));
+  };
+
+  it('deal.created fires when a deal is created', async () => {
+    const t = await makeTenant('EvDeal');
+    await addEndpoint(t, 'https://a.example.com/deals', ['deal.created']);
+    await callerFor(t.principal).deals.create({
+      name: 'Webhook Wharf', address: '2 Test Street', assetType: 'RESIDENTIAL', stage: 'SOURCING',
+      probability: 50, gdv: 0, forecastProfit: 0, equityRequired: 0,
+    } as never);
+
+    const queued = await drainOne(t);
+    expect(queued.map((q) => q.event)).toEqual(['deal.created']);
+    expect(queued[0]!.data.name).toBe('Webhook Wharf');
+  });
+
+  it('report.shared fires when a link is created, and never carries the token', async () => {
+    const t = await makeTenant('EvShare');
+    await addEndpoint(t, 'https://a.example.com/shares', ['report.shared']);
+    const share = (await callerFor(t.principal).appraisal.createShare({
+      dealId: t.dealId, kind: 'appraisal', days: 7,
+    } as never)) as { token: string };
+
+    const queued = await drainOne(t);
+    expect(queued.map((q) => q.event)).toEqual(['report.shared']);
+    /**
+     * The link IS the credential — anyone holding the delivery would hold the
+     * report. A receiver's logs are not a place to put a bearer token.
+     */
+    const raw = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    expect(raw.payload, 'the share token was published in the webhook body').not.toContain(share.token);
+  });
+
+  it('appraisal.submitted fires when a version goes for review', async () => {
+    const t = await makeTenant('EvSubmit');
+    await addEndpoint(t, 'https://a.example.com/submitted', ['appraisal.submitted']);
+    const caller = callerFor(t.principal);
+    const saved = (await caller.appraisal.save(baseAppraisal(t.dealId) as never)) as { id: string };
+    await caller.appraisal.submitForReview({ versionId: saved.id } as never);
+
+    const queued = await drainOne(t);
+    expect(queued.map((q) => q.event)).toEqual(['appraisal.submitted']);
+    expect(queued[0]!.data.appraisalId).toBe(saved.id);
+  });
+});
+
+/**
+ * The one whose absence was worst. A lender or a firm's own risk system
+ * subscribes to be told when a facility covenant breaks; it heard nothing,
+ * which from a covenant monitor reads as "nothing to report".
+ */
+describe('covenant.breached', () => {
+  const approve = async (t: Tenant, input: unknown) => {
+    const caller = callerFor(t.principal);
+    const saved = (await caller.appraisal.save(input as never)) as { id: string };
+    await caller.appraisal.submitForReview({ versionId: saved.id } as never);
+    await callerFor({ ...t.principal, role: 'ADMIN' }).appraisal.review({
+      versionId: saved.id, decision: 'approve',
+    } as never);
+    return saved.id;
+  };
+
+  it('fires when approved figures break a limit the firm set', async () => {
+    const t = await makeTenant('EvCov');
+    await addEndpoint(t, 'https://a.example.com/covenants', ['covenant.breached']);
+    // a limit this scheme cannot meet: no profit on cost is above 500%
+    await prisma.orgPolicy.upsert({
+      where: { orgId: t.orgId },
+      create: { orgId: t.orgId, covMinProfitOnCostPct: 500 },
+      update: { covMinProfitOnCostPct: 500 },
+    });
+
+    await approve(t, baseAppraisal(t.dealId));
+
+    const rows = await prisma.webhookDelivery.findMany({ where: { orgId: t.orgId, event: 'covenant.breached' } });
+    expect(rows, 'a covenant monitor was told nothing about a breach').toHaveLength(1);
+    const breaches = JSON.parse(rows[0]!.payload).data.breaches as Array<{ key: string; limitPct: number }>;
+    expect(breaches.map((b) => b.key)).toContain('profitOnCost');
+    expect(breaches[0]!.limitPct).toBe(500);
+  });
+
+  it('stays quiet when the figures are inside the limits', async () => {
+    const t = await makeTenant('EvCovOk');
+    await addEndpoint(t, 'https://a.example.com/covenants', ['covenant.breached']);
+    await prisma.orgPolicy.upsert({
+      where: { orgId: t.orgId },
+      create: { orgId: t.orgId, covLtgdvMaxPct: 99, covLtcMaxPct: 99, covMinProfitOnCostPct: 0 },
+      update: { covLtgdvMaxPct: 99, covLtcMaxPct: 99, covMinProfitOnCostPct: 0 },
+    });
+
+    await approve(t, baseAppraisal(t.dealId));
+
+    expect(
+      await prisma.webhookDelivery.count({ where: { orgId: t.orgId, event: 'covenant.breached' } }),
+      'an alert that fires when nothing is wrong is an alert people turn off',
+    ).toBe(0);
+  });
+
+  it('says nothing when the firm has set no covenants at all', async () => {
+    // no limits means nothing was tested — which is not the same as passing, and
+    // must not be reported as an event either way
+    const t = await makeTenant('EvCovNone');
+    await addEndpoint(t, 'https://a.example.com/covenants', ['covenant.breached']);
+    await approve(t, baseAppraisal(t.dealId));
+    expect(await prisma.webhookDelivery.count({ where: { orgId: t.orgId, event: 'covenant.breached' } })).toBe(0);
   });
 });

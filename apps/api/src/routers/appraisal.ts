@@ -6,6 +6,7 @@ import {
   autoAppraise,
   compareAppraisals,
   computeAppraisal,
+  testCovenants,
   jvWaterfall,
   sensitivityGrid,
   weightedComparables,
@@ -379,6 +380,16 @@ export const appraisalRouter = router({
         orgId: ctx.principal.orgId, dealId: input.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'shared a report by link', target: `${deal.name} — ${input.kind}`, ip: ctx.ip,
       });
+      // never the token: a webhook payload is a copy of the link, and the link IS
+      // the credential — anyone holding the delivery would hold the report
+      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'report.shared', {
+        dealId: input.dealId,
+        dealName: deal.name,
+        shareId: share.id,
+        kind: input.kind,
+        sharedBy: ctx.principal.name,
+        expiresAt,
+      });
       return { id: share.id, token, expiresAt };
     }),
 
@@ -447,6 +458,15 @@ export const appraisalRouter = router({
         orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'submitted an appraisal version for review', target: v.label, ip: ctx.ip,
       });
+      const submittedDeal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.submitted', {
+        dealId: v.dealId,
+        dealName: submittedDeal?.name ?? null,
+        appraisalId: row.id,
+        label: row.label,
+        submittedBy: ctx.principal.name,
+        submittedAt: row.submittedAt,
+      });
       return { id: row.id, status: row.reviewStatus };
     }),
 
@@ -509,6 +529,51 @@ export const appraisalRouter = router({
           profit: Math.round(result.profit * 100) / 100,
           profitOnCost: result.poc,
         });
+
+        /**
+         * And separately, if the figures just approved break one of the firm's
+         * own facility covenants.
+         *
+         * Emitted at APPROVAL rather than on every save, because approval is the
+         * firm's committed position and that is what a lender's covenant applies
+         * to — a draft that dips under a limit for an afternoon is not a breach,
+         * and reporting it as one would train everybody to ignore the alert.
+         * Approval is also discrete, so this needs no stored previous state to
+         * avoid re-sending the same breach.
+         *
+         * The alert nobody was getting: this event has been offered to
+         * integrators since outbound webhooks shipped — an endpoint could
+         * subscribe, and org.createWebhook would accept it — and nothing has ever
+         * emitted it. A lender's system watching for a breach heard silence, and
+         * silence from a covenant monitor reads as "no breaches".
+         */
+        const policy = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+        const covenants = testCovenants(
+          { facility: result.facility, totalCost: result.totalCost, gdv: result.gdv, profit: result.profit },
+          {
+            ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
+            ltcMaxPct: policy?.covLtcMaxPct ?? null,
+            minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
+          },
+        );
+        if (covenants.breaches.length > 0) {
+          await emitWebhook(ctx.prisma, ctx.principal.orgId, 'covenant.breached', {
+            dealId: v.dealId,
+            dealName: deal?.name ?? null,
+            appraisalId: row.id,
+            label: row.label,
+            approvedBy: ctx.principal.name,
+            approvedAt: row.reviewedAt,
+            breaches: covenants.breaches.map((b) => ({
+              key: b.key,
+              label: b.label,
+              actualPct: Math.round(b.actualPct * 100) / 100,
+              limitPct: b.limitPct,
+              direction: b.direction,
+              headroomPts: Math.round(b.headroomPts * 100) / 100,
+            })),
+          });
+        }
       }
       return { id: row.id, status: row.reviewStatus };
     }),

@@ -15,6 +15,7 @@ import {
   testCovenants,
 } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
+import { emitWebhook } from '../webhook-delivery.js';
 
 const dealOut = (d: {
   id: string; name: string; address: string; postcode?: string | null; assetType: string; stage: string;
@@ -212,7 +213,7 @@ export const dealsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       await assertCanAddDeal(ctx.prisma, ctx.principal.orgId, org?.plan ?? 'TRIAL');
-      return ctx.prisma.deal.create({
+      const created = await ctx.prisma.deal.create({
         data: {
           orgId: ctx.principal.orgId,
           name: input.name,
@@ -229,6 +230,16 @@ export const dealsRouter = router({
           ownerId: ctx.principal.userId,
         },
       });
+      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'deal.created', {
+        dealId: created.id,
+        name: created.name,
+        address: created.address,
+        assetType: created.assetType,
+        stage: created.stage,
+        createdBy: ctx.principal.name,
+        createdAt: created.createdAt,
+      });
+      return created;
     }),
 
   setStage: internalProcedure
