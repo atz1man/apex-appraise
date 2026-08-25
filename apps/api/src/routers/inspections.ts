@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { J, P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
+import { assertUnchanged } from '../optimistic.js';
 
 const zRoom = z.object({
   name: z.string(),
@@ -114,21 +115,16 @@ export const inspectionsRouter = router({
        * reopens the hole for whichever caller forgets next, and the person it
        * costs is a surveyor whose site notes vanish without a trace.
        */
-      if (!input.expectedUpdatedAt) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Saving an existing inspection needs expectedUpdatedAt — the stamp of the one you loaded.',
-        });
-      }
-      if (existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
-        const by = existing.surveyorId
-          ? await ctx.prisma.user.findUnique({ where: { id: existing.surveyorId }, select: { name: true } })
-          : null;
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: `This inspection was saved${by ? ` by ${by.name}` : ''} after you opened it. Reload to see the current notes before saving yours — nothing you can see here has been lost.`,
-        });
-      }
+      await assertUnchanged({
+        what: 'inspection',
+        current: existing.updatedAt,
+        expected: input.expectedUpdatedAt,
+        lastActor: async () =>
+          existing.surveyorId
+            ? (await ctx.prisma.user.findUnique({ where: { id: existing.surveyorId }, select: { name: true } }))?.name
+            : null,
+        advice: 'Reload to see the current notes before saving yours — nothing you can see here has been lost.',
+      });
 
       const row = await ctx.prisma.inspection.update({ where: { id: existing.id }, data });
       return inspectionOut(row);

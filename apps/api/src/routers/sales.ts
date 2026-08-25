@@ -4,7 +4,7 @@ import { lettingsRollup, salesRollup } from '@apex/appraisal-engine';
 import { LETTING_MILESTONES, SALES_MILESTONES } from '@apex/types';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
-import { assertOwned } from '../auth/owned.js';
+import { assertUnchanged } from '../optimistic.js';
 
 const salesStatusForProg = (prog: number) =>
   prog >= 7 ? 'HANDOVER' : prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE';
@@ -27,6 +27,8 @@ const unitOut = (u: any) => ({
   reservedAt: u.reservedAt,
   progress: u.progress,
   stalled: u.stalled,
+  /** the stamp an in-place save has to hand back — see sales.upsertUnit */
+  updatedAt: u.updatedAt,
 });
 
 const tenancyOut = (t: any) => ({
@@ -44,6 +46,8 @@ const tenancyOut = (t: any) => ({
   appliedAt: t.appliedAt,
   stalled: t.stalled,
   arrears: P(t.arrears),
+  /** the stamp an in-place save has to hand back — see sales.upsertTenancy */
+  updatedAt: t.updatedAt,
 });
 
 export const salesRouter = router({
@@ -104,12 +108,21 @@ export const salesRouter = router({
         incentive: z.string().nullable().default(null),
         progress: z.number().int().min(0).max(7).default(0),
         stalled: z.boolean().default(false),
+        /**
+         * The stamp of the plot the caller loaded.
+         *
+         * Required when editing an existing one. This writes EVERY field from a
+         * single form — agreed value, buyer, solicitor, incentive, progress — so
+         * two agents on one plot means whichever saves second reverts the other,
+         * on a figure that reaches a contract.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-      const { id, dealId, appraisedValue, agreedValue, ...rest } = input;
+      const { id, dealId, appraisedValue, agreedValue, expectedUpdatedAt, ...rest } = input;
       const data = {
         ...rest,
         appraisedValue: toPence(appraisedValue),
@@ -121,6 +134,12 @@ export const salesRouter = router({
       if (id) {
         const existing = await ctx.prisma.unit.findFirst({ where: { id, orgId: ctx.principal.orgId } });
         if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+        await assertUnchanged({
+          what: `plot “${existing.name}”`,
+          current: existing.updatedAt,
+          expected: expectedUpdatedAt,
+          advice: 'Reload to see the current details before saving yours — the agreed value may have moved.',
+        });
         return ctx.prisma.unit.update({ where: { id }, data: { ...data, reservedAt: existing.reservedAt ?? data.reservedAt } });
       }
       return ctx.prisma.unit.create({
@@ -181,12 +200,14 @@ export const salesRouter = router({
         incentive: z.string().nullable().default(null),
         progress: z.number().int().min(0).max(5).default(0),
         stalled: z.boolean().default(false),
+        /** the stamp of the tenancy the caller loaded — see upsertUnit above */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-      const { id, dealId, ervPcm, agreedRentPcm, ...rest } = input;
+      const { id, dealId, ervPcm, agreedRentPcm, expectedUpdatedAt, ...rest } = input;
       const data = {
         ...rest,
         ervPcm: toPence(ervPcm),
@@ -195,7 +216,14 @@ export const salesRouter = router({
         appliedAt: input.progress > 0 ? new Date() : null,
       };
       if (id) {
-        await assertOwned(ctx.prisma.tenancy, id, ctx.principal.orgId);
+        const existing = await ctx.prisma.tenancy.findFirst({ where: { id, orgId: ctx.principal.orgId } });
+        if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+        await assertUnchanged({
+          what: `tenancy “${existing.name}”`,
+          current: existing.updatedAt,
+          expected: expectedUpdatedAt,
+          advice: 'Reload to see the current details before saving yours — the agreed rent may have moved.',
+        });
         return ctx.prisma.tenancy.update({ where: { id }, data });
       }
       return ctx.prisma.tenancy.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });

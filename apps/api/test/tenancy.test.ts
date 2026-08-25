@@ -181,6 +181,9 @@ describe('the suite can tell a refusal from a wall', () => {
       level: 0,
       ervPcm: 1200,
       progress: 0,
+      // an in-place save carries the stamp of the record it loaded — see
+      // unit-concurrency.test.ts
+      expectedUpdatedAt: (mine as { updatedAt: Date }).updatedAt,
     } as never);
     expect((updated as { name: string }).name).toBe('Flat 2 — renamed');
   });

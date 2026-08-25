@@ -241,6 +241,10 @@ model Unit {
   reservedAt DateTime?
   progress Int   @default(0) // 0-7 conveyancing milestone index
   stalled Boolean @default(false)
+  /// The stamp an in-place save has to hand back — see sales.upsertUnit. Two
+  /// agents on one plot is an ordinary afternoon in a sales office, and this row
+  /// carries an agreed value.
+  updatedAt DateTime @default(now()) @updatedAt
   milestones SalesMilestone[]
 
   @@index([dealId, status])
@@ -274,6 +278,9 @@ model Tenancy {
   appliedAt DateTime?
   stalled Boolean @default(false)
   arrears BigInt @default(0)
+  /// The stamp an in-place save has to hand back — see sales.upsertTenancy. The
+  /// same drawer, the same two agents, and an agreed rent is a tenancy term.
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([dealId, status])
 }

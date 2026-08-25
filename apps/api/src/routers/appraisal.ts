@@ -22,6 +22,7 @@ import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
+import { assertUnchanged } from '../optimistic.js';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -226,20 +227,16 @@ export const appraisalRouter = router({
          * far shorter than a person, and the consequence is only the behaviour
          * this replaces.
          */
-        if (!input.expectedUpdatedAt) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Editing an existing version needs expectedUpdatedAt — the updatedAt of the version you loaded.',
-          });
-        }
-        if (existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
-          const by = existing.submittedById ?? null;
-          const who = by ? await ctx.prisma.user.findUnique({ where: { id: by }, select: { name: true } }) : null;
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: `“${existing.label}” changed${who ? ` (last touched by ${who.name})` : ''} while you were editing it. Reload to see the current figures, then reapply your changes — or save yours as a new version.`,
-          });
-        }
+        await assertUnchanged({
+          what: `version “${existing.label}”`,
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          lastActor: async () =>
+            existing.submittedById
+              ? (await ctx.prisma.user.findUnique({ where: { id: existing.submittedById }, select: { name: true } }))?.name
+              : null,
+          advice: 'Reload to see the current figures, then reapply your changes — or save yours as a new version.',
+        });
 
         const withdrawn = existing.reviewStatus === 'in_review';
         row = await ctx.prisma.appraisal.update({

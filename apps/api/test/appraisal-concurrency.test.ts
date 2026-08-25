@@ -60,7 +60,10 @@ describe('two people editing the same draft', () => {
         input: input({ units: [{ label: '2-bed apartments', count: 14, area: 750, cap: 420 }] }),
         expectedUpdatedAt: opened.updatedAt,
       } as never),
-    ).rejects.toThrow(/changed .* while you were editing it|changed while you were editing it/);
+      // the wording is shared with every other optimistic lock — see
+      // src/optimistic.ts — so it is asserted on the shape rather than prose
+      // that would drift per procedure
+    ).rejects.toThrow(/was saved.*after you opened it/s);
 
     const after = await prisma.appraisal.findFirstOrThrow({ where: { dealId: T.dealId, isCurrent: true } });
     const trades = JSON.parse(after.trades) as Array<{ rate: number }>;
