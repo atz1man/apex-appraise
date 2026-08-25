@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { formatMoneyFull } from '@apex/appraisal-engine';
 import { FirmMark } from './ui';
-import { A4Page as PaperPage, PRINT_CSS } from './paper';
+import { A4Page as PaperPage, PRINT_CSS, docDate } from './paper';
 
 /**
  * The client-facing terms of engagement (RICS VPS 1), laid out for A4. Shared by
@@ -58,8 +58,15 @@ export const TERMS_PRINT_CSS = `
 }
 `;
 
-const fmtLong = (d: string | Date) =>
-  new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+/**
+ * Every date this document prints is in the firm's time — see paper.tsx.
+ *
+ * This one was measured: a valuation date the valuer typed as 30 June 2026
+ * rendered as 29 June 2026 to a client opening the signing link from New York.
+ * The signing link is deliberately public and deliberately for someone outside
+ * the firm, so that reader is the ordinary case here.
+ */
+const fmtLong = docDate;
 
 /** the engagement letter sets its own margins — see components/paper.tsx */
 const A4Page = ({ children }: { children: ReactNode }) => <PaperPage padding="54px 64px">{children}</PaperPage>;

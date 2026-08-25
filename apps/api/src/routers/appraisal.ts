@@ -105,6 +105,16 @@ export const appraisalRouter = router({
       label: row.label,
       /** the token an in-place save has to hand back — see save.expectedUpdatedAt */
       updatedAt: row.updatedAt,
+      /**
+       * When this version was signed off, and whether it was.
+       *
+       * A printed report needs a date of its own or it dates itself from the
+       * reader's clock — which is what both documents did, so a valuation
+       * re-dated itself every time anybody opened it. An approved version has a
+       * real signing date; a draft has only the moment it was last saved.
+       */
+      reviewStatus: row.reviewStatus,
+      reviewedAt: row.reviewedAt,
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,

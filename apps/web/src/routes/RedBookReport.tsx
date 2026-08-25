@@ -15,7 +15,8 @@ import { getToken, trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
-import { A4Page as PaperPage, PRINT_CSS } from '../components/paper';
+import { A4Page as PaperPage, PRINT_CSS, docDate } from '../components/paper';
+import { reportDates } from '../lib/report-dates';
 
 /** the Red Book sets its own margins — see the note in components/paper.tsx */
 const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
@@ -67,7 +68,8 @@ const GENERAL_ASSUMPTIONS = [
 
 const SQFT_PER_SQM = 10.764;
 
-const fmtLong = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+/** every date this document prints is in the firm's time — see paper.tsx */
+const fmtLong = docDate;
 const round1k = (n: number) => Math.round(n / 1000) * 1000;
 
 /* ------------------------- pounds in words ------------------------- */
@@ -170,6 +172,13 @@ export default function RedBookReport() {
    * exist, in a document carrying professional indemnity.
    */
   const { data: sitePhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The inspection this report is written on the back of. Same reason as the
+   * photographs above: the report stated an inspection date of *today*, so a
+   * property nobody has ever attended was reported as inspected on whatever day
+   * the reader opened the file.
+   */
+  const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
   const valuer = valuerFrom(toe);
   const utils = trpc.useUtils();
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
@@ -210,7 +219,7 @@ export default function RedBookReport() {
 
   const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
-  const today = fmtLong(new Date());
+  const dates = reportDates({ appraisal: appr, terms: toe, inspection });
   const subject = deal?.name ?? 'Subject property';
 
   const comps = compsData?.comps ?? [];
@@ -444,11 +453,20 @@ export default function RedBookReport() {
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Inspection date</div>
-                <div className="mt-1.5 text-[14px] font-semibold">{today}</div>
+                {dates.inspection ? (
+                  <div className="mt-1.5 text-[14px] font-semibold">{dates.inspection}</div>
+                ) : (
+                  /* the same rule as the valuer's name and the photographs: state
+                     the gap rather than fill it, because a reader relies on this */
+                  <div className="mt-1.5 text-[12.5px] leading-[1.45] text-ink-2">
+                    No inspection is recorded for this property. This valuation is made without
+                    inspection and on the assumptions stated.
+                  </div>
+                )}
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Valuation date</div>
-                <div className="mt-1.5 text-[14px] font-semibold">{today}</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{dates.valuation}</div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Valuer</div>
@@ -899,7 +917,16 @@ export default function RedBookReport() {
                   <div className="mt-2.5 text-[14px] font-semibold">{valuer.name}</div>
                   {valuer.reg && <div className="text-[12px] text-ink-2">{valuer.reg}</div>}
                   <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
-                  <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {today}</div>
+                  {dates.signedOff ? (
+                    <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                  ) : (
+                    /* the unnamed branch below already refuses to print "a date
+                       pretending it was signed"; a version nobody approved is
+                       the same claim with a name on it */
+                    <div className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-2">
+                      Prepared {dates.report}. This version has not been approved for issue.
+                    </div>
+                  )}
                 </>
               ) : (
                 /* no name, no registration number, and no date pretending it was signed */
