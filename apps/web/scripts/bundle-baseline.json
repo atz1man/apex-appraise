@@ -1,6 +1,7 @@
 {
   "entryKb": 292,
   "routes": {
+    "ApiDocs": 9,
     "AppraisalReport": 76,
     "AutoAppraisal": 30,
     "Benchmarking": 23,

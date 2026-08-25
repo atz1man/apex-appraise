@@ -45,7 +45,7 @@ async function assertSelfContained(
   expect(offOrigin, `${where} loaded something from another origin`).toEqual([]);
 }
 
-for (const path of ['/', '/login', '/privacy', '/terms']) {
+for (const path of ['/', '/login', '/privacy', '/terms', '/docs/api']) {
   test(`${path} contacts nothing but this product`, async ({ page, baseURL }) => {
     await assertSelfContained(page, baseURL!, path, async () => {
       await page.goto(path);

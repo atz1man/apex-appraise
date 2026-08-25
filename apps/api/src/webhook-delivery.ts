@@ -23,17 +23,15 @@ import { openFor } from './sealed-fields.js';
  *   valid forever.
  */
 
-export const WEBHOOK_EVENTS = [
-  'appraisal.approved',
-  'appraisal.submitted',
-  'covenant.breached',
-  'deal.created',
-  'report.shared',
-] as const;
-
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
-
-export const isWebhookEvent = (s: string): s is WebhookEvent => (WEBHOOK_EVENTS as readonly string[]).includes(s);
+/**
+ * The event names live in @apex/types/api, because the API documentation page
+ * lists them and the browser cannot import from this package. Re-exported so
+ * every existing import still resolves — and api-docs.test.ts asserts this is
+ * the SAME array, not a second one that happens to agree today.
+ */
+import { WEBHOOK_EVENTS, isWebhookEvent, type WebhookEvent } from '@apex/types/api';
+export { WEBHOOK_EVENTS, isWebhookEvent };
+export type { WebhookEvent };
 
 /** Shown once when an endpoint is created, exactly like an API key. */
 export const newWebhookSecret = () => `whsec_${randomBytes(24).toString('base64url')}`;

@@ -12,6 +12,7 @@ import { prisma as defaultPrisma } from './context.js';
 import { appraisalRowToEngineInput } from './mappers.js';
 import { hasScope, principalFromApiKey, type ApiPrincipal } from './api-keys.js';
 import { FEATURE_COPY, cheapestPlanWith, planHasFeature } from './entitlements.js';
+import { APP_URL } from './email.js';
 
 /**
  * The public API.
@@ -100,7 +101,13 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
   app.get('/api/v1', async () => ({
     data: {
       version: 'v1',
-      documentation: 'https://apex-appraise-web.fly.dev/docs/api',
+      /**
+       * Derived, not hardcoded. This used to name OUR OWN hosting provider's
+       * hostname, handed to every integrator of every self-hosted deployment,
+       * pointing at a page that did not exist on any of them. The literal is not
+       * repeated here on purpose: api-docs.test.ts greps this file for it.
+       */
+      documentation: `${APP_URL()}/docs/api`,
       authentication: 'Bearer token — create a key in Settings → API keys',
       endpoints: [
         { method: 'GET', path: '/api/v1/deals', description: 'Deals in your workspace', query: 'limit, cursor, stage' },

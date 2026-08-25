@@ -54,6 +54,7 @@ const Register = lazy(() => import('./routes/Register'));
 const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const SsoCallback = lazy(() => import('./routes/SsoCallback'));
+const ApiDocs = lazy(() => import('./routes/ApiDocs'));
 const SitePack = lazy(() => import('./routes/SitePack'));
 const WhatsNew = lazy(() => import('./routes/WhatsNew'));
 // public, and deliberately not behind Protected: a privacy notice you have to
@@ -185,6 +186,8 @@ export default function App() {
               client signing a specific engagement — React Router ranks the static
               path first, so the two do not collide */}
           <Route path="/terms" element={<Terms />} />
+          {/* the address /api/v1 hands every integrator */}
+          <Route path="/docs/api" element={<ApiDocs />} />
           {/* The root is the front door for BOTH audiences. A signed-in user gets
               their workspace; a stranger gets the product and its pricing, rather
               than being bounced to a login form with demo credentials on it —
