@@ -6,6 +6,7 @@ import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
 import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { useToast } from '../components/Toast';
 
 const MINUS = '−';
 
@@ -81,6 +82,7 @@ const deltaTone = (d: number) => (d > 0 ? statusTokens.green.text : d < 0 ? stat
 export default function SalesCrm() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  const toast = useToast();
 
   const [mode, setMode] = useState<'sales' | 'lettings'>('sales');
   const [view, setView] = useState<'table' | 'plan'>('table');
@@ -134,9 +136,21 @@ export default function SalesCrm() {
     },
   });
   const deleteUnit = trpc.sales.deleteUnit.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       utils.sales.units.invalidate(dealId);
       closeDrawer();
+      /**
+       * A buyer's portal login points at the plot. Deleting the plot used to
+       * leave them with an account whose every page answers NOT_FOUND, and told
+       * the person deleting nothing — the same shape as removing a colleague
+       * and silently killing the valuation links they had sent.
+       */
+      if (res.portalLogins > 0) {
+        toast.push(
+          'info',
+          `${res.portalLogins} buyer portal login${res.portalLogins === 1 ? '' : 's'} went with this plot — ${res.portalLogins === 1 ? 'that buyer' : 'those buyers'} can no longer sign in.`,
+        );
+      }
     },
   });
   const advanceUnit = trpc.sales.advanceMilestone.useMutation({
