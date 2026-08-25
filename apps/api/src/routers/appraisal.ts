@@ -23,6 +23,7 @@ import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from 
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
 import { assertUnchanged } from '../optimistic.js';
+import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -1634,56 +1635,6 @@ export const scenariosRouter = router({
 });
 
 // ---------- Scenario risk commentary (AI-drafted, figures from the engine) ----------
-
-/**
- * Fixed appraisal assumptions behind the scenario compare — kept in lockstep
- * with the grid in apps/web/src/routes/Scenarios.tsx (fees 11%, contingency 5%,
- * CIL £40/m² + S106 £150k, disposal 2%, 60% LTC @ 7.5% over 18+3 months,
- * 1.5% arrangement, 6.8% acq).
- */
-const SCENARIO_ASSUMPTIONS = {
-  efficiency: 90,
-  profFeePct: 11,
-  contingencyPct: 5,
-  cilPerSqm: 40,
-  s106: 150_000,
-  agentPct: 1.5,
-  legalPct: 0.5,
-  ltcPct: 60,
-  ratePct: 7.5,
-  periodMonths: 18,
-  salesMonths: 3,
-  arrangementFeePct: 1.5,
-  acqPct: 6.8,
-} as const;
-
-/** Scenario levers → engine metrics — identical maths to the web compare grid. */
-function scenarioMetrics(s: { blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }) {
-  const A = SCENARIO_ASSUMPTIONS;
-  const r = autoAppraise({
-    units: [{ label: 'Blended', count: 1, area: s.gia * (A.efficiency / 100), cap: s.blendedPsf }],
-    efficiency: A.efficiency,
-    buildPerSqft: s.buildPsf,
-    profFeePct: A.profFeePct,
-    contingencyPct: A.contingencyPct,
-    cilPerSqm: A.cilPerSqm,
-    s106: A.s106,
-    agentPct: A.agentPct,
-    legalPct: A.legalPct,
-    ltcPct: A.ltcPct,
-    ratePct: A.ratePct,
-    periodMonths: A.periodMonths,
-    salesMonths: A.salesMonths,
-    arrangementFeePct: A.arrangementFeePct,
-    targetProfitPct: s.targetProfitPct,
-    acqPct: A.acqPct,
-    asking: 0,
-  });
-  const land = r.residualNet * (1 + A.acqPct / 100);
-  const totalCost = r.saleCosts + r.build + r.fees + r.cont + r.other + r.finance + land;
-  const profit = r.gdv - totalCost;
-  return { residual: r.residualNet, gdv: r.gdv, totalCost, profit, poc: totalCost > 0 ? profit / totalCost : 0 };
-}
 
 type RiskOption = {
   name: string;
