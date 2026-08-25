@@ -29,7 +29,20 @@ export interface FoundFigure {
   /** as written, for the message a human reads */
   raw: string;
   value: number;
+  /**
+   * Significant digits AS WRITTEN, which is not the same as the significant
+   * digits of the value. "£8m" is one; "£8,000,000" is seven. The value cannot
+   * tell them apart — both are 8000000 — and the difference is the whole
+   * question of whether a figure is an abbreviation or a claim to precision.
+   */
+  writtenDigits: number;
 }
+
+/** Digits actually typed, ignoring separators and any leading zero. */
+const digitsWritten = (literal: string) => {
+  const bare = literal.replace(/[,\s]/g, '').replace(/\./g, '').replace(/^0+/, '');
+  return Math.max(1, bare.length);
+};
 
 export function moneyIn(text: string): FoundFigure[] {
   const out: FoundFigure[] = [];
@@ -37,7 +50,11 @@ export function moneyIn(text: string): FoundFigure[] {
     const digits = Number(m[1]!.replace(/,/g, ''));
     if (!Number.isFinite(digits)) continue;
     const suffix = m[2]?.toLowerCase();
-    out.push({ raw: m[0].trim(), value: digits * (suffix ? (MULTIPLIER[suffix] ?? 1) : 1) });
+    out.push({
+      raw: m[0].trim(),
+      value: digits * (suffix ? (MULTIPLIER[suffix] ?? 1) : 1),
+      writtenDigits: digitsWritten(m[1]!),
+    });
   }
   return out;
 }
@@ -46,15 +63,11 @@ export function percentIn(text: string): FoundFigure[] {
   const out: FoundFigure[] = [];
   for (const m of text.matchAll(PERCENT)) {
     const v = Number(m[1]!);
-    if (Number.isFinite(v)) out.push({ raw: m[0].trim(), value: v });
+    if (Number.isFinite(v)) out.push({ raw: m[0].trim(), value: v, writtenDigits: digitsWritten(m[1]!) });
   }
   return out;
 }
 
-const significantDigits = (n: number) => {
-  const s = String(Math.abs(n)).replace(/[.,]/g, '').replace(/0+$/, '');
-  return Math.max(1, s.length);
-};
 
 /**
  * Rounded by the language's own decimal rules, not by float arithmetic.
@@ -84,13 +97,25 @@ const roundToSigFigs = (n: number, digits: number) => {
  * it is written to seven digits and does not match at seven digits. That
  * distinction matters, because a transposed digit lands inside any percentage
  * tolerance you would otherwise reach for.
+ *
+ * The precision is the one the author WROTE, not the one the value happens to
+ * carry. This used to measure significantDigits(value), which strips trailing
+ * zeros — so "£8,000,000" counted as one significant digit and earned the same
+ * allowance as "£8m". Against an engine Market Value of £7,600,000, a draft
+ * reading "the Market Value is £8,000,000" was accepted: four hundred thousand
+ * pounds out, written to the penny-place as a precise figure, in the sentence
+ * this guard exists for. Measured before the change and after.
+ *
+ * Written out in full, a round number is a claim about precision and is held to
+ * it. "£8m" still passes, because saying a figure shortly is not the same as
+ * saying a different figure.
  */
-function isSupported(value: number, allowed: number[]): boolean {
+function isSupported(figure: FoundFigure, allowed: number[]): boolean {
+  const { value, writtenDigits } = figure;
   for (const a of allowed) {
     if (value === a) return true;
-    const digits = significantDigits(value);
     // only a genuinely abbreviated figure earns the rounding allowance
-    if (digits <= 3 && roundToSigFigs(a, digits) === value) return true;
+    if (writtenDigits <= 3 && roundToSigFigs(a, writtenDigits) === value) return true;
   }
   return false;
 }
@@ -114,10 +139,10 @@ export function unsupportedFigures(sections: Record<string, string>, facts: Narr
   for (const [section, text] of Object.entries(sections)) {
     if (typeof text !== 'string') continue;
     for (const f of moneyIn(text)) {
-      if (!isSupported(f.value, facts.money)) bad.push(`${section}: ${f.raw}`);
+      if (!isSupported(f, facts.money)) bad.push(`${section}: ${f.raw}`);
     }
     for (const f of percentIn(text)) {
-      if (!isSupported(f.value, facts.percents)) bad.push(`${section}: ${f.raw}`);
+      if (!isSupported(f, facts.percents)) bad.push(`${section}: ${f.raw}`);
     }
   }
   return bad;
