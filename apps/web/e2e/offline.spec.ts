@@ -37,6 +37,22 @@ test('says so, instead of appearing to do nothing', async ({ page, context }) =>
   await context.setOffline(true);
   await expect(banner(page)).toBeVisible();
 
+  /**
+   * And does not cover the thing it appears above. The first version was fixed
+   * at the top with a high z-index and sat on the TopBar — sticky at top-0, 56px
+   * tall — hiding the brand lockup and the breadcrumb. Taking the navigation
+   * away exactly when somebody is offline and wants a screen that still works is
+   * a bad trade for a notice.
+   */
+  const covered = await page.evaluate(() => {
+    const header = document.querySelector('header');
+    if (!header) return 'no header';
+    const r = header.getBoundingClientRect();
+    const hit = document.elementFromPoint(Math.round(r.left + 40), Math.round(r.top + r.height / 2));
+    return hit?.closest('header') ? 'header' : (hit?.getAttribute('role') ?? hit?.tagName ?? '?');
+  });
+  expect(covered, 'the offline bar is sitting on top of the navigation').toBe('header');
+
   await context.setOffline(false);
   // and goes when the signal does, without a reload
   await expect(banner(page)).toHaveCount(0);

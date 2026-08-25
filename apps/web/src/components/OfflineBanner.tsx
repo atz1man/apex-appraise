@@ -36,11 +36,25 @@ export function OfflineBanner() {
 
   if (online) return null;
 
+  /**
+   * In the document flow, not fixed over it.
+   *
+   * The first version was `fixed top-0 z-[110]`, which covered the TopBar —
+   * sticky at top-0 and 56px tall — including the brand lockup and the
+   * breadcrumb. Measured with elementFromPoint: the bar was on top of the header
+   * at its middle, not merely its edge. Hiding the navigation exactly when
+   * somebody is offline and trying to get back to a screen that still works is a
+   * bad trade for a notice.
+   *
+   * So it pushes the page down instead, and the TopBar below it goes on
+   * sticking to the top of the viewport once you scroll past. The layout shift
+   * when it appears is the honest version of the signal.
+   */
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-0 inset-x-0 z-[110] px-4 py-2 text-center text-[12.5px] font-medium bg-status-amber-bg text-status-amber border-b border-border-strong"
+      className="px-4 py-2 text-center text-[12.5px] font-medium bg-status-amber-bg text-status-amber border-b border-border-strong"
     >
       No signal — your work is held on this device{waiting > 0 ? ` (${waiting} waiting)` : ''} and will be sent when you
       are back online.
