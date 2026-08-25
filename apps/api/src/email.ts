@@ -99,6 +99,29 @@ Start with a deal: Pipeline → New deal from documents, or run the Auto-Apprais
 
 export const APP_URL = () => process.env.APP_URL ?? 'http://localhost:5273';
 
+/**
+ * The reply when the workspace signs in with SSO.
+ *
+ * No token, no link — a password set here could never be used to sign in while
+ * enforcement is on, and would become a live credential the moment it was
+ * turned off. The person still gets an answer, because silence after clicking
+ * "forgot password" reads as a broken product and sends them to support.
+ */
+export function ssoResetEmail(name: string, appUrl: string) {
+  return {
+    subject: 'Signing in to Apex Appraise',
+    text: [
+      `Hi ${name},`,
+      '',
+      'Someone asked to reset the password on your Apex Appraise account. Your organisation signs in with single sign-on, so there is no password to reset — use the single sign-on button on the sign-in page instead:',
+      '',
+      `${appUrl}/login`,
+      '',
+      'If it was not you who asked, nothing has changed and no action is needed. If you cannot sign in, your IT team manages this.',
+    ].join('\n'),
+  };
+}
+
 export function resetEmail(name: string, appUrl: string, token: string) {
   const link = `${appUrl}/reset?token=${token}`;
   return {

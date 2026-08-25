@@ -12,7 +12,7 @@ import {
   tooManyResetRequests,
   verifyPassword,
 } from '../auth/password.js';
-import { APP_URL, resetEmail, sendMail } from '../email.js';
+import { APP_URL, resetEmail, sendMail, ssoResetEmail } from '../email.js';
 import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
@@ -175,6 +175,30 @@ export const authRouter = router({
 
       const user = await ctx.prisma.user.findUnique({ where: { email } });
       if (user) {
+        /**
+         * A workspace that enforces SSO has no password to reset, and issuing a
+         * token anyway is worse than useless. The password set through it cannot
+         * sign in — login refuses enforced orgs before it looks at the hash — so
+         * the person is walked through the whole flow to a dead end. Worse, the
+         * hash is now stored: a credential nobody's IdP knows about, which goes
+         * live the moment enforcement is turned off for an outage. And the flow
+         * is a ready-made phishing setup, since anyone can make us mail "reset
+         * your password" to a firm that does not use passwords.
+         *
+         * Same uniform { ok: true } either way — whether an address has an
+         * account here is still not something this endpoint tells anyone.
+         */
+        const sso = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: user.orgId } });
+        if (sso?.enforced) {
+          const mail = ssoResetEmail(user.name, APP_URL());
+          await sendMail(user.email, mail.subject, mail.text);
+          await recordAudit(ctx.prisma, {
+            orgId: user.orgId, userId: user.id, actor: user.name,
+            action: AUDIT.passwordResetRequested, target: `${user.email} (SSO — no token issued)`, ip: ctx.ip,
+          });
+          return { ok: true };
+        }
+
         const { token, hash, expiresAt } = newResetToken();
         await ctx.prisma.user.update({
           where: { id: user.id },
@@ -200,6 +224,23 @@ export const authRouter = router({
       // an attacker which of their guesses was once real
       if (!user) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'That reset link is invalid or has expired' });
+      }
+      /**
+       * Checked again here, not only where the token is issued. Enforcement can
+       * be turned on in the window between a link being sent and clicked, and
+       * this is the write that would leave a password behind.
+       */
+      const sso = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: user.orgId } });
+      if (sso?.enforced) {
+        // clear the token: it is dead either way, and leaving it live invites a retry
+        await ctx.prisma.user.update({
+          where: { id: user.id },
+          data: { resetTokenHash: null, resetTokenExpiresAt: null },
+        });
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Your organisation signs in with single sign-on — there is no password to set. Use the SSO button on the sign-in page.',
+        });
       }
       await ctx.prisma.user.update({
         where: { id: user.id },
