@@ -63,6 +63,9 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Settling a buyer payment with no card processor behind it. Off unless a
+      # demo instance asks for it — see the note in infra/DEPLOY.md.
+      DEMO_PAYMENTS: ${DEMO_PAYMENTS:-}
       # Map tiles. infra/DEPLOY.md tells an operator to set these — under a
       # heading saying the choice has to be made before selling this — and they
       # were never passed to the container, so setting them did nothing at all

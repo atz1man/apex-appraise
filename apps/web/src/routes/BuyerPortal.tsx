@@ -322,7 +322,9 @@ export default function BuyerPortal() {
                   <div className="mt-2.5 text-[10.5px] text-ink-3 leading-snug">
                     {data.stripeMode === 'live'
                       ? 'Card payments are processed securely by Stripe.'
-                      : 'Demo mode — payments settle instantly. Live card processing activates when Stripe keys are configured.'}
+                      : data.stripeMode === 'demo'
+                        ? 'Demo mode — payments settle instantly. Live card processing activates when Stripe keys are configured.'
+                        : 'Card payments are not set up on this development yet — contact the developer to arrange your payment.'}
                   </div>
                 </section>
 
