@@ -121,8 +121,15 @@ describe('editing a version that is out for review', () => {
     await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
     expect((await current()).reviewStatus).toBe('in_review');
 
-    // the analyst keeps working — the save is allowed, but it withdraws
-    await callerFor(analyst).appraisal.save({ dealId: T.dealId, input: input(125) } as never);
+    // the analyst keeps working — the save is allowed, but it withdraws.
+    // expectedUpdatedAt because this edits the version in place; submitForReview
+    // touched the row, so it is the post-submission stamp that has to be sent
+    const held = await current();
+    await callerFor(analyst).appraisal.save({
+      dealId: T.dealId,
+      input: input(125),
+      expectedUpdatedAt: held.updatedAt,
+    } as never);
     const after = await current();
     expect(after.reviewStatus).toBe('draft');
     expect(after.submittedById).toBeNull();

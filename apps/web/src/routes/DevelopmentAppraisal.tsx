@@ -164,8 +164,18 @@ export default function DevelopmentAppraisal() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: firm } = trpc.org.firm.useQuery();
   const { data: saved, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The version this page is holding.
+   *
+   * Sent back on every in-place save so the server can refuse one built on a
+   * copy somebody else has already changed. Taken from the save's own response
+   * as well as from the query, so two saves in a row do not depend on a refetch
+   * landing in between.
+   */
+  const [heldVersion, setHeldVersion] = useState<Date | null>(null);
   const save = trpc.appraisal.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setHeldVersion(res.updatedAt);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.deals.list.invalidate();
       setDirty(false);
@@ -192,7 +202,8 @@ export default function DevelopmentAppraisal() {
     },
   });
   const saveVersion = trpc.appraisal.save.useMutation({
-    onSuccess: (_res, vars) => {
+    onSuccess: (res, vars) => {
+      setHeldVersion(res.updatedAt);
       toast.success(`Saved version “${vars.label || 'new version'}”`);
       setVersionLabel('');
       setDirty(false);
@@ -207,6 +218,7 @@ export default function DevelopmentAppraisal() {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
+    if (saved) setHeldVersion(saved.updatedAt);
     if (saved && !loaded) {
       setInput({ ...saved.input, jv: saved.input.jv ?? DEFAULT_INPUT.jv });
       setLoaded(true);
@@ -410,7 +422,11 @@ export default function DevelopmentAppraisal() {
             >
               Export .xlsx
             </Button>
-            <Button onClick={() => save.mutate({ dealId, input })} loading={save.isPending} disabled={!dirty}>
+            <Button
+              onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
+              loading={save.isPending}
+              disabled={!dirty}
+            >
               {dirty ? 'Save appraisal' : 'Saved'}
             </Button>
           </>

@@ -102,6 +102,8 @@ export const appraisalRouter = router({
       id: row.id,
       dealId: row.dealId,
       label: row.label,
+      /** the token an in-place save has to hand back — see save.expectedUpdatedAt */
+      updatedAt: row.updatedAt,
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,
@@ -125,6 +127,19 @@ export const appraisalRouter = router({
         label: z.string().max(60).optional(),
         /** why this version exists — the half of a review a diff cannot supply */
         note: z.string().max(500).optional(),
+        /**
+         * The updatedAt of the version the caller was looking at.
+         *
+         * Required for an in-place edit of an existing version, and checked
+         * before the write. Without it two analysts on one deal — which is the
+         * collaboration a ten-seat plan sells — silently overwrite each other:
+         * the second save carries EVERY field from a copy loaded before the
+         * first, so the first person's work disappears with no version, no
+         * conflict and no audit event. On a valuation workfile whose version
+         * history is the evidence trail, a change that leaves no trace is the
+         * exact thing the approved-version rule further down exists to prevent.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -140,16 +155,41 @@ export const appraisalRouter = router({
       };
       let row;
       if (existing && input.asNewVersion) {
-        await ctx.prisma.appraisal.update({ where: { id: existing.id }, data: { isCurrent: false } });
-        row = await ctx.prisma.appraisal.create({
-          data: {
-            ...data,
-            orgId: ctx.principal.orgId,
-            dealId: input.dealId,
-            isCurrent: true,
-            label: input.label?.trim() || `v${(await ctx.prisma.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
-            note: input.note?.trim() || null,
-          },
+        /**
+         * Stand down the old version and raise the new one together.
+         *
+         * These were two statements. Two callers branching at once both read the
+         * same current row, both flipped it, and both created — leaving TWO rows
+         * marked current, after which "the current appraisal" is whichever
+         * findFirst happened to return. Measured: it produced exactly that.
+         *
+         * The transaction is not what fixes it. The compare-and-set is: the flip
+         * only counts if this call is the one that found it current, which is the
+         * same technique the webhook claim lease uses. The transaction is so a
+         * failure between the two cannot leave a deal with no current version at
+         * all.
+         */
+        row = await ctx.prisma.$transaction(async (tx) => {
+          const { count } = await tx.appraisal.updateMany({
+            where: { id: existing.id, isCurrent: true },
+            data: { isCurrent: false },
+          });
+          if (count !== 1) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Somebody else saved a new version a moment ago. Reload to see it, then branch from there.',
+            });
+          }
+          return tx.appraisal.create({
+            data: {
+              ...data,
+              orgId: ctx.principal.orgId,
+              dealId: input.dealId,
+              isCurrent: true,
+              label: input.label?.trim() || `v${(await tx.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
+              note: input.note?.trim() || null,
+            },
+          });
         });
       } else if (existing) {
         /**
@@ -173,6 +213,34 @@ export const appraisalRouter = router({
          * Withdrawn rather than refused: the analyst is mid-thought, and blocking
          * the save would only teach them to stop submitting until they are certain.
          */
+        /**
+         * Whose copy is this?
+         *
+         * Demanded rather than merely checked when present: a caller that forgets
+         * gets a clear refusal, where an optional token silently reopens the hole
+         * for whoever forgets next. Not needed to CREATE a version or to branch a
+         * new one — only to edit a row somebody else may be holding.
+         *
+         * Compared to the millisecond, which is what @updatedAt records. Two
+         * saves inside the same millisecond would still race; that is a window
+         * far shorter than a person, and the consequence is only the behaviour
+         * this replaces.
+         */
+        if (!input.expectedUpdatedAt) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Editing an existing version needs expectedUpdatedAt — the updatedAt of the version you loaded.',
+          });
+        }
+        if (existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+          const by = existing.submittedById ?? null;
+          const who = by ? await ctx.prisma.user.findUnique({ where: { id: by }, select: { name: true } }) : null;
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `“${existing.label}” changed${who ? ` (last touched by ${who.name})` : ''} while you were editing it. Reload to see the current figures, then reapply your changes — or save yours as a new version.`,
+          });
+        }
+
         const withdrawn = existing.reviewStatus === 'in_review';
         row = await ctx.prisma.appraisal.update({
           where: { id: existing.id },
@@ -212,7 +280,9 @@ export const appraisalRouter = router({
           target: `GDV £${Math.round(result.gdv).toLocaleString('en-GB')} · profit £${Math.round(result.profit).toLocaleString('en-GB')}`,
         },
       });
-      return { id: row.id, result, jv };
+      // updatedAt so a client can save again without waiting for a refetch to
+      // tell it what the stamp is now
+      return { id: row.id, updatedAt: row.updatedAt, result, jv };
     }),
 
   /** Version history with headline figures for comparison (newest first). */
