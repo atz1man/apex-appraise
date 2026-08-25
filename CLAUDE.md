@@ -39,7 +39,15 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 - One shared calculation engine for every surface (screen, export, report, portal).
 - UK conventions: £, RICS, SDLT, CIL, GIA/NIA, en-GB dates.
 - Money stored as integer pence in the DB.
-- Design tokens only — no raw hex in components (tokens come from `@apex/ui-tokens`).
+- Design tokens only — no raw hex in components (tokens come from `@apex/ui-tokens`) — with one
+  deliberate exception: the PRINTED documents (`AppraisalReport`, `RedBookReport`, `TermsDocument`,
+  `FundingPack`, `paper.tsx`) hardcode light-paper inks and surfaces on purpose. A signed valuation
+  must not change colour because the valuer had dark mode on, so those styles are theme-invariant
+  by design and pair a raw ink with its own raw background so they stay legible on any canvas.
+  Measured: with the renderer forced to `colorScheme: 'dark'` the app does go dark, and `.a4-page`
+  still computes to `rgb(255,255,255)`, with `@media print` forcing the body white too. Do NOT
+  "tokenise" these — `e2e/contrast.spec.ts` sweeps the report, Red Book and terms routes in BOTH
+  themes and is what proves the exception is safe. Everywhere else the rule is absolute.
 - Typefaces are SELF-HOSTED (`apps/web/public/fonts`, `@font-face` in `src/index.css`) — never
   re-add a Google Fonts `<link>`. A signed valuation is printed server-side, the field app has to
   render offline, and the privacy notice says "Nobody else"; `e2e/typography.spec.ts` enforces it.
