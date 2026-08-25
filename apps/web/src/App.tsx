@@ -53,6 +53,7 @@ const Settings = lazy(() => import('./routes/Settings'));
 const Register = lazy(() => import('./routes/Register'));
 const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
+const SsoCallback = lazy(() => import('./routes/SsoCallback'));
 const SitePack = lazy(() => import('./routes/SitePack'));
 const WhatsNew = lazy(() => import('./routes/WhatsNew'));
 // public, and deliberately not behind Protected: a privacy notice you have to
@@ -175,6 +176,8 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/reset" element={<ResetPassword />} />
+          {/* the redirect URI auth.ssoStart hands the identity provider */}
+          <Route path="/sso/callback" element={<SsoCallback />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
           <Route path="/privacy" element={<Privacy />} />

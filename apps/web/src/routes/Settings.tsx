@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { ApiKeysPanel, BankPanel, SsoPanel, XeroPanel } from '../components/settings-integrations';
+import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
 import { Avatar, Button, FirmMark, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
@@ -1074,6 +1074,7 @@ export default function Settings() {
         <XeroPanel isAdmin={isAdmin} />
         <BankPanel isAdmin={isAdmin} />
         <ApiKeysPanel isAdmin={isAdmin} />
+        <WebhooksPanel isAdmin={isAdmin} />
         {isAdmin && <ErrorsPanel />}
         <SecurityPanel />
         {isAdmin && <DataPrivacyPanel />}
