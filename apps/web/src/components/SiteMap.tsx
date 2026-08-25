@@ -1,83 +1,29 @@
-import { useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { trpc } from '../lib/trpc';
-
-export interface MapPin {
-  lat: number;
-  lng: number;
-  label: string;
-  sub?: string;
-  kind?: 'subject' | 'comp';
-}
-
-/** div-icon markers — no image assets, tokens-only colours */
-const icon = (kind: 'subject' | 'comp') =>
-  L.divIcon({
-    className: '',
-    html:
-      kind === 'subject'
-        ? `<div style="width:26px;height:26px;border-radius:9px;background:linear-gradient(135deg,#1E7A55,#14503B);box-shadow:0 2px 8px rgba(20,30,25,.4);display:flex;align-items:center;justify-content:center">
-             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>
-           </div>`
-        : `<div style="width:14px;height:14px;border-radius:50%;background:#1E9E6A;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,.45)"></div>`,
-    iconSize: kind === 'subject' ? [26, 26] : [14, 14],
-    iconAnchor: kind === 'subject' ? [13, 13] : [7, 7],
-  });
+import { Suspense, lazy } from 'react';
+import { Skeleton } from './ui';
+export type { MapPin } from './SiteMapImpl';
 
 /**
- * Real interactive map. Subject site gets the brand house pin; comparables get
- * mint dots with popups.
+ * The map, behind a lazy boundary.
  *
- * Tiles come from THIS application, not from tile.openstreetmap.org directly.
- * Pointing the browser at a public tile server told that server the IP address
- * of every valuer and the coordinates of every site they opened — the last
- * third-party request left on any page, on a privacy notice that says "Nobody
- * else." The API proxies and caches them under a User-Agent that identifies us,
- * which is what OSM's tile policy asks for and what a browser cannot provide.
+ * Leaflet is 150K. It used to be imported statically by this component and
+ * statically by Comparables and the Site Pack, so opening either route
+ * downloaded the whole library before anything could paint — including on a
+ * Comparables page where not one comparable had been geocoded and the map would
+ * never draw a tile. CLAUDE.md's rule ("heavy deps stay lazy-loaded") was
+ * satisfied to the letter, because leaflet was not in the MAIN bundle; it had
+ * simply moved into a shared chunk that arrived just as eagerly.
+ *
+ * Now it arrives with the map. Both call sites render this only when there are
+ * pins to show, so a page with nothing to plot never fetches it at all.
+ *
+ * The props and the module path are unchanged, so no call site had to move.
  */
-export function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height?: number }) {
-  const el = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  /**
-   * The tile URL carries a short-lived token, so the map waits for it. Without
-   * this gate Leaflet would fire a screenful of unauthorised tile requests on
-   * first paint and cache the failures.
-   */
-  const { data: mapConfig } = trpc.org.mapConfig.useQuery(undefined, {
-    /**
-     * Just under the token's own half-hour life. The tile URL carries the token,
-     * so a new token is a new URL and a whole screen of browser-cached tiles
-     * stops matching — refetching them from us costs a round trip each. Rotating
-     * once per session rather than every ten minutes keeps that rare, and the
-     * proxy's cache means even then nothing extra reaches the tile server.
-     */
-    staleTime: 25 * 60_000,
-  });
+const Impl = lazy(() => import('./SiteMapImpl'));
 
-  useEffect(() => {
-    if (!el.current || pins.length === 0 || !mapConfig) return;
-    const map = L.map(el.current, { scrollWheelZoom: false, attributionControl: true });
-    mapRef.current = map;
-    L.tileLayer(mapConfig.tileUrl, {
-      maxZoom: mapConfig.maxZoom,
-      attribution: mapConfig.attribution,
-    }).addTo(map);
-    const group = L.featureGroup(
-      pins.map((p) =>
-        L.marker([p.lat, p.lng], { icon: icon(p.kind ?? 'comp') }).bindPopup(
-          `<div style="font:600 12px 'Schibsted Grotesk',sans-serif">${p.label}</div>${p.sub ? `<div style="font:500 11px 'JetBrains Mono',monospace;color:#5F665F;margin-top:2px">${p.sub}</div>` : ''}`,
-        ),
-      ),
-    ).addTo(map);
-    map.fitBounds(group.getBounds().pad(0.25), { maxZoom: 16 });
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins), mapConfig?.tileUrl]);
-
-  if (pins.length === 0) return null;
-  return <div ref={el} style={{ height }} className="rounded-[12px] overflow-hidden border border-border-strong z-0" />;
+export function SiteMap({ pins, height = 300 }: { pins: import('./SiteMapImpl').MapPin[]; height?: number }) {
+  return (
+    <Suspense fallback={<Skeleton height={height} />}>
+      <Impl pins={pins} height={height} />
+    </Suspense>
+  );
 }
