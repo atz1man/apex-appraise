@@ -19,6 +19,7 @@ import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
 import { recordAudit } from '../audit.js';
+import { assertUnchanged } from '../optimistic.js';
 import { assertOwned } from '../auth/owned.js';
 import { WEBHOOK_EVENTS, isWebhookEvent, newWebhookSecret } from '../webhook-delivery.js';
 import { initialsOf } from '../names.js';
@@ -273,17 +274,42 @@ export const orgRouter = router({
         covLtgdvMaxPct: z.number().min(0).max(200).nullish(),
         covLtcMaxPct: z.number().min(0).max(200).nullish(),
         covMinProfitOnCostPct: z.number().min(0).max(200).nullish(),
+        /**
+         * The stamp of the policy this panel loaded.
+         *
+         * Seventeen fields, read once and posted back in full — the fourth
+         * instance of the shape `b39f174` first found, and the one above all the
+         * others: a lost update here does not change one instruction, it changes
+         * the wording every future instruction drafts from. `238d265` established
+         * that `toeSpecialAssumptions` is the field deciding what a valuation
+         * MEANS, and the settings panel destructured `updatedAt` out and threw it
+         * away.
+         *
+         * Demanded for an edit, absent for the first save: there is no policy yet
+         * to have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const { expectedUpdatedAt, ...fields } = input;
+      const existing = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+      if (existing) {
+        await assertUnchanged({
+          what: 'firm policy',
+          current: existing.updatedAt,
+          expected: expectedUpdatedAt,
+          advice: 'Reload to see the current wording before saving yours — nothing you can see here has been lost.',
+        });
+      }
       const data = {
-        ...input,
+        ...fields,
         toeLiabilityCap: input.toeLiabilityCap == null ? null : toPence(input.toeLiabilityCap),
         covLtgdvMaxPct: input.covLtgdvMaxPct ?? null,
         covLtcMaxPct: input.covLtcMaxPct ?? null,
         covMinProfitOnCostPct: input.covMinProfitOnCostPct ?? null,
       };
-      await ctx.prisma.orgPolicy.upsert({
+      const saved = await ctx.prisma.orgPolicy.upsert({
         where: { orgId: ctx.principal.orgId },
         create: { ...data, orgId: ctx.principal.orgId },
         update: data,
@@ -302,7 +328,8 @@ export const orgRouter = router({
           },
         });
       }
-      return { ok: true };
+      // the stamp comes from THIS save, never a refetch — see a48b7b3
+      return { ok: true, updatedAt: saved.updatedAt };
     }),
 
   members: internalProcedure.query(({ ctx }) =>

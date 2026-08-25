@@ -2460,13 +2460,25 @@ test('the terms document paginates to fit whatever house style a firm writes', a
     return rest as Record<string, unknown>;
   });
 
+  /**
+   * Reads the current stamp before each write, and CHECKS the write landed.
+   *
+   * `org.savePolicy` refuses an edit that carries no `expectedUpdatedAt`, which
+   * this helper used to strip. Worse than being refused: it ignored the response,
+   * so a refusal was silent and the test failed four lines later on a page count
+   * that had not changed, saying nothing about why.
+   */
   const savePolicy = (body: Record<string, unknown>) =>
     page.evaluate(async (p) => {
-      await fetch('/trpc/org.savePolicy', {
+      const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}` };
+      const cur = await (await fetch('/trpc/org.policy', { headers: auth })).json();
+      const res = await fetch('/trpc/org.savePolicy', {
         method: 'POST',
-        headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ json: p }),
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ json: { ...p, expectedUpdatedAt: cur.result.data.json.updatedAt } }),
       });
+      const out = await res.json();
+      if (out.error) throw new Error(`org.savePolicy refused: ${out.error.json?.message ?? 'unknown'}`);
     }, body);
 
   try {

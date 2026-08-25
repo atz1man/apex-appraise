@@ -958,6 +958,15 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const toast = useToast();
   const { data: policy, isLoading } = trpc.org.policy.useQuery();
   const [form, setForm] = useState<Record<string, string> | null>(null);
+  /**
+   * The stamp of the policy this panel loaded, so a second admin's save is
+   * refused rather than silently restoring seventeen clauses.
+   *
+   * Refreshed from the SAVE's own response, never re-read from the query: the
+   * drawer in `a48b7b3` re-read it from a list that had not refetched yet, and
+   * refused its own user's second edit as a conflict with themselves.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
   const [cap, setCap] = useState<string>('');
   const [open, setOpen] = useState(false);
   // held as strings so an empty box stays empty: "" means no covenant, and a
@@ -966,8 +975,9 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     if (policy && !form) {
-      const { updatedAt: _u, toeLiabilityCap, covLtgdvMaxPct, covLtcMaxPct, covMinProfitOnCostPct, ...rest } = policy;
+      const { updatedAt, toeLiabilityCap, covLtgdvMaxPct, covLtcMaxPct, covMinProfitOnCostPct, ...rest } = policy;
       setForm(Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, String(v ?? '')])));
+      setStamp(updatedAt ? new Date(updatedAt) : null);
       setCap(toeLiabilityCap == null ? '' : String(toeLiabilityCap));
       setCovenantText({
         covLtgdvMaxPct: covLtgdvMaxPct == null ? '' : String(covLtgdvMaxPct),
@@ -981,7 +991,8 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const covNum = (v: string) => (v.trim() === '' ? null : Number.parseFloat(v));
 
   const save = trpc.org.savePolicy.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       utils.org.policy.invalidate();
       toast.success('Firm policy saved — new terms will draft from it');
     },
@@ -1012,6 +1023,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
                 covLtgdvMaxPct: covNum(covenantText.covLtgdvMaxPct),
                 covLtcMaxPct: covNum(covenantText.covLtcMaxPct),
                 covMinProfitOnCostPct: covNum(covenantText.covMinProfitOnCostPct),
+                expectedUpdatedAt: stamp ?? undefined,
               })
             }
           >

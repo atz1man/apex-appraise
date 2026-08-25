@@ -28,10 +28,22 @@ const signIn = async (page: import('@playwright/test').Page) => {
 
 const banner = (page: import('@playwright/test').Page) => page.getByText(/No signal — your work is held/);
 
+/**
+ * The Members panel's own heading, not the word "Members" anywhere on the page.
+ *
+ * `getByText('Members')` also matches the plan comparison — "✓ 2 team members",
+ * "✓ 10 team members", "✓ Unlimited members" — which Settings renders while the
+ * workspace is still on TRIAL. So these two tests passed only when an earlier
+ * spec had already changed the plan, and failed on a fresh seed in isolation:
+ * measured identically before and after the change that surfaced it.
+ */
+const membersPanel = (page: import('@playwright/test').Page) =>
+  page.getByRole('heading', { name: 'Members', exact: true });
+
 test('says so, instead of appearing to do nothing', async ({ page, context }) => {
   await signIn(page);
   await page.goto('/settings');
-  await expect(page.getByText('Members')).toBeVisible();
+  await expect(membersPanel(page)).toBeVisible();
   await expect(banner(page)).toHaveCount(0);
 
   await context.setOffline(true);
@@ -61,7 +73,7 @@ test('says so, instead of appearing to do nothing', async ({ page, context }) =>
 test('holds the work and sends it when the signal returns', async ({ page, context }) => {
   await signIn(page);
   await page.goto('/settings');
-  await expect(page.getByText('Members')).toBeVisible();
+  await expect(membersPanel(page)).toBeVisible();
 
   // a name unique to this run: the members table is shared with every other
   // spec, and a fixed one matches leftovers from a previous failure

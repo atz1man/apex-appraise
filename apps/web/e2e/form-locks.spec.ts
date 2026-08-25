@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The terms of engagement form, saved twice by one person.
+ * The forms that hold a whole document, saved twice by one person.
  *
  * The API side of this lock has its own tests. This exists for the OTHER half,
  * which is where `a48b7b3` found the real bug: the sales drawer re-read its
@@ -54,7 +54,7 @@ const ownDeal = (page: Page) =>
     return made.result.data.json.id as string;
   }, NAME);
 
-test('saves twice in a row without reloading', async ({ page }) => {
+test('terms of engagement: saved twice in a row without reloading', async ({ page }) => {
   await signIn(page);
   const id = await ownDeal(page);
   await page.goto(`/deal/${id}/engagement`);
@@ -88,6 +88,86 @@ test('saves twice in a row without reloading', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
   await expect(page.getByText(/after you opened it|Reload to see/i)).toHaveCount(0);
 
+  /**
+   * What this test does NOT prove, stated rather than implied.
+   *
+   * The page keeps its stamp current two ways — from each save's own response,
+   * and by following the query whenever the form is clean. On a local stack the
+   * post-save refetch always wins, so removing the first path leaves this test
+   * green: measured, not assumed. It is kept because it is the only path that
+   * works when the refetch has NOT landed, which is the ordinary case on a slow
+   * connection, and that window is not reproducible here without delaying the
+   * refetch enough to break the page for unrelated reasons.
+   *
+   * The path this test DOES prove is the one that matters more: sending no
+   * stamp at all fails, and so does dropping the clean-follow effect — the
+   * latter caught a regression this same change introduced, where issuing or
+   * withdrawing terms left the next save refused.
+   */
+
   await page.reload();
   await expect(page.getByLabel('Purpose of the valuation', { exact: true })).toHaveValue(`Secured lending ${stamp}b`);
+});
+
+/**
+ * The firm-level panel above it. Seventeen fields of standing wording — the
+ * clauses every future instruction drafts from — read once into local state and
+ * posted back in full.
+ *
+ * Restores what it found, because unlike the terms above this one is shared by
+ * every deal in the workspace: "the terms document paginates to fit whatever
+ * house style a firm writes" reads this exact policy, and a demo left holding
+ * this test's wording is worse than the defect being covered.
+ */
+test('firm policy: saved twice in a row without reloading', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/settings');
+
+  const note = page.getByLabel('AI policy note', { exact: true });
+  await expect(note).toBeVisible();
+  const original = await note.inputValue();
+  const save = page.getByRole('button', { name: 'Save policy', exact: true });
+  const run = `${Date.now()}`.slice(-6);
+
+  /**
+   * Click, and read what the server actually said.
+   *
+   * Asserting through a reload instead was wrong twice over: the reload cancels
+   * the in-flight save, and a refusal would show up as a stale value rather than
+   * as the refusal it is. The response IS the thing this test is about — "the
+   * second save was not refused as a conflict with itself" — so it asserts that
+   * directly.
+   */
+  const saveAndRead = async () => {
+    const [res] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes('org.savePolicy')),
+      save.click(),
+    ]);
+    return (await res.json())[0] as { error?: { json?: { message?: string } } };
+  };
+
+  try {
+    await note.fill(`Extraction only ${run}a`);
+    expect((await saveAndRead()).error, 'the first save was refused').toBeUndefined();
+
+    // no reload, no refetch waited on — exactly what a person editing does
+    await note.fill(`Extraction only ${run}b`);
+    const second = await saveAndRead();
+    expect(
+      second.error?.json?.message,
+      'the second save was refused — the panel is holding a stamp it did not get from the first save',
+    ).toBeUndefined();
+
+    await page.reload();
+    await expect(page.getByLabel('AI policy note', { exact: true })).toHaveValue(`Extraction only ${run}b`);
+  } finally {
+    await page.reload();
+    const restore = page.getByLabel('AI policy note', { exact: true });
+    await expect(restore).toBeVisible();
+    await restore.fill(original);
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes('org.savePolicy')),
+      page.getByRole('button', { name: 'Save policy', exact: true }).click(),
+    ]);
+  }
 });

@@ -131,6 +131,24 @@ export default function Engagement() {
     }
   }, [saved, terms]);
 
+  /**
+   * Follow the server's stamp while there is nothing unsaved to protect.
+   *
+   * `save` is not the only mutation on this row: Issue, Withdraw & revise and
+   * Record acceptance all write it and move `updatedAt`. Seeding the stamp once
+   * on load meant that after any of those, the next Save was refused — the user
+   * told their own terms had changed underneath them, which is the exact failure
+   * `a48b7b3` found in the sales drawer and which I reintroduced here in a new
+   * shape.
+   *
+   * Only while clean. Once there are unsaved edits the stamp must stay at the
+   * one those edits were made against, because that is what makes the refusal
+   * mean anything.
+   */
+  useEffect(() => {
+    if (saved && !dirty) setStamp(saved.updatedAt ? new Date(saved.updatedAt) : null);
+  }, [saved, dirty]);
+
   const invalidate = () => {
     utils.engagement.get.invalidate(dealId);
     utils.documents.activity.invalidate(dealId);

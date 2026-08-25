@@ -121,6 +121,9 @@ describe('facility covenants', () => {
     const policy = (await callerFor(A.principal).org.policy()) as Record<string, unknown>;
     await callerFor(A.principal).org.savePolicy({
       ...policy,
+      // the stamp it just read — the panel now sends this so a second admin's
+      // save cannot silently restore seventeen clauses
+      expectedUpdatedAt: policy.updatedAt,
       // deliberately tight, so the seeded deal breaches
       covLtgdvMaxPct: 1,
       covLtcMaxPct: null,
@@ -139,7 +142,11 @@ describe('facility covenants', () => {
 
   it('lets a covenant be cleared again', async () => {
     const policy = (await callerFor(A.principal).org.policy()) as Record<string, unknown>;
-    await callerFor(A.principal).org.savePolicy({ ...policy, covLtgdvMaxPct: null } as never);
+    await callerFor(A.principal).org.savePolicy({
+      ...policy,
+      expectedUpdatedAt: policy.updatedAt,
+      covLtgdvMaxPct: null,
+    } as never);
     const e = (await callerFor(A.principal).deals.exposure()) as {
       positions: Array<{ covenants: { untested: boolean } }>;
     };
