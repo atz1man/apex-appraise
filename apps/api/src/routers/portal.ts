@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { J, P } from '../mappers.js';
+import { J, P, toPence } from '../mappers.js';
+import { depositSchedule } from '@apex/appraisal-engine';
 import { randomBytes } from 'node:crypto';
 import { adminProcedure, buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
 import { hashPassword } from '../auth/password.js';
@@ -108,30 +109,89 @@ export const investorsRouter = router({
   }),
 });
 
-/** First visit bootstraps the buyer's payment schedule from the unit's state. */
-async function ensurePayments(prisma: any, orgId: string, unit: { id: string; reservedAt: Date | null; agreedValue: bigint | null; progress: number }) {
-  const existing = await prisma.payment.findMany({ where: { unitId: unit.id, orgId } });
-  if (existing.length) return existing;
-  const rows = [
-    {
-      orgId,
-      unitId: unit.id,
-      kind: 'Reservation fee',
-      amount: 200_000n, // £2,000
-      status: unit.reservedAt ? 'PAID' : 'PENDING',
-      paidAt: unit.reservedAt,
-    },
-    {
-      orgId,
-      unitId: unit.id,
-      kind: 'Exchange deposit (10%)',
-      amount: unit.agreedValue != null ? BigInt(Math.round(Number(unit.agreedValue) * 0.1)) : 0n,
-      status: unit.progress >= 5 ? 'PAID' : 'PENDING',
-      paidAt: unit.progress >= 5 ? new Date() : null,
-    },
-  ];
-  for (const r of rows) await prisma.payment.create({ data: r });
-  return prisma.payment.findMany({ where: { unitId: unit.id, orgId } });
+/**
+ * The buyer's payment schedule, kept in step with the plot.
+ *
+ * Three things were wrong here and each was visible on the buyer's own screen.
+ *
+ * The amounts came from a formula written only in this file — a £2,000
+ * reservation fee where the firm's side used £5,000, and ten per cent of the
+ * agreed value or **£0** where there was none, printed beside a Pay button. It
+ * now comes from the one schedule in the engine, so the developer's "Deposit
+ * held" and the buyer's receipts are the same money.
+ *
+ * The rows were written once, on the buyer's first visit, and never touched
+ * again — so a price renegotiated after that first login left the deposit at
+ * the old figure for good. An unpaid row now follows the plot.
+ *
+ * And a row was marked PAID with `paidAt: new Date()`, so a GET wrote a receipt
+ * date. Measured: a plot reserved on 12 January 2026 and long since completed
+ * carried an exchange deposit "received" at 17:50 on the day the portal was
+ * first opened. The date now comes from the milestone that recorded the event,
+ * and where there is no such record the row carries no date rather than a
+ * plausible one.
+ */
+async function ensurePayments(
+  prisma: any,
+  orgId: string,
+  unit: {
+    id: string;
+    reservedAt: Date | null;
+    agreedValue: bigint | null;
+    appraisedValue: bigint;
+    progress: number;
+    milestones?: Array<{ index: number; date: Date | null }>;
+  },
+) {
+  const schedule = depositSchedule({
+    agreedValue: unit.agreedValue != null ? P(unit.agreedValue) : null,
+    appraisedValue: P(unit.appraisedValue),
+  });
+  /** when the plot actually reached a milestone, or null — never "now" */
+  const reachedAt = (index: number) =>
+    unit.milestones?.find((m) => m.index === index)?.date ?? (index <= 1 ? unit.reservedAt : null);
+
+  const existing: Array<{ id: string; kind: string; amount: bigint; status: string; paidAt: Date | null }> =
+    await prisma.payment.findMany({ where: { unitId: unit.id, orgId } });
+
+  for (const row of schedule) {
+    const due = unit.progress >= row.dueAtProgress;
+    const found = existing.find((p) => p.kind === row.kind);
+    if (!found) {
+      await prisma.payment.create({
+        data: {
+          orgId,
+          unitId: unit.id,
+          kind: row.kind,
+          amount: toPence(row.amount),
+          status: due ? 'PAID' : 'PENDING',
+          paidAt: due ? reachedAt(row.dueAtProgress) : null,
+        },
+      });
+      continue;
+    }
+    // a settled payment is a receipt: the amount and the date are what happened,
+    // and nothing derived from the plot's current state may rewrite them
+    if (found.status === 'PAID') continue;
+    /**
+     * The plot has passed the milestone this row falls due at — a plot cannot
+     * exchange without its deposit — so the row is settled, dated from the
+     * milestone that recorded it. Without this the firm's figure said £41,200
+     * held while the buyer's own schedule still showed the exchange deposit
+     * outstanding: the same disagreement, in the other direction.
+     */
+    if (due) {
+      await prisma.payment.update({
+        where: { id: found.id },
+        data: { amount: toPence(row.amount), status: 'PAID', paidAt: reachedAt(row.dueAtProgress) },
+      });
+      continue;
+    }
+    if (P(found.amount) !== row.amount) {
+      await prisma.payment.update({ where: { id: found.id }, data: { amount: toPence(row.amount) } });
+    }
+  }
+  return prisma.payment.findMany({ where: { unitId: unit.id, orgId }, orderBy: { createdAt: 'asc' } });
 }
 
 export const buyerRouter = router({

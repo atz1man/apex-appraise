@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { lettingsRollup, salesRollup } from '@apex/appraisal-engine';
 import { LETTING_MILESTONES, SALES_MILESTONES } from '@apex/types';
+import { depositsHeldAt } from '@apex/appraisal-engine';
 import { P, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertUnchanged } from '../optimistic.js';
@@ -129,7 +130,6 @@ export const salesRouter = router({
         agreedValue: agreedValue != null && agreedValue > 0 ? toPence(agreedValue) : null,
         status: salesStatusForProg(input.progress),
         reservedAt: input.progress > 0 ? new Date() : null,
-        depositHeld: input.progress > 0 ? toPence(input.progress >= 5 ? (agreedValue ?? appraisedValue) * 0.1 : 5000) : null,
       };
       if (id) {
         const existing = await ctx.prisma.unit.findFirst({ where: { id, orgId: ctx.principal.orgId } });
@@ -145,6 +145,17 @@ export const salesRouter = router({
       return ctx.prisma.unit.create({
         data: {
           ...data,
+          /**
+           * Set once, here, from the shared schedule. NOT on update: the drawer
+           * has no deposit field, and a form that does not show a figure must
+           * not rewrite it. Measured before this — a plot carrying a recorded
+           * £24,400 dropped to £5,000 because somebody corrected the buyer's
+           * solicitor.
+           */
+          depositHeld:
+            input.progress > 0
+              ? toPence(depositsHeldAt(input.progress, { agreedValue, appraisedValue }))
+              : null,
           orgId: ctx.principal.orgId,
           dealId,
           milestones: { create: SALES_MILESTONES.map((m, idx) => ({ name: m, index: idx, done: idx < input.progress })) },
@@ -177,10 +188,16 @@ export const salesRouter = router({
         buyerName: unit.buyerName ?? 'New record',
         leadSource: unit.leadSource ?? 'Direct',
         incentive: unit.incentive ?? 'None',
-        depositHeld:
-          progress >= 5
-            ? BigInt(Math.round(Number(unit.agreedValue ?? unit.appraisedValue) * 0.1))
-            : unit.depositHeld ?? toPence(5000),
+        /**
+         * Advancing a milestone IS the event that takes a deposit, so this is
+         * the one write that may set it — from the shared schedule, which
+         * counts the reservation fee the buyer paid months ago as well as the
+         * ten per cent. The old formula counted only the ten per cent, so the
+         * firm's client-money figure disagreed with the buyer's own receipts.
+         */
+        depositHeld: toPence(
+          depositsHeldAt(progress, { agreedValue: P(unit.agreedValue ?? unit.appraisedValue), appraisedValue: P(unit.appraisedValue) }),
+        ),
       },
     });
   }),

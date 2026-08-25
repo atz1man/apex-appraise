@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { computeAppraisal, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
+import { computeAppraisal, depositsHeldAt, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
@@ -485,7 +485,7 @@ export const orgRouter = router({
           status: prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE',
           buyerName: buyer || null,
           progress: prog,
-          depositHeld: prog > 0 ? p(prog >= 5 ? agreed * 0.1 : 5000) : null,
+          depositHeld: prog > 0 ? p(depositsHeldAt(prog, { agreedValue: agreed || null, appraisedValue: appr })) : null,
           reservedAt: prog > 0 ? new Date() : null,
           milestones: { create: milestoneNames.map((m, idx) => ({ name: m, index: idx, done: idx < prog })) },
         },
