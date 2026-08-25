@@ -1373,14 +1373,22 @@ export const scenariosRouter = router({
     }));
     if (options.length < 2)
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'At least two scheme options are needed to compare risk — add another option first.' });
-    const commentary = await draftRiskCommentary({ subject: deal.name, options });
-    // audited like every other AI touchpoint — the report's AI-use disclosure is
-    // derived from this trail, so an unlogged call would be an undisclosed one
+    const { commentary, source } = await draftRiskCommentary({ subject: deal.name, options });
+    /**
+     * Audited like every other AI touchpoint — the report's AI-use disclosure is
+     * derived from this trail, so an unlogged call would be an undisclosed one.
+     *
+     * And the converse, which this missed: a LOGGED non-call is a falsely
+     * disclosed one. With no key the commentary comes from a deterministic
+     * template, and filing it under AI_ACTOR put "Scenario risk commentary" in
+     * the AI-use declaration of a signed valuation over prose no model wrote.
+     * Recorded either way, under whoever actually did it.
+     */
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
         dealId: input,
-        actor: AI_ACTOR,
+        actor: source === 'model' ? AI_ACTOR : ctx.principal.name,
         action: 'drafted scenario risk commentary for',
         target: deal.name,
       },
@@ -1484,7 +1492,9 @@ const RISK_TOOL = {
  * is supplied (engine-computed) — it authors register, never arithmetic. Falls
  * back to a deterministic template when no ANTHROPIC_API_KEY (demo mode).
  */
-async function draftRiskCommentary(facts: { subject: string; options: RiskOption[] }): Promise<string> {
+async function draftRiskCommentary(
+  facts: { subject: string; options: RiskOption[] },
+): Promise<{ commentary: string; source: 'model' | 'template' }> {
   const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
   const optionLines = facts.options
     .map(
@@ -1518,7 +1528,7 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
       const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
       const toolUse = body.content.find((c) => c.type === 'tool_use');
       const parsed = zRiskCommentary.safeParse(toolUse?.input);
-      if (parsed.success) return parsed.data.commentary;
+      if (parsed.success) return { commentary: parsed.data.commentary, source: 'model' as const };
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
     }
     // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
@@ -1528,15 +1538,22 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
       message: `AI risk drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
     });
   }
-  // demo fallback: deterministic template interpolating the same engine figures
+  /**
+   * Demo fallback: a deterministic template interpolating the same engine
+   * figures. No model wrote a word of it, and the caller has to be able to tell
+   * — the AI-use disclosure in the Red Book is derived from whether this was an
+   * AI touchpoint.
+   */
   const others = facts.options.filter((o) => o !== best);
   const spread = others
     .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
     .join(', while ');
-  return (
+  return {
+    source: 'template' as const,
+    commentary:
     `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
     `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
     `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
-    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
-  );
+    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`,
+  };
 }

@@ -441,7 +441,14 @@ export const documentsRouter = router({
           },
         });
       if (!process.env.ANTHROPIC_API_KEY) {
-        await audit();
+        /**
+         * Not audited as an AI use, because none happened. What follows is not
+         * an answer — it is a sentence telling the reader to configure a key —
+         * and filing it under AI_ACTOR put "Data-room questions" in the AI-use
+         * declaration of a signed valuation on the strength of a model that was
+         * never called. The disclosure is derived from this trail; a logged
+         * non-call is a falsely disclosed one.
+         */
         return {
           status: 'demo' as const,
           answer: `The workfile holds ${readable.length} readable document${readable.length === 1 ? '' : 's'} (${readable.map((d) => d.name).join('; ')}). Configure ANTHROPIC_API_KEY and the AI will answer questions directly from their contents.`,
