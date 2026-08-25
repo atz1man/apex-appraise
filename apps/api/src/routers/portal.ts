@@ -8,6 +8,8 @@ import { initialsOf } from '../names.js';
 import { APP_URL, portalInviteEmail, sendMail } from '../email.js';
 import { recordAudit } from '../audit.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
+import { settlePayment } from '../payments.js';
+import { stripeFetch } from '../stripe.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
 async function investorPosition(prisma: any, investorId: string, orgId: string) {
@@ -193,6 +195,36 @@ export const buyerRouter = router({
 
     const key = process.env.STRIPE_SECRET_KEY;
     if (key) {
+      /**
+       * One PaymentIntent per payment, ever.
+       *
+       * This used to create a new intent on every call. A buyer who
+       * double-clicks, or reloads the page and tries again, produced a second
+       * intent for the same money; the row kept only the newest id, so the first
+       * was orphaned at Stripe while still being chargeable by a browser holding
+       * its client_secret. Two intents for one deposit is a buyer charged twice
+       * and a ledger showing one.
+       *
+       * Two defences, because they fail differently. Reusing a stored intent
+       * covers the sequential case — a reload, a retry after a declined card,
+       * which is what an intent is designed to survive. Stripe's own
+       * Idempotency-Key covers the concurrent one, where both calls read the row
+       * before either wrote to it: the second POST returns the FIRST intent
+       * rather than making another.
+       */
+      if (payment.stripeIntentId) {
+        const existing = await stripeFetch<{ client_secret: string; status: string }>(
+          `/payment_intents/${payment.stripeIntentId}`,
+          undefined,
+          'GET',
+        ).catch(() => null);
+        // a usable intent is reused; one Stripe has since cancelled is not, and
+        // falls through to a fresh one below
+        if (existing && existing.status !== 'canceled') {
+          return { mode: 'live' as const, clientSecret: existing.client_secret };
+        }
+      }
+
       const body = new URLSearchParams({
         amount: String(payment.amount),
         currency: 'gbp',
@@ -202,7 +234,12 @@ export const buyerRouter = router({
       });
       const res = await fetch('https://api.stripe.com/v1/payment_intents', {
         method: 'POST',
-        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/x-www-form-urlencoded' },
+        headers: {
+          authorization: `Bearer ${key}`,
+          'content-type': 'application/x-www-form-urlencoded',
+          // keyed on the payment, so two calls racing return one intent
+          'idempotency-key': `apex-intent-${payment.id}`,
+        },
         body,
       });
       if (!res.ok) {
@@ -223,23 +260,21 @@ export const buyerRouter = router({
       });
     }
 
-    // demo mode — settle instantly and audit it
-    const paidDemo = await ctx.prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: 'PAID', paidAt: new Date() },
-    });
-    if (unit) {
-      await ctx.prisma.activityEvent.create({
-        data: {
-          orgId: ctx.principal.orgId,
-          dealId: unit.dealId,
-          actor: ctx.principal.name,
-          action: 'paid (demo mode)',
-          target: `${payment.kind} · ${unit.name}`,
-        },
-      });
-    }
-    return { mode: 'demo' as const, paidAt: paidDemo.paidAt };
+    // demo mode — settle instantly and audit it, once
+    /**
+     * `settled: false` means another call got there first — a double-click, or
+     * the webhook. Both are reported as success, and deliberately: the buyer's
+     * payment DID complete, and an error on the screen where it just succeeded
+     * is a support call. What must not happen twice is the receipt, and that is
+     * settlePayment's job rather than this caller's.
+     *
+     * The check at the top of this procedure is a different question — a buyer
+     * opening a payment that was settled some time ago is told so instead of
+     * being shown a pay button that quietly does nothing.
+     */
+    await settlePayment(ctx.prisma, payment.id, { actor: ctx.principal.name, action: 'paid (demo mode)' });
+    const paid = await ctx.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    return { mode: 'demo' as const, paidAt: paid.paidAt };
   }),
 
   /**
@@ -257,19 +292,11 @@ export const buyerRouter = router({
     const { stripeFetch } = await import('../stripe.js');
     const intent = await stripeFetch<{ status: string }>(`/payment_intents/${payment.stripeIntentId}`, undefined, 'GET');
     if (intent.status !== 'succeeded') return { paid: false, stripeStatus: intent.status };
-    await ctx.prisma.payment.update({ where: { id: payment.id }, data: { status: 'PAID', paidAt: new Date() } });
-    const unit = await ctx.prisma.unit.findFirst({ where: { id: payment.unitId } });
-    if (unit) {
-      await ctx.prisma.activityEvent.create({
-        data: {
-          orgId: ctx.principal.orgId,
-          dealId: unit.dealId,
-          actor: 'Stripe',
-          action: 'card payment received',
-          target: `${payment.kind} · ${unit.name}`,
-        },
-      });
-    }
+    /**
+     * The webhook may be settling this same intent right now — that is what
+     * "belt-and-braces" above means. Whichever arrives second writes nothing.
+     */
+    await settlePayment(ctx.prisma, payment.id, { actor: 'Stripe', action: 'card payment received' });
     return { paid: true };
   }),
 
