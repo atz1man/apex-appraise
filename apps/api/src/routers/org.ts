@@ -21,14 +21,7 @@ import { mintApiKey } from '../api-keys.js';
 import { recordAudit } from '../audit.js';
 import { assertOwned } from '../auth/owned.js';
 import { WEBHOOK_EVENTS, isWebhookEvent, newWebhookSecret } from '../webhook-delivery.js';
-
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase())
-    .slice(0, 2)
-    .join('') || 'AA';
+import { initialsOf } from '../names.js';
 
 /** Admin-only guard on top of internal. */
 

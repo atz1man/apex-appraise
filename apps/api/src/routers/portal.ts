@@ -1,7 +1,12 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P } from '../mappers.js';
-import { buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
+import { randomBytes } from 'node:crypto';
+import { adminProcedure, buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
+import { hashPassword } from '../auth/password.js';
+import { initialsOf } from '../names.js';
+import { APP_URL, portalInviteEmail, sendMail } from '../email.js';
+import { recordAudit } from '../audit.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
@@ -282,5 +287,192 @@ export const buyerRouter = router({
       data: { orgId: ctx.principal.orgId, dealId: unit.dealId, actor: ctx.principal.name, action: 'signed', target: doc.name },
     });
     return { id: signed.id, signedAt: signed.signedAt };
+  }),
+});
+
+/* ---------------------------- portal access ----------------------------- */
+
+/**
+ * Who from outside the firm can sign in, and to see what.
+ *
+ * The portals themselves have worked for a long time — an LP's position, a
+ * buyer's reservation and conveyancing, deposits, signing. Nothing could create
+ * a login for either. Outside the demo seed the only ways a User row came into
+ * existence were org.register and org.invite, both of which write
+ * principalType: 'internal'. So "Buyer + investor portals" sat on the Growth
+ * column of the pricing page and a firm that paid for it had no way to let a
+ * single buyer or investor in.
+ *
+ * Creating a login is gated on the plan. Listing and REVOKING are not, for the
+ * same reason revoking an API key is not: a workspace that downgrades still has
+ * outsiders holding credentials to its deal figures, and the one thing it must
+ * always be able to do is take them back.
+ */
+const portalInviteProcedure = adminProcedure.use(requiresFeature('portals'));
+
+/** A temporary password, shown once to the admin and mailed to the recipient. */
+const tempPassword = () => randomBytes(6).toString('base64url');
+
+async function refuseIfTaken(prisma: any, email: string) {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
+}
+
+export const portalAccessRouter = router({
+  /**
+   * Every outside login this workspace has issued.
+   *
+   * internalProcedure, not admin: an analyst looking at a deal has a legitimate
+   * reason to know whether the buyer can see it. Issuing and revoking are the
+   * admin-only parts.
+   */
+  list: internalProcedure.query(async ({ ctx }) => {
+    const users = await ctx.prisma.user.findMany({
+      where: { orgId: ctx.principal.orgId, principalType: { in: ['investor', 'buyer'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, email: true, initials: true, principalType: true, investorId: true, buyerUnitId: true, createdAt: true },
+    });
+    // resolve what each one is attached to, so the screen can say "Plot 14"
+    // rather than a cuid nobody can act on
+    const [investors, units] = await Promise.all([
+      ctx.prisma.investor.findMany({ where: { orgId: ctx.principal.orgId }, select: { id: true, name: true } }),
+      ctx.prisma.unit.findMany({ where: { orgId: ctx.principal.orgId }, select: { id: true, name: true, deal: { select: { name: true } } } }),
+    ]);
+    const investorName = new Map(investors.map((i) => [i.id, i.name]));
+    const unitName = new Map(units.map((u) => [u.id, `${u.name} · ${u.deal.name}`]));
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      initials: u.initials,
+      kind: u.principalType as 'investor' | 'buyer',
+      /** null when the row it pointed at is gone — said, not hidden */
+      sees:
+        u.principalType === 'investor'
+          ? (u.investorId ? investorName.get(u.investorId) ?? null : null)
+          : (u.buyerUnitId ? unitName.get(u.buyerUnitId) ?? null : null),
+      createdAt: u.createdAt,
+    }));
+  }),
+
+  /** Who a login could be issued against, for the pickers. */
+  candidates: internalProcedure.query(async ({ ctx }) => {
+    const [investors, units] = await Promise.all([
+      ctx.prisma.investor.findMany({
+        where: { orgId: ctx.principal.orgId },
+        select: { id: true, name: true, contactFirst: true },
+        orderBy: { name: 'asc' },
+      }),
+      ctx.prisma.unit.findMany({
+        where: { orgId: ctx.principal.orgId },
+        select: { id: true, name: true, buyerName: true, status: true, deal: { select: { name: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    return {
+      investors,
+      // a buyer portal is about a reservation, so an unsold unit has nobody to
+      // invite; offering them all would just make the list long and wrong
+      units: units
+        .filter((u) => u.status !== 'AVAILABLE')
+        .map((u) => ({ id: u.id, label: `${u.name} · ${u.deal.name}`, buyerName: u.buyerName, status: u.status })),
+    };
+  }),
+
+  inviteInvestor: portalInviteProcedure
+    .input(z.object({ investorId: z.string(), name: z.string().min(2).max(80), email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const investor = await ctx.prisma.investor.findFirst({
+        where: { id: input.investorId, orgId: ctx.principal.orgId },
+      });
+      if (!investor) throw new TRPCError({ code: 'NOT_FOUND' });
+      const email = input.email.toLowerCase();
+      await refuseIfTaken(ctx.prisma, email);
+
+      /**
+       * No seat check. assertCanAddMember counts principalType 'internal' only,
+       * and charging a firm a team seat for its own investor's read-only login
+       * would be indefensible — the comment in entitlements.ts says so, and this
+       * is the procedure that has to honour it.
+       */
+      const password = tempPassword();
+      await ctx.prisma.user.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          email,
+          password: hashPassword(password),
+          name: input.name,
+          role: 'VIEWER',
+          principalType: 'investor',
+          investorId: investor.id,
+          initials: initialsOf(input.name),
+        },
+      });
+
+      const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      const mail = portalInviteEmail(input.name, org?.name ?? 'A firm', email, password, APP_URL(), `your position in ${investor.name}`);
+      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'gave an investor portal access', target: `${input.name} <${email}> · ${investor.name}`, ip: ctx.ip,
+      });
+      return { tempPassword: password, emailed };
+    }),
+
+  inviteBuyer: portalInviteProcedure
+    .input(z.object({ unitId: z.string(), name: z.string().min(2).max(80), email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const unit = await ctx.prisma.unit.findFirst({
+        where: { id: input.unitId, orgId: ctx.principal.orgId },
+        include: { deal: { select: { name: true } } },
+      });
+      if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+      const email = input.email.toLowerCase();
+      await refuseIfTaken(ctx.prisma, email);
+
+      const password = tempPassword();
+      await ctx.prisma.user.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          email,
+          password: hashPassword(password),
+          name: input.name,
+          role: 'VIEWER',
+          principalType: 'buyer',
+          buyerUnitId: unit.id,
+          initials: initialsOf(input.name),
+        },
+      });
+
+      const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      const what = `your reservation at ${unit.name}, ${unit.deal.name}`;
+      const mail = portalInviteEmail(input.name, org?.name ?? 'A firm', email, password, APP_URL(), what);
+      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'gave a buyer portal access', target: `${input.name} <${email}> · ${unit.name}`, ip: ctx.ip,
+      });
+      return { tempPassword: password, emailed };
+    }),
+
+  /**
+   * Take access away. NOT gated on the plan — see the note above.
+   *
+   * A hard delete, like removeMember: the login is the only thing being removed,
+   * and the investor, the unit, the payments and the audit trail all belong to
+   * the workspace rather than to the person who could read them. Scoped to
+   * portal types so this can never be turned on a colleague.
+   */
+  revoke: adminProcedure.input(z.object({ userId: z.string() })).mutation(async ({ ctx, input }) => {
+    const user = await ctx.prisma.user.findFirst({
+      where: { id: input.userId, orgId: ctx.principal.orgId, principalType: { in: ['investor', 'buyer'] } },
+    });
+    if (!user) throw new TRPCError({ code: 'NOT_FOUND' });
+    await ctx.prisma.user.delete({ where: { id: user.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'revoked portal access', target: `${user.name} <${user.email}>`, ip: ctx.ip,
+    });
+    return { ok: true };
   }),
 });

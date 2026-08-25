@@ -84,6 +84,40 @@ Please change your password straight away in Settings → Security.
   };
 }
 
+/**
+ * A buyer's or an investor's way in.
+ *
+ * Deliberately not inviteEmail(): a portal login is not a colleague joining the
+ * firm's workspace, and telling an LP they have been "invited to join Brookfield
+ * Developments on Apex Appraise" invites a phone call. It says who is sharing,
+ * what they will see, and nothing about the firm's own pipeline.
+ */
+export function portalInviteEmail(
+  name: string,
+  orgName: string,
+  email: string,
+  tempPassword: string,
+  appUrl: string,
+  what: string,
+) {
+  return {
+    subject: `${orgName} has shared ${what} with you`,
+    text: `Hi ${name},
+
+${orgName} uses Apex Appraise, and has given you access to ${what}.
+
+Sign in at ${appUrl}/login
+Email: ${email}
+Temporary password: ${tempPassword}
+
+Please change your password straight away once you are in.
+
+You will only ever see ${what} — nothing else from ${orgName}.
+
+— Apex Appraise, on behalf of ${orgName}`,
+  };
+}
+
 export function welcomeEmail(name: string, orgName: string, appUrl: string) {
   return {
     subject: `Welcome to Apex Appraise, ${name.split(' ')[0]}`,

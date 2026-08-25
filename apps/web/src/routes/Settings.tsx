@@ -4,7 +4,8 @@ import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
-import { Avatar, Button, FirmMark, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, FirmMark, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 type Role = (typeof ROLES)[number];
@@ -248,6 +249,234 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
       </div>
     </form>
+  );
+}
+
+// ---------- Portal access ----------
+
+/**
+ * Who from outside the firm can sign in, and what they see.
+ *
+ * The portals have worked for a long time and there was no way to let anybody
+ * into one: outside the demo seed, every User row was created by registration
+ * or by inviting a colleague, and both are internal. So a firm on Growth had
+ * bought "Buyer + investor portals" and could not give a single buyer or
+ * investor a login.
+ *
+ * Sits next to Members deliberately. It is the same question — who can sign in —
+ * and an admin looking for it will look here rather than under integrations.
+ */
+function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast();
+  const utils = trpc.useUtils();
+  const { data: logins, isLoading } = trpc.portalAccess.list.useQuery();
+  const { data: candidates } = trpc.portalAccess.candidates.useQuery(undefined, { enabled: isAdmin });
+
+  const [kind, setKind] = useState<'investor' | 'buyer'>('investor');
+  const [target, setTarget] = useState('');
+  const [form, setForm] = useState({ name: '', email: '' });
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  const { has } = usePlanFeatures();
+  const canInvite = has('portals');
+
+  const done = (res: { tempPassword: string; emailed: boolean }) => {
+    setTempPassword(res.tempPassword);
+    setEmailed(res.emailed);
+    setForm({ name: '', email: '' });
+    setTarget('');
+    void utils.portalAccess.list.invalidate();
+  };
+  const inviteInvestor = trpc.portalAccess.inviteInvestor.useMutation({ onSuccess: done, onError: (e) => toast.error(e.message) });
+  const inviteBuyer = trpc.portalAccess.inviteBuyer.useMutation({ onSuccess: done, onError: (e) => toast.error(e.message) });
+  const pending = inviteInvestor.isPending || inviteBuyer.isPending;
+
+  const revoke = trpc.portalAccess.revoke.useMutation({
+    onSuccess: (_res, vars) => {
+      const gone = (logins ?? []).find((l) => l.id === vars.userId);
+      setRevoking(null);
+      void utils.portalAccess.list.invalidate();
+      toast.success(gone ? `${gone.name} can no longer sign in` : 'Portal access revoked');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const options = kind === 'investor'
+    ? (candidates?.investors ?? []).map((i) => ({ id: i.id, label: i.name }))
+    : (candidates?.units ?? []).map((u) => ({ id: u.id, label: u.buyerName ? `${u.label} — ${u.buyerName}` : u.label }));
+
+  return (
+    <Panel
+      title="Portal access"
+      right={<StatusChip status={logins?.length ? 'green' : 'neutral'} label={`${logins?.length ?? 0} outside`} />}
+    >
+      <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        A buyer or an investor signs in and sees one thing: their own reservation, or their own position. Never the
+        pipeline, never another buyer, never the firm's figures. A portal login is not a team member and does not use a
+        seat on your plan.
+      </div>
+
+      {tempPassword && (
+        <div className="mt-3 rounded-card border border-status-amber-bg bg-sunken p-4">
+          <div className="label-mono text-status-amber mb-1.5">One-time temporary password</div>
+          <div className="flex gap-2 items-center">
+            <code className="fig flex-1 rounded-input border border-border-strong bg-sunken-2 px-3 py-2 text-[13px] select-all">
+              {tempPassword}
+            </code>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                navigator.clipboard.writeText(tempPassword).then(
+                  () => toast.success('Password copied to clipboard'),
+                  () => toast.error('Could not copy — select and copy it manually'),
+                );
+              }}
+            >
+              Copy
+            </Button>
+            <Button variant="secondary" onClick={() => setTempPassword(null)}>
+              Done
+            </Button>
+          </div>
+          <div className="mt-2 text-[11.5px] text-ink-2">
+            {emailed
+              ? 'Sent to them by email as well. It is not shown again.'
+              : 'No email is configured on this server, so pass it on yourself. It is not shown again.'}
+          </div>
+        </div>
+      )}
+
+      {isAdmin && !canInvite && (
+        <div className="mt-3">
+          <PlanLocked feature={featureName('portals')} plan={featurePlanName('portals')}>
+            New portal logins are issued from {featurePlanName('portals')} upwards. Anyone already invited is listed
+            below and can still be revoked.
+          </PlanLocked>
+        </div>
+      )}
+
+      {isAdmin && canInvite && (
+        <form
+          className="mt-3 flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const payload = { name: form.name.trim(), email: form.email.trim() };
+            if (kind === 'investor') inviteInvestor.mutate({ ...payload, investorId: target });
+            else inviteBuyer.mutate({ ...payload, unitId: target });
+          }}
+        >
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Portal</span>
+            <select
+              className="h-[36px]"
+              aria-label="Portal"
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value as 'investor' | 'buyer');
+                setTarget('');
+              }}
+            >
+              <option value="investor">Investor</option>
+              <option value="buyer">Buyer</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 min-w-0">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">
+              {kind === 'investor' ? 'Investor' : 'Reserved unit'}
+            </span>
+            <select
+              className="h-[36px] max-w-[260px]"
+              aria-label={kind === 'investor' ? 'Investor' : 'Reserved unit'}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
+            {/* "Portal user name", not "Name": the members panel above has a Name
+                field too, and two inputs with one label is ambiguous to a screen
+                reader before it is ambiguous to a test */}
+            <input
+              className="min-w-[160px]"
+              aria-label="Portal user name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Email</span>
+            <input
+              className="min-w-[200px]"
+              aria-label="Portal user email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </label>
+          <Button type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
+            Invite to portal
+          </Button>
+          {kind === 'buyer' && candidates && candidates.units.length === 0 && (
+            <div className="w-full text-[11.5px] text-ink-3">
+              {/* an unsold unit has no buyer to invite, so the list is empty rather than wrong */}
+              No unit is reserved yet — a buyer portal is about a reservation.
+            </div>
+          )}
+        </form>
+      )}
+
+      <div className="mt-4">
+        {isLoading ? (
+          <SkeletonRows rows={2} />
+        ) : !logins?.length ? (
+          <div className="text-[12.5px] text-ink-3">Nobody outside the firm can sign in.</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {logins.map((l) => (
+              <div key={l.id} className="flex items-center gap-3 text-[12.5px] border-t border-border-faint pt-2">
+                <Avatar initials={l.initials} size={26} />
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{l.name}</div>
+                  <div className="text-[11px] text-ink-3 truncate">{l.email}</div>
+                </div>
+                <StatusChip status="neutral" label={l.kind.toUpperCase()} />
+                <span className="text-[11.5px] text-ink-2 min-w-0 truncate">
+                  {/* the row it pointed at can be deleted from under it; saying so
+                      beats printing a blank where a plot number should be */}
+                  {l.sees ?? 'no longer attached to anything'}
+                </span>
+                <span className="flex-1" />
+                {isAdmin &&
+                  (revoking === l.id ? (
+                    <>
+                      <span className="text-[11.5px] text-ink-2">Sign-in ends immediately.</span>
+                      <Button size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
+                        Revoke
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setRevoking(null)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => setRevoking(l.id)}>
+                      Revoke
+                    </Button>
+                  ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -1068,6 +1297,7 @@ export default function Settings() {
         <OrganisationPanel isAdmin={isAdmin} />
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
+        <PortalAccessPanel isAdmin={isAdmin} />
         <PolicyPanel isAdmin={isAdmin} />
         {/* the three surfaces that let other systems talk to this one */}
         <SsoPanel isAdmin={isAdmin} />
