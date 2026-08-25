@@ -101,3 +101,50 @@ describe('a draft that wrote a figure nobody calculated', () => {
     expect(bad).toHaveLength(3);
   });
 });
+
+/**
+ * A round number written out in full.
+ *
+ * The allowance for abbreviation used to be granted on the significant digits
+ * of the VALUE, and a value's trailing zeros are not significant — so
+ * "£8,000,000" counted as one significant digit, exactly like "£8m", and earned
+ * the same latitude. Against a Market Value of £7,600,000 the draft could say
+ * "the Market Value is £8,000,000" and pass.
+ *
+ * Four hundred thousand pounds, written to the pound as a precise figure, in
+ * the one sentence a reader trusts most — which is the failure this whole file
+ * exists to prevent, arriving through the tolerance meant to permit shorthand.
+ */
+describe('shorthand versus a claim to precision', () => {
+  const facts = { money: [7_600_000], percents: [20.4] };
+  const draft = (text: string) => unsupportedFigures({ valuationRationale: text }, facts);
+
+  it('accepts the figure said shortly', () => {
+    // one and two significant digits, and 7,600,000 rounds to each of them
+    expect(draft('The Market Value is £8m.')).toEqual([]);
+    expect(draft('The Market Value is £7.6m.')).toEqual([]);
+    expect(draft('The Market Value is £7,600,000.')).toEqual([]);
+  });
+
+  it('refuses a different figure written out in full', () => {
+    const bad = draft('The valuer’s opinion of Market Value is £8,000,000.');
+    expect(bad, '£400,000 out, and written as though it were exact').toHaveLength(1);
+    expect(bad[0]).toContain('£8,000,000');
+  });
+
+  it('refuses an abbreviation that claims more precision than it has', () => {
+    // "£8.0m" asserts two significant digits; 7.6m is not 8.0m at two
+    expect(draft('The Market Value is £8.0m.')).toHaveLength(1);
+  });
+
+  it('holds the same line on percentages', () => {
+    expect(draft('a return of 20.4% on cost')).toEqual([]);
+    expect(draft('a return of 20% on cost'), '20% is 20.4 to two digits').toEqual([]);
+    expect(draft('a return of 20.0% on cost'), '20.0% claims three, and 20.4 is not 20.0').toHaveLength(1);
+  });
+
+  it('still lets an exact round figure through when that is what the engine said', () => {
+    const round = { money: [8_000_000], percents: [] };
+    expect(unsupportedFigures({ valuationRationale: 'Market Value of £8,000,000.' }, round)).toEqual([]);
+  });
+});
