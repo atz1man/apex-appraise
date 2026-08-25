@@ -213,6 +213,10 @@ model Inspection {
   reconciledValue BigInt?
   approachWeights String // JSON {salesComparison, cost, income}
   status     String @default("draft")
+  /// The stamp an in-place save has to hand back — see inspections.save. The
+  /// field app and the workbench edit the same row by design, and the offline
+  /// queue means a phone's write can land after a desk edit that happened later.
+  updatedAt  DateTime @default(now()) @updatedAt
 
   @@index([dealId])
 }

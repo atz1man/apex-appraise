@@ -26,6 +26,8 @@ const inspectionOut = (i: any) => ({
   reconciledValue: i.reconciledValue != null ? P(i.reconciledValue) : null,
   approachWeights: J<z.infer<typeof zWeights>>(i.approachWeights, { salesComparison: 60, cost: 20, income: 20 }),
   status: i.status,
+  /** the stamp a save has to hand back — see save.expectedUpdatedAt */
+  updatedAt: i.updatedAt,
 });
 
 export const inspectionsRouter = router({
@@ -70,6 +72,22 @@ export const inspectionsRouter = router({
         reconciledValue: z.number().min(0).nullable(),
         approachWeights: zWeights,
         status: z.enum(['draft', 'submitted']).default('submitted'),
+        /**
+         * The stamp of the inspection the caller loaded.
+         *
+         * Required when editing an existing one. The field app and the workbench
+         * edit the same row on purpose — the get procedure above calls it "the
+         * field app ⇄ workbench handoff" — and this write carries EVERY field,
+         * so without a check the second save wipes the first with no version and
+         * nothing to say it happened.
+         *
+         * Offline turns that from unlucky into systematic. A write made with no
+         * signal is HELD by react-query and replayed on reconnect, so a phone's
+         * older copy lands after a desk edit that happened later, by
+         * construction. The bar telling a surveyor their work is held is what
+         * makes them rely on it.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -83,10 +101,36 @@ export const inspectionsRouter = router({
         surveyorId: ctx.principal.userId,
         inspectedAt: new Date(),
       };
-      if (input.id) await assertOwned(ctx.prisma.inspection, input.id, ctx.principal.orgId);
-      const row = input.id
-        ? await ctx.prisma.inspection.update({ where: { id: input.id }, data })
-        : await ctx.prisma.inspection.create({ data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId } });
+      if (!input.id) {
+        const created = await ctx.prisma.inspection.create({
+          data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId },
+        });
+        return inspectionOut(created);
+      }
+
+      const existing = await assertOwned(ctx.prisma.inspection, input.id, ctx.principal.orgId);
+      /**
+       * Demanded rather than checked-when-present: an optional stamp silently
+       * reopens the hole for whichever caller forgets next, and the person it
+       * costs is a surveyor whose site notes vanish without a trace.
+       */
+      if (!input.expectedUpdatedAt) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Saving an existing inspection needs expectedUpdatedAt — the stamp of the one you loaded.',
+        });
+      }
+      if (existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+        const by = existing.surveyorId
+          ? await ctx.prisma.user.findUnique({ where: { id: existing.surveyorId }, select: { name: true } })
+          : null;
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `This inspection was saved${by ? ` by ${by.name}` : ''} after you opened it. Reload to see the current notes before saving yours — nothing you can see here has been lost.`,
+        });
+      }
+
+      const row = await ctx.prisma.inspection.update({ where: { id: existing.id }, data });
       return inspectionOut(row);
     }),
 });

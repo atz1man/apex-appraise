@@ -100,8 +100,14 @@ export default function Workbench() {
   const wSum = contributing.reduce((t, a) => t + weights[a.wKey], 0);
   const reconciled = wSum > 0 ? contributing.reduce((t, a) => t + values[a.key] * weights[a.wKey], 0) / wSum : 0;
 
+  // the stamp of the inspection this desk is holding — see FieldApp for why
+  const [held, setHeld] = useState<Date | null>(null);
+  useEffect(() => {
+    if (inspection?.updatedAt) setHeld(inspection.updatedAt);
+  }, [inspection?.updatedAt]);
   const save = trpc.inspections.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setHeld(res.updatedAt);
       utils.inspections.get.invalidate(dealId);
       setDirty(false);
     },
@@ -115,6 +121,7 @@ export default function Workbench() {
       reconciledValue: Math.round(reconciled) || null,
       approachWeights: weights,
       status: inspection?.status === 'submitted' ? 'submitted' : 'draft',
+      expectedUpdatedAt: held ?? undefined,
     });
 
   const setValue = (k: ApproachKey, v: number) => {
