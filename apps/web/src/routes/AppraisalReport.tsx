@@ -16,6 +16,7 @@ import { ShareLinks } from '../components/ShareLinks';
 import { A4Page, PRINT_CSS } from '../components/paper';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { openReport } from '../lib/download';
+import { namedModel } from '../lib/ai-model';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -1239,7 +1240,7 @@ export default function AppraisalReport() {
             <>
               <p className="mt-3 text-[11px] text-ink-2b leading-[1.6]">
                 Artificial intelligence was used in preparing this appraisal
-                {ai.model && ai.model !== 'demo' ? ` (model: ${ai.model})` : ''}:{' '}
+                {namedModel(ai.model)}:{' '}
                 {ai.items.map((t, i) => (
                   <span key={t.key}>
                     {i > 0 ? ' ' : ''}

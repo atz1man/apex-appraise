@@ -25,6 +25,7 @@ const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boo
 );
 import { CompsLadder } from '../components/charts';
 import { openReport } from '../lib/download';
+import { namedModel } from '../lib/ai-model';
 
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
@@ -826,7 +827,7 @@ export default function RedBookReport() {
               <>
                 <div>
                   Artificial intelligence was used in preparing this valuation, as follows
-                  {ai.model && ai.model !== 'demo' ? ` (model: ${ai.model})` : ''}:
+                  {namedModel(ai.model)}:
                 </div>
                 <div className="mt-1.5 flex flex-col gap-1">
                   {ai.items.map((t) => (
