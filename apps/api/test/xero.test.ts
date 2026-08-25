@@ -9,6 +9,7 @@ import {
   type XeroTransport,
 } from '../src/xero.js';
 import { makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { openFor } from '../src/sealed-fields.js';
 
 /**
  * Xero, against a fake Xero.
@@ -117,8 +118,12 @@ describe('refresh tokens rotate', () => {
     const row = await prisma.xeroConnection.findUniqueOrThrow({ where: { orgId: A.orgId } });
     // losing this write kills the connection permanently, with no error until the
     // next sync — which is the failure this whole module is shaped around
-    expect(row.refreshToken).toBe('refresh-NEW');
-    expect(row.accessToken).toBe('access-1');
+    expect(openFor('xeroConnection', 'refreshToken', A.orgId, row.refreshToken)).toBe('refresh-NEW');
+    expect(openFor('xeroConnection', 'accessToken', A.orgId, row.accessToken)).toBe('access-1');
+    // and it is the SEALED form on the way in: a standing key to the customer's
+    // ledger does not sit in the database in the clear
+    expect(row.refreshToken).not.toBe('refresh-NEW');
+    expect(row.accessToken).not.toBe('access-1');
     expect(row.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 

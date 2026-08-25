@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { openFor, sealFor } from './sealed-fields.js';
 
 /**
  * UK Open Banking, through TrueLayer.
@@ -124,11 +125,17 @@ export async function accessTokenFor(
     throw new Error('Your bank consent has expired — reconnect the account to resume the feed.');
   }
 
-  if (conn.expiresAt.getTime() > Date.now() + 60_000) return conn.accessToken;
-  const fresh = await refresh(conn.refreshToken, transport);
+  if (conn.expiresAt.getTime() > Date.now() + 60_000) {
+    return openFor('bankConnection', 'accessToken', orgId, conn.accessToken);
+  }
+  const fresh = await refresh(openFor('bankConnection', 'refreshToken', orgId, conn.refreshToken), transport);
   await prisma.bankConnection.update({
     where: { id: conn.id },
-    data: { accessToken: fresh.accessToken, refreshToken: fresh.refreshToken, expiresAt: fresh.expiresAt },
+    data: {
+      accessToken: sealFor('bankConnection', 'accessToken', orgId, fresh.accessToken),
+      refreshToken: sealFor('bankConnection', 'refreshToken', orgId, fresh.refreshToken),
+      expiresAt: fresh.expiresAt,
+    },
   });
   return fresh.accessToken;
 }

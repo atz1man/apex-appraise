@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { planHasFeature } from '@apex/types/plan';
+import { openFor } from './sealed-fields.js';
 
 /**
  * Outbound webhooks.
@@ -237,7 +238,11 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
     const timestamp = Math.floor(now.getTime() / 1000);
     const headers = {
       'content-type': 'application/json',
-      'apex-signature': signatureHeader(d.endpoint.secret, timestamp, d.payload),
+      'apex-signature': signatureHeader(
+        openFor('webhookEndpoint', 'secret', d.orgId, d.endpoint.secret),
+        timestamp,
+        d.payload,
+      ),
       'apex-event': d.event,
       'apex-delivery': d.id,
     };

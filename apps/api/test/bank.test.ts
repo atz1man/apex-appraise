@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONSENT_DAYS, accessTokenFor, fetchAccounts, fetchTransactions, syncBank, type BankTransport } from '../src/open-banking.js';
 import { callerFor, expectDenied, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { openFor } from '../src/sealed-fields.js';
 
 /**
  * The bank feed, against a fake provider.
@@ -109,7 +110,9 @@ describe('syncing', () => {
     const token = await accessTokenFor(prisma, t.orgId, transportFor([]));
     expect(token).toBe('fresh');
     const after = await prisma.bankConnection.findUniqueOrThrow({ where: { id: conn.id } });
-    expect(after.refreshToken).toBe('r2');
+    expect(openFor('bankConnection', 'refreshToken', t.orgId, after.refreshToken)).toBe('r2');
+    // sealed on the way in: a PSD2 refresh token reads the customer's bank feed
+    expect(after.refreshToken).not.toBe('r2');
     expect(after.consentExpiresAt.getTime()).toBe(conn.consentExpiresAt.getTime());
   });
 });

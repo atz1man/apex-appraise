@@ -16,6 +16,7 @@ import { APP_URL, resetEmail, sendMail, ssoResetEmail } from '../email.js';
 import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
+import { openFor } from '../sealed-fields.js';
 
 /** Pending SSO sign-ins. Ten minutes, single use, in memory — a restart costs
  *  someone one retry, which is a better trade than a table. */
@@ -132,7 +133,7 @@ export const authRouter = router({
       const { id_token } = await exchangeCode(meta, {
         code: input.code,
         clientId: conn.clientId,
-        clientSecret: conn.clientSecret,
+        clientSecret: openFor('ssoConnection', 'clientSecret', conn.orgId, conn.clientSecret),
         redirectUri: `${APP_URL()}/sso/callback`,
         codeVerifier: pending.codeVerifier,
       });

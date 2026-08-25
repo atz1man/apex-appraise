@@ -13,6 +13,7 @@ import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, requiresFeature, router } from '../trpc.js';
 import { assertCanAddMember, featuresFor, usageFor } from '../entitlements.js';
+import { sealFor } from '../sealed-fields.js';
 import { signDownloadToken } from '../download-token.js';
 import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
@@ -734,7 +735,14 @@ export const orgRouter = router({
       }
       const secret = newWebhookSecret();
       const row = await ctx.prisma.webhookEndpoint.create({
-        data: { orgId: ctx.principal.orgId, url: input.url, secret, events: events.join(','), createdById: ctx.principal.userId },
+        data: {
+          orgId: ctx.principal.orgId,
+          url: input.url,
+          // shown once below and sealed here; the receiver keeps the only other copy
+          secret: sealFor('webhookEndpoint', 'secret', ctx.principal.orgId, secret),
+          events: events.join(','),
+          createdById: ctx.principal.userId,
+        },
       });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
@@ -821,11 +829,26 @@ export const orgRouter = router({
         domains: domains.join(','),
         enforced: input.enforced,
         defaultRole: input.defaultRole,
-        ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
+        ...(input.clientSecret
+          ? { clientSecret: sealFor('ssoConnection', 'clientSecret', ctx.principal.orgId, input.clientSecret) }
+          : {}),
       };
       await ctx.prisma.ssoConnection.upsert({
         where: { orgId: ctx.principal.orgId },
-        create: { orgId: ctx.principal.orgId, clientSecret: input.clientSecret ?? '', createdById: ctx.principal.userId, ...data },
+        create: {
+          orgId: ctx.principal.orgId,
+          createdById: ctx.principal.userId,
+          /**
+           * Only ever the placeholder that satisfies the required column: the
+           * guard above refuses a first-time save with no secret, so `...data`
+           * always carries the sealed one over the top on this path. It used to
+           * seal here as well — a second, unreachable copy of the same call,
+           * which meant the seal could be removed from it without any test
+           * noticing, because the value never survived the spread.
+           */
+          clientSecret: '',
+          ...data,
+        },
         update: data,
       });
       await recordAudit(ctx.prisma, {

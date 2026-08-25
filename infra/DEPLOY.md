@@ -20,8 +20,32 @@ git clone https://github.com/atz1man/apex-appraise.git && cd apex-appraise
 cat >> .env <<'ENV'
 JWT_SECRET=REPLACE_ME          # openssl rand -hex 32 — keep it safe
 POSTGRES_PASSWORD=REPLACE_ME   # openssl rand -hex 32 — the database password
+ENCRYPTION_KEY=REPLACE_ME      # openssl rand -hex 32 — seals credentials at rest
 ENV
-$EDITOR .env   # paste real values in; both are REQUIRED and the stack will not start without them
+$EDITOR .env   # paste real values in; the first two are REQUIRED and the stack will not start without them
+### About `ENCRYPTION_KEY`
+
+Xero and open-banking refresh tokens, the API keys a workspace pastes in for the
+EPC register and Companies House, and each webhook endpoint's signing secret are
+encrypted in the database (AES-256-GCM). A Xero refresh token is a standing key
+to the customer's whole accounting ledger and a TrueLayer one reads their bank
+feed, so a copy of the database — a stolen dump, a misconfigured replica, or one
+of the backups `infra/backup.sh` makes on purpose — must not hand over both.
+
+It is **optional**, and the only variable here that is optional for a reason
+worth reading. Left unset, the key is derived from `JWT_SECRET` by HKDF, so an
+existing deployment is protected on its next deploy rather than refusing to boot
+until somebody reads a changelog. The cost of leaving it unset is that
+**rotating `JWT_SECRET` then makes every sealed field unreadable**, and every
+integration has to be reconnected by hand. Set it and the two rotate
+independently.
+
+Rotating `ENCRYPTION_KEY` itself has the same consequence today: sealed values
+carry the id of the key that sealed them and refuse to open under a different
+one, with an error saying so rather than returning rubbish. Reconnecting Xero,
+the bank feed and the self-serve providers is the recovery, and re-adding
+webhook endpoints. Pick the key once.
+
 # Optional integrations — same file, same reason. Each degrades gracefully to a
 # clearly-labelled demo mode when unset, which is exactly why they belong here
 # and not in a shell: a later rebuild without them does not fail, it quietly

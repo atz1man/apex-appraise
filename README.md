@@ -110,6 +110,7 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 All optional vars degrade gracefully to a clearly-labelled demo mode when unset.
 
 - `PORT` (default 4100), `JWT_SECRET` (**required in production**), `POSTGRES_PASSWORD` (**required**; the compose stack builds `DATABASE_URL` from it)
+- `ENCRYPTION_KEY` — 32 bytes (hex or base64) sealing integration credentials at rest. Optional: derived from `JWT_SECRET` when unset, so nothing breaks on upgrade — but then rotating `JWT_SECRET` makes every sealed field unreadable. See `infra/DEPLOY.md`
 - `RATE_LIMIT_PER_MIN` (default 600) and `AUTH_RATE_LIMIT_PER_MIN` (default 10) — raise them only for a test run, never in the deployed file
 - `ANTHROPIC_API_KEY` — live LLM extraction for Auto-Appraisal
 - `SMTP_URL` + `EMAIL_FROM` + `APP_URL` — invite/welcome email delivery (logged to console otherwise)

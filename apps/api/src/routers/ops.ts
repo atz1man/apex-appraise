@@ -30,6 +30,7 @@ import {
   newState,
   syncBank,
 } from '../open-banking.js';
+import { openFor, sealFor } from '../sealed-fields.js';
 
 // ---------- Construction cost monitoring ----------
 
@@ -587,20 +588,24 @@ export const bankRouter = router({
       const accounts = await fetchAccounts(tokens.accessToken);
       const consentExpiresAt = new Date(Date.now() + CONSENT_DAYS * 86_400_000);
 
+      // a PSD2 refresh token reads the customer's bank feed for 90 days —
+      // it never reaches the database in the clear
+      const sealedAccess = sealFor('bankConnection', 'accessToken', ctx.principal.orgId, tokens.accessToken);
+      const sealedRefresh = sealFor('bankConnection', 'refreshToken', ctx.principal.orgId, tokens.refreshToken);
       const conn = await ctx.prisma.bankConnection.upsert({
         where: { orgId: ctx.principal.orgId },
         create: {
           orgId: ctx.principal.orgId,
           institution: accounts[0]?.name ?? 'Bank',
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          accessToken: sealedAccess,
+          refreshToken: sealedRefresh,
           expiresAt: tokens.expiresAt,
           consentExpiresAt,
           createdById: ctx.principal.userId,
         },
         update: {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          accessToken: sealedAccess,
+          refreshToken: sealedRefresh,
           expiresAt: tokens.expiresAt,
           // reconnecting renews the consent clock — that is the whole point of
           // doing it, and leaving the old date would keep the warning showing
@@ -737,8 +742,8 @@ export const xeroRouter = router({
       const data = {
         tenantId: tenants[0]!.tenantId,
         tenantName: tenants[0]!.tenantName,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        accessToken: sealFor('xeroConnection', 'accessToken', ctx.principal.orgId, tokens.access_token),
+        refreshToken: sealFor('xeroConnection', 'refreshToken', ctx.principal.orgId, tokens.refresh_token),
         expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         scopes: tokens.scope ?? XERO_SCOPES,
         connectedById: ctx.principal.userId,
@@ -876,7 +881,13 @@ export const integrationsRouter = router({
       const existing = await ctx.prisma.integrationConnection.findFirst({
         where: { orgId: ctx.principal.orgId, provider: input.provider },
       });
-      const data = { status: 'CONNECTED', lastSync: new Date(), config: JSON.stringify(input.fields) };
+      const data = {
+        status: 'CONNECTED',
+        lastSync: new Date(),
+        // the customer's own API key for someone else's service — sealed here,
+        // opened by getIntegrationCreds and nowhere else
+        config: sealFor('integrationConnection', 'config', ctx.principal.orgId, JSON.stringify(input.fields)),
+      };
       const row = existing
         ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
         : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
