@@ -125,7 +125,14 @@ function Body({ children }: { children: ReactNode }) {
   return <div className="mt-2.5 text-[13px] leading-[1.62]" style={{ color: '#2C342E', textWrap: 'pretty' as never }}>{children}</div>;
 }
 
-/** Screen-only provenance flag beside AI-drafted narrative sections — never printed. */
+/**
+ * Screen-only provenance flag beside AI-drafted narrative sections — never printed.
+ *
+ * Rendered only when a model actually wrote them. The commentary falls back to a
+ * deterministic template with no ANTHROPIC_API_KEY, and whenever the figure guard
+ * rejects a draft — and labelling those "AI-drafted" is the same misstatement the
+ * disclosure page used to make, in the margin instead of the declaration.
+ */
 function AiDraftNote() {
   return (
     <span className="no-print print:hidden fig text-[10px] font-medium normal-case text-inactive" style={{ marginLeft: 10, letterSpacing: '0.3px' }}>
@@ -174,6 +181,13 @@ export default function RedBookReport() {
     },
   });
   const narrative = appr?.narrative ?? null;
+  /**
+   * Whether a model wrote the commentary, as opposed to the deterministic
+   * template. `model` records what produced the prose currently in the report;
+   * 'template' is the value for the fallback, and 'demo' meant the same before
+   * that field recorded provenance rather than configuration.
+   */
+  const modelDrafted = !!namedModel(narrative?.model);
 
   const input = appr?.input;
   // All figures from the shared engine — never hand-rolled.
@@ -784,18 +798,25 @@ export default function RedBookReport() {
           <A4Page>
             <PageHead title="Valuation commentary" right="Section 5" />
 
-            <Micro mt={20}>Valuation rationale<AiDraftNote /></Micro>
+            <Micro mt={20}>Valuation rationale{modelDrafted && <AiDraftNote />}</Micro>
             <Body>{narrative.valuationRationale}</Body>
 
-            <Micro>Market commentary<AiDraftNote /></Micro>
+            <Micro>Market commentary{modelDrafted && <AiDraftNote />}</Micro>
             <Body>{narrative.marketCommentary}</Body>
 
-            <Micro>Risk commentary<AiDraftNote /></Micro>
+            <Micro>Risk commentary{modelDrafted && <AiDraftNote />}</Micro>
             <Body>{narrative.riskCommentary}</Body>
 
             <PageFoot>
-              Page {pageNo.commentary} of {pageTotal} · Commentary drafted with AI assistance and reviewed by the valuer — see the AI-use
-              disclosure on page {pageNo.declaration}.
+              Page {pageNo.commentary} of {pageTotal} ·{' '}
+              {modelDrafted ? (
+                <>
+                  Commentary drafted with AI assistance and reviewed by the valuer — see the AI-use disclosure on page{' '}
+                  {pageNo.declaration}.
+                </>
+              ) : (
+                <>Commentary prepared from the appraisal figures and reviewed by the valuer.</>
+              )}
             </PageFoot>
           </A4Page>
         )}
