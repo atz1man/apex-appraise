@@ -570,6 +570,33 @@ export const orgRouter = router({
       const apiKeysCreated = await ctx.prisma.apiKey.count({
         where: { orgId: ctx.principal.orgId, createdById: user.id, revokedAt: null },
       });
+
+      /**
+       * The links this person sent out, which are about to stop working.
+       *
+       * Different from the API keys above, and worse. A key goes on working
+       * after its creator leaves — the admin is warned because a leaver may hold
+       * a copy. A report share BREAKS: reports.ts looks the creator up on every
+       * request and answers 404 with "ask the sender for a new one", to a lender
+       * whose sender no longer exists, while the firm hears nothing.
+       *
+       * Only live ones. Padding the number with links that were already revoked
+       * or expired trains an admin to ignore it.
+       *
+       * Re-pointing the share at the removing admin would keep it working and is
+       * the wrong fix: the document is RENDERED as its creator, and a Red Book
+       * report carries the valuer's name. That would reissue somebody's signed
+       * valuation under a colleague who did not sign it.
+       */
+      const sharesCreated = await ctx.prisma.reportShare.count({
+        where: {
+          orgId: ctx.principal.orgId,
+          createdById: user.id,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
       await ctx.prisma.user.delete({ where: { id: user.id } });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId,
@@ -579,7 +606,7 @@ export const orgRouter = router({
         target: `${user.name} (${user.email})`,
         ip: ctx.ip,
       });
-      return { ok: true, apiKeysCreated };
+      return { ok: true, apiKeysCreated, sharesCreated };
     }),
 
   setRole: adminProcedure

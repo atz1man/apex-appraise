@@ -578,6 +578,18 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
           `They created ${res.apiKeysCreated} API key${res.apiKeysCreated === 1 ? '' : 's'} that ${res.apiKeysCreated === 1 ? 'is' : 'are'} still live — review them under Integrations.`,
         );
       }
+      /**
+       * The opposite problem, and the more urgent one. A key goes on working; a
+       * report link STOPS. Whoever holds it — a lender, a client's solicitor —
+       * gets "ask the sender for a new one", about a sender who has just been
+       * removed, and nobody here would otherwise know.
+       */
+      if (res.sharesCreated > 0) {
+        toast.push(
+          'info',
+          `${res.sharesCreated} report link${res.sharesCreated === 1 ? '' : 's'} they shared ${res.sharesCreated === 1 ? 'has' : 'have'} stopped working — re-share from the deal if anyone still needs ${res.sharesCreated === 1 ? 'it' : 'them'}.`,
+        );
+      }
     },
   });
 
