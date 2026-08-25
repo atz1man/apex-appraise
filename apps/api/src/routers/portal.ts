@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P } from '../mappers.js';
 import { buyerProcedure, internalProcedure, investorProcedure, router } from '../trpc.js';
-import { demoSettlementAllowed } from '../stripe.js';
+import { demoFallbacksAllowed } from '../demo-mode.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
 async function investorPosition(prisma: any, investorId: string, orgId: string) {
@@ -153,7 +153,7 @@ export const buyerRouter = router({
         date: p.paidAt,
       })),
       // three states, not two: live, demo settlement, and configured-for-neither
-      stripeMode: process.env.STRIPE_SECRET_KEY ? 'live' : demoSettlementAllowed() ? 'demo' : 'unavailable',
+      stripeMode: process.env.STRIPE_SECRET_KEY ? 'live' : demoFallbacksAllowed() ? 'demo' : 'unavailable',
     };
   }),
 
@@ -195,7 +195,7 @@ export const buyerRouter = router({
       return { mode: 'live' as const, clientSecret: intent.client_secret };
     }
 
-    if (!demoSettlementAllowed()) {
+    if (!demoFallbacksAllowed()) {
       // A buyer reads this, so it says what to do rather than what is missing.
       throw new TRPCError({
         code: 'BAD_REQUEST',

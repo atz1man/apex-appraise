@@ -32,7 +32,7 @@ SMTP_URL=smtp://user:pass@host:587       # invite + welcome email delivery
 EMAIL_FROM=Apex Appraise <no-reply@yourdomain.co.uk>
 APP_URL=https://app.yourdomain.co.uk     # used in email links
 STRIPE_SECRET_KEY=                       # live buyer card payments
-DEMO_PAYMENTS=                           # set to 1 ONLY on a demo instance — see below
+DEMO_MODE=                               # set to 1 ONLY on a demo instance — see below
 STRIPE_WEBHOOK_SECRET=                   # POST /webhooks/stripe
 TILE_URL=                                # map tiles — READ THE NOTE BELOW
 TILE_ATTRIBUTION=                        # the credit line that provider requires
@@ -43,7 +43,7 @@ ENV
 docker compose up -d --build
 ```
 
-### Buyer payments settle for real, or not at all
+### Demo fallbacks are off in production
 
 Without `STRIPE_SECRET_KEY` the buyer portal has nothing to charge a card with.
 On a demo instance it settles the payment instantly so the flow can be shown;
@@ -52,7 +52,13 @@ deposit PAID when no money moved — that figure feeds your sales ledger and you
 exposure numbers, and a deposit you have not received is worse than one the
 portal declined to take.
 
-Set `DEMO_PAYMENTS=1` only if this deployment IS the demo.
+The same switch governs Auto-Appraisal. Without `ANTHROPIC_API_KEY` it returns
+a built-in worked example rather than a reading of your documents — complete
+with unit values and citations like "Drawing A-102" for a drawing your deal has
+never had, which can then be saved into a real appraisal. In production it
+refuses and points you at manual entry instead.
+
+Set `DEMO_MODE=1` only if this deployment IS the demo.
 
 ### Map tiles need a decision before you sell this
 
