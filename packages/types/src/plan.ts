@@ -61,3 +61,56 @@ export const cheapestPlanWith = (feature: Feature): PlanKey =>
 
 /** "GROWTH" → "Growth", for a sentence rather than a shout. */
 export const planLabel = (plan: PlanKey | string) => plan.charAt(0) + plan.slice(1).toLowerCase();
+
+/**
+ * The plans, as sold.
+ *
+ * One definition, because there were two. The API owned this list and the
+ * landing page kept its own copy of the same three columns, and they had already
+ * parted company: the public page offered Enterprise "Data exports + API
+ * access" where the product sells "Public API + webhooks", and described the
+ * site pack with different words on each side. A prospect and a subscriber were
+ * reading different promises about the same tier.
+ *
+ * "Data exports" is gone from the Enterprise column rather than reworded,
+ * because it was never true as a differentiator: org.exportData is open on every
+ * plan and must stay that way — taking your data out is how you leave, and a
+ * paywall in front of leaving is not a feature. The landing page says so in its
+ * "every plan includes" line instead.
+ *
+ * Prices are in pence to match everything else that touches money.
+ */
+export interface PlanDef {
+  key: Exclude<PlanKey, 'TRIAL'>;
+  name: string;
+  pricePencePerMonth: number;
+  blurb: string;
+  features: string[];
+  /** the column drawn with the border and the "Most popular" tag */
+  featured?: boolean;
+}
+
+export const PLANS: PlanDef[] = [
+  {
+    key: 'STARTER',
+    name: 'Starter',
+    pricePencePerMonth: 4900,
+    blurb: 'For a single developer running a handful of deals',
+    features: ['3 active deals', '2 team members', 'Appraisal engine + reports', 'Site pack (open data)'],
+  },
+  {
+    key: 'GROWTH',
+    name: 'Growth',
+    pricePencePerMonth: 14900,
+    blurb: 'For teams running a live pipeline',
+    features: ['Unlimited deals', '10 team members', 'AI Development Director', 'Buyer + investor portals', 'Benchmarking'],
+    featured: true,
+  },
+  {
+    key: 'ENTERPRISE',
+    name: 'Enterprise',
+    pricePencePerMonth: 39900,
+    blurb: 'Multi-entity groups and funds',
+    features: ['Everything in Growth', 'Unlimited members', 'Priority support', 'Public API + webhooks'],
+  },
+];

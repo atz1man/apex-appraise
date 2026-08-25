@@ -32,37 +32,14 @@ export async function stripeFetch<T = any>(
   return body;
 }
 
-export interface PlanDef {
-  key: 'STARTER' | 'GROWTH' | 'ENTERPRISE';
-  name: string;
-  pricePencePerMonth: number;
-  blurb: string;
-  features: string[];
-}
-
-export const PLANS: PlanDef[] = [
-  {
-    key: 'STARTER',
-    name: 'Starter',
-    pricePencePerMonth: 4900,
-    blurb: 'For a single developer running a handful of deals',
-    features: ['3 active deals', '2 team members', 'Appraisal engine + reports', 'Site pack (open data)'],
-  },
-  {
-    key: 'GROWTH',
-    name: 'Growth',
-    pricePencePerMonth: 14900,
-    blurb: 'For teams running a live pipeline',
-    features: ['Unlimited deals', '10 team members', 'AI Development Director', 'Buyer + investor portals', 'Benchmarking'],
-  },
-  {
-    key: 'ENTERPRISE',
-    name: 'Enterprise',
-    pricePencePerMonth: 39900,
-    blurb: 'Multi-entity groups and funds',
-    features: ['Everything in Growth', 'Unlimited members', 'Priority support', 'Public API + webhooks'],
-  },
-];
+/**
+ * The plan catalogue lives in @apex/types/plan — the landing page renders the
+ * same three columns and used to keep its own copy, which had already drifted.
+ * Re-exported here so every existing import still resolves.
+ */
+import { PLANS, type PlanDef } from '@apex/types/plan';
+export { PLANS };
+export type { PlanDef };
 
 /** Idempotent product+price per plan via lookup_key. Returns the price id. */
 export async function ensurePrice(plan: PlanDef): Promise<string> {

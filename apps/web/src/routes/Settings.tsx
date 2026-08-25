@@ -1031,7 +1031,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                   {isAdmin && !current && data.configured && (
                     <Button
                       className="mt-3 w-full"
-                      variant={p.key === 'GROWTH' ? 'primary' : 'secondary'}
+                      variant={p.featured ? 'primary' : 'secondary'}
                       loading={checkout.isPending && checkout.variables?.plan === p.key}
                       disabled={checkout.isPending}
                       onClick={() => checkout.mutate({ plan: p.key })}
