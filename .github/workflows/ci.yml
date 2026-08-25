@@ -84,6 +84,33 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Job-level, not step-level. compose interpolates the whole file for EVERY
+    # command, so `docker compose logs` needs these as much as `up` does — and
+    # that is the step that runs when the suite has just failed. It was set on
+    # `up` alone, so the one time the diagnostics mattered they died with
+    # "required variable POSTGRES_PASSWORD is missing" instead of printing the
+    # API log.
+    env:
+      # a throwaway signing key: this stack is created and destroyed inside
+      # this job, and no real secret should ever be needed to run the tests
+      JWT_SECRET: ci-ephemeral-not-a-real-secret
+      # a throwaway database password, for the same reason as the signing key
+      POSTGRES_PASSWORD: ci-ephemeral-not-a-real-password
+      # the suite signs in as the seeded demo users, so this stack asks for
+      # them explicitly — a production build does not seed them
+      SEED_DEMO: '1'
+      # …and it drives the demo fallbacks too: the suite asserts that
+      # Auto-Appraisal returns the worked example AND says so. A production
+      # deployment refuses to invent a scheme; this stack is a demo and has to
+      # declare itself one. See src/demo-mode.ts.
+      DEMO_MODE: '1'
+      # The suite signs in on every test from one IP, so the honest
+      # production limits would fail it for the wrong reason. They live HERE
+      # rather than in docker-compose.yml, so the file people deploy is not
+      # loosened to suit the test run. The limiter itself is covered
+      # directly by apps/api/test/security.test.ts.
+      RATE_LIMIT_PER_MIN: '5000'
+      AUTH_RATE_LIMIT_PER_MIN: '1000'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -93,22 +120,6 @@ jobs:
           cache: pnpm
       - run: pnpm install
       - name: Build and start the production stack
-        env:
-          # a throwaway signing key: this stack is created and destroyed inside
-          # this job, and no real secret should ever be needed to run the tests
-          JWT_SECRET: ci-ephemeral-not-a-real-secret
-          # the suite signs in as the seeded demo users, so this stack asks for
-          # them explicitly — a production build does not seed them
-          SEED_DEMO: '1'
-          # a throwaway database password, for the same reason as the signing key
-          POSTGRES_PASSWORD: ci-ephemeral-not-a-real-password
-          # The suite signs in on every test from one IP, so the honest
-          # production limits would fail it for the wrong reason. They live HERE
-          # rather than in docker-compose.yml, so the file people deploy is not
-          # loosened to suit the test run. The limiter itself is covered
-          # directly by apps/api/test/security.test.ts.
-          RATE_LIMIT_PER_MIN: '5000'
-          AUTH_RATE_LIMIT_PER_MIN: '1000'
         run: |
           # --env-file /dev/null so a stray .env can never leak real credentials
           # into a CI run, and so the suite is proven to pass WITHOUT them
