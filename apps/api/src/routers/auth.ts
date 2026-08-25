@@ -192,7 +192,7 @@ export const authRouter = router({
         const sso = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: user.orgId } });
         if (sso?.enforced) {
           const mail = ssoResetEmail(user.name, APP_URL());
-          await sendMail(user.email, mail.subject, mail.text);
+          await sendMail(user.orgId, user.email, mail.subject, mail.text);
           await recordAudit(ctx.prisma, {
             orgId: user.orgId, userId: user.id, actor: user.name,
             action: AUDIT.passwordResetRequested, target: `${user.email} (SSO — no token issued)`, ip: ctx.ip,
@@ -206,7 +206,7 @@ export const authRouter = router({
           data: { resetTokenHash: hash, resetTokenExpiresAt: expiresAt },
         });
         const mail = resetEmail(user.name, APP_URL(), token);
-        await sendMail(user.email, mail.subject, mail.text);
+        await sendMail(user.orgId, user.email, mail.subject, mail.text);
         await recordAudit(ctx.prisma, {
           orgId: user.orgId, userId: user.id, actor: user.name,
           action: AUDIT.passwordResetRequested, target: user.email, ip: ctx.ip,

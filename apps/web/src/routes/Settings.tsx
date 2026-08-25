@@ -252,6 +252,68 @@ function InviteForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ---------- Demo mailbox ----------
+
+/**
+ * What would have been emailed, on an instance that cannot send.
+ *
+ * The API has kept this in memory for a long time and nothing displayed it, so
+ * the flows it exists for — invite a colleague, forgot your password — were
+ * demonstrable only by reading a server console. The reset flow in particular
+ * could not be shown at all.
+ *
+ * The panel hides itself unless the server says the mailbox is on, which is
+ * demo mode AND no SMTP. On any instance that sends real email there is nothing
+ * here and nothing to hide.
+ */
+function DemoMailboxPanel({ isAdmin }: { isAdmin: boolean }) {
+  const { data } = trpc.org.demoMailbox.useQuery(undefined, { enabled: isAdmin, refetchInterval: 15_000 });
+  const [open, setOpen] = useState<string | null>(null);
+
+  if (!isAdmin || !data?.enabled) return null;
+
+  return (
+    <Panel
+      title="Demo mailbox"
+      right={<StatusChip status="amber" label={`${data.messages.length} HELD`} />}
+    >
+      <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        This server has no outbound email configured and is running in demo mode, so invitations and password-reset
+        links are held here instead of being sent. Only this workspace's messages appear, and nothing is kept once{' '}
+        <code className="fig text-[11.5px]">SMTP_URL</code> is set.
+      </div>
+
+      {data.messages.length === 0 ? (
+        <div className="mt-3 text-[12.5px] text-ink-3">Nothing yet.</div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-1.5">
+          {data.messages.map((m) => (
+            <div key={`${m.at}-${m.to}`} className="border-t border-border-faint pt-2">
+              <button
+                type="button"
+                className="w-full text-left flex items-baseline gap-3"
+                onClick={() => setOpen(open === `${m.at}-${m.to}` ? null : `${m.at}-${m.to}`)}
+              >
+                <span className="text-[12.5px] font-semibold min-w-0 truncate">{m.subject}</span>
+                <span className="text-[11.5px] text-ink-3 min-w-0 truncate">{m.to}</span>
+                <span className="flex-1" />
+                <span className="fig text-[10.5px] text-ink-3">
+                  {new Date(m.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </button>
+              {open === `${m.at}-${m.to}` && (
+                <pre className="fig mt-2 overflow-x-auto whitespace-pre-wrap rounded-[8px] bg-sunken px-3 py-2 text-[11.5px] leading-[1.6] text-ink-2">
+                  {m.text}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 // ---------- Portal access ----------
 
 /**
@@ -1305,6 +1367,7 @@ export default function Settings() {
         <BankPanel isAdmin={isAdmin} />
         <ApiKeysPanel isAdmin={isAdmin} />
         <WebhooksPanel isAdmin={isAdmin} />
+        <DemoMailboxPanel isAdmin={isAdmin} />
         {isAdmin && <ErrorsPanel />}
         <SecurityPanel />
         {isAdmin && <DataPrivacyPanel />}

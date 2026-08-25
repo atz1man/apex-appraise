@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import { demoFallbacksAllowed } from './demo-mode.js';
 
 /**
  * Outbound email. Configured with SMTP_URL (e.g. smtp://user:pass@smtp.postmarkapp.com:587)
@@ -25,14 +26,27 @@ function getTransporter(): Transporter | null {
 const FROM = () => process.env.EMAIL_FROM || 'Apex Appraise <no-reply@apexappraise.co.uk>';
 
 /**
- * Demo mailbox — the last few messages, in memory, ONLY when no SMTP is
- * configured.
+ * Demo mailbox — the last few messages, in memory, on a demo instance only.
  *
  * Without this, every email-shaped flow (invites, reset links) is untestable and
- * unusable on a demo instance: the mail goes to a console nobody reads. It is
- * deliberately impossible to enable alongside real email — the moment SMTP_URL is
- * set, nothing is recorded and the reader returns nothing, so a production
- * instance cannot serve anyone else's messages even by mistake.
+ * unusable on a demo instance: the mail goes to a console nobody reads.
+ *
+ * It used to turn itself on whenever SMTP_URL was unset, and that was the exact
+ * hazard demo-mode.ts was written to describe, in its own words: "the trigger is
+ * the ABSENCE of configuration — which is not consent. A firm that has deployed
+ * but not yet set up Stripe, or an AI key, is in exactly that state on day one."
+ * A firm that has deployed and not yet configured SMTP is in it too — and this
+ * mailbox holds password-reset links.
+ *
+ * Three things were wrong at once, and only together did they matter. The array
+ * is process-wide rather than per-workspace, the procedure that read it was open
+ * to any internal user rather than an admin, and it was live on any deployment
+ * that had not set SMTP_URL. So on a real multi-tenant instance in that state,
+ * any analyst in any workspace could read the reset link for anyone in any
+ * other workspace, and take the account.
+ *
+ * Now it takes a decision, the same one every other fabrication takes, and what
+ * it hands back is scoped to the caller's own workspace.
  */
 /**
  * 25 was too small once the test suite started registering workspaces: each
@@ -42,20 +56,37 @@ const FROM = () => process.env.EMAIL_FROM || 'Apex Appraise <no-reply@apexapprai
  * nothing and gives the mailbox enough depth to be trusted.
  */
 const MAILBOX_LIMIT = 200;
-const mailbox: Array<{ to: string; subject: string; text: string; at: string }> = [];
+const mailbox: Array<{ orgId: string; to: string; subject: string; text: string; at: string }> = [];
 
-export const mailboxEnabled = () => !process.env.SMTP_URL;
+/**
+ * Both halves. Real email means nothing is recorded, so a configured instance
+ * cannot serve anyone's messages even by mistake; and production without an
+ * explicit DEMO_MODE means the same, so an instance that simply has not got to
+ * SMTP yet is not quietly keeping reset links in memory.
+ */
+export const mailboxEnabled = () => demoFallbacksAllowed() && !process.env.SMTP_URL;
 
-export function readMailbox(): typeof mailbox {
-  return mailboxEnabled() ? [...mailbox].reverse() : [];
+/** One workspace's messages, newest first. Never another's. */
+export function readMailbox(orgId: string): typeof mailbox {
+  if (!mailboxEnabled()) return [];
+  return mailbox.filter((m) => m.orgId === orgId).reverse();
 }
 
-export async function sendMail(to: string, subject: string, text: string): Promise<{ emailed: boolean }> {
+/**
+ * `orgId` is what the message belongs to, not who it is addressed to — an invite
+ * goes to somebody who has no account yet. It is required rather than optional
+ * so that a new email-shaped flow cannot be added without deciding whose it is.
+ */
+export async function sendMail(orgId: string, to: string, subject: string, text: string): Promise<{ emailed: boolean }> {
   const t = getTransporter();
   if (!t) {
-    console.log(`[email:demo-mode] to=${to} subject="${subject}"\n${text}\n`);
-    mailbox.push({ to, subject, text, at: new Date().toISOString() });
-    if (mailbox.length > MAILBOX_LIMIT) mailbox.shift();
+    // logged either way: on an instance with neither SMTP nor demo mode, the
+    // console is the only place an operator can find what would have been sent
+    console.log(`[email:not-sent] to=${to} subject="${subject}"\n${text}\n`);
+    if (mailboxEnabled()) {
+      mailbox.push({ orgId, to, subject, text, at: new Date().toISOString() });
+      if (mailbox.length > MAILBOX_LIMIT) mailbox.shift();
+    }
     return { emailed: false };
   }
   try {

@@ -103,7 +103,7 @@ describe('inviting an investor', () => {
       name: 'Sam Reed',
       email: 'sam@fischer.test',
     } as never);
-    const mail = readMailbox().find((m) => m.to === 'sam@fischer.test');
+    const mail = readMailbox(A.orgId).find((m) => m.to === 'sam@fischer.test');
     expect(mail, 'no invitation was sent').toBeTruthy();
     // an LP told they have been "invited to join Brookfield Developments"
     // reasonably picks up the phone

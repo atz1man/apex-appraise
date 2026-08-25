@@ -255,7 +255,7 @@ describe('enforcement', () => {
 
     // and the person is told why, rather than left waiting for a mail that never comes
     const { readMailbox } = await import('../src/email.js');
-    const last = readMailbox().find((m) => m.to === user.email);
+    const last = readMailbox(user.orgId).find((m) => m.to === user.email);
     expect(last?.subject).toMatch(/Signing in/i);
     expect(last?.text).toMatch(/single sign-on/i);
     expect(last?.text, 'a reset link was sent anyway').not.toMatch(/\/reset\?token=/);

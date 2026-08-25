@@ -73,12 +73,19 @@ export const orgRouter = router({
   /**
    * The demo mailbox: what would have been emailed, when no SMTP is configured.
    *
-   * Returns nothing at all the moment SMTP_URL is set, so a production instance
-   * cannot serve messages even if this were called. It exists because on a demo
-   * instance an invite or a reset link otherwise goes to a console nobody reads,
-   * which makes those flows impossible to try — and impossible to test.
+   * It exists because on a demo instance an invite or a reset link otherwise
+   * goes to a console nobody reads, which makes those flows impossible to try —
+   * and impossible to test.
+   *
+   * Admin, and scoped to the caller's own workspace. Both are new: this was open
+   * to any internal user and returned a process-wide array, which on a
+   * multi-tenant instance with SMTP unset let any analyst read the reset link
+   * for anyone in any other workspace. See the note in email.ts.
    */
-  demoMailbox: internalProcedure.query(() => ({ enabled: mailboxEnabled(), messages: readMailbox() })),
+  demoMailbox: adminProcedure.query(({ ctx }) => ({
+    enabled: mailboxEnabled(),
+    messages: readMailbox(ctx.principal.orgId),
+  })),
 
   /** Self-serve tenant onboarding: new organisation + its first (admin) user. */
   register: publicProcedure
@@ -121,7 +128,7 @@ export const orgRouter = router({
       }
       const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
       const welcome = welcomeEmail(user.name, org.name, APP_URL());
-      void sendMail(email, welcome.subject, welcome.text);
+      void sendMail(org.id, email, welcome.subject, welcome.text);
       return {
         token,
         principal: {
@@ -326,7 +333,7 @@ export const orgRouter = router({
       });
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       const mail = inviteEmail(input.name, org?.name ?? 'your team', email, tempPassword, APP_URL());
-      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      const { emailed } = await sendMail(ctx.principal.orgId, email, mail.subject, mail.text);
       return { tempPassword, emailed };
     }),
 

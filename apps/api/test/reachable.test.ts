@@ -47,8 +47,6 @@ const CALL_FORMS = (path: string) => [`trpc.${path}.`, `utils.${path}.`, `client
 const NO_APP_CALLER: Record<string, string> = {
   'auth.me':
     'the canonical "who am I" for an API consumer. The app holds the principal from sign-in, so it has never needed to ask.',
-  'org.demoMailbox':
-    'reads the in-memory mailbox a demo instance keeps when no SMTP is configured. e2e/screens.spec.ts drives it over HTTP; there is no screen, so a demo instance can be tested but an operator still cannot read an invite. A gap, deliberately left rather than missed.',
   'appraisal.compute':
     'the app imports the engine directly and computes in the browser, which is the point of a shared engine. This is the same computation for an API consumer.',
   'appraisal.sensitivity':

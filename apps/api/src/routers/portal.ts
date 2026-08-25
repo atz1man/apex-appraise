@@ -411,7 +411,7 @@ export const portalAccessRouter = router({
 
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       const mail = portalInviteEmail(input.name, org?.name ?? 'A firm', email, password, APP_URL(), `your position in ${investor.name}`);
-      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      const { emailed } = await sendMail(ctx.principal.orgId, email, mail.subject, mail.text);
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'gave an investor portal access', target: `${input.name} <${email}> · ${investor.name}`, ip: ctx.ip,
@@ -447,7 +447,7 @@ export const portalAccessRouter = router({
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       const what = `your reservation at ${unit.name}, ${unit.deal.name}`;
       const mail = portalInviteEmail(input.name, org?.name ?? 'A firm', email, password, APP_URL(), what);
-      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      const { emailed } = await sendMail(ctx.principal.orgId, email, mail.subject, mail.text);
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'gave a buyer portal access', target: `${input.name} <${email}> · ${unit.name}`, ip: ctx.ip,
