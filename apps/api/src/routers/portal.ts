@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { J, P } from '../mappers.js';
 import { buyerProcedure, internalProcedure, investorProcedure, router } from '../trpc.js';
+import { demoSettlementAllowed } from '../stripe.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
 async function investorPosition(prisma: any, investorId: string, orgId: string) {
@@ -151,7 +152,8 @@ export const buyerRouter = router({
         paid: p.status === 'PAID',
         date: p.paidAt,
       })),
-      stripeMode: process.env.STRIPE_SECRET_KEY ? 'live' : 'demo',
+      // three states, not two: live, demo settlement, and configured-for-neither
+      stripeMode: process.env.STRIPE_SECRET_KEY ? 'live' : demoSettlementAllowed() ? 'demo' : 'unavailable',
     };
   }),
 
@@ -191,6 +193,15 @@ export const buyerRouter = router({
       const intent = (await res.json()) as { id: string; client_secret: string };
       await ctx.prisma.payment.update({ where: { id: payment.id }, data: { stripeIntentId: intent.id } });
       return { mode: 'live' as const, clientSecret: intent.client_secret };
+    }
+
+    if (!demoSettlementAllowed()) {
+      // A buyer reads this, so it says what to do rather than what is missing.
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message:
+          'Card payments are not available on this development yet. Please contact the developer to arrange your payment.',
+      });
     }
 
     // demo mode — settle instantly and audit it

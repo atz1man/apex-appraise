@@ -127,3 +127,98 @@ describe('a buyer', () => {
     await expectDenied('buyer portal as investor', () => investor.buyer.myUnit());
   });
 });
+
+/**
+ * Settling a payment when no money moved.
+ *
+ * The buyer portal falls back to instant settlement when no Stripe key is
+ * configured. That is right for a demo and dangerous anywhere else: a firm that
+ * has deployed but not yet set up payments is in exactly that state on day one,
+ * possibly with buyers already invited. The fabricated settlement writes
+ * Payment.status = PAID, which is what the sales ledger and the exposure
+ * figures are built from — the buyer sees a label, the developer sees a deposit
+ * that does not exist.
+ */
+describe('paying without a payment processor', () => {
+  const withEnv = async (env: Record<string, string | undefined>, run: () => Promise<void>) => {
+    const before = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
+    Object.entries(env).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v)));
+    try {
+      await run();
+    } finally {
+      Object.entries(before).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v)));
+    }
+  };
+
+  /** A reserved plot, its buyer's portal login, and a payment they owe. */
+  const duePayment = async (t: Tenant) => {
+    const unit = await prisma.unit.create({
+      data: { orgId: t.orgId, dealId: t.dealId, name: 'Plot 1', spec: '3 bed', appraisedValue: BigInt(450_000_00), status: 'RESERVED', buyerName: 'Buyer' },
+    });
+    const user = await prisma.user.create({
+      data: {
+        orgId: t.orgId, email: `buyer-${unit.id}@stripe.test`, password: 'x', name: 'Buyer',
+        initials: 'BY', role: 'VIEWER', principalType: 'buyer', buyerUnitId: unit.id,
+      },
+    });
+    const payment = await prisma.payment.create({
+      data: { orgId: t.orgId, unitId: unit.id, kind: 'Reservation fee', amount: BigInt(500_000), status: 'PENDING' },
+    });
+    const principal = {
+      userId: user.id, orgId: t.orgId, principalType: 'buyer' as const, role: 'VIEWER',
+      name: 'Buyer', initials: 'BY', investorId: null, buyerUnitId: unit.id,
+    };
+    return { payment, principal };
+  };
+
+  it('refuses in production unless someone decided otherwise', async () => {
+    const t = await makeTenant('NoStripe');
+    const { payment, principal: buyer } = await duePayment(t);
+
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+      await expect(callerFor(buyer as never).buyer.pay(payment.id)).rejects.toThrow(/contact the developer/i);
+    });
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
+      'a deposit was recorded as received when no money had moved',
+    ).toBe('PENDING');
+  });
+
+  it('still settles on a demo instance that asked for it', async () => {
+    const t = await makeTenant('DemoStripe');
+    const { payment, principal: buyer } = await duePayment(t);
+
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: '1' }, async () => {
+      const out = (await callerFor(buyer as never).buyer.pay(payment.id)) as { mode: string };
+      expect(out.mode).toBe('demo');
+    });
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe('PAID');
+  });
+
+  it('still settles in development, so the flow can be exercised', async () => {
+    const t = await makeTenant('DevStripe');
+    const { payment, principal: buyer } = await duePayment(t);
+
+    await withEnv({ NODE_ENV: 'test', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+      expect(((await callerFor(buyer as never).buyer.pay(payment.id)) as { mode: string }).mode).toBe('demo');
+    });
+  });
+
+  it('tells the buyer which of the three states they are in', async () => {
+    const t = await makeTenant('Modes');
+    const { payment, principal: buyer } = await duePayment(t);
+    const mode = async () => ((await callerFor(buyer as never).buyer.myUnit()) as { stripeMode: string }).stripeMode;
+
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: undefined }, async () => {
+      // not "demo" — the portal used to promise instant settlement it would not do
+      expect(await mode()).toBe('unavailable');
+    });
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: undefined, DEMO_PAYMENTS: '1' }, async () => {
+      expect(await mode()).toBe('demo');
+    });
+    await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: 'sk_test_x' }, async () => {
+      expect(await mode()).toBe('live');
+    });
+  });
+});

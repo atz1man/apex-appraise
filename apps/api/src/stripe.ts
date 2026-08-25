@@ -9,6 +9,24 @@ const API = 'https://api.stripe.com/v1';
 export const stripeConfigured = () => Boolean(process.env.STRIPE_SECRET_KEY);
 // `||`: compose sends `${STRIPE_PUBLISHABLE_KEY:-}`, and '' is not null — a
 // caller checking for null would have been handed an empty string instead
+/**
+ * May this deployment settle a payment without taking any money?
+ *
+ * The buyer portal falls back to instant settlement when no Stripe key is
+ * configured, which is right for a demo and dangerous anywhere else. Absence of
+ * a key is not consent: a firm that has deployed but not yet set up payments is
+ * in exactly that state on day one, possibly with buyers already invited — and
+ * a fabricated settlement writes Payment.status = PAID, which is what the sales
+ * ledger and the exposure figures are built from. The buyer sees a label; the
+ * developer sees a deposit that does not exist.
+ *
+ * So in production it takes an explicit decision, the same shape the seed uses
+ * for demo accounts (see prisma/seed.ts). Outside production it stays on,
+ * because a local checkout that cannot be exercised is a feature nobody tests.
+ */
+export const demoSettlementAllowed = () =>
+  process.env.NODE_ENV !== 'production' || process.env.DEMO_PAYMENTS === '1';
+
 export const stripePublishableKey = () => process.env.STRIPE_PUBLISHABLE_KEY || null;
 
 export async function stripeFetch<T = any>(
