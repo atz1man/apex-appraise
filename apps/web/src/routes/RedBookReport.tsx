@@ -27,6 +27,7 @@ const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boo
   </PaperPage>
 );
 import { CompsLadder } from '../components/charts';
+import { SiteMap } from '../components/SiteMap';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
 
@@ -199,6 +200,20 @@ export default function RedBookReport() {
   const comps = compsData?.comps ?? [];
   const summary = compsData?.summary;
   const hasComps = comps.length > 0 && !!summary;
+
+  /**
+   * The subject's coordinates, geocoded and cached by the API — the same
+   * `comparables.list` this page already calls, so plotting the site costs
+   * nothing extra. The situation panel used to embed google.com/maps in an
+   * iframe, which handed Google the subject property's address every time
+   * anybody opened a valuation and was the last third-party request left in
+   * the product. "Nobody else" is what the privacy notice says.
+   */
+  const located = compsData?.subject;
+  const subjectPin =
+    located?.status === 'located'
+      ? [{ lat: located.geo.latitude, lng: located.geo.longitude, label: deal?.name ?? 'Subject site', sub: deal?.address, kind: 'subject' as const }]
+      : [];
 
   /**
    * There is nothing to export until an appraisal exists. Offering the buttons
@@ -613,14 +628,21 @@ export default function RedBookReport() {
               were noted on inspection.
             </div>
             <div className="shrink-0 rounded-[12px] overflow-hidden border border-border-strong relative" style={{ width: 300, height: 188, background: neutral.sunken2 }}>
-              <iframe
-                src={`https://www.google.com/maps?q=${encodeURIComponent(deal?.address ?? '')}&z=16&output=embed`}
-                title={`Site location — ${deal?.address ?? 'subject property'}`}
-                style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-              <div className="absolute fig text-[9.5px] font-medium rounded-[7px] pointer-events-none" style={{ bottom: 10, left: 10, padding: '4px 9px', background: 'rgba(255,255,255,0.92)', color: brand[700] }}>
+              {subjectPin.length ? (
+                <SiteMap pins={subjectPin} height={188} />
+              ) : (
+                /* Nothing plotted rather than a map of somewhere else: without a
+                   resolved postcode there is no position to draw, and a panel
+                   saying so is what the certificate can stand behind. */
+                <div className="w-full h-full flex items-center justify-center text-center text-[11.5px] leading-[1.5]" style={{ padding: '0 22px', color: '#5F625F' }}>
+                  {located?.status === 'no-postcode'
+                    ? 'No postcode on this deal, so the site is not plotted.'
+                    : located?.status === 'bad-postcode'
+                      ? `“${located.postcode}” is not a recognised UK postcode, so the site is not plotted.`
+                      : 'The postcode lookup is unavailable, so the site is not plotted.'}
+                </div>
+              )}
+              <div className="absolute fig text-[9.5px] font-medium rounded-[7px] pointer-events-none" style={{ bottom: 10, left: 10, zIndex: 500, padding: '4px 9px', background: 'rgba(255,255,255,0.92)', color: brand[700] }}>
                 {deal?.address}
               </div>
             </div>

@@ -42,6 +42,36 @@ async function assertSelfContained(
   // give anything lazy — a map, a deferred script — a chance to betray us
   await page.waitForTimeout(1500);
 
+  /**
+   * What the page ASKS for, checked before what this run happened to fetch.
+   *
+   * Watching requests catches the leak only when the element renders, and a
+   * whole panel can be gated on a live geocode: an environment that cannot
+   * reach postcodes.io draws no map, so a Google Maps iframe restored behind
+   * that same gate passed the request sweep with nothing to report. An
+   * off-origin `src` in the document is the defect whether or not this
+   * particular run got as far as loading it.
+   */
+  const embedded = await page.evaluate((allowed) => {
+    const out: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('iframe[src], img[src], script[src], link[href], embed[src], object[data], source[src], video[src], audio[src]')) {
+      const raw = el.getAttribute('src') ?? el.getAttribute('href') ?? el.getAttribute('data') ?? '';
+      if (!raw) continue;
+      let url: URL;
+      try {
+        url = new URL(raw, document.baseURI);
+      } catch {
+        continue;
+      }
+      if (url.protocol === 'data:' || url.protocol === 'blob:') continue;
+      if (url.origin === location.origin) continue;
+      if (allowed.some((re) => new RegExp(re).test(url.href))) continue;
+      out.push(`${el.tagName.toLowerCase()} ${url.href}`);
+    }
+    return out;
+  }, ALLOWED_OFF_ORIGIN.map((re) => re.source));
+
+  expect(embedded, `${where} embeds something from another origin`).toEqual([]);
   expect(offOrigin, `${where} loaded something from another origin`).toEqual([]);
 }
 
@@ -85,4 +115,41 @@ test('the map screens fetch their tiles from this application', async ({ page, b
    * here would already have failed the check above.
    */
   for (const t of tiles) expect(t.startsWith(origin), `a tile came from ${t}`).toBe(true);
+});
+
+/**
+ * The printed documents, which are the pages that most need this rule and were
+ * the ones exempt from it.
+ *
+ * Measured on the demo workspace: opening a Red Book valuation fired
+ * `document https://www.google.com/maps?q=West%20Quay%20Road%2C%20Poole&z=16&output=embed`
+ * — the situation panel embedded Google Maps in an iframe, so the subject
+ * property's address reached Google every time anybody opened a valuation, and
+ * every time one was rendered server-side for a PDF. Nothing above covered a
+ * deal route, so the last third-party request in the product sat on the most
+ * confidential page in it.
+ *
+ * The sweep above is by route, so it can only ever be as good as its list. These
+ * two are the documents that leave the building.
+ */
+test('the printed documents contact nothing but this product', async ({ page, baseURL }) => {
+  test.setTimeout(90_000);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return (j.result.data.json.deals as Array<{ id: string; name: string }>).find((d) => d.name.startsWith('Harbour'))!.id;
+  });
+
+  for (const [what, path] of [
+    ['the Red Book valuation', `/deal/${id}/redbook`],
+    ['the appraisal report', `/deal/${id}/report`],
+  ] as const) {
+    await assertSelfContained(page, baseURL!, what, async () => {
+      await page.goto(path);
+      await page.waitForSelector('.a4-page', { timeout: 30_000 });
+    });
+  }
 });
