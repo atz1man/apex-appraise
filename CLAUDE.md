@@ -24,12 +24,13 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (246; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (254; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (578). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (581). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (57): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx).
+  A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
 - `cd apps/web && npx playwright test` — e2e (139, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
@@ -61,7 +62,7 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
   fails the build if a page contacts anyone else.
 - Provenance on every figure (extraction citations, audit events).
 
-## Mechanical guards (whole-codebase sweeps in `apps/api/test`)
+## Mechanical guards (whole-codebase sweeps)
 
 Each of these walks the REAL router or schema rather than a hand-kept list, because each
 was written after the same defect was found and fixed by hand several times over. Adding a
@@ -75,6 +76,20 @@ the point, so read the failure rather than adding an exemption.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp
   (`assertUnchanged`) or writes only the keys it was given.
+- `secrets-at-rest` — after the real procedures have run, the raw tables are searched for
+  the plaintext, so the FIFTH credential column cannot land unsealed.
+- `ai-disclosure-provenance` — both halves: every declared AI touchpoint has a procedure
+  writing its event, AND every call to the Anthropic API sits inside a function some
+  touchpoint names (`drafter`), so a new model call cannot be used undisclosed.
+- `one-engine-sweep` (in `packages/appraisal-engine/test`) — nothing outside the engine
+  re-derives a quantity the engine owns. Deliberately narrow: it matches the specific
+  derived figures that have a house rule and print on more than one surface
+  (`reportedMarketValue`, `analysedPsf`), not "money maths" in general. Add to its RULES
+  when a fourth is found rather than widening the matchers.
+
+Two of these carry a "finds what it is meant to be sweeping" case, and any new sweep should:
+a sweep over an empty file list passes silently, reporting success for a question it never
+asked.
 
 The LLM outputs are guarded the same way, and for the same reason — an instruction in a
 prompt is not a guard. `narrative-guard.ts` holds a draft to the figures the engine produced
