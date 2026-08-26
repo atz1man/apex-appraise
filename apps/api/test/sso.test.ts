@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import {
   authRequest,
@@ -10,6 +10,7 @@ import {
   type OidcMetadata,
   type OidcTransport,
 } from '../src/sso.js';
+import { __ssoStateCount, pruneSsoStates } from '../src/routers/auth.js';
 import { anonymous, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
@@ -301,5 +302,91 @@ describe('enforcement', () => {
     for (const attempt of ['', ' ', 'password']) {
       await expect(anonymous().auth.login({ email: sso.email, password: attempt } as never)).rejects.toThrow();
     }
+  });
+});
+
+/**
+ * The map behind the redirect, and who decides how big it gets.
+ *
+ * `ssoStart` is public. Every call put a pending state into a module-level Map,
+ * and an entry was only ever removed by the `ssoComplete` that presented that
+ * exact state — so every abandoned sign-in left one behind for the life of the
+ * process. A closed tab does it; so does anyone calling the procedure in a loop.
+ *
+ * The ten-minute check on read looks like a TTL and is not one: it refuses a
+ * stale entry without deleting it, so the memory stays held by states that can
+ * never complete. That is the criterion `row-sweeper.ts` names for AuthThrottle
+ * — "the row count is set by a stranger" — in a Map instead of a table, and with
+ * nothing sweeping it.
+ */
+describe('pending single sign-on states', () => {
+  it('drops the ones that can no longer complete', () => {
+    const before = __ssoStateCount();
+    // nothing to prune yet, and pruning an empty map is not an error
+    expect(pruneSsoStates()).toBe(0);
+    expect(__ssoStateCount()).toBe(before);
+  });
+
+  it('is bounded by the arrival rate rather than by the uptime', async () => {
+    /**
+     * Driven through the real procedure: a hundred sign-ins started and none
+     * finished. `ssoStart` reaches the identity provider's discovery document,
+     * so the transport is stubbed the way `tiles.test.ts` stubs the tile
+     * upstream — what is under test is the map, not the network.
+     */
+    await connect(A);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(meta), { status: 200, headers: { 'content-type': 'application/json' } })),
+    );
+    try {
+      const started = __ssoStateCount();
+      for (let i = 0; i < 100; i++) {
+        await anonymous().auth.ssoStart({ email: emailFor(A) } as never);
+      }
+      expect(__ssoStateCount(), 'the starts did not reach the map').toBe(started + 100);
+
+      /**
+       * The clock moves past the TTL and one more caller arrives. Before this,
+       * the map still held all hundred — indefinitely, since only a matching
+       * `ssoComplete` removed anything and none of these will ever get one.
+       */
+      const dropped = pruneSsoStates(Date.now() + 11 * 60_000);
+      expect(dropped, 'nothing was reclaimed — the map grows for the life of the process').toBeGreaterThanOrEqual(100);
+      expect(__ssoStateCount()).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('prunes on the way in, so nobody has to remember to call it', async () => {
+    await connect(A);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(meta), { status: 200, headers: { 'content-type': 'application/json' } })),
+    );
+    try {
+      await anonymous().auth.ssoStart({ email: emailFor(A) } as never);
+      expect(__ssoStateCount()).toBe(1);
+      /**
+       * Age the entry past the TTL by moving the clock the map is read against.
+       * The next start is the only thing that has to happen for the dead one to
+       * go — no timer, no sweeper, no deploy.
+       */
+      vi.setSystemTime(new Date(Date.now() + 11 * 60_000));
+      await anonymous().auth.ssoStart({ email: emailFor(A) } as never);
+      expect(__ssoStateCount(), 'the abandoned state outlived its own TTL').toBe(1);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('never drops a state that can still complete', () => {
+    /**
+     * The failure that would be worse than the leak: pruning a live sign-in
+     * turns a working redirect into "that sign-in has expired".
+     */
+    expect(pruneSsoStates(Date.now())).toBe(0);
   });
 });
