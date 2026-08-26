@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (254; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (597). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (602). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (57): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx).
@@ -83,6 +83,9 @@ the point, so read the failure rather than adding an exemption.
 - `ai-disclosure-provenance` — both halves: every declared AI touchpoint has a procedure
   writing its event, AND every call to the Anthropic API sits inside a function some
   touchpoint names (`drafter`), so a new model call cannot be used undisclosed.
+- `one-current-read-sweep` — "the current appraisal" is asked once, in
+  `current-appraisal.ts`; no other file spells the query out, and a rollup lands on
+  the same row a single deal's report does.
 - `one-engine-sweep` (in `packages/appraisal-engine/test`) — nothing outside the engine
   re-derives a quantity the engine owns. Deliberately narrow: it matches the specific
   derived figures that have a house rule and print on more than one surface

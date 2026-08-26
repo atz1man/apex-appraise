@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { currentAppraisal, currentAppraisals, currentByDeal } from './current-appraisal.js';
 import {
   aggregateExposure,
   computeAppraisal,
@@ -170,9 +171,7 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
     // way to discover which deal ids exist elsewhere
     if (!deal) return fail(reply, 404, 'not_found', 'No such deal');
 
-    const appraisal = await db.appraisal.findFirst({
-      where: { dealId: deal.id, orgId: principal.orgId, isCurrent: true },
-    });
+    const appraisal = await currentAppraisal(db.appraisal, deal.id, principal.orgId);
     const result = appraisal ? computeAppraisal(appraisalRowToEngineInput(appraisal)) : null;
 
     return {
@@ -209,7 +208,7 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
     const orgId = principal.orgId;
     const [deals, appraisals, packages, policy] = await Promise.all([
       db.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
-      db.appraisal.findMany({ where: { orgId, isCurrent: true } }),
+      currentAppraisals(db.appraisal, orgId),
       db.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
       db.orgPolicy.findUnique({ where: { orgId } }),
     ]);
@@ -228,7 +227,8 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
       ltcMaxPct: policy?.covLtcMaxPct ?? null,
       minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
     };
-    const byDeal = new Map(appraisals.map((a) => [a.dealId, a]));
+    // newest-first, first-wins — the same answer the per-deal route above gives
+    const byDeal = currentByDeal(appraisals);
 
     const positions = deals
       .map((d) => {

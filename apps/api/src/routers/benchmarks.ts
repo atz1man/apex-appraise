@@ -11,6 +11,7 @@ import {
   type CohortPoint,
 } from '@apex/appraisal-engine';
 import { recordAudit } from '../audit.js';
+import { currentAppraisal } from '../current-appraisal.js';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 
 /**
@@ -278,9 +279,7 @@ export const benchmarksRouter = router({
 
     const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: deal.id, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, deal.id, ctx.principal.orgId);
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save an appraisal before contributing' });
     const R = computeAppraisal(appraisalRowToEngineInput(row));
     if (R.gia <= 0 || R.gdv <= 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Appraisal has no areas/revenue yet' });

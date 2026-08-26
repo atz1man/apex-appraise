@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { currentAppraisals, currentByDeal } from '../current-appraisal.js';
 import { portfolioRollup } from '@apex/appraisal-engine';
 import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, moneyLabel, toPence } from '../mappers.js';
@@ -94,7 +95,7 @@ export const dealsRouter = router({
     const orgId = ctx.principal.orgId;
     const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
       ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
-      ctx.prisma.appraisal.findMany({ where: { orgId, isCurrent: true } }),
+      currentAppraisals(ctx.prisma.appraisal, orgId),
       ctx.prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
       ctx.prisma.orgPolicy.findUnique({ where: { orgId } }),
       // the bank feed, where one exists — cash beats a proxy built from invoices
@@ -131,7 +132,12 @@ export const dealsRouter = router({
       cur.weighted += budget * (p.progressPct ?? 0);
       costBy.set(p.dealId, cur);
     }
-    const byDeal = new Map(appraisals.map((a) => [a.dealId, a]));
+    /**
+     * Newest-first from `currentAppraisals`, first-wins here — so a portfolio
+     * row and that deal's own report resolve to the same version. This was
+     * `new Map(appraisals.map(...))`, which keeps whichever row arrived LAST.
+     */
+    const byDeal = currentByDeal(appraisals);
 
     const positions = deals
       .map((d) => {

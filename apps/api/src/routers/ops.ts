@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
 import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
@@ -89,9 +90,7 @@ export const costRouter = router({
       where: { dealId: input, orgId: ctx.principal.orgId },
       include: { contractor: true },
     });
-    const appraisal = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const appraisal = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     const out = packages.map(pkgOut);
     /**
      * The baseline is the CURRENT APPRAISAL's construction cost.

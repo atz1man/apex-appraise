@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
+import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
 import {
   analysedPsf,
@@ -167,10 +168,7 @@ function assertNotApproved(row: { reviewStatus: string | null; label: string }) 
 export const appraisalRouter = router({
   getCurrent: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) return null;
     const engineInput = appraisalRowToEngineInput(row);
     return {
@@ -230,9 +228,7 @@ export const appraisalRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { result, jv } = fullResult(input.input);
-      const existing = await ctx.prisma.appraisal.findFirst({
-        where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-      });
+      const existing = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
       const data = {
         ...inputToRow(input.input),
         source: input.source,
@@ -347,9 +343,7 @@ export const appraisalRouter = router({
          */
         row = await ctx.prisma.$transaction(
           async (tx) => {
-            const raced = await tx.appraisal.findFirst({
-              where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-            });
+            const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
             if (raced) {
               throw new TRPCError({
                 code: 'CONFLICT',
@@ -832,9 +826,7 @@ export const appraisalRouter = router({
      * serialisation alone — which passes the test and leaves the guard that
      * production actually needs unexercised.
      */
-    const existingCurrent = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const existingCurrent = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
     const restored = await ctx.prisma.$transaction(async (tx) => {
       if (existingCurrent) {
         const { count } = await tx.appraisal.updateMany({
@@ -922,10 +914,7 @@ export const appraisalRouter = router({
     }).filter((t) => t.count > 0);
 
     const [row, policy] = await Promise.all([
-      ctx.prisma.appraisal.findFirst({
-        where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
+      currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId),
       ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
     ]);
     const narrative = J<NarrativePayload | null>(row?.narrative, null);
@@ -951,10 +940,7 @@ export const appraisalRouter = router({
    */
   draftNarrative: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to draft a narrative from — save an appraisal first.' });
     // the narrative IS the Red Book prose, and it carries the AI-use disclosure
     assertNotApproved(row);
@@ -1690,9 +1676,7 @@ export const comparablesRouter = router({
         adjustments: { size: c.adjSize, condition: c.adjCondition, date: c.adjDate, location: c.adjLocation },
       })),
     );
-    const appraisal = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const appraisal = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!appraisal) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to apply to' });
     assertNotApproved(appraisal);
     const supported = Math.round(summary.supportedPsf);
