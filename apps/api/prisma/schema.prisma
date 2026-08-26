@@ -18,6 +18,18 @@ model Organisation {
   id        String     @id @default(cuid())
   name      String
   logoUrl   String     @default("") // firm mark on client-facing documents
+  /// The firm's RICS Regulated Firm number, or empty where it holds none.
+  ///
+  /// "RICS Regulated" was printed as a literal on the cover and the signature
+  /// seal of every Red Book report and on every terms of engagement, for every
+  /// firm on the platform, with nothing in this table that could ever have made
+  /// it true. It is a claim about a real organisation's regulatory standing,
+  /// made to a lender, on a document carrying professional indemnity.
+  ///
+  /// The number rather than a boolean on purpose: a flag set true with no
+  /// number is the same unverifiable claim with an extra step, and a reader who
+  /// can check the register is a reader the mark is worth something to.
+  ricsFirmNumber String @default("")
   plan      String     @default("TRIAL") // TRIAL | STARTER | GROWTH | ENTERPRISE
   // When the trial stops. Null on a paid plan, and null on the demo workspace.
   // A trial with no clock is a free tier nobody decided to offer.

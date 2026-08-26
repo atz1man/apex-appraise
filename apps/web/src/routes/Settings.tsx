@@ -31,10 +31,18 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
   const utils = trpc.useUtils();
   const { data: org, isLoading } = trpc.org.get.useQuery();
   const [name, setName] = useState<string | null>(null);
+  const [rics, setRics] = useState<string | null>(null);
   const update = trpc.org.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       utils.org.get.invalidate();
-      toast.success('Workspace name updated');
+      setRics(null);
+      toast.success(
+        vars.ricsFirmNumber === undefined
+          ? 'Workspace name updated'
+          : vars.ricsFirmNumber
+            ? 'RICS regulation recorded — the mark now appears on your documents'
+            : 'RICS regulation withdrawn — the mark no longer appears on your documents',
+      );
     },
   });
   const [uploading, setUploading] = useState(false);
@@ -88,6 +96,48 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const draft = name ?? org.name;
   const dirty = draft.trim() !== org.name && draft.trim().length >= 2;
+  const ricsDraft = rics ?? org.ricsFirmNumber;
+  const ricsDirty = ricsDraft.trim() !== org.ricsFirmNumber;
+
+  /**
+   * "RICS Regulated" used to be printed on the Red Book cover, its signature
+   * seal and the terms of engagement for every firm on the platform, with
+   * nothing behind it. It is a claim about this firm's regulatory standing made
+   * to a lender, so the firm makes it here or the documents do not make it.
+   */
+  const ricsBlock = (
+    <div className="mt-5 border-t border-border-std pt-4">
+      <div className="text-[13.5px] font-semibold">RICS Regulated Firm number</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[520px]">
+        Shown on the Red Book valuation and the terms of engagement, so a reader can check the firm on the RICS register.
+        Leave it empty if the firm is not RICS regulated — those documents then carry no regulatory mark.
+      </div>
+      <div className="mt-3 max-w-[320px]">
+        {isAdmin ? (
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (ricsDirty) update.mutate({ ricsFirmNumber: ricsDraft.trim() });
+            }}
+          >
+            <input
+              className="flex-1 fig"
+              aria-label="RICS Regulated Firm number"
+              placeholder="e.g. 123456"
+              value={ricsDraft}
+              onChange={(e) => setRics(e.target.value)}
+            />
+            <Button type="submit" loading={update.isPending} disabled={!ricsDirty}>
+              Save
+            </Button>
+          </form>
+        ) : (
+          <div className="text-[15px] font-semibold fig">{org.ricsFirmNumber || 'Not declared'}</div>
+        )}
+      </div>
+    </div>
+  );
   const logoBlock = (
     <div className="mt-5 border-t border-border-std pt-4">
       <div className="text-[13.5px] font-semibold">Firm logo</div>
@@ -165,6 +215,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
         <StatCard label="Investors" value={org.counts.investors} />
       </div>
       {logoBlock}
+      {ricsBlock}
     </Panel>
   );
 }

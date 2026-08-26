@@ -151,6 +151,7 @@ export const engagementRouter = router({
         saved: true,
         ...shape(row, org?.name ?? 'Apex Appraise'),
         orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
         signTokenExpiresAt: row.signTokenExpiresAt,
         linkExpired: linkExpired(row),
       };
@@ -160,6 +161,7 @@ export const engagementRouter = router({
       dealId: input,
       ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }, policy),
       orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       issuedAt: null,
       acceptedAt: null,
       acceptedBy: null,
@@ -371,6 +373,7 @@ export const engagementRouter = router({
     return {
       ...shape(terms, org?.name ?? 'Apex Appraise'),
       orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       dealName: deal?.name ?? 'the property',
       dealAddress: deal?.address ?? '',
       dealPostcode: deal?.postcode ?? '',

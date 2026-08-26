@@ -154,6 +154,7 @@ export const orgRouter = router({
       id: org.id,
       name: org.name,
       logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId),
+      ricsFirmNumber: org.ricsFirmNumber,
       createdAt: org.createdAt,
       counts: { deals, users, investors },
       /**
@@ -193,9 +194,13 @@ export const orgRouter = router({
   firm: authedProcedure.query(async ({ ctx }) => {
     const org = await ctx.prisma.organisation.findUnique({
       where: { id: ctx.principal.orgId },
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, ricsFirmNumber: true },
     });
-    return { name: org?.name ?? 'Apex Appraise', logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId) };
+    return {
+      name: org?.name ?? 'Apex Appraise',
+      logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId),
+      ricsFirmNumber: org?.ricsFirmNumber ?? '',
+    };
   }),
 
   /** Remove the firm mark and fall back to the Apex mark on documents. */
@@ -205,21 +210,54 @@ export const orgRouter = router({
   }),
 
   update: adminProcedure
-    .input(z.object({ name: z.string().min(2).max(80) }))
+    .input(
+      z.object({
+        name: z.string().min(2).max(80).optional(),
+        /**
+         * The firm's RICS Regulated Firm number, or '' where it holds none.
+         *
+         * Patch semantics — only the keys supplied are written — for the reason
+         * `7dd1415` gives: the Settings panel holds several fields and posts
+         * them back, and a field nobody edited should not be able to travel.
+         */
+        ricsFirmNumber: z.string().max(20).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const before = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
-      const org = await ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { name: input.name } });
+      const data = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+      const org = await ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data });
       // this name is printed on every signed valuation and every terms of
       // engagement, so a report produced last month names a firm that may no
       // longer be called that. The trail is how the two are reconciled.
-      await recordAudit(ctx.prisma, {
-        orgId: ctx.principal.orgId,
-        userId: ctx.principal.userId,
-        actor: ctx.principal.name,
-        action: 'renamed the workspace',
-        target: `${before?.name ?? '—'} → ${input.name}`,
-        ip: ctx.ip,
-      });
+      if (input.name !== undefined && input.name !== before?.name) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'renamed the workspace',
+          target: `${before?.name ?? '—'} → ${input.name}`,
+          ip: ctx.ip,
+        });
+      }
+      /**
+       * Recorded separately, and always — this one decides whether a signed
+       * valuation carries a regulatory mark, so "who asserted that, and when"
+       * is a question a reviewer will ask about the claim itself rather than
+       * about the workspace.
+       */
+      if (input.ricsFirmNumber !== undefined && input.ricsFirmNumber !== before?.ricsFirmNumber) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: input.ricsFirmNumber ? 'declared the firm RICS regulated' : 'withdrew the firm’s RICS regulation',
+          target: input.ricsFirmNumber
+            ? `RICS Regulated Firm no. ${input.ricsFirmNumber}`
+            : `was ${before?.ricsFirmNumber || '—'}`,
+          ip: ctx.ip,
+        });
+      }
       return org;
     }),
 

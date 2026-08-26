@@ -196,6 +196,15 @@ export default function RedBookReport() {
   const pageTotal = pageNo.declaration;
 
   const firmName = org?.name ?? 'Apex Appraise';
+  /**
+   * The firm's RICS Regulated Firm number, or empty. "RICS Regulated" was a
+   * literal on the cover and on the signature seal, printed for every firm on
+   * the platform with nothing in the record that could make it true — the same
+   * defect as the hardcoded valuer name and registration number this file
+   * already had to be cured of, one level up: there the claim was about a
+   * person, here it is about the firm.
+   */
+  const ricsFirmNumber = org?.ricsFirmNumber?.trim() ?? '';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const dates = reportDates({ appraisal: appr, terms: toe, inspection });
   const subject = deal?.name ?? 'Subject property';
@@ -429,7 +438,11 @@ export default function RedBookReport() {
             <div className="relative flex items-center gap-3">
               <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
               <span className="text-[20px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
-              <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>RICS Regulated</span>
+              {ricsFirmNumber ? (
+                <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>
+                  RICS Regulated · {ricsFirmNumber}
+                </span>
+              ) : null}
             </div>
             <div className="relative mt-[88px] fig text-[12px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: 'rgba(255,255,255,0.66)' }}>Valuation Report</div>
             <div className="relative mt-3.5 text-[40px] font-bold leading-[1.08]" style={{ letterSpacing: '-1.4px' }}>{subject}</div>
@@ -950,12 +963,17 @@ export default function RedBookReport() {
                 </div>
               )}
             </div>
-            <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={brand[700]} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" />
-              </svg>
-              <span className="fig mt-1 text-[7.5px] font-semibold text-center" style={{ letterSpacing: '0.5px' }}>RICS<br />REGULATED</span>
-            </div>
+            {/* A seal is the strongest form the claim takes on this document, so
+                it appears only where the firm has declared the number it rests on. */}
+            {ricsFirmNumber ? (
+              <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={brand[700]} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" />
+                </svg>
+                <span className="fig mt-1 text-[7.5px] font-semibold text-center" style={{ letterSpacing: '0.5px' }}>RICS<br />REGULATED</span>
+                <span className="fig text-[7px] font-medium text-center" style={{ letterSpacing: '0.3px' }}>{ricsFirmNumber}</span>
+              </div>
+            ) : null}
           </div>
 
           <PageFoot>Page {pageNo.declaration} of {pageTotal} · © {firmName} · This report remains the property of {firmName} until fees are settled in full.</PageFoot>
