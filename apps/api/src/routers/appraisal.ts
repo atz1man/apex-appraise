@@ -3,9 +3,11 @@ import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
 import { z } from 'zod';
 import {
+  analysedPsf,
   autoAppraise,
   compareAppraisals,
   computeAppraisal,
+  reportedMarketValue,
   testCovenants,
   jvWaterfall,
   sensitivityGrid,
@@ -1059,8 +1061,15 @@ async function draftNarrativeSections(facts: {
    */
   specialAssumptions: string | null;
 }): Promise<NarrativeSections & { source: 'model' | 'template' }> {
-  const mv = Math.round(facts.gdv / 1000) * 1000; // Market Value — GDV to the nearest £1,000, as reported
-  const psf = facts.nia > 0 ? Math.round(mv / facts.nia) : 0;
+  /**
+   * From the engine, not from a copy here. The certificate this narrative is
+   * printed beside derives the same two figures, and the figure guard below
+   * checks the model's draft against THIS list — so a local copy meant the
+   * guard was certifying the model against a number the API had computed for
+   * itself, which is the one thing it exists to prevent.
+   */
+  const mv = reportedMarketValue(facts.gdv);
+  const psf = analysedPsf(mv, facts.nia);
   const compLine = facts.compCount
     ? `${facts.compCount} adjusted comparable${facts.compCount === 1 ? '' : 's'} (${facts.compAddresses.join('; ')}) supporting ${facts.supportedPsf != null ? `£${facts.supportedPsf}/ft²` : 'the adopted rate'}`
     : 'no comparables logged — appraisal-led evidence only';

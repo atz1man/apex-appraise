@@ -19,6 +19,8 @@
  * evidence is absent and leaves the number to somebody qualified to give it.
  */
 
+import { toNearestThousand } from '@apex/appraisal-engine';
+
 export interface EvidenceBasedRange {
   /** null when no comparable evidence supports a range */
   range: { lo: number; hi: number } | null;
@@ -40,7 +42,6 @@ export function valuationConfidence(input: {
   compCount: number;
 }): EvidenceBasedRange {
   const { marketValue, compRange, netInternalArea, avgGrossAdjustment, compCount } = input;
-  const round1k = (n: number) => Math.round(n / 1_000) * 1_000;
 
   if (compCount === 0 || !compRange || netInternalArea <= 0) {
     /**
@@ -57,7 +58,7 @@ export function valuationConfidence(input: {
     };
   }
 
-  const range = { lo: round1k(compRange.lo * netInternalArea), hi: round1k(compRange.hi * netInternalArea) };
+  const range = { lo: toNearestThousand(compRange.lo * netInternalArea), hi: toNearestThousand(compRange.hi * netInternalArea) };
   const confidence = avgGrossAdjustment < 8 ? 'High' : avgGrossAdjustment < 15 ? 'Medium' : 'Low';
   return {
     range,

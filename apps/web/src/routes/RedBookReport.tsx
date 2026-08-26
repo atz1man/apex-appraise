@@ -2,12 +2,15 @@ import { useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   DEFAULT_PURCHASER_COSTS_PCT,
+  analysedPsf,
   capitaliseIncome,
   computeAppraisal,
   discountedCashflow,
   formatMoneyFull,
   formatPct,
   formatRent,
+  reportedMarketValue,
+  toNearestThousand,
   type IncomeInput,
 } from '@apex/appraisal-engine';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
@@ -74,7 +77,6 @@ const SQFT_PER_SQM = 10.764;
 
 /** every date this document prints is in the firm's time — see paper.tsx */
 const fmtLong = docDate;
-const round1k = (n: number) => Math.round(n / 1000) * 1000;
 
 /* ---------------------------- page chrome ---------------------------- */
 
@@ -297,9 +299,9 @@ export default function RedBookReport() {
 
   /* ----- derived valuation figures (engine outputs, rounded for reporting) ----- */
   const nia = R.nia;
-  const mv = round1k(R.gdv); // Market Value — appraisal GDV, reported to the nearest £1,000
-  const compApproach = hasComps && nia > 0 ? round1k(summary.supportedPsf * nia) : mv;
-  const drcApproach = round1k(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
+  const mv = reportedMarketValue(R.gdv); // Market Value — appraisal GDV, to the nearest £1,000
+  const compApproach = hasComps && nia > 0 ? toNearestThousand(summary.supportedPsf * nia) : mv;
+  const drcApproach = toNearestThousand(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
   /**
    * Investment cross-check, run THROUGH THE ENGINE.
    *
@@ -349,7 +351,7 @@ export default function RedBookReport() {
    * reports the equated yield — the rate at which the two methods agree.
    */
   const invDcf = input.dcf ? discountedCashflow(investmentBasis, input.dcf) : null;
-  const invApproach = round1k(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
+  const invApproach = toNearestThousand(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
   const reinstatement = Math.round((R.build + R.fees) / 5000) * 5000;
   /**
    * The range and the grade are claims about the evidence, so they come from
@@ -371,7 +373,7 @@ export default function RedBookReport() {
       : confidence === 'Medium'
         ? statusTokens.amber.text
         : neutral.ink3;
-  const psf = nia > 0 ? Math.round(mv / nia) : 0;
+  const psf = analysedPsf(mv, nia);
   const avgNetAdj = hasComps ? summary.comps.reduce((a, c) => a + c.netAdjustment, 0) / summary.comps.length : 0;
 
   const assetLabel: Record<string, string> = {
