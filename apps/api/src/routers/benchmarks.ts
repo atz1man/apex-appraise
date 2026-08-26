@@ -216,24 +216,36 @@ export const benchmarksRouter = router({
    * is not a decision for whoever happens to be looking at the screen.
    */
   setContribution: adminProcedure.input(z.object({ enabled: z.boolean() })).mutation(async ({ ctx, input }) => {
-    await ctx.prisma.organisation.update({
-      where: { id: ctx.principal.orgId },
-      data: { contributesBenchmarks: input.enabled },
-    });
-
+    /**
+     * Both writes or neither.
+     *
+     * Opting out WITHDRAWS what was already given. A switch that only stops
+     * future contributions would leave a firm's figures in other firms' medians
+     * after it asked to leave — which is not what anyone means by turning it
+     * off, and is the whole point of the test below.
+     *
+     * The flag was flipped first and the points deleted second, on separate
+     * round trips. A fault between them — a dropped connection, the process
+     * killed mid-request — left the switch reading "not contributing" while the
+     * points stayed in the pool, and the audit event never written, because the
+     * throw came before it. Consent withdrawn in the interface and not in the
+     * data is the one direction that must not be possible: these are ratios
+     * derived from client-confidential appraisals, and this repo has twice had
+     * to go back for rows an erasure left behind (`1cdf171`, `77c95e2`).
+     */
     let withdrawn = 0;
-    if (!input.enabled) {
-      /**
-       * Opting out WITHDRAWS what was already given. A switch that only stops
-       * future contributions would leave a firm's figures in other firms'
-       * medians after it asked to leave — which is not what anyone means by
-       * turning it off.
-       */
-      const { count } = await ctx.prisma.benchmarkPoint.deleteMany({
-        where: { orgId: ctx.principal.orgId, source: 'contributed' },
+    await ctx.prisma.$transaction(async (tx) => {
+      await tx.organisation.update({
+        where: { id: ctx.principal.orgId },
+        data: { contributesBenchmarks: input.enabled },
       });
-      withdrawn = count;
-    }
+      if (!input.enabled) {
+        const { count } = await tx.benchmarkPoint.deleteMany({
+          where: { orgId: ctx.principal.orgId, source: 'contributed' },
+        });
+        withdrawn = count;
+      }
+    });
 
     await recordAudit(ctx.prisma, {
       orgId: ctx.principal.orgId,
