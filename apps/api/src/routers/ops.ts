@@ -116,37 +116,80 @@ export const costRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        name: z.string().min(1),
-        budget: z.number().min(0),
-        committed: z.number().min(0).default(0),
-        spent: z.number().min(0).default(0),
-        forecast: z.number().min(0),
-        progressPct: z.number().int().min(0).max(100).default(0),
-        contractorId: z.string().nullable().default(null),
+        /**
+         * Everything but the id is OPTIONAL, and an update writes only what it
+         * was actually given.
+         *
+         * It used to take the whole row, and the cost monitor's only call site
+         * is the contractor dropdown — which therefore posted back four money
+         * figures from whatever copy the browser was holding. That matters
+         * because this firm is not the only writer: `syncXero` updates
+         * `committed` and `spent` on `source: 'xero'` packages from the
+         * customer's ledger, and this screen renders the dropdown on every
+         * package including those. So choosing a groundworker on a page loaded
+         * before the last sync silently reverted it — and `a68f459` made this
+         * screen's variance real, which means the reverted figure is the one a
+         * lender pack reports.
+         *
+         * The sibling procedures in this class got an optimistic stamp. This one
+         * gets patch semantics instead, which is better where it applies: a stamp
+         * DETECTS the clobber and asks the user to reload, while not sending the
+         * fields at all means there is nothing to clobber. `deals.update` already
+         * works this way for the same reason.
+         */
+        name: z.string().min(1).optional(),
+        budget: z.number().min(0).optional(),
+        committed: z.number().min(0).optional(),
+        spent: z.number().min(0).optional(),
+        forecast: z.number().min(0).optional(),
+        progressPct: z.number().int().min(0).max(100).optional(),
+        contractorId: z.string().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       const { id, dealId, budget, committed, spent, forecast, ...rest } = input;
+      /**
+       * Creating still needs the figures — a package with no budget and no
+       * forecast is not a package, and defaulting them to zero would put a
+       * £0 line into the variance the cost report is built from.
+       */
+      if (!id && (rest.name == null || budget == null || forecast == null)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'A new cost package needs a name, a budget and a forecast.',
+        });
+      }
+      const money = { budget, committed, spent, forecast };
       const data = {
-        ...rest,
-        budget: toPence(budget),
-        committed: toPence(committed),
-        spent: toPence(spent),
-        forecast: toPence(forecast),
+        // only the keys actually supplied: `undefined` would be written as null
+        // by a spread, and Prisma treats a missing key as "leave it alone"
+        ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        ...Object.fromEntries(
+          Object.entries(money).filter(([, v]) => v !== undefined).map(([k, v]) => [k, toPence(v as number)]),
+        ),
       };
       if (id) await assertOwned(ctx.prisma.costPackage, id, ctx.principal.orgId);
       const row = id
         ? await ctx.prisma.costPackage.update({ where: { id }, data })
-        : await ctx.prisma.costPackage.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
+        : await ctx.prisma.costPackage.create({
+            data: {
+              progressPct: 0,
+              committed: 0n,
+              spent: 0n,
+              ...data,
+              orgId: ctx.principal.orgId,
+              dealId,
+            } as never,
+          });
       await ctx.prisma.activityEvent.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId,
           actor: ctx.principal.name,
           action: id ? 'updated cost package' : 'created cost package',
-          target: `${input.name} — forecast £${Math.round(forecast).toLocaleString('en-GB')}`,
+          target: `${row.name} — forecast ${moneyLabel(row.forecast)}`,
         },
       });
       return row;

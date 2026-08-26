@@ -316,15 +316,13 @@ export default function CostMonitoring() {
                               value={pk.contractorId ?? ''}
                               disabled={upsertPkg.isPending}
                               onChange={(e) =>
+                                // ONLY the contractor. Sending the row's figures
+                                // back would revert whatever the ledger sync had
+                                // brought in since this page loaded — see
+                                // cost.upsertPackage
                                 upsertPkg.mutate({
                                   id: pk.id,
                                   dealId,
-                                  name: pk.name,
-                                  budget: pk.budget,
-                                  committed: pk.committed,
-                                  spent: pk.spent,
-                                  forecast: pk.forecast,
-                                  progressPct: pk.progressPct,
                                   contractorId: e.target.value || null,
                                 })
                               }
