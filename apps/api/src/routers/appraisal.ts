@@ -1822,7 +1822,7 @@ export function riskFigures(facts: RiskFactsForGuard): { money: number[]; percen
  * unsupported. `risk-commentary-guard.test.ts` asserts exactly that.
  */
 export function riskTemplate(facts: RiskFactsForGuard): string {
-  const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+  const best = bestOption(facts);
   const others = facts.options.filter((o) => o !== best);
   const spread = others
     .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
@@ -1833,6 +1833,64 @@ export function riskTemplate(facts: RiskFactsForGuard): string {
     `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
     `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
   );
+}
+
+/**
+ * Which option the engine actually ranks best, by profit on cost.
+ *
+ * The template and the instruction both derive it here, so the brief the model
+ * is given and the answer it is checked against cannot drift apart.
+ */
+const bestOption = (facts: RiskFactsForGuard) => facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+
+/** the option names, longest first, so "Scheme A2" is matched before "Scheme A" */
+const namesIn = (facts: RiskFactsForGuard) => [...facts.options].sort((a, b) => b.name.length - a.name.length);
+
+const escapeName = (n: string) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const mentions = (text: string, name: string) => new RegExp(`(?<![\\w-])${escapeName(name)}(?![\\w-])`, 'i').test(text);
+
+/**
+ * Words a reader takes as "this is the one".
+ *
+ * The instruction asks the model to name the resilient option and say why its
+ * margin is widest, so this is the vocabulary it was pointed at.
+ */
+const PREFERRED =
+  /\b(?:more|most)\s+resilient\b|\bresilient\s+option\b|\bpreferred\b|\brecommend(?:ed|s|ation)?\b|\bwidest\s+margin\b|\b(?:most|more)\s+(?:robust|defensive|attractive)\b|\bstrongest\b|\bbest\s+(?:option|placed|risk[- ]adjusted)\b|\bfavoured\b/i;
+
+/**
+ * Does the commentary recommend the option the ENGINE ranked best?
+ *
+ * `unsupportedFigures` checks that every number came from the engine. Choosing
+ * WHICH option those numbers make the better scheme is a financial conclusion —
+ * the first non-negotiable in this codebase is that the model never draws one —
+ * and it was checked by nothing. Every figure in "Scheme B is the more resilient
+ * option" is a figure the model was handed, so the figure guard returns [] and
+ * a commentary recommending the scheme the engine ranks lower is shown as the
+ * model's own work, to a promoter taking it to a lender or a JV partner.
+ *
+ * Sentence-level and comparison-aware: "Scheme B is less resilient than Scheme A"
+ * names both, and naming the engine's choice in the same breath is what makes it
+ * a comparison rather than a rival recommendation.
+ */
+export function unsupportedRecommendation(commentary: string, facts: RiskFactsForGuard): string[] {
+  if (facts.options.length < 2) return [];
+  const best = bestOption(facts);
+  const bad: string[] = [];
+  if (!mentions(commentary, best.name)) {
+    bad.push(`the commentary never names ${best.name}, which the engine ranks best on profit on cost`);
+  }
+  for (const sentence of commentary.split(/(?<=[.;])\s+/)) {
+    if (!PREFERRED.test(sentence) || mentions(sentence, best.name)) continue;
+    for (const o of namesIn(facts)) {
+      if (o.name === best.name) continue;
+      if (mentions(sentence, o.name)) {
+        bad.push(`recommends ${o.name} over the engine's choice of ${best.name} — "${sentence.trim()}"`);
+        break;
+      }
+    }
+  }
+  return bad;
 }
 
 /**
@@ -1855,9 +1913,12 @@ export function acceptRiskDraft(
   commentary: string,
   facts: RiskFactsForGuard,
 ): { commentary: string; source: 'model' | 'template' } {
-  const unsupported = unsupportedFigures({ commentary }, riskFigures(facts));
+  const unsupported = [
+    ...unsupportedFigures({ commentary }, riskFigures(facts)),
+    ...unsupportedRecommendation(commentary, facts),
+  ];
   if (unsupported.length === 0) return { commentary, source: 'model' };
-  console.warn(`[risk] draft discarded — figures not produced by the engine: ${unsupported.join(', ')}`);
+  console.warn(`[risk] draft discarded — not supported by the engine: ${unsupported.join(', ')}`);
   return { commentary: riskTemplate(facts), source: 'template' };
 }
 
@@ -1889,7 +1950,7 @@ const RISK_TOOL = {
 async function draftRiskCommentary(
   facts: { subject: string; options: RiskOption[] },
 ): Promise<{ commentary: string; source: 'model' | 'template' }> {
-  const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+  const best = bestOption(facts);
   const optionLines = facts.options
     .map(
       (o) =>

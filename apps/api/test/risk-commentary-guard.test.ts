@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unsupportedFigures } from '../src/narrative-guard.js';
-import { acceptRiskDraft, riskFigures, riskTemplate, type RiskFactsForGuard } from '../src/routers/appraisal.js';
+import { acceptRiskDraft, riskFigures, riskTemplate, unsupportedRecommendation, type RiskFactsForGuard } from '../src/routers/appraisal.js';
 
 /**
  * The other prose a model writes with money in it.
@@ -111,6 +111,110 @@ describe('the figures a risk commentary is allowed to carry', () => {
       const out = acceptRiskDraft(clean, facts);
       expect(out.source).toBe('model');
       expect(out.commentary).toBe(clean);
+    });
+  });
+});
+
+/**
+ * And WHICH option it recommends, which is a financial conclusion.
+ *
+ * The figure guard above checks that every number came from the engine. Choosing
+ * which option those numbers make the better scheme is not a number — it is the
+ * conclusion the whole comparison exists to produce, and the first
+ * non-negotiable in this codebase is that the model never draws one.
+ *
+ * The instruction already tells the model which option to name: "name Option B
+ * as the more resilient option and explain why its 25.8% profit on cost gives
+ * the widest margin". That was the whole of the enforcement. Every figure in
+ * "Option A is the more resilient option" is a figure the model was handed, so
+ * `unsupportedFigures` returns [] and a commentary recommending the scheme the
+ * engine ranks LOWER is shown to a promoter as the model's own work, next to a
+ * grid showing the other one ahead.
+ */
+describe('the option a risk commentary is allowed to recommend', () => {
+  // Option B: 25.8% on cost against Option A's 25.0%
+  const engineChoice = 'Option B';
+
+  it('is the one the engine ranks best on profit on cost', () => {
+    expect(unsupportedRecommendation(riskTemplate(facts), facts)).toEqual([]);
+    expect(riskTemplate(facts)).toContain(`${engineChoice} is considered the more resilient option`);
+  });
+
+  it('rejects a draft that recommends the other one', () => {
+    const flipped = riskTemplate(facts)
+      .replace(/Option B is considered the more resilient option/, 'Option A is considered the more resilient option');
+    expect(
+      unsupportedFigures({ commentary: flipped }, riskFigures(facts)),
+      'the figure guard was never going to catch a recommendation — that is why this one exists',
+    ).toEqual([]);
+    expect(unsupportedRecommendation(flipped, facts).join('\n')).toContain('recommends Option A');
+  });
+
+  it('rejects the recommendation however it is worded', () => {
+    for (const sentence of [
+      'Option A is the preferred scheme.',
+      'On balance Option A is recommended.',
+      'Option A offers the widest margin.',
+      'Option A is the most robust of the two.',
+      'Option A is the strongest performer here.',
+    ]) {
+      expect(unsupportedRecommendation(`${riskTemplate(facts)} ${sentence}`, facts), sentence).not.toEqual([]);
+    }
+  });
+
+  it('allows a comparison, which names both', () => {
+    /**
+     * "Option A is less resilient than Option B" carries a preference word and
+     * the losing option's name, and is exactly right. Naming the engine's choice
+     * in the same breath is what makes it a comparison rather than a rival
+     * recommendation.
+     */
+    for (const sentence of [
+      'Option A is less resilient than Option B.',
+      'Option B is the more resilient of the two, with Option A carrying more planning exposure.',
+    ]) {
+      expect(unsupportedRecommendation(`${riskTemplate(facts)} ${sentence}`, facts), sentence).toEqual([]);
+    }
+  });
+
+  it('rejects a draft that drops the conclusion altogether', () => {
+    const noVerdict = 'The options carry distinct risk profiles, and planning exposure sits with the unconsented variant.';
+    expect(unsupportedRecommendation(noVerdict, facts).join('\n')).toContain('never names Option B');
+  });
+
+  it('says nothing where there is nothing to choose between', () => {
+    expect(unsupportedRecommendation('Anything at all.', { ...facts, options: [OPTIONS[0]!] })).toEqual([]);
+  });
+
+  it('matches whole names, so one option cannot be read inside another', () => {
+    /**
+     * The engine's choice is the SHORTER name, which is the direction that
+     * breaks. A substring test finds "Option A" inside "Option A2", so a
+     * recommendation of the rival reads as a mention of the engine's own choice
+     * and is waved through — the guard silently stops guarding for any firm
+     * whose scheme names nest, which is most of them ("Scheme 1"/"Scheme 1A").
+     */
+    const nested: RiskFactsForGuard = {
+      subject: 'Harbour Reach',
+      options: [
+        { ...OPTIONS[0]!, name: 'Option A', poc: 0.3 },
+        { ...OPTIONS[1]!, name: 'Option A2', poc: 0.25 },
+      ],
+    };
+    expect(
+      unsupportedRecommendation('Option A is set out above. Option A2 is the preferred scheme.', nested).join('\n'),
+      'a recommendation of Option A2 was read as naming Option A',
+    ).toContain('recommends Option A2');
+    // and the honest version still passes
+    expect(unsupportedRecommendation('Option A is the preferred scheme.', nested)).toEqual([]);
+  });
+
+  describe('and the draft that recommends the wrong one is not the one shown', () => {
+    it('replaces it with the template, which names the engine’s choice', () => {
+      const flipped = 'Option A is the more resilient option, on a residual land value of £1,197,577.';
+      const out = acceptRiskDraft(flipped, facts);
+      expect(out.source, 'a recommendation the engine contradicts was shown as the model’s own').toBe('template');
+      expect(out.commentary).toContain(`${engineChoice} is considered the more resilient option`);
     });
   });
 });
