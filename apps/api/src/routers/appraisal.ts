@@ -324,8 +324,58 @@ export const appraisalRouter = router({
           });
         }
       } else {
-        row = await ctx.prisma.appraisal.create({
-          data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
+        /**
+         * The first version on a deal, and the third path to this invariant.
+         *
+         * `Appraisal.isCurrent` must be true for exactly one row per deal.
+         * `b39f174` fixed that for branching and `50ca9fc` for restoring, both
+         * with a compare-and-set: the demote only counts if this call is the one
+         * that found the row current. Here there is no row to compare against —
+         * both callers read `existing` as null and both created — so a
+         * compare-and-set has nothing to bite on. Measured before this change:
+         * two concurrent saves on a fresh deal left TWO rows marked current, and
+         * which one each surface then reports is whichever the database happens
+         * to return.
+         *
+         * The read is repeated INSIDE the transaction on purpose, and the
+         * isolation level is what makes that sound. `50ca9fc` recorded the trap:
+         * a read inside a transaction is serialised by SQLite whatever level is
+         * asked for, so the same code passes locally and, under Postgres READ
+         * COMMITTED, lets both transactions miss each other's uncommitted row
+         * and commit. Serializable is the only level at which "nobody else has
+         * one" stays true until this transaction commits.
+         */
+        row = await ctx.prisma.$transaction(
+          async (tx) => {
+            const raced = await tx.appraisal.findFirst({
+              where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
+            });
+            if (raced) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+              });
+            }
+            return tx.appraisal.create({
+              data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
+            });
+          },
+          { isolationLevel: 'Serializable' },
+        ).catch((e: unknown) => {
+          if (e instanceof TRPCError) throw e;
+          /**
+           * Postgres aborts the loser of a serialisable conflict rather than
+           * blocking it (SQLSTATE 40001, which Prisma reports as P2034). That is
+           * this invariant working, so it reaches the user as the same refusal
+           * the other two paths give and not as a server fault.
+           */
+          if ((e as { code?: string })?.code === 'P2034') {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+            });
+          }
+          throw e;
         });
       }
       await syncDealHeadline(ctx.prisma, input.dealId, result);
