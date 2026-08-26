@@ -114,11 +114,24 @@ export default function CostMonitoring() {
   const overs = packages.filter((p) => p.forecast > p.budget);
   const openTasks = (tasks ?? []).filter((t) => !t.done).length;
 
-  // programme & drawdown — progress-weighted spend
-  const weightedProgress = rollup && rollup.packageBudgets > 0 ? packages.reduce((a, p) => a + p.budget * p.progressPct, 0) / rollup.packageBudgets : 0;
-  const drawdown = rollup && rollup.forecast > 0 ? (rollup.spent / rollup.forecast) * 100 : 0;
-  const retentionHeld = packages.reduce((a, p) => a + p.committed * (p.retentionPct / 100), 0);
-  const certificates = packages.reduce((a, p) => a + p.certificates, 0);
+  /**
+   * All four come from the engine now.
+   *
+   * They were worked out here, and `retentionHeld` — money withheld from a
+   * builder — was worked out AGAIN on the server for the contractor list. One
+   * rule, two implementations, one edit away from the two screens disagreeing
+   * about what the firm owes. `packages/appraisal-engine` is where "ALL money
+   * maths lives", and `cost-report.ts` already owned the variance beside them.
+   *
+   * The engine returns null for the two ratios when there is nothing to divide
+   * by, which is an absence rather than a zero; the `?? 0` here is only reached
+   * while the rollup is loading, since the panel that shows them is already
+   * gated on the job having packages.
+   */
+  const weightedProgress = rollup?.weightedProgressPct ?? 0;
+  const drawdown = rollup?.drawdownPct ?? 0;
+  const retentionHeld = rollup?.retentionHeld ?? 0;
+  const certificates = rollup?.certificates ?? 0;
 
   // photo log grouped by week commencing, newest first
   const photoGroups = useMemo(() => {

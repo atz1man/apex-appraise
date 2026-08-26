@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { computeAppraisal, costRollup } from '@apex/appraisal-engine';
+import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
@@ -211,9 +211,17 @@ export const costRouter = router({
       timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
       operatives: c.operatives,
       weeks: J<number[]>(c.weeks, []),
-      contractValue: c.packages.reduce((a, pk) => a + P(pk.committed), 0),
-      retention: c.packages.reduce((a, pk) => a + P(pk.committed) * (pk.retentionPct / 100), 0),
-      certificates: c.packages.reduce((a, pk) => a + pk.certificates, 0),
+      // the engine owns the retention rule; this used to keep its own copy of it
+      ...contractorTotals(
+        c.packages.map((pk: any) => ({
+          budget: P(pk.budget),
+          committed: P(pk.committed),
+          spent: P(pk.spent),
+          forecast: P(pk.forecast),
+          retentionPct: pk.retentionPct,
+          certificates: pk.certificates,
+        })),
+      ),
     }));
   }),
 

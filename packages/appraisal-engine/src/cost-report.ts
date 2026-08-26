@@ -26,6 +26,17 @@ export interface CostPackageLike {
   spent: number;
   /** £ expected on completion */
   forecast: number;
+  /**
+   * Percentage of the contract sum withheld until the works are accepted.
+   *
+   * A package the accounting feed created carries 0 — `syncXero` knows what was
+   * invoiced, not what a contract withholds.
+   */
+  retentionPct?: number;
+  /** payment certificates issued against the package so far */
+  certificates?: number;
+  /** how far the package has got, 0–100 */
+  progressPct?: number;
 }
 
 export interface CostBaseline {
@@ -59,7 +70,52 @@ export interface CostRollup {
    * cost — the state Harbour Reach was in while the screen read "on budget".
    */
   unallocated: number | null;
+  /**
+   * £ withheld from contractors until the works are accepted.
+   *
+   * Real money the firm owes and a builder is chasing. It was worked out on the
+   * cost monitor screen AND again in the contractor list on the server, one
+   * edit away from the two disagreeing about what is owed.
+   */
+  retentionHeld: number;
+  /** payment certificates issued across the job */
+  certificates: number;
+  /**
+   * Progress across the job, weighted by what each package is worth.
+   *
+   * Weighted, because a £900k package at 10% beside a £100k package at 100% is
+   * a job barely started; averaging the percentages calls it 55%. Null when
+   * there is nothing costed to weight by — an absence, not a zero.
+   */
+  weightedProgressPct: number | null;
+  /** spend as a percentage of the forecast — what will actually be drawn. Null with nothing costed. */
+  drawdownPct: number | null;
 }
+
+/** What one contractor is owed, withheld and certified across their packages. */
+export interface ContractorTotals {
+  contractValue: number;
+  retention: number;
+  certificates: number;
+}
+
+/**
+ * The same rule per contractor as `costRollup` applies per deal.
+ *
+ * Separate function, one source: the contractor list on the server used to
+ * carry its own copy of `committed × retentionPct`, so a change to how
+ * retention is calculated would have moved one screen and not the other.
+ */
+export function contractorTotals(packages: CostPackageLike[]): ContractorTotals {
+  return {
+    contractValue: packages.reduce((a, p) => a + p.committed, 0),
+    retention: retentionOf(packages),
+    certificates: packages.reduce((a, p) => a + (p.certificates ?? 0), 0),
+  };
+}
+
+const retentionOf = (packages: CostPackageLike[]) =>
+  packages.reduce((a, p) => a + p.committed * ((p.retentionPct ?? 0) / 100), 0);
 
 export function costRollup(packages: CostPackageLike[], baseline: CostBaseline): CostRollup {
   const sum = (pick: (p: CostPackageLike) => number) => packages.reduce((a, p) => a + pick(p), 0);
@@ -67,13 +123,21 @@ export function costRollup(packages: CostPackageLike[], baseline: CostBaseline):
   const forecast = sum((p) => p.forecast);
   const appraisedBuild = baseline.appraisedBuild;
   const contingency = baseline.contingency ?? null;
+  const spent = sum((p) => p.spent);
   const base = {
     packageBudgets,
     committed: sum((p) => p.committed),
-    spent: sum((p) => p.spent),
+    spent,
     forecast,
     appraisedBuild,
     contingency,
+    retentionHeld: retentionOf(packages),
+    certificates: sum((p) => p.certificates ?? 0),
+    // null rather than 0 when there is nothing to divide by: "nobody has costed
+    // this" and "nothing has been drawn" are different sentences
+    weightedProgressPct:
+      packageBudgets > 0 ? sum((p) => p.budget * (p.progressPct ?? 0)) / packageBudgets : null,
+    drawdownPct: forecast > 0 ? (spent / forecast) * 100 : null,
   };
 
   /**
