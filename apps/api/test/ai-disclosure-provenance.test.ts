@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { AI_ACTOR, AI_TOUCHPOINTS } from '../src/ai-disclosure.js';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
@@ -178,6 +178,88 @@ describe('the other AI touchpoints', () => {
       expect(src, `no procedure writes "${t.action}" — ${t.label} could never be disclosed`).toContain(
         `'${t.action}'`,
       );
+    }
+  });
+});
+
+/**
+ * The direction that was never checked: a model call with no disclosure.
+ *
+ * The sweep above holds every DECLARED touchpoint to a procedure that writes
+ * its event, so a disclosure cannot describe a use that could never happen.
+ * Nothing held the converse — that every model call the server makes is
+ * described by a touchpoint — and that is the direction RICS cares about. A
+ * fifth Anthropic call added tomorrow would touch a valuation and appear in no
+ * declaration, on a report whose whole point is to state whether and how AI was
+ * used.
+ *
+ * `ai-disclosure.ts` said so in its own words: "Adding a new AI feature? Write
+ * the ActivityEvent and add it here, or it will be used without being
+ * disclosed." That is an instruction, and the discipline in this repo is that
+ * an instruction is not a guard — `narrative-guard.ts` opens with the same
+ * sentence about the model's own brief.
+ *
+ * Same shape as `reachable.test.ts`, which compares two halves of a boundary
+ * rather than trusting either to a person: there, everything declared must be
+ * reachable; here, everything reachable must be declared.
+ */
+describe('every model call this server makes', () => {
+  const SOURCE_DIR = new URL('../src/', import.meta.url);
+  const ANTHROPIC = /fetch\(\s*'https:\/\/api\.anthropic\.com\/v1\/messages'/g;
+
+  /** every .ts under src/, so a new router cannot hide a call site */
+  const sources = (): Array<{ path: string; text: string }> => {
+    const out: Array<{ path: string; text: string }> = [];
+    const walk = (dir: URL) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const child = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+        if (entry.isDirectory()) walk(child);
+        else if (entry.name.endsWith('.ts')) out.push({ path: entry.name, text: readFileSync(child, 'utf8') });
+      }
+    };
+    walk(SOURCE_DIR);
+    return out;
+  };
+
+  /** the nearest `async function NAME(` above an index — every drafter is one */
+  const enclosingFunction = (text: string, index: number): string | null => {
+    const before = text.slice(0, index);
+    const matches = [...before.matchAll(/(?:async\s+)?function\s+(\w+)\s*\(/g)];
+    return matches.length ? matches[matches.length - 1]![1]! : null;
+  };
+
+  const callSites = () => {
+    const found: Array<{ file: string; fn: string | null }> = [];
+    for (const { path, text } of sources()) {
+      for (const m of text.matchAll(ANTHROPIC)) {
+        found.push({ file: path, fn: enclosingFunction(text, m.index!) });
+      }
+    }
+    return found;
+  };
+
+  it('finds the calls it is meant to be sweeping', () => {
+    // a sweep that matches nothing passes silently, which is worse than none
+    const sites = callSites();
+    expect(sites.length, 'no Anthropic call sites found — the call shape has changed').toBeGreaterThan(0);
+    expect(sites.every((s) => s.fn), `a call site sits outside any named function: ${JSON.stringify(sites)}`).toBe(true);
+  });
+
+  it('is described by a touchpoint, so none of them is used undisclosed', () => {
+    const declared = new Set(AI_TOUCHPOINTS.map((t) => t.drafter));
+    const undisclosed = callSites()
+      .filter((s) => !declared.has(s.fn!))
+      .map((s) => `${s.file}: ${s.fn}`);
+    expect(
+      undisclosed,
+      'a model call with no AI_TOUCHPOINTS entry — it would touch a valuation and appear in no declaration',
+    ).toEqual([]);
+  });
+
+  it('has a drafter that actually exists, so a typo cannot satisfy the check', () => {
+    const called = new Set(callSites().map((s) => s.fn));
+    for (const t of AI_TOUCHPOINTS) {
+      expect(called, `AI_TOUCHPOINTS names "${t.drafter}", which calls no model`).toContain(t.drafter);
     }
   });
 });
