@@ -200,3 +200,97 @@ test('a client abroad reads the same dates as the valuer who issued them', async
   expect(london.length, 'the report printed no dates at all').toBeGreaterThan(0);
   expect(newYork).toEqual(london);
 });
+
+/**
+ * The document is not allowed to contradict itself.
+ *
+ * Measured on the demo workspace, on one signed valuation of a deal with no
+ * inspection on file, all four of these were printed:
+ *
+ *   page 2  "No inspection is recorded for this property."
+ *   page 3  "...no adverse environmental factors were noted on inspection."
+ *   page 3  "the site is identified as Flood Zone 1 (low risk)"
+ *   page 7  "the property is not in an area of material flood risk"  (assumed)
+ *
+ * The first two are a straight contradiction: the certificate discloses that
+ * nobody attended and the next page reports what was seen there. The second two
+ * contradict in the more dangerous direction — the declaration correctly treats
+ * flood risk as an assumption, while page 3 states the zone as identified,
+ * which reads as somebody having looked it up. Nobody had; the classification
+ * was a literal in the component, printed for every property in the country.
+ *
+ * This lives here because it is the same rule as the dates above and the
+ * photographs before them: state the gap rather than fill it.
+ */
+test('the Red Book never reports an inspection it has just disclosed did not happen', async ({ page }) => {
+  test.setTimeout(90_000);
+  await signIn(page);
+
+  /**
+   * Both states are driven rather than read, on a deal of its own: this one
+   * records an inspection, and a spec sharing the deal would then be reading an
+   * inspection it did not put there. Every seeded deal is already claimed — the
+   * note in screens.spec.ts keeps that list.
+   */
+  const created = await mutate(page, 'deals.create', {
+    name: `Situation Check ${Date.now()}`,
+    address: '1 Situation Row, Bournemouth',
+    assetType: 'RESIDENTIAL',
+    stage: 'APPRAISAL',
+  });
+  expect(created, `could not create a deal: ${created.err}`).toMatchObject({ ok: true });
+  const id = (created.data as { id: string }).id;
+  const saved = await mutate(page, 'appraisal.save', { dealId: id, input: APPRAISAL_INPUT, label: 'Base' });
+  expect(saved, `appraisal.save failed: ${saved.err}`).toMatchObject({ ok: true });
+
+  const reportText = async () => {
+    await page.goto(`/deal/${id}/redbook`);
+    await page.waitForSelector('.a4-page', { timeout: 20_000 });
+    return page.locator('body').innerText();
+  };
+  const body = await reportText();
+
+  /**
+   * Never, in either state. An inspection record holds rooms, conditions and
+   * notes — nothing about contamination, ground stability or flood — so having
+   * attended is not evidence that those were looked at either.
+   */
+  expect(body, 'a flood zone classification was stated that nothing checked').not.toMatch(/flood zone/i);
+  expect(body, 'the report claimed a finding from an inspection').not.toMatch(/noted on inspection/i);
+
+  /**
+   * And the flood position is stated once, as the assumption it is, rather than
+   * in two places that can drift apart.
+   */
+  expect(body, 'the general assumption on flood risk has gone').toMatch(/not in an area of material flood risk/i);
+  expect(body).toMatch(/flood risk[^.]*general assumptions/i);
+
+  // ---- nothing on file: the gap is disclosed, and nothing is reported from it ----
+  expect(body, 'the certificate should disclose that nobody attended').toMatch(/No inspection is recorded/i);
+  expect(body, 'the report described an inspection it had just said did not happen').not.toMatch(/was inspected on/i);
+
+  // ---- inspected: both pages say so, and neither invents a finding ----
+  const inspected = await mutate(page, 'inspections.save', {
+    dealId: id,
+    rooms: [{ name: 'Living room', condition: 4, photos: 0, notes: '' }],
+    reconciledValue: null,
+    approachWeights: { salesComparison: 100, cost: 0, income: 0 },
+    status: 'submitted',
+  });
+  expect(inspected, `inspections.save failed: ${inspected.err}`).toMatchObject({ ok: true });
+
+  const after = await reportText();
+  expect(after, 'an inspection is on file and the certificate still disclosed a gap').not.toMatch(
+    /No inspection is recorded/i,
+  );
+  expect(after, 'an inspection is on file and the situation panel did not say so').toMatch(/was inspected on/i);
+  expect(after, 'attending a property is not evidence that flood risk was looked at').not.toMatch(/flood zone/i);
+  expect(after, 'the report claimed a finding the inspection record does not hold').not.toMatch(/noted on inspection/i);
+
+  /**
+   * The two pages read the same value, which is what makes the contradiction
+   * impossible rather than merely absent today.
+   */
+  const record = (await call(page, 'inspections.get', id)) as { inspectedAt: string };
+  expect(after).toContain(`was inspected on ${longDate(record.inspectedAt)}`);
+});

@@ -14,6 +14,7 @@ import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
 import { valuationConfidence } from '../lib/valuation-confidence';
+import { situationStatement } from '../lib/situation';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
@@ -622,10 +623,7 @@ export default function RedBookReport() {
           <Micro>2 · Situation &amp; locality</Micro>
           <div className="mt-2.5 flex" style={{ gap: 18 }}>
             <div className="flex-1 text-[13px] leading-[1.62]" style={{ color: '#2C342E' }}>
-              The property occupies an established position at {deal?.address}. Local amenities and arterial transport links are within
-              convenient reach, and occupier demand in the immediate locality is considered good. The surrounding pattern of use is
-              consistent with the subject's class, the site is identified as Flood Zone 1 (low risk) and no adverse environmental factors
-              were noted on inspection.
+              {situationStatement({ address: deal?.address ?? null, inspectedOn: dates.inspection })}
             </div>
             <div className="shrink-0 rounded-[12px] overflow-hidden border border-border-strong relative" style={{ width: 300, height: 188, background: neutral.sunken2 }}>
               {subjectPin.length ? (
