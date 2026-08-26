@@ -1782,6 +1782,74 @@ type RiskOption = {
   poc: number;
 };
 
+export type RiskFactsForGuard = { subject: string; options: RiskOption[] };
+
+/**
+ * Every figure the risk commentary is allowed to carry.
+ *
+ * Built from the options being compared, which is what the instruction hands
+ * the model — so the guard's allowance and the model's brief cannot drift apart
+ * the way two hand-kept lists would.
+ */
+export function riskFigures(facts: RiskFactsForGuard): { money: number[]; percents: number[] } {
+  return {
+    money: facts.options.flatMap((o) => [o.gdv, o.residual, o.profit, o.totalCost, o.blendedPsf, o.buildPsf]),
+    percents: [
+      ...facts.options.flatMap((o) => [Number((o.poc * 100).toFixed(1)), o.targetProfitPct]),
+      SCENARIO_ASSUMPTIONS.ltcPct,
+      SCENARIO_ASSUMPTIONS.ratePct,
+    ],
+  };
+}
+
+/**
+ * The deterministic commentary, in one place.
+ *
+ * It is both the demo-mode output AND what a rejected model draft falls back
+ * to, so it has to satisfy `riskFigures` itself — a guard its own fallback
+ * fails would reject every draft and then print prose it had just called
+ * unsupported. `risk-commentary-guard.test.ts` asserts exactly that.
+ */
+export function riskTemplate(facts: RiskFactsForGuard): string {
+  const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+  const others = facts.options.filter((o) => o !== best);
+  const spread = others
+    .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
+    .join(', while ');
+  return (
+    `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
+    `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
+    `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
+    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
+  );
+}
+
+/**
+ * Whether a drafted commentary may be shown, or the template used instead.
+ *
+ * The model was told to use these figures verbatim. This checks it did — the
+ * same reasoning as the Red Book narrative, which has had it since
+ * `narrative-guard.ts`: the instruction is right, and it is still only an
+ * instruction. This commentary is what a promoter takes to a lender or a JV
+ * partner, beside a comparison grid showing the real numbers, so a transposed
+ * digit is a residual land value nobody calculated in the one paragraph a
+ * reader takes on trust.
+ *
+ * Separated from the fetch on purpose. Behind the live call it could only be
+ * exercised with an API key and a model that misbehaves on cue, so removing it
+ * would have failed nothing — the split is what lets the decision be driven
+ * backwards.
+ */
+export function acceptRiskDraft(
+  commentary: string,
+  facts: RiskFactsForGuard,
+): { commentary: string; source: 'model' | 'template' } {
+  const unsupported = unsupportedFigures({ commentary }, riskFigures(facts));
+  if (unsupported.length === 0) return { commentary, source: 'model' };
+  console.warn(`[risk] draft discarded — figures not produced by the engine: ${unsupported.join(', ')}`);
+  return { commentary: riskTemplate(facts), source: 'template' };
+}
+
 const zRiskCommentary = z.object({ commentary: z.string().min(1) });
 
 /** JSON Schema for the forced tool call — one plain-prose comparative paragraph. */
@@ -1843,8 +1911,10 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
       const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
       const toolUse = body.content.find((c) => c.type === 'tool_use');
       const parsed = zRiskCommentary.safeParse(toolUse?.input);
-      if (parsed.success) return { commentary: parsed.data.commentary, source: 'model' as const };
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
+      if (!parsed.success) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
+      }
+      return acceptRiskDraft(parsed.data.commentary, facts);
     }
     // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
     const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -1859,16 +1929,5 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
    * — the AI-use disclosure in the Red Book is derived from whether this was an
    * AI touchpoint.
    */
-  const others = facts.options.filter((o) => o !== best);
-  const spread = others
-    .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
-    .join(', while ');
-  return {
-    source: 'template' as const,
-    commentary:
-    `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
-    `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
-    `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
-    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`,
-  };
+  return { source: 'template' as const, commentary: riskTemplate(facts) };
 }
