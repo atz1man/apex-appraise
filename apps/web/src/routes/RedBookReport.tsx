@@ -13,6 +13,7 @@ import {
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
+import { valuationConfidence } from '../lib/valuation-confidence';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
@@ -334,18 +335,27 @@ export default function RedBookReport() {
   const invDcf = input.dcf ? discountedCashflow(investmentBasis, input.dcf) : null;
   const invApproach = round1k(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
   const reinstatement = Math.round((R.build + R.fees) / 5000) * 5000;
-  const range = hasComps && nia > 0
-    ? { lo: round1k(summary.range.lo * nia), hi: round1k(summary.range.hi * nia) }
-    : { lo: round1k(mv - R.gdv * 0.025), hi: round1k(mv + R.gdv * 0.025) };
-  const marker = range.hi > range.lo ? Math.min(95, Math.max(5, ((mv - range.lo) / (range.hi - range.lo)) * 100)) : 50;
+  /**
+   * The range and the grade are claims about the evidence, so they come from
+   * the evidence or they are not made. `valuationConfidence` returns nulls
+   * where there is nothing to grade, and every panel below prints its `note`
+   * instead of a figure it cannot support.
+   */
+  const { range, marker, confidence, note: confidenceNote } = valuationConfidence({
+    marketValue: mv,
+    compRange: hasComps ? summary.range : null,
+    netInternalArea: nia,
+    avgGrossAdjustment: hasComps ? summary.avgGrossAdjustment : 0,
+    compCount: comps.length,
+  });
+  const confidenceTone = confidence === 'High'
+    ? statusTokens.green.text
+    : confidence === 'Low'
+      ? statusTokens.red.text
+      : confidence === 'Medium'
+        ? statusTokens.amber.text
+        : neutral.ink3;
   const psf = nia > 0 ? Math.round(mv / nia) : 0;
-  const confidence = !hasComps
-    ? { label: 'Medium', tone: statusTokens.amber.text }
-    : summary.avgGrossAdjustment < 8
-      ? { label: 'High', tone: statusTokens.green.text }
-      : summary.avgGrossAdjustment < 15
-        ? { label: 'Medium', tone: statusTokens.amber.text }
-        : { label: 'Low', tone: statusTokens.red.text };
   const avgNetAdj = hasComps ? summary.comps.reduce((a, c) => a + c.netAdjustment, 0) / summary.comps.length : 0;
 
   const assetLabel: Record<string, string> = {
@@ -489,7 +499,9 @@ export default function RedBookReport() {
             </div>
             <div className="flex items-center">
               <div className="flex-1 text-[13.5px]" style={{ padding: '15px 18px', color: '#3C443D' }}>Indicated value range</div>
-              <div className="flex-1 fig text-[14px] font-medium" style={{ padding: '15px 18px' }}>{formatMoneyFull(range.lo)} – {formatMoneyFull(range.hi)}</div>
+              <div className="flex-1 fig text-[14px] font-medium" style={{ padding: '15px 18px' }}>
+                {range ? `${formatMoneyFull(range.lo)} – ${formatMoneyFull(range.hi)}` : 'Not assessed — no comparable evidence'}
+              </div>
             </div>
           </div>
 
@@ -520,7 +532,7 @@ export default function RedBookReport() {
             </div>
             <div className="text-[12.5px] leading-[1.55]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               Opinion of value supported by {hasComps ? `${comps.length} recent comparable ${comps.length === 1 ? 'sale' : 'sales'}, with average net adjustment of ${formatPct(Math.abs(avgNetAdj) / 100)}` : 'the current development appraisal pending comparable evidence'}.
-              Valuation confidence assessed as <b className="font-semibold">{confidence.label.toLowerCase()}</b> under the RICS confidence framework.
+              {confidenceNote}
             </div>
           </div>
 
@@ -673,17 +685,25 @@ export default function RedBookReport() {
                 <div className="fig mt-1 text-[15px] font-semibold">£{n0(psf)} / sq ft</div>
               </div>
             </div>
-            <div className="mt-4 relative h-[7px] rounded-[4px]" style={{ background: neutral.sunken2 }}>
-              <div className="absolute inset-y-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
-              <div
-                className="absolute rounded-full"
-                style={{ left: `${marker}%`, top: -3, width: 13, height: 13, background: brand[700], border: '2.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transform: 'translateX(-50%)' }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between fig text-[11px] font-medium text-ink-3">
-              <span>{formatMoneyFull(range.lo)}</span>
-              <span>{formatMoneyFull(range.hi)}</span>
-            </div>
+            {range && marker !== null ? (
+              <>
+                <div className="mt-4 relative h-[7px] rounded-[4px]" style={{ background: neutral.sunken2 }}>
+                  <div className="absolute inset-y-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
+                  <div
+                    className="absolute rounded-full"
+                    style={{ left: `${marker}%`, top: -3, width: 13, height: 13, background: brand[700], border: '2.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transform: 'translateX(-50%)' }}
+                  />
+                </div>
+                <div className="mt-2 flex justify-between fig text-[11px] font-medium text-ink-3">
+                  <span>{formatMoneyFull(range.lo)}</span>
+                  <span>{formatMoneyFull(range.hi)}</span>
+                </div>
+              </>
+            ) : (
+              /* No bar where there is no range: a scale drawn around a single
+                 opinion reads as a spread of evidence that does not exist. */
+              <div className="mt-3 text-[11.5px] leading-[1.55] text-ink-3">{confidenceNote}</div>
+            )}
           </div>
 
           {/* Drafted commentary moves to its own page — three narrative sections do
@@ -769,7 +789,7 @@ export default function RedBookReport() {
             </div>
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Valuation confidence</div>
-              <div className="mt-1.5 text-[17px] font-semibold" style={{ color: confidence.tone }}>{confidence.label}</div>
+              <div className="mt-1.5 text-[17px] font-semibold" style={{ color: confidenceTone }}>{confidence ?? '—'}</div>
             </div>
           </div>
 
