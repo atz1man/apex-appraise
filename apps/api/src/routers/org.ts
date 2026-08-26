@@ -874,6 +874,8 @@ export const orgRouter = router({
       enforced: c.enforced,
       defaultRole: c.defaultRole,
       lastLoginAt: c.lastLoginAt,
+      // the stamp the panel hands back when it saves — see saveSso
+      updatedAt: c.updatedAt,
     };
   }),
 
@@ -888,6 +890,17 @@ export const orgRouter = router({
         domains: z.array(z.string().min(3).max(200)).min(1),
         enforced: z.boolean().default(false),
         defaultRole: z.enum(['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER']).default('ANALYST'),
+        /**
+         * The stamp of the configuration this panel loaded.
+         *
+         * `SsoPanel` reads five fields once (`if (!sso || loaded) return`) and
+         * posts every one of them back, so a second administrator's save
+         * silently restored whatever the first changed — `enforced` included,
+         * which is the switch `a9cbb50` found could lock a firm out of its own
+         * workspace. Absent on the first configuration: there is nothing yet to
+         * have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -909,6 +922,14 @@ export const orgRouter = router({
       if (!existing && !input.clientSecret) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'A client secret is needed to set this up.' });
       }
+      if (existing) {
+        await assertUnchanged({
+          what: 'single sign-on configuration',
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          advice: 'Reload to see the current settings before saving yours — nothing you can see here has been lost.',
+        });
+      }
       const data = {
         issuer: input.issuer.replace(/\/$/, ''),
         clientId: input.clientId,
@@ -919,7 +940,7 @@ export const orgRouter = router({
           ? { clientSecret: sealFor('ssoConnection', 'clientSecret', ctx.principal.orgId, input.clientSecret) }
           : {}),
       };
-      await ctx.prisma.ssoConnection.upsert({
+      const saved = await ctx.prisma.ssoConnection.upsert({
         where: { orgId: ctx.principal.orgId },
         create: {
           orgId: ctx.principal.orgId,
@@ -942,7 +963,8 @@ export const orgRouter = router({
         action: input.enforced ? 'required single sign-on' : 'configured single sign-on',
         target: domains.join(', '), ip: ctx.ip,
       });
-      return { ok: true };
+      // from THIS save, never a refetch — see a48b7b3
+      return { ok: true, updatedAt: saved.updatedAt };
     }),
 
   deleteSso: adminProcedure.mutation(async ({ ctx }) => {

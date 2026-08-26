@@ -255,8 +255,16 @@ describe('the fifth column', () => {
     };
     // twice: saveSso creates on the first call and updates on the second, and
     // those are two separate places the seal can be dropped
-    await admin(A).org.saveSso({ ...sso, clientSecret: 'oidc-client-secret' } as never);
-    await admin(A).org.saveSso({ ...sso, clientSecret: 'oidc-client-secret-rotated' } as never);
+    const first = (await admin(A).org.saveSso({ ...sso, clientSecret: 'oidc-client-secret' } as never)) as {
+      updatedAt?: Date;
+    };
+    // the stamp the first save handed back — the panel now carries one, so a
+    // second administrator cannot silently restore five fields
+    await admin(A).org.saveSso({
+      ...sso,
+      clientSecret: 'oidc-client-secret-rotated',
+      expectedUpdatedAt: first.updatedAt,
+    } as never);
 
     const tables: string[] = (
       await prisma.$queryRawUnsafe<Array<{ name: string }>>(

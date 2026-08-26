@@ -494,6 +494,14 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
   const { data: sso, isLoading } = trpc.org.ssoConfig.useQuery(undefined, { enabled: isAdmin });
   const [form, setForm] = useState({ issuer: '', clientId: '', clientSecret: '', domains: '', enforced: false, defaultRole: 'ANALYST' });
   const [loaded, setLoaded] = useState(false);
+  /**
+   * The stamp of the configuration this panel loaded, so a second administrator
+   * cannot silently restore five fields — `enforced` among them, which is the
+   * switch that decides whether passwords work at all.
+   *
+   * Refreshed from the SAVE's own response, never re-read from the query.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!sso || loaded) return;
@@ -507,11 +515,13 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
       enforced: sso.enforced,
       defaultRole: sso.defaultRole,
     });
+    setStamp(sso.updatedAt ? new Date(sso.updatedAt) : null);
     setLoaded(true);
   }, [sso, loaded]);
 
   const save = trpc.org.saveSso.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       toast.success('Single sign-on saved.');
       setForm((f) => ({ ...f, clientSecret: '' }));
       void utils.org.ssoConfig.invalidate();
@@ -616,6 +626,7 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
               domains,
               enforced: form.enforced,
               defaultRole: form.defaultRole as 'ADMIN' | 'ANALYST' | 'SURVEYOR' | 'VIEWER',
+              expectedUpdatedAt: stamp ?? undefined,
             })
           }
         >

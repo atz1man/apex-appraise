@@ -1535,18 +1535,43 @@ export const comparablesRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        address: z.string(),
-        meta: z.string().default(''),
-        basePsf: z.number(),
-        adjSize: z.number(),
-        adjCondition: z.number(),
-        adjDate: z.number(),
-        adjLocation: z.number(),
+        /**
+         * Optional, and an update writes only what it was given.
+         *
+         * The Comparables screen persists on blur and sent the WHOLE row every
+         * time, so adjusting one column wrote all seven fields from the copy the
+         * page was holding. Two valuers on one deal — the collaboration this
+         * product sells — meant the second blur silently reverted the first's
+         * adjustments, and an adjustment is a judgement a Red Book valuation is
+         * defended with.
+         *
+         * Patch rather than a stamp, for the reason `7dd1415` gives: a stamp
+         * DETECTS the clobber and asks the user to reload; not sending the field
+         * means there is nothing to clobber. Two people adjusting DIFFERENT
+         * columns should both land. Only the same column is last-write-wins,
+         * which is what editing one number means.
+         */
+        address: z.string().optional(),
+        meta: z.string().optional(),
+        basePsf: z.number().optional(),
+        adjSize: z.number().optional(),
+        adjCondition: z.number().optional(),
+        adjDate: z.number().optional(),
+        adjLocation: z.number().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
-      const { id, ...data } = input;
+      const { id, dealId: _d, ...supplied } = input;
+      /**
+       * Only the keys actually supplied. `undefined` in a spread is written as
+       * null; a missing key tells Prisma to leave the column alone, which is the
+       * whole point of a partial write.
+       */
+      const data = Object.fromEntries(Object.entries(supplied).filter(([, v]) => v !== undefined));
+      if (!id && (data.address == null || data.basePsf == null)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A new comparable needs an address and a base £/ft².' });
+      }
       /**
        * These ARE the evidence. A Red Book valuation is defended by its
        * comparables and the adjustments made to them, and an adjustment is a
@@ -1555,7 +1580,9 @@ export const comparablesRouter = router({
        * imports from open data; the ones a valuer types or edits by hand, which
        * are the ones carrying a judgement, recorded nothing.
        */
-      const note = (action: string, row: { address: string; basePsf: number }) =>
+      // read from the ROW, never the input: after a partial write the input may
+      // carry only the one column that changed
+      const note = (action: string, row: { address: string; basePsf: number; adjSize: number; adjCondition: number; adjDate: number; adjLocation: number }) =>
         ctx.prisma.activityEvent.create({
           data: {
             orgId: ctx.principal.orgId,
@@ -1564,7 +1591,7 @@ export const comparablesRouter = router({
             actor: ctx.principal.name,
             action,
             target: `${row.address} · £${Math.round(row.basePsf).toLocaleString('en-GB')}/ft² base, adjustments ${
-              [input.adjSize, input.adjCondition, input.adjDate, input.adjLocation].map((n) => `${n > 0 ? '+' : ''}${n}%`).join(' ')
+              [row.adjSize, row.adjCondition, row.adjDate, row.adjLocation].map((n) => `${n > 0 ? '+' : ''}${n}%`).join(' ')
             }`,
           },
         });
@@ -1574,7 +1601,9 @@ export const comparablesRouter = router({
         await note('edited a comparable', updated);
         return updated;
       }
-      const created = await ctx.prisma.comparable.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.comparable.create({
+        data: { meta: '', adjSize: 0, adjCondition: 0, adjDate: 0, adjLocation: 0, ...data, orgId: ctx.principal.orgId, dealId: input.dealId } as never,
+      });
       await note('added a comparable', created);
       return created;
     }),
@@ -1639,21 +1668,33 @@ export const scenariosRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        name: z.string(),
-        descriptor: z.string().default(''),
-        blendedPsf: z.number(),
-        buildPsf: z.number(),
-        gia: z.number(),
-        targetProfitPct: z.number(),
+        // optional for the same reason as the comparables above: the Scenarios
+        // screen persists a lever on blur and used to write all six fields
+        name: z.string().optional(),
+        descriptor: z.string().optional(),
+        blendedPsf: z.number().optional(),
+        buildPsf: z.number().optional(),
+        gia: z.number().optional(),
+        targetProfitPct: z.number().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
-      const { id, ...data } = input;
+      const { id, dealId: _d, ...supplied } = input;
+      /**
+       * Only the keys actually supplied. `undefined` in a spread is written as
+       * null; a missing key tells Prisma to leave the column alone, which is the
+       * whole point of a partial write.
+       */
+      const data = Object.fromEntries(Object.entries(supplied).filter(([, v]) => v !== undefined));
+      if (!id && (data.name == null || data.blendedPsf == null || data.buildPsf == null || data.gia == null || data.targetProfitPct == null)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A new scheme option needs a name and all four levers.' });
+      }
       // a scheme option is what a promoter takes to a lender or a JV partner, and
       // `draftRisk` right below records the commentary written ABOUT these — so
       // the prose was traceable and the levers it describes were not
-      const note = (action: string, row: { name: string }) =>
+      // from the ROW, not the input — a partial write may name only one lever
+      const note = (action: string, row: { name: string; blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }) =>
         ctx.prisma.activityEvent.create({
           data: {
             orgId: ctx.principal.orgId,
@@ -1661,7 +1702,7 @@ export const scenariosRouter = router({
             userId: ctx.principal.userId,
             actor: ctx.principal.name,
             action,
-            target: `${row.name} · £${input.blendedPsf}/ft² blended, £${input.buildPsf}/ft² build, ${input.gia.toLocaleString('en-GB')} ft² GIA, ${input.targetProfitPct}% target`,
+            target: `${row.name} · £${row.blendedPsf}/ft² blended, £${row.buildPsf}/ft² build, ${row.gia.toLocaleString('en-GB')} ft² GIA, ${row.targetProfitPct}% target`,
           },
         });
       if (id) {
@@ -1670,7 +1711,9 @@ export const scenariosRouter = router({
         await note('edited a scheme option', updated);
         return updated;
       }
-      const created = await ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.scenario.create({
+        data: { descriptor: '', ...data, orgId: ctx.principal.orgId, dealId: input.dealId } as never,
+      });
       await note('added a scheme option', created);
       return created;
     }),

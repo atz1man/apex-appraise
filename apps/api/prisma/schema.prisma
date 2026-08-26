@@ -540,6 +540,14 @@ model SsoConnection {
   defaultRole  String  @default("ANALYST")
   createdById  String
   createdAt    DateTime @default(now())
+  // the stamp the settings panel hands back — see org.saveSso. The panel loads
+  // five fields once and posts them all back, so without it a second admin's
+  // save silently restores whatever the first changed, `enforced` included.
+  // @default(now()) as well as @updatedAt, matching Unit and Tenancy: the
+  // migration adds the column with DEFAULT CURRENT_TIMESTAMP so it cannot block
+  // on existing rows, and `prisma migrate diff --exit-code` in CI reads a DB
+  // default the datamodel does not declare as drift.
+  updatedAt    DateTime @default(now()) @updatedAt
   lastLoginAt  DateTime?
 }
 

@@ -68,17 +68,12 @@ export default function Scenarios() {
   const setLever = (id: string, key: LeverKey, v: number) =>
     setEdits((e) => ({ ...e, [id]: { ...e[id], [key]: v } }));
 
-  const persist = (s: (typeof scenarios)[number]) =>
-    upsert.mutate({
-      id: s.id,
-      dealId,
-      name: s.name,
-      descriptor: s.descriptor,
-      blendedPsf: s.blendedPsf,
-      buildPsf: s.buildPsf,
-      gia: s.gia,
-      targetProfitPct: s.targetProfitPct,
-    });
+  // only the levers this person moved — see Comparables.persist
+  const persist = (s: (typeof scenarios)[number]) => {
+    const changed = edits[s.id];
+    if (!changed || !Object.keys(changed).length) return;
+    upsert.mutate({ id: s.id, dealId, ...changed });
+  };
 
   const addOption = (slot: number) =>
     upsert.mutate({
@@ -93,16 +88,8 @@ export default function Scenarios() {
 
   const useOption = (s: (typeof scenarios)[number]) =>
     upsert.mutate(
-      {
-        id: s.id,
-        dealId,
-        name: s.name,
-        descriptor: `${s.descriptor.replace(/ · Chosen$/, '')} · Chosen`,
-        blendedPsf: s.blendedPsf,
-        buildPsf: s.buildPsf,
-        gia: s.gia,
-        targetProfitPct: s.targetProfitPct,
-      },
+      // marking an option chosen changes its descriptor and nothing else
+      { id: s.id, dealId, descriptor: `${s.descriptor.replace(/ · Chosen$/, '')} · Chosen` },
       { onSuccess: () => navigate(`/deal/${dealId}/appraisal`) },
     );
 
