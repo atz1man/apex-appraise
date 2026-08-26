@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { unsupportedFigures } from '../narrative-guard.js';
+import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
 import { z } from 'zod';
 import {
@@ -1104,10 +1104,21 @@ DO NOT ASSERT WHAT IS NOT ABOVE. Specifically: do not state transaction volumes,
          * and cannot drift — losing some prose quality rather than putting an
          * invented Market Value into a signed valuation.
          */
-        const unsupported = unsupportedFigures(parsed.data as unknown as Record<string, string>, {
-          money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
-          percents: [Number((facts.poc * 100).toFixed(1))],
-        });
+        const sections = parsed.data as unknown as Record<string, string>;
+        const unsupported = [
+          ...unsupportedFigures(sections, {
+            money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
+            percents: [Number((facts.poc * 100).toFixed(1))],
+          }),
+          /**
+           * And what it CLAIMED. The prompt's rules about market conditions, the
+           * adequacy of the evidence and clause 11 were enforced by nothing —
+           * and none of those sentences carries a figure, so the check above
+           * cannot see them. Same disposal: fall back to the template, which
+           * makes none of them.
+           */
+          ...unsupportedClaims(sections, { specialAssumptions: facts.specialAssumptions }),
+        ];
         if (unsupported.length === 0) return { ...parsed.data, source: 'model' as const };
         narrativeRejections.push(...unsupported);
       } else {
@@ -1128,7 +1139,7 @@ DO NOT ASSERT WHAT IS NOT ABOVE. Specifically: do not state transaction volumes,
    * mode, and whenever a model draft carried a figure the engine did not produce.
    */
   if (narrativeRejections.length) {
-    console.warn(`[narrative] draft discarded — figures not produced by the engine: ${narrativeRejections.join(', ')}`);
+    console.warn(`[narrative] draft discarded — not supported by the record: ${narrativeRejections.join(', ')}`);
   }
   const evidence = facts.compCount
     ? `${facts.compCount} adjusted comparable transaction${facts.compCount === 1 ? '' : 's'}, which support${facts.compCount === 1 ? 's' : ''} a rate of £${facts.supportedPsf}/ft²`

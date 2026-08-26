@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moneyIn, percentIn, unsupportedFigures } from '../src/narrative-guard.js';
+import { moneyIn, percentIn, unsupportedClaims, unsupportedFigures } from '../src/narrative-guard.js';
 
 /**
  * The model is told to use the engine's figures verbatim and invent nothing.
@@ -146,5 +146,93 @@ describe('shorthand versus a claim to precision', () => {
   it('still lets an exact round figure through when that is what the engine said', () => {
     const round = { money: [8_000_000], percents: [] };
     expect(unsupportedFigures({ valuationRationale: 'Market Value of £8,000,000.' }, round)).toEqual([]);
+  });
+});
+
+/**
+ * The claims, which had no check at all.
+ *
+ * The figure guard above exists because "use these figures verbatim" is only an
+ * instruction. The same prompt carries rules about what the draft may ASSERT,
+ * and those were enforced by nothing — a gap hidden by where the tests run:
+ * `narrative-claims.test.ts` asserts all of them, but its harness sets no
+ * ANTHROPIC_API_KEY, so every assertion there exercises the deterministic
+ * template. On the model path, which is the one production takes, a sentence
+ * like "transaction volumes have been stable and marketing periods are
+ * typically six to eight weeks" carries no money and no percentage, so the
+ * figure guard finds nothing to object to and it prints into a signed valuation.
+ *
+ * Every sentence rejected below was written by this product's own template until
+ * 238d265 — which is why a model drafting in the same house style reaches for
+ * them.
+ */
+describe('claims nothing established', () => {
+  const none = { specialAssumptions: null };
+  const claims = (text: string, facts = none) => unsupportedClaims({ marketCommentary: text }, facts);
+
+  it('rejects market conditions this product has never measured', () => {
+    for (const sentence of [
+      'The local market remains active, with steady occupier and investor demand.',
+      'There is a limited supply of directly comparable stock.',
+      'Transaction volumes over the preceding twelve months have been stable.',
+      'Marketing periods for well-presented accommodation are typically six to eight weeks.',
+      'No material valuation uncertainty is reported.',
+    ]) {
+      expect(claims(sentence), sentence).not.toEqual([]);
+    }
+  });
+
+  it('rejects a declaration that the evidence base is adequate', () => {
+    expect(claims('The evidence base of 1 comparable is considered adequate for the class.')).not.toEqual([]);
+    expect(claims('Adequate comparable evidence is available.')).not.toEqual([]);
+  });
+
+  it('rejects denying a special assumption the signed terms record', () => {
+    const denial = 'No special assumptions have been made.';
+    expect(claims(denial, { specialAssumptions: 'That planning permission is granted.' })).not.toEqual([]);
+    // and says so where the terms genuinely record none
+    expect(claims(denial, none)).toEqual([]);
+  });
+
+  it('names the section and quotes the sentence, so a rejection can be read', () => {
+    const [first] = unsupportedClaims({ riskCommentary: 'Transaction volumes have been stable.' }, none);
+    expect(first).toContain('riskCommentary');
+    expect(first).toContain('Transaction volumes have been stable.');
+  });
+
+  it('accepts naming a gap, which is the opposite of asserting it', () => {
+    /**
+     * This has to hold or the guard rejects the honest prose it exists to fall
+     * back to. The template's own market paragraph names demand, supply,
+     * transaction volumes and marketing periods in one breath — to say none of
+     * them were looked at.
+     */
+    for (const sentence of [
+      'Local market conditions — occupier and investor demand, supply of comparable stock, transaction volumes and marketing periods — have not been assessed in this draft and are for the valuer to state.',
+      'The evidence base is 1 comparable, and its adequacy for the class is for the valuer to confirm.',
+      'Material valuation uncertainty has not been assessed in this draft.',
+      'Demand in the locality has not been measured.',
+    ]) {
+      expect(claims(sentence), sentence).toEqual([]);
+    }
+  });
+
+  it('does not object to ordinary valuation prose', () => {
+    for (const sentence of [
+      'Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches.',
+      "Reconciling the approaches, the valuer's opinion of Market Value is £3,150,000.",
+      'Planning status is recorded as outline consent, and the valuation assumes all stated consents remain in effect.',
+      'No comparables have been logged, so the figure is appraisal-led and should be read accordingly.',
+    ]) {
+      expect(claims(sentence), sentence).toEqual([]);
+    }
+  });
+
+  it('reads one sentence at a time, so a disclaimer cannot cover an assertion beside it', () => {
+    const mixed =
+      'Demand in the locality has not been measured. Transaction volumes over the preceding twelve months have been stable.';
+    const found = claims(mixed);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('Transaction volumes');
   });
 });
