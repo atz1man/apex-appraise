@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (254; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (586). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (589). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (57): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx).
@@ -78,6 +78,8 @@ the point, so read the failure rather than adding an exemption.
   (`assertUnchanged`) or writes only the keys it was given.
 - `secrets-at-rest` — after the real procedures have run, the raw tables are searched for
   the plaintext, so the FIFTH credential column cannot land unsealed.
+- `mail-limiter-sweep` — every procedure a stranger can make send an email is in
+  `SENSITIVE` (the strict rate-limit bucket), and no authenticated one is.
 - `ai-disclosure-provenance` — both halves: every declared AI touchpoint has a procedure
   writing its event, AND every call to the Anthropic API sits inside a function some
   touchpoint names (`drafter`), so a new model call cannot be used undisclosed.
