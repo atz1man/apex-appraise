@@ -24,9 +24,13 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (199; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (246; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/web && npx playwright test` — e2e (108, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/api && npx vitest run` — API tests (578). See the container gotcha below before
+  trusting a green run.
+- `cd apps/web && npx vitest run` — web unit tests (57): the pure decision modules in
+  `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx).
+- `cd apps/web && npx playwright test` — e2e (139, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
   api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
@@ -56,6 +60,31 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
   exception is Stripe's payment form, which must see a card number. `e2e/third-party.spec.ts`
   fails the build if a page contacts anyone else.
 - Provenance on every figure (extraction citations, audit events).
+
+## Mechanical guards (whole-codebase sweeps in `apps/api/test`)
+
+Each of these walks the REAL router or schema rather than a hand-kept list, because each
+was written after the same defect was found and fixed by hand several times over. Adding a
+procedure or a model without satisfying them fails CI with a message naming yours — that is
+the point, so read the failure rather than adding an exemption.
+
+- `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
+- `cascade` — every model appears in the GDPR delete list and the seed wipe list.
+- `isolation-sweep` — every procedure refuses another firm's ids.
+- `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
+- `approved-immutable` — no procedure edits an approved appraisal in place.
+- `lost-update-sweep` — every procedure that updates a held row either takes a stamp
+  (`assertUnchanged`) or writes only the keys it was given.
+
+The LLM outputs are guarded the same way, and for the same reason — an instruction in a
+prompt is not a guard. `narrative-guard.ts` holds a draft to the figures the engine produced
+(`unsupportedFigures`) and to the claims the record supports (`unsupportedClaims`); the
+scenario risk commentary is additionally held to the option the ENGINE ranks best
+(`unsupportedRecommendation`, in `routers/appraisal.ts` beside the template it falls back
+to), since choosing between schemes is a financial conclusion. A
+draft failing any of them is discarded for the deterministic template. Note that the test
+harness sets no `ANTHROPIC_API_KEY`, so a test calling one of these procedures exercises the
+TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 
 ## Gotchas (hard-won — do not re-learn)
 
