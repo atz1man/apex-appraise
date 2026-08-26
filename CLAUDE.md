@@ -109,6 +109,10 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   `RATE_LIMIT_PER_MIN=5000 AUTH_RATE_LIMIT_PER_MIN=1000 pnpm dev`. Plain `pnpm dev` uses the
   production defaults (600/10) and the suite signs in on every test from one IP, so ~39 specs
   fail on the rate limiter and look like real regressions. CI sets these in the browser job.
+- To exercise maps and open-data panels with no route to postcodes.io, seed the geocode straight
+  into `OpenDataCache` (key `geocode:BH151JF`, source `postcodes.io`, payload
+  `{postcode,latitude,longitude,district,region}`). Leaflet then renders and the Site Pack specs
+  pass. Without it those specs fail for the environment, not for the code.
 - Rebuild containers before verifying new API procedures (`docker compose up -d --build`) —
   stale images make zod silently strip unknown mutation keys and "succeed" confusingly.
 - Run the API suite in the container, not just on the host — `docker compose run --rm --no-deps
@@ -119,6 +123,14 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
 - New Prisma model ⇒ add it to the seed wipe list, or stale rows accumulate across reseeds.
+- Editing `schema.prisma` and running `prisma generate` is NOT enough for a running dev stack:
+  the SQLite file still lacks the column, so the API throws inside `findUnique` and the failure
+  surfaces in whatever procedure happened to read that table. Run `cd apps/api && npx prisma
+  db push` too. (The migration is separate again — CI applies it to real Postgres from empty
+  and then `migrate diff --exit-code`s against the datamodel.)
+- Start the stack from the REPO ROOT. `pnpm dev` inside `apps/web` starts only vite, and the
+  browser suite then fails everywhere at once, which reads as a code fault. Also: `pkill -f vite`
+  can kill the shell's own process group — check `ps aux | grep -cE '[t]sx|[v]ite'` instead.
 - `.env` (repo root, gitignored) holds the Anthropic + Stripe sandbox keys and JWT_SECRET —
   never print or commit them; docker compose reads it automatically. Preserve existing keys
   when editing.
@@ -132,6 +144,16 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Flex children default `min-width:auto` — clusters need `min-w-0` (+ internal `overflow-x-auto`)
   or they widen the page on phones; e2e guards zero horizontal scroll at 390px.
 - Live-LLM e2e needs `test.setTimeout(120_000)`.
+- Undoing a mutation with `git checkout -- <file>` restores HEAD, not the pre-mutation state —
+  on a file with uncommitted work it deletes the fix you are testing, and the next mutation runs
+  against a file with no guard in it, which reads as a cascade of unrelated failures. Copy the
+  good file aside first and restore from that.
+- A surviving mutation may mean the TEST is not discriminating rather than the guard being fine.
+  Ask which direction actually breaks: a substring match found "Option A" inside "Option A2"
+  only when the engine's choice was the SHORTER name, and the test used the longer one.
+- A static presence check ("the file mentions `ricsFirmNumber`") passes every mutation when the
+  claim appears in three places and only one is unconditional. Delete such a test rather than
+  keep it beside a real one — it reads as coverage.
 - Repo is PUBLIC (github.com/atz1man/apex-appraise) so GitHub Actions runs free.
 
 ## Session memory
