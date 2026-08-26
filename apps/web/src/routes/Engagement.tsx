@@ -146,7 +146,37 @@ export default function Engagement() {
    * mean anything.
    */
   useEffect(() => {
-    if (saved && !dirty) setStamp(saved.updatedAt ? new Date(saved.updatedAt) : null);
+    if (!saved || dirty) return;
+    const fromQuery = saved.updatedAt ? new Date(saved.updatedAt) : null;
+    /**
+     * Never BACKWARDS.
+     *
+     * This effect depends on `dirty`, so a save re-runs it the moment
+     * `setDirty(false)` lands — before the refetch it just triggered has
+     * returned. `saved` is therefore still the copy from before the save, and
+     * setting the stamp from it threw away the fresh one the save had just
+     * handed back. The next save then carried a stamp one version old and was
+     * refused: the user told their own terms had changed underneath them.
+     *
+     * Invisible on a fast machine, where the refetch always won the race —
+     * it passed ten runs in a row locally and failed in CI, which runs two
+     * workers against a docker stack. Reproduced deterministically by holding
+     * `engagement.get` back for three seconds.
+     *
+     * A row's `updatedAt` only ever moves forward, so keeping the later of the
+     * two is correct whichever arrives first — and a query that has NO stamp is
+     * not later than one that has. That case is the first save on a deal with no
+     * terms yet: the create returns a real stamp while the query still holds the
+     * unsaved draft's `null`, and treating null as "newer" wiped it, so the next
+     * save carried nothing and was refused for having no stamp at all. Which is
+     * why this looked intermittent and was in fact exact — it failed on the
+     * first run after a reseed and passed on every run after.
+     */
+    setStamp((current) => {
+      if (!fromQuery) return current;
+      if (current && fromQuery < current) return current;
+      return fromQuery;
+    });
   }, [saved, dirty]);
 
   const invalidate = () => {

@@ -55,6 +55,7 @@ const ownDeal = (page: Page) =>
   }, NAME);
 
 test('terms of engagement: saved twice in a row without reloading', async ({ page }) => {
+  test.setTimeout(60_000);
   await signIn(page);
   const id = await ownDeal(page);
   await page.goto(`/deal/${id}/engagement`);
@@ -66,6 +67,24 @@ test('terms of engagement: saved twice in a row without reloading', async ({ pag
   // fixed one matches leftovers from a previous failure
   const stamp = `${Date.now()}`.slice(-6);
   const save = page.getByRole('button', { name: 'Save terms', exact: true });
+
+  /**
+   * Hold the post-save refetch until this test lets it go.
+   *
+   * A gate rather than a delay. A fixed three seconds reproduced the failure but
+   * was itself timing-dependent — it raced the machine under two workers and
+   * turned a real regression test into a flake. Holding the request until the
+   * second save has happened is deterministic at any speed, and costs no
+   * wall-clock at all.
+   */
+  let releaseRefetch: () => void = () => {};
+  const refetchHeld = new Promise<void>((resolve) => {
+    releaseRefetch = resolve;
+  });
+  await page.route('**/trpc/engagement.get*', async (route) => {
+    await refetchHeld;
+    await route.continue();
+  });
 
   await purpose.fill(`Secured lending ${stamp}a`);
   await save.click();
@@ -85,26 +104,45 @@ test('terms of engagement: saved twice in a row without reloading', async ({ pag
    * on the page either way. An absence assertion that runs before the thing
    * could appear is not an assertion.
    */
-  await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+  /**
+   * Fifteen seconds, not the default five. This waits on a real round trip to a
+   * server two Playwright workers are sharing, and the run that found the bug
+   * this test now guards was itself a two-worker run on a loaded machine.
+   *
+   * It does not soften the assertion. The failure being guarded — a save
+   * refused as a conflict — never produces this button at all, so a longer wait
+   * changes only how long a genuine failure takes to report, not whether it
+   * does. Verified: all three stamp mutations still fail with it.
+   */
+  await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/after you opened it|Reload to see/i)).toHaveCount(0);
 
   /**
-   * What this test does NOT prove, stated rather than implied.
+   * Held-back refetch, and why it is the whole point of this test.
    *
-   * The page keeps its stamp current two ways — from each save's own response,
-   * and by following the query whenever the form is clean. On a local stack the
-   * post-save refetch always wins, so removing the first path leaves this test
-   * green: measured, not assumed. It is kept because it is the only path that
-   * works when the refetch has NOT landed, which is the ordinary case on a slow
-   * connection, and that window is not reproducible here without delaying the
-   * refetch enough to break the page for unrelated reasons.
+   * The page keeps its stamp current two ways: from each save's own response,
+   * and by following the query while the form is clean. With the refetch
+   * delayed above, the save's response is the ONLY source — so all three ways
+   * this can break are reachable here, and each was driven backwards:
    *
-   * The path this test DOES prove is the one that matters more: sending no
-   * stamp at all fails, and so does dropping the clean-follow effect — the
-   * latter caught a regression this same change introduced, where issuing or
-   * withdrawing terms left the next save refused.
+   *   not sending a stamp at all             → refused
+   *   not taking it from the save's response → refused
+   *   the clean-follow effect going backwards → refused
+   *
+   * That last one is a bug this file's own change shipped and CI caught. An
+   * earlier version of this comment claimed the delay "broke the page for
+   * unrelated reasons" and that the first path could not be proven here. That
+   * was wrong on both counts: the delay was reproducing the third failure, and
+   * I misread the reproduction as noise.
    */
 
+  /**
+   * Let the held refetch through. The handler stays registered on purpose:
+   * once the gate is open it is a pass-through, and calling `unroute` here
+   * instead handled the still-suspended request out from under
+   * `route.continue()` — "Route is already handled!".
+   */
+  releaseRefetch();
   await page.reload();
   await expect(page.getByLabel('Purpose of the valuation', { exact: true })).toHaveValue(`Secured lending ${stamp}b`);
 });
