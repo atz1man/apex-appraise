@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import type { PrismaClient } from '@prisma/client';
 import { issuedBefore, prisma, principalFromAuthHeader } from './context.js';
 import { guard, internalWriter } from './http-guards.js';
 import { signDownloadToken, verifyDownloadToken } from './download-token.js';
@@ -69,17 +70,17 @@ export function signFileUrl(url: string | null | undefined, userId: string): str
   return `${url}?t=${encodeURIComponent(signDownloadToken({ sub: userId, kind: 'file', key }))}`;
 }
 
-async function orgForKey(key: string): Promise<string | null> {
+async function orgForKey(key: string, db: PrismaClient = prisma): Promise<string | null> {
   const url = `/uploads/files/${key}`;
   const [doc, photo, org] = await Promise.all([
-    prisma.document.findFirst({ where: { url }, select: { orgId: true } }),
-    prisma.sitePhoto.findFirst({ where: { url }, select: { orgId: true } }),
-    prisma.organisation.findFirst({ where: { logoUrl: url }, select: { id: true } }),
+    db.document.findFirst({ where: { url }, select: { orgId: true } }),
+    db.sitePhoto.findFirst({ where: { url }, select: { orgId: true } }),
+    db.organisation.findFirst({ where: { logoUrl: url }, select: { id: true } }),
   ]);
   return doc?.orgId ?? photo?.orgId ?? org?.id ?? null;
 }
 
-export async function registerUploads(app: FastifyInstance) {
+export async function registerUploads(app: FastifyInstance, db: PrismaClient = prisma) {
   await mkdir(UPLOAD_DIR, { recursive: true });
   await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
   /**
@@ -102,16 +103,16 @@ export async function registerUploads(app: FastifyInstance) {
     const key = req.params['*'];
     if (!key || key.includes('..')) return reply.code(400).send({ error: 'bad key' });
 
-    const owner = await orgForKey(key);
+    const owner = await orgForKey(key, db);
     // a key nobody owns is not a file we serve — never fall back to the disk
     if (!owner) return reply.code(404).send({ error: 'not found' });
 
-    const bearer = await principalFrom(req);
+    const bearer = await principalFrom(req, db);
     let allowed = bearer?.orgId === owner;
     if (!allowed && req.query.t) {
       const claim = verifyDownloadToken(req.query.t, { kind: 'file', key });
       if (claim) {
-        const u = await prisma.user.findUnique({ where: { id: claim.userId } });
+        const u = await db.user.findUnique({ where: { id: claim.userId } });
         /**
          * The session cutoff applies here too. A file token lives half an hour
          * — long enough to matter, and this branch already has the row in hand,
@@ -132,7 +133,7 @@ export async function registerUploads(app: FastifyInstance) {
 
   app.post('/uploads/document', async (req, reply) => {
     // the whole internalProcedure chain, in one place — see http-guards.ts
-    const user = await guard(reply, () => internalWriter(req, 'uploads.document'));
+    const user = await guard(reply, () => internalWriter(req, 'uploads.document', db));
     if (!user) return;
     const parts = req.parts();
     let dealId = '';
@@ -151,10 +152,10 @@ export async function registerUploads(app: FastifyInstance) {
       }
     }
     if (!stored || !dealId) return reply.code(400).send({ error: 'file and dealId required' });
-    const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
+    const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
     if (!deal) return reply.code(404).send({ error: 'deal not found' });
     const ext = stored.filename.includes('.') ? stored.filename.split('.').pop()! : 'pdf';
-    const doc = await prisma.document.create({
+    const doc = await db.document.create({
       data: {
         orgId: user.orgId,
         dealId,
@@ -167,7 +168,7 @@ export async function registerUploads(app: FastifyInstance) {
         addedById: user.userId,
       },
     });
-    await prisma.activityEvent.create({
+    await db.activityEvent.create({
       data: { orgId: user.orgId, dealId, actor: user.name, action: 'uploaded', target: stored.filename },
     });
     return { id: doc.id, url: doc.url };
@@ -180,7 +181,7 @@ export async function registerUploads(app: FastifyInstance) {
    */
   app.post('/uploads/logo', async (req, reply) => {
     // the whole internalProcedure chain, in one place — see http-guards.ts
-    const user = await guard(reply, () => internalWriter(req, 'uploads.logo'));
+    const user = await guard(reply, () => internalWriter(req, 'uploads.logo', db));
     if (!user) return;
     if (user.role !== 'ADMIN') return reply.code(403).send({ error: 'admin access required' });
     const ALLOWED: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
@@ -199,13 +200,13 @@ export async function registerUploads(app: FastifyInstance) {
       return reply.code(413).send({ error: 'Logo must be 2MB or smaller' });
     }
     const url = `/uploads/files/${key}`;
-    await prisma.organisation.update({ where: { id: user.orgId }, data: { logoUrl: url } });
+    await db.organisation.update({ where: { id: user.orgId }, data: { logoUrl: url } });
     return { url };
   });
 
   app.post('/uploads/photo', async (req, reply) => {
     // the whole internalProcedure chain, in one place — see http-guards.ts
-    const user = await guard(reply, () => internalWriter(req, 'uploads.photo'));
+    const user = await guard(reply, () => internalWriter(req, 'uploads.photo', db));
     if (!user) return;
     const parts = req.parts();
     let dealId = '';
@@ -225,12 +226,18 @@ export async function registerUploads(app: FastifyInstance) {
       }
     }
     if (!key || !dealId) return reply.code(400).send({ error: 'file and dealId required' });
-    const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
+    const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
     if (!deal) return reply.code(404).send({ error: 'deal not found' });
+    // the deal and the contractor are two independent inputs. The tRPC twin of
+    // this route took the same id on trust, and firm B's subcontractor name then
+    // rendered on firm A's cost screen — `photos.list` joins the contractor and
+    // filters only on the photo's own orgId.
+    if (contractorId && !(await db.contractor.findFirst({ where: { id: contractorId, orgId: user.orgId } })))
+      return reply.code(404).send({ error: 'contractor not found' });
     const taken = new Date(takenAt + 'T00:00:00Z');
     const wc = new Date(taken);
     wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
-    const photo = await prisma.sitePhoto.create({
+    const photo = await db.sitePhoto.create({
       data: {
         orgId: user.orgId,
         dealId,
@@ -239,6 +246,26 @@ export async function registerUploads(app: FastifyInstance) {
         url: `/uploads/files/${key}`,
         takenAt: taken,
         weekCommencing: wc,
+      },
+    });
+    /**
+     * The same event its tRPC twin writes, and for the reason `photos.add` gives:
+     * the site log is what a disputed valuation of works-in-progress is argued
+     * from, and `takenAt` is typed by hand — so when it was RECORDED, and by
+     * whom, is a different fact from when it was taken, and the only one of the
+     * two that cannot be backdated.
+     *
+     * This is the door that carries the actual photograph; `photos.add` creates a
+     * row with no image. The argument was written on the wrong one.
+     */
+    await db.activityEvent.create({
+      data: {
+        orgId: user.orgId,
+        dealId,
+        userId: user.userId,
+        actor: user.name,
+        action: 'added a site photo',
+        target: `${caption} · taken ${takenAt}`,
       },
     });
     return { id: photo.id, url: photo.url };

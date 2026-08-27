@@ -170,6 +170,8 @@ export const costRouter = router({
         ),
       };
       if (id) await assertOwned(ctx.prisma.costPackage, id, ctx.principal.orgId);
+      // and the contractor the package is being assigned to is a THIRD input
+      if (rest.contractorId) await assertOwned(ctx.prisma.contractor, rest.contractorId, ctx.principal.orgId);
       const row = id
         ? await ctx.prisma.costPackage.update({ where: { id }, data })
         : await ctx.prisma.costPackage.create({
@@ -272,6 +274,9 @@ export const photosRouter = router({
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      // the deal and the contractor are two independent inputs; checking the
+      // first says nothing about the second — see auth/owned.ts
+      if (input.contractorId) await assertOwned(ctx.prisma.contractor, input.contractorId, ctx.principal.orgId);
       const taken = new Date(input.takenAt + 'T00:00:00Z');
       const wc = new Date(taken);
       wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
