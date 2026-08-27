@@ -1,6 +1,6 @@
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -80,6 +80,33 @@ async function orgForKey(key: string, db: PrismaClient = prisma): Promise<string
   return doc?.orgId ?? photo?.orgId ?? org?.id ?? null;
 }
 
+/**
+ * Refuse an upload whose bytes are already on disk.
+ *
+ * Multipart has to be consumed before the fields it carries can be read, so the
+ * file is written before the deal or the contractor it names can be checked.
+ * Every refusal after that point left the bytes behind with no row that would
+ * ever reference them: an internal member of one firm posting to another firm's
+ * deal id got a 404 and a permanent file, and nothing collects them. The logo
+ * route already unlinks when it rejects an oversize image; these did not.
+ *
+ * Best-effort on the unlink — a file that is already gone is the outcome we
+ * wanted, and failing the refusal because the cleanup failed would turn a 404
+ * into a 500.
+ */
+async function refuse(
+  reply: FastifyReply,
+  code: number,
+  error: string,
+  ...keys: (string | null | undefined)[]
+) {
+  const { unlink } = await import('node:fs/promises');
+  await Promise.all(
+    keys.filter((k): k is string => !!k).map((k) => unlink(path.join(UPLOAD_DIR, k)).catch(() => {})),
+  );
+  return reply.code(code).send({ error });
+}
+
 export async function registerUploads(app: FastifyInstance, db: PrismaClient = prisma) {
   await mkdir(UPLOAD_DIR, { recursive: true });
   await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
@@ -151,9 +178,11 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
         stored = { key, filename: part.filename, bytes: size };
       }
     }
-    if (!stored || !dealId) return reply.code(400).send({ error: 'file and dealId required' });
+    // split so the cleanup has a file to name: no upload, nothing to collect
+    if (!stored) return reply.code(400).send({ error: 'file and dealId required' });
+    if (!dealId) return refuse(reply, 400, 'file and dealId required', stored.key);
     const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
-    if (!deal) return reply.code(404).send({ error: 'deal not found' });
+    if (!deal) return refuse(reply, 404, 'deal not found', stored.key);
     const ext = stored.filename.includes('.') ? stored.filename.split('.').pop()! : 'pdf';
     const doc = await db.document.create({
       data: {
@@ -225,15 +254,17 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
         await pipeline(part.file, createWriteStream(path.join(UPLOAD_DIR, key)));
       }
     }
-    if (!key || !dealId) return reply.code(400).send({ error: 'file and dealId required' });
+    // split so the cleanup has a file to name: no upload, nothing to collect
+    if (!key) return reply.code(400).send({ error: 'file and dealId required' });
+    if (!dealId) return refuse(reply, 400, 'file and dealId required', key);
     const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
-    if (!deal) return reply.code(404).send({ error: 'deal not found' });
+    if (!deal) return refuse(reply, 404, 'deal not found', key);
     // the deal and the contractor are two independent inputs. The tRPC twin of
     // this route took the same id on trust, and firm B's subcontractor name then
     // rendered on firm A's cost screen — `photos.list` joins the contractor and
     // filters only on the photo's own orgId.
     if (contractorId && !(await db.contractor.findFirst({ where: { id: contractorId, orgId: user.orgId } })))
-      return reply.code(404).send({ error: 'contractor not found' });
+      return refuse(reply, 404, 'contractor not found', key);
     const taken = new Date(takenAt + 'T00:00:00Z');
     const wc = new Date(taken);
     wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
