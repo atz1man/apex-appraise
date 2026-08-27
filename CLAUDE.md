@@ -136,6 +136,15 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   && npx vitest run'`. The image is Node 22 and this Mac is Node 25: `10 ** -4` differs between
   them, which once let the Red Book narrative guard accept a transposed Market Value in
   production while its test was green locally.
+- A cloud/sandbox container may carry a DIFFERENT Playwright browser build from the one the
+  pinned `@playwright/test` wants (seen: `/opt/pw-browsers` has `chromium_headless_shell-1194`,
+  Playwright asks for `-1228`). Every browser spec then dies with "Executable doesn't exist"
+  before any test body runs, which reads as a total regression. Point the SUITE at the
+  installed binary with `use: { launchOptions: { executablePath:
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } }` — temporary, NEVER committed. That
+  does not fix `reports.ts`, which launches its own browser server-side, so the two PDF specs
+  (funding pack, shared report link) still fail with a 501 for the environment, not the code.
+  Do not run `playwright install`.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
 - New Prisma model ⇒ add it to the seed wipe list, or stale rows accumulate across reseeds.
