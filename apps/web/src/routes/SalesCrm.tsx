@@ -6,6 +6,7 @@ import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
 import { Button, Dot, Drawer, EmptyState, Panel, ProgressBar, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { useToast } from '../components/Toast';
 
 const MINUS = '−';
 
@@ -53,6 +54,8 @@ interface Row {
   stalled: boolean;
   arrears: number;
   msDates: Array<Date | null>;
+  /** the stamp an in-place save has to hand back */
+  updatedAt: Date;
 }
 
 interface Draft {
@@ -79,6 +82,7 @@ const deltaTone = (d: number) => (d > 0 ? statusTokens.green.text : d < 0 ? stat
 export default function SalesCrm() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  const toast = useToast();
 
   const [mode, setMode] = useState<'sales' | 'lettings'>('sales');
   const [view, setView] = useState<'table' | 'plan'>('table');
@@ -86,6 +90,23 @@ export default function SalesCrm() {
   const [selected, setSelected] = useState<string | null>(null); // row id | 'new' | null
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  /**
+   * The record this drawer is holding, and which record it belongs to.
+   *
+   * Sent back on an in-place save so the server can refuse one built on a copy
+   * somebody else has already changed — two agents working the same release is
+   * the ordinary case in a sales office, not the unlucky one.
+   *
+   * Seeded when a row is opened and then advanced by every write this drawer
+   * makes, from the write's OWN response. It is deliberately not re-read from
+   * the list when the edit form opens: the list can still be showing the row as
+   * it was before this drawer's last save, and re-seeding from it would send a
+   * stamp older than the row's, so the server would refuse the drawer's own
+   * change. Carrying the id makes that impossible to apply to the wrong plot.
+   */
+  const [heldStamp, setHeldStamp] = useState<{ id: string; at: Date } | null>(null);
+  const stampFor = (id: string | null) => (heldStamp && heldStamp.id === id ? heldStamp.at : undefined);
+  const holdStamp = (rec: { id: string; updatedAt: Date }) => setHeldStamp({ id: rec.id, at: rec.updatedAt });
 
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const unitsQ = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
@@ -109,19 +130,41 @@ export default function SalesCrm() {
 
   const upsertUnit = trpc.sales.upsertUnit.useMutation({
     onSuccess: (rec) => {
+      holdStamp(rec);
       utils.sales.units.invalidate(dealId);
       afterSave(rec.id);
     },
   });
   const deleteUnit = trpc.sales.deleteUnit.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       utils.sales.units.invalidate(dealId);
       closeDrawer();
+      /**
+       * A buyer's portal login points at the plot. Deleting the plot used to
+       * leave them with an account whose every page answers NOT_FOUND, and told
+       * the person deleting nothing — the same shape as removing a colleague
+       * and silently killing the valuation links they had sent.
+       */
+      if (res.portalLogins > 0) {
+        toast.push(
+          'info',
+          `${res.portalLogins} buyer portal login${res.portalLogins === 1 ? '' : 's'} went with this plot — ${res.portalLogins === 1 ? 'that buyer' : 'those buyers'} can no longer sign in.`,
+        );
+      }
     },
   });
-  const advanceUnit = trpc.sales.advanceMilestone.useMutation({ onSuccess: () => utils.sales.units.invalidate(dealId) });
+  const advanceUnit = trpc.sales.advanceMilestone.useMutation({
+    onSuccess: (rec, id) => {
+      // advancing writes to the row, so the stamp the drawer is holding is now
+      // one behind its own change — refresh it rather than make the next edit
+      // wait for the refetch and then be refused for a conflict with itself
+      setHeldStamp({ id, at: rec.updatedAt });
+      utils.sales.units.invalidate(dealId);
+    },
+  });
   const upsertTenancy = trpc.sales.upsertTenancy.useMutation({
     onSuccess: (rec) => {
+      holdStamp(rec);
       utils.sales.tenancies.invalidate(dealId);
       afterSave(rec.id);
     },
@@ -132,7 +175,12 @@ export default function SalesCrm() {
       closeDrawer();
     },
   });
-  const advanceTenancy = trpc.sales.advanceTenancy.useMutation({ onSuccess: () => utils.sales.tenancies.invalidate(dealId) });
+  const advanceTenancy = trpc.sales.advanceTenancy.useMutation({
+    onSuccess: (rec, id) => {
+      setHeldStamp({ id, at: rec.updatedAt });
+      utils.sales.tenancies.invalidate(dealId);
+    },
+  });
 
   const saving = upsertUnit.isPending || upsertTenancy.isPending;
   const advancing = advanceUnit.isPending || advanceTenancy.isPending;
@@ -159,6 +207,7 @@ export default function SalesCrm() {
         stalled: u.stalled,
         arrears: 0,
         msDates: u.milestones.map((m) => m.date),
+        updatedAt: u.updatedAt,
       }));
     }
     return (tenQ.data?.tenancies ?? []).map((t) => ({
@@ -179,6 +228,7 @@ export default function SalesCrm() {
       stalled: t.stalled,
       arrears: t.arrears,
       msDates: [],
+      updatedAt: t.updatedAt,
     }));
   }, [mode, unitsQ.data, tenQ.data]);
 
@@ -315,11 +365,14 @@ export default function SalesCrm() {
     setSelected(id);
     setEditing(false);
     setDraft(null);
+    const row = rows.find((r) => r.id === id);
+    setHeldStamp(row ? { id, at: row.updatedAt } : null);
   };
   const openCreate = () => {
     setSelected('new');
     setEditing(true);
     setDraft(emptyDraft());
+    setHeldStamp(null);
   };
   const openEdit = () => {
     if (!sel) return;
@@ -352,7 +405,13 @@ export default function SalesCrm() {
       stalled: draft.stalled,
     };
     if (isRent) {
-      upsertTenancy.mutate({ ...base, ervPcm: draft.appraised, agreedRentPcm: draft.agreed > 0 ? draft.agreed : null, tenantName: draft.party || null });
+      upsertTenancy.mutate({
+        ...base,
+        ervPcm: draft.appraised,
+        agreedRentPcm: draft.agreed > 0 ? draft.agreed : null,
+        tenantName: draft.party || null,
+        expectedUpdatedAt: stampFor(selected),
+      });
     } else {
       upsertUnit.mutate({
         ...base,
@@ -360,6 +419,7 @@ export default function SalesCrm() {
         agreedValue: draft.agreed > 0 ? draft.agreed : null,
         buyerName: draft.party || null,
         buyerSolicitor: draft.solicitor || null,
+        expectedUpdatedAt: stampFor(selected),
       });
     }
   };

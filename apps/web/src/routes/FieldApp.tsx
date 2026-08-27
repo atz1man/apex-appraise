@@ -187,16 +187,33 @@ export default function FieldApp() {
     if (v > 0) setValue(v);
   }, [screen, value, indicated, deal]);
 
-  const save = trpc.inspections.save.useMutation({ onSuccess: () => utils.inspections.get.invalidate() });
+  /**
+   * The inspection this device is holding.
+   *
+   * Sent back on every save so the server can refuse one built on a copy the
+   * workbench has already changed. Taken from the save's own response too, so a
+   * second save does not depend on a refetch landing in between — which offline
+   * it will not.
+   */
+  const [held, setHeld] = useState<Date | null>(null);
+  useEffect(() => {
+    if (inspection?.updatedAt) setHeld(inspection.updatedAt);
+  }, [inspection?.updatedAt]);
+  const save = trpc.inspections.save.useMutation({
+    onSuccess: (res) => {
+      setHeld(res.updatedAt);
+      utils.inspections.get.invalidate();
+    },
+  });
 
   const setRoom = (i: number, patch: Partial<Room>) => setRooms((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const snap = () => setRoom(current, { photos: rooms[current].photos + 1 });
 
   const saveDraft = () =>
-    save.mutate({ id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'draft' });
+    save.mutate({ id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'draft', expectedUpdatedAt: held ?? undefined });
   const sendToWorkbench = () =>
     save.mutate(
-      { id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'submitted' },
+      { id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'submitted', expectedUpdatedAt: held ?? undefined },
       { onSuccess: () => setScreen('sent') },
     );
 

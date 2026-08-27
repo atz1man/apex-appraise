@@ -1,0 +1,13 @@
+-- "RICS Regulated" was a literal in two components — the Red Book cover, its
+-- signature seal, and the terms of engagement — printed for every firm on the
+-- platform. Nothing in Organisation could ever have made it true, so the badge
+-- said the same thing about a regulated firm and an unregulated one.
+--
+-- The same defect as the hardcoded valuer name and registration number the Red
+-- Book carried until it was made to read them from the signed terms, one level
+-- up: there the claim was about a person, here it is about the firm.
+--
+-- Empty default so no existing workspace starts out asserting a status it has
+-- not declared. A firm that holds the number enters it in Settings, and only
+-- then does the mark appear.
+ALTER TABLE "Organisation" ADD COLUMN     "ricsFirmNumber" TEXT NOT NULL DEFAULT '';

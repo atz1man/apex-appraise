@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { formatMoneyFull } from '@apex/appraisal-engine';
 import { FirmMark } from './ui';
-import { A4Page as PaperPage, PRINT_CSS } from './paper';
+import { A4Page as PaperPage, PRINT_CSS, docDate } from './paper';
 
 /**
  * The client-facing terms of engagement (RICS VPS 1), laid out for A4. Shared by
@@ -34,6 +34,13 @@ export interface TermsDocumentProps {
     valuerName: string;
     valuerReg: string;
     orgLogoUrl?: string | null;
+    /**
+     * The firm's RICS Regulated Firm number, or empty where it holds none.
+     * "RICS Regulated" used to be a literal here, printed for every firm on the
+     * platform — a claim about a real organisation's regulatory standing, on a
+     * document the client signs.
+     */
+    orgRicsFirmNumber?: string | null;
     issuedAt: string | Date | null;
     acceptedAt: string | Date | null;
     acceptedBy: string | null;
@@ -58,8 +65,15 @@ export const TERMS_PRINT_CSS = `
 }
 `;
 
-const fmtLong = (d: string | Date) =>
-  new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+/**
+ * Every date this document prints is in the firm's time — see paper.tsx.
+ *
+ * This one was measured: a valuation date the valuer typed as 30 June 2026
+ * rendered as 29 June 2026 to a client opening the signing link from New York.
+ * The signing link is deliberately public and deliberately for someone outside
+ * the firm, so that reader is the ordinary case here.
+ */
+const fmtLong = docDate;
 
 /** the engagement letter sets its own margins — see components/paper.tsx */
 const A4Page = ({ children }: { children: ReactNode }) => <PaperPage padding="54px 64px">{children}</PaperPage>;
@@ -242,9 +256,11 @@ export function TermsDocument({ t, subject, address, postcode, refCode: ref }: T
                 <div className="flex items-center gap-3 border-b border-border-std pb-4">
                   <FirmMark logoUrl={t.orgLogoUrl} size={30} alt={`${t.orgName} logo`} />
                   <span className="text-[17px] font-bold tracking-[-0.3px]">{t.orgName}</span>
-                  <span className="fig ml-auto text-[10.5px] font-medium uppercase text-ink-3" style={{ letterSpacing: '1px' }}>
-                    RICS Regulated
-                  </span>
+                  {t.orgRicsFirmNumber?.trim() ? (
+                    <span className="fig ml-auto text-[10.5px] font-medium uppercase text-ink-3" style={{ letterSpacing: '1px' }}>
+                      RICS Regulated · {t.orgRicsFirmNumber.trim()}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-6">
                   <div className="text-[22px] font-bold" style={{ letterSpacing: '-0.5px' }}>Terms of engagement</div>

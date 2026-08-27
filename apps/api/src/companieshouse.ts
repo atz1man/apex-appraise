@@ -51,8 +51,58 @@ export interface CompanyProfile {
   summary: CompanySummary;
   sicCodes: string[];
   officers: Array<{ name: string; role: string; appointed: string }>;
-  charges: { total: number; outstanding: number; items: Array<{ description: string; status: string; created: string; personsEntitled: string[] }> };
+  charges: ChargeSummary;
   accountsOverdue: boolean;
+}
+
+export interface ChargeSummary {
+  /** every charge on the register, from the API's own count */
+  total: number;
+  /** how many are not fully satisfied — a lender still holds security */
+  outstanding: number;
+  /**
+   * Whether `outstanding` was counted over the whole register.
+   *
+   * False when the register holds more charges than one page returned, in which
+   * case the count is a floor and the screen must say so. An understated figure
+   * presented as exact is the defect this replaced.
+   */
+  complete: boolean;
+  /** the handful the panel lists; presentation, never the population counted */
+  items: Array<{ description: string; status: string; created: string; personsEntitled: string[] }>;
+}
+
+/**
+ * Shape the charges response.
+ *
+ * Split out from the fetch so it can be exercised. `total` came from the API's
+ * `total_count` while `outstanding` was counted inside the SIX items the panel
+ * lists, so one sentence — "N outstanding of M" — measured its two halves
+ * against different populations, and a company with twenty charges could never
+ * report more than six outstanding however many it had. On a due-diligence
+ * panel about how much of a counterparty's assets are already pledged, that
+ * error only ever runs one way.
+ */
+export function shapeCharges(raw: {
+  total_count?: number;
+  unfiltered_count?: number;
+  items?: Array<Record<string, any>>;
+}): ChargeSummary {
+  const all = raw.items ?? [];
+  const total = Number(raw.total_count ?? raw.unfiltered_count ?? all.length) || all.length;
+  return {
+    total,
+    // "part-satisfied" is still a charge on the assets, so anything short of
+    // fully satisfied counts
+    outstanding: all.filter((c) => String(c.status ?? '') !== 'fully-satisfied').length,
+    complete: all.length >= total,
+    items: all.slice(0, 6).map((c) => ({
+      description: String(c.classification?.description ?? c.charge_code ?? 'Charge'),
+      status: String(c.status ?? ''),
+      created: String(c.created_on ?? ''),
+      personsEntitled: (c.persons_entitled ?? []).map((pe: any) => String(pe.name)).slice(0, 3),
+    })),
+  };
 }
 
 /** Profile + officers + charges — the "who are we buying from?" answer. */
@@ -60,13 +110,17 @@ export async function companyProfile(companyNumber: string, orgKey?: string | nu
   const [profile, officers, charges] = await Promise.allSettled([
     chFetch<any>(`/company/${companyNumber}`, orgKey),
     chFetch<{ items: any[] }>(`/company/${companyNumber}/officers?items_per_page=10`, orgKey),
-    chFetch<{ total_count?: number; unfiltered_count?: number; items?: any[] }>(`/company/${companyNumber}/charges`, orgKey),
+    // 100, not the default page: the outstanding count is only meaningful over
+    // the whole register, and `complete` below says so when it is not
+    chFetch<{ total_count?: number; unfiltered_count?: number; items?: any[] }>(
+      `/company/${companyNumber}/charges?items_per_page=100`,
+      orgKey,
+    ),
   ]);
   if (profile.status !== 'fulfilled') throw new Error('company not found');
   const p = profile.value;
   const off = officers.status === 'fulfilled' ? (officers.value.items ?? []) : [];
   const ch = charges.status === 'fulfilled' ? charges.value : { items: [] as any[] };
-  const chargeItems = (ch.items ?? []).slice(0, 6);
   return {
     summary: {
       companyNumber: String(p.company_number ?? companyNumber),
@@ -83,16 +137,7 @@ export async function companyProfile(companyNumber: string, orgKey?: string | nu
       .filter((o: any) => !o.resigned_on)
       .slice(0, 6)
       .map((o: any) => ({ name: String(o.name ?? ''), role: String(o.officer_role ?? ''), appointed: String(o.appointed_on ?? '') })),
-    charges: {
-      total: Number(ch.total_count ?? ch.unfiltered_count ?? chargeItems.length) || chargeItems.length,
-      outstanding: chargeItems.filter((c: any) => c.status === 'outstanding').length,
-      items: chargeItems.map((c: any) => ({
-        description: String(c.classification?.description ?? c.charge_code ?? 'Charge'),
-        status: String(c.status ?? ''),
-        created: String(c.created_on ?? ''),
-        personsEntitled: (c.persons_entitled ?? []).map((pe: any) => String(pe.name)).slice(0, 3),
-      })),
-    },
+    charges: shapeCharges(ch),
     accountsOverdue: Boolean(p.accounts?.overdue),
   };
 }

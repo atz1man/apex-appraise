@@ -2,6 +2,7 @@ import { TRPCError, initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import type { Context } from './context.js';
 import { assertTrialLive } from './trial.js';
+import { assertFeature, type Feature } from './entitlements.js';
 
 const t = initTRPC.context<Context>().create({ transformer: superjson });
 
@@ -57,3 +58,28 @@ export const buyerProcedure = authedProcedure.use(({ ctx, next }) => {
   if (ctx.principal.principalType !== 'buyer') throw new TRPCError({ code: 'FORBIDDEN' });
   return next({ ctx });
 });
+
+/**
+ * A capability the plan has to include.
+ *
+ * A middleware factory rather than a fourth procedure in the chain, because the
+ * gated procedures sit at two different levels — benchmarking is any internal
+ * user, minting an API key is an admin — and a feature is orthogonal to both.
+ * Compose it: `internalProcedure.use(requiresFeature('benchmarking'))`,
+ * `adminProcedure.use(requiresFeature('publicApi'))`.
+ *
+ * Queries are gated as well as mutations, unlike the trial rule above. A lapsed
+ * trial keeps its data readable because the data is the customer's; a plan that
+ * does not include benchmarking does not include READING the benchmarks, because
+ * the reading IS the feature.
+ */
+export const requiresFeature = (feature: Feature) =>
+  t.middleware(async ({ ctx, next }) => {
+    // a free-standing middleware starts from the bare Context, so the principal
+    // is re-narrowed and passed on — otherwise every procedure downstream of this
+    // one loses the narrowing its own chain had already done
+    const principal = ctx.principal;
+    if (!principal) throw new TRPCError({ code: 'UNAUTHORIZED' });
+    await assertFeature(ctx.prisma, principal.orgId, feature);
+    return next({ ctx: { ...ctx, principal } });
+  });

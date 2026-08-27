@@ -147,3 +147,94 @@ export function unsupportedFigures(sections: Record<string, string>, facts: Narr
   }
   return bad;
 }
+
+/**
+ * Claims in the draft that nothing established.
+ *
+ * `unsupportedFigures` above exists because "use these figures verbatim" is only
+ * an instruction. The same prompt carries a second set of rules — do not state
+ * transaction volumes, marketing periods, demand levels or supply of comparable
+ * stock; do not declare the evidence base adequate; state the special
+ * assumptions exactly as given — and those had no check at all.
+ *
+ * That gap was invisible because of where the tests run. `narrative-claims.test.ts`
+ * asserts all three rules, but the harness sets no ANTHROPIC_API_KEY, so every
+ * one of its assertions exercises the DETERMINISTIC TEMPLATE. The model path is
+ * the one production takes, and on that path a sentence like "transaction volumes
+ * have been stable and marketing periods are typically six to eight weeks"
+ * carries no money and no percentage — the figure guard finds nothing to object
+ * to, and it prints into a signed valuation.
+ *
+ * Every claim below was made by this product's own template until 238d265, so
+ * these are not hypothetical failure modes; they are the register the report was
+ * written in, which is exactly the register a model drafting in that house style
+ * will reach for.
+ *
+ * Sentence-level and negation-aware, because the honest prose has to survive it:
+ * the template now SAYS "occupier and investor demand, supply of comparable
+ * stock, transaction volumes and marketing periods — have not been assessed in
+ * this draft and are for the valuer to state", and naming a gap is the opposite
+ * of asserting it.
+ */
+
+/** What a sentence looks like when it hands the judgement back rather than making it. */
+const DISCLAIMED =
+  /\b(?:ha(?:ve|s)\s+not\s+been\s+(?:assessed|measured|investigated|verified|established)|not\s+been\s+assessed|(?:is|are)\s+for\s+the\s+valuer\s+to|for\s+the\s+valuer(?:'|’)?s?\s+(?:own\s+)?(?:judgement|assessment|confirmation)|left?\s+to\s+the\s+valuer|remains?\s+for\s+the\s+valuer)\b/i;
+
+const CLAIMS: Array<{ what: string; re: RegExp }> = [
+  /**
+   * VPGA 10. "No material valuation uncertainty is reported" is a declaration a
+   * valuer makes, not a sentence a drafter supplies; nothing in this product
+   * assesses it.
+   */
+  { what: 'a material valuation uncertainty declaration', re: /\bmaterial\s+valuation\s+uncertainty\b/i },
+  { what: 'transaction volumes', re: /\btransaction\s+volumes?\b/i },
+  { what: 'marketing periods', re: /\bmarketing\s+period/i },
+  { what: 'a level of demand', re: /\bdemand\b/i },
+  { what: 'the supply of comparable stock', re: /\bsupply\s+of\b|\bstock\s+(?:is|remains|has\s+been)\b/i },
+  {
+    what: 'the state of the market',
+    re: /\bmarket(?:\s+\w+){0,3}\s+(?:remains?|is|are|has\s+been|have\s+been|continues?\s+to\s+be)\s+(?:active|buoyant|strong|stable|steady|robust|healthy|firm|subdued|weak|soft|liquid|illiquid)\b/i,
+  },
+  {
+    what: 'the adequacy of the evidence base',
+    re: /\b(?:adequate|sufficient|ample|comprehensive|robust)\b[^.]{0,40}\b(?:evidence|comparable)|\b(?:evidence|comparables?)\b[^.]{0,40}\b(?:is|are|was|were|considered|deemed|judged)\b[^.]{0,20}\b(?:adequate|sufficient|ample|comprehensive|robust)\b/i,
+  },
+];
+
+/** Denying a special assumption the signed terms record — measured, and fixed once already. */
+const DENIES_SPECIAL_ASSUMPTIONS = /\bno\s+special\s+assumptions?\b/i;
+
+/**
+ * Sentences, near enough. A valuation report is plain prose with no abbreviations
+ * that matter here, and splitting slightly wrong only ever widens the window a
+ * disclaimer is looked for in — which fails safe towards accepting honest prose.
+ */
+const sentences = (text: string) => text.split(/(?<=[.;])\s+/).filter((s) => s.trim());
+
+export function unsupportedClaims(
+  sections: Record<string, string>,
+  facts: { specialAssumptions: string | null },
+): string[] {
+  const bad: string[] = [];
+  for (const [section, text] of Object.entries(sections)) {
+    if (typeof text !== 'string') continue;
+    for (const sentence of sentences(text)) {
+      if (DISCLAIMED.test(sentence)) continue;
+      for (const { what, re } of CLAIMS) {
+        if (re.test(sentence)) bad.push(`${section}: ${what} — "${sentence.trim()}"`);
+      }
+      /**
+       * Only a denial is caught, and only against terms that state one. Asserting
+       * a special assumption the terms do not carry is the model inventing an
+       * instruction, which the figure guard cannot see either — but the terms are
+       * free text, so there is no way to tell an invented one from a faithful
+       * paraphrase. Denial is exact, and it is the direction that was measured.
+       */
+      if (facts.specialAssumptions && DENIES_SPECIAL_ASSUMPTIONS.test(sentence)) {
+        bad.push(`${section}: denied a special assumption the terms record — "${sentence.trim()}"`);
+      }
+    }
+  }
+  return bad;
+}

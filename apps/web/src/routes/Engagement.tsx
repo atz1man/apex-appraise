@@ -91,6 +91,16 @@ export default function Engagement() {
   const { data: saved, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
 
   const [terms, setTerms] = useState<Terms | null>(null);
+  /**
+   * The stamp of the terms this page loaded, so a save can be refused rather
+   * than silently restoring nineteen fields somebody else has since changed.
+   *
+   * Held in state and refreshed from the SAVE's own response — never re-read
+   * from the query. `a48b7b3` found a drawer doing the latter: it re-read the
+   * stamp from the list, which had not refetched yet, so the same person's
+   * second edit was refused as a conflict with themselves.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
   const [acceptedBy, setAcceptedBy] = useState('');
 
@@ -117,34 +127,81 @@ export default function Engagement() {
         valuerName: saved.valuerName,
         valuerReg: saved.valuerReg,
       });
+      setStamp(saved.updatedAt ? new Date(saved.updatedAt) : null);
     }
   }, [saved, terms]);
+
+  /**
+   * Follow the server's stamp while there is nothing unsaved to protect.
+   *
+   * `save` is not the only mutation on this row: Issue, Withdraw & revise and
+   * Record acceptance all write it and move `updatedAt`. Seeding the stamp once
+   * on load meant that after any of those, the next Save was refused — the user
+   * told their own terms had changed underneath them, which is the exact failure
+   * `a48b7b3` found in the sales drawer and which I reintroduced here in a new
+   * shape.
+   *
+   * Only while clean. Once there are unsaved edits the stamp must stay at the
+   * one those edits were made against, because that is what makes the refusal
+   * mean anything.
+   */
+  useEffect(() => {
+    if (!saved || dirty) return;
+    const fromQuery = saved.updatedAt ? new Date(saved.updatedAt) : null;
+    /**
+     * Never BACKWARDS.
+     *
+     * This effect depends on `dirty`, so a save re-runs it the moment
+     * `setDirty(false)` lands — before the refetch it just triggered has
+     * returned. `saved` is therefore still the copy from before the save, and
+     * setting the stamp from it threw away the fresh one the save had just
+     * handed back. The next save then carried a stamp one version old and was
+     * refused: the user told their own terms had changed underneath them.
+     *
+     * Invisible on a fast machine, where the refetch always won the race —
+     * it passed ten runs in a row locally and failed in CI, which runs two
+     * workers against a docker stack. Reproduced deterministically by holding
+     * `engagement.get` back for three seconds.
+     *
+     * A row's `updatedAt` only ever moves forward, so keeping the later of the
+     * two is correct whichever arrives first — and a query that has NO stamp is
+     * not later than one that has. That case is the first save on a deal with no
+     * terms yet: the create returns a real stamp while the query still holds the
+     * unsaved draft's `null`, and treating null as "newer" wiped it, so the next
+     * save carried nothing and was refused for having no stamp at all. Which is
+     * why this looked intermittent and was in fact exact — it failed on the
+     * first run after a reseed and passed on every run after.
+     */
+    setStamp((current) => {
+      if (!fromQuery) return current;
+      if (current && fromQuery < current) return current;
+      return fromQuery;
+    });
+  }, [saved, dirty]);
 
   const invalidate = () => {
     utils.engagement.get.invalidate(dealId);
     utils.documents.activity.invalidate(dealId);
   };
   const save = trpc.engagement.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       setDirty(false);
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       invalidate();
       toast.success('Terms saved');
     },
-    onError: (e) => toast.error(e.message),
   });
   const issue = trpc.engagement.issue.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Terms issued — send the client their signing link');
     },
-    onError: (e) => toast.error(e.message),
   });
   const revokeLink = trpc.engagement.revokeLink.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Link revoked — the client can no longer sign it');
     },
-    onError: (e) => toast.error(e.message),
   });
   const [copied, setCopied] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
@@ -155,14 +212,12 @@ export default function Engagement() {
       invalidate();
       toast.success('Client acceptance recorded');
     },
-    onError: (e) => toast.error(e.message),
   });
   const withdraw = trpc.engagement.withdraw.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success('Terms withdrawn — back to draft');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   const status = (saved?.status ?? 'DRAFT') as keyof typeof STATUS_TONE;
@@ -210,7 +265,7 @@ export default function Engagement() {
             >
               Download PDF
             </Button>
-            <Button onClick={() => save.mutate({ dealId, terms })} loading={save.isPending} disabled={!dirty || locked}>
+            <Button onClick={() => save.mutate({ dealId, terms, expectedUpdatedAt: stamp ?? undefined })} loading={save.isPending} disabled={!dirty || locked}>
               {dirty ? 'Save terms' : 'Saved'}
             </Button>
           </>

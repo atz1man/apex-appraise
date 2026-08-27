@@ -1,31 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { autoAppraise } from '@apex/appraisal-engine';
+import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetrics as Metrics } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
-
-/**
- * Fixed appraisal assumptions behind the scenario compare — identical to the
- * prototype's compute (fees 11%, contingency 5%, CIL £40/m² + S106 £150k,
- * disposal 2%, 60% LTC @ 7.5% over 18+3 months, 1.5% arrangement, 6.8% acq).
- */
-const ASSUMPTIONS = {
-  efficiency: 90,
-  profFeePct: 11,
-  contingencyPct: 5,
-  cilPerSqm: 40,
-  s106: 150_000,
-  agentPct: 1.5,
-  legalPct: 0.5,
-  ltcPct: 60,
-  ratePct: 7.5,
-  periodMonths: 18,
-  salesMonths: 3,
-  arrangementFeePct: 1.5,
-  acqPct: 6.8,
-} as const;
 
 const ACCENTS = ['rgb(var(--brand-ink, 20 80 59))', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
@@ -41,37 +20,12 @@ const LEVERS: Array<{ key: LeverKey; label: string; min: number; max: number; st
   { key: 'targetProfitPct', label: 'Target profit %', min: 12, max: 28, step: 1, fmt: (v) => `${v}%` },
 ];
 
-interface Metrics { residual: number; gdv: number; totalCost: number; profit: number; poc: number }
-
-/** Scenario levers → engine residual (autoAppraise owns the residual/finance approximation, SDLT, CIL). */
-function compute(s: { blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }): Metrics {
-  const r = autoAppraise({
-    units: [{ label: 'Blended', count: 1, area: s.gia * (ASSUMPTIONS.efficiency / 100), cap: s.blendedPsf }],
-    efficiency: ASSUMPTIONS.efficiency,
-    buildPerSqft: s.buildPsf,
-    profFeePct: ASSUMPTIONS.profFeePct,
-    contingencyPct: ASSUMPTIONS.contingencyPct,
-    cilPerSqm: ASSUMPTIONS.cilPerSqm,
-    s106: ASSUMPTIONS.s106,
-    agentPct: ASSUMPTIONS.agentPct,
-    legalPct: ASSUMPTIONS.legalPct,
-    ltcPct: ASSUMPTIONS.ltcPct,
-    ratePct: ASSUMPTIONS.ratePct,
-    periodMonths: ASSUMPTIONS.periodMonths,
-    salesMonths: ASSUMPTIONS.salesMonths,
-    arrangementFeePct: ASSUMPTIONS.arrangementFeePct,
-    targetProfitPct: s.targetProfitPct,
-    acqPct: ASSUMPTIONS.acqPct,
-    asking: 0,
-  });
-  /**
-   * Straight from the engine. This screen used to re-add the cost lines and
-   * regross the land itself, with its own copy of the acquisition-cost rule — so
-   * a scenario table could quietly disagree with the appraisal it was varying,
-   * and the two would have looked equally authoritative.
-   */
-  return { residual: r.residualNet, gdv: r.gdv, totalCost: r.totalCost, profit: r.profit, poc: r.poc };
-}
+/**
+ * Levers → figures. Both this grid and the server that writes the comparative
+ * risk commentary call the SAME function — see
+ * packages/appraisal-engine/src/scenario.ts for why that matters.
+ */
+const compute = scenarioMetrics;
 
 /** dc-prototype money format: £2.41m / £625k. */
 const fMoney = (v: number) => {
@@ -99,7 +53,8 @@ export default function Scenarios() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: rows, isLoading } = trpc.scenarios.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.scenarios.upsert.useMutation({ onSuccess: () => utils.scenarios.list.invalidate(dealId) });
-  const draftRisk = trpc.scenarios.draftRisk.useMutation();
+  // this screen shows the error where it happened; see App.tsx
+  const draftRisk = trpc.scenarios.draftRisk.useMutation({ meta: { inlineError: true } });
 
   // local lever overlay for live recompute; persisted on slider release / input blur
   const [edits, setEdits] = useState<Record<string, Partial<Record<LeverKey, number>>>>({});
@@ -113,17 +68,12 @@ export default function Scenarios() {
   const setLever = (id: string, key: LeverKey, v: number) =>
     setEdits((e) => ({ ...e, [id]: { ...e[id], [key]: v } }));
 
-  const persist = (s: (typeof scenarios)[number]) =>
-    upsert.mutate({
-      id: s.id,
-      dealId,
-      name: s.name,
-      descriptor: s.descriptor,
-      blendedPsf: s.blendedPsf,
-      buildPsf: s.buildPsf,
-      gia: s.gia,
-      targetProfitPct: s.targetProfitPct,
-    });
+  // only the levers this person moved — see Comparables.persist
+  const persist = (s: (typeof scenarios)[number]) => {
+    const changed = edits[s.id];
+    if (!changed || !Object.keys(changed).length) return;
+    upsert.mutate({ id: s.id, dealId, ...changed });
+  };
 
   const addOption = (slot: number) =>
     upsert.mutate({
@@ -138,16 +88,8 @@ export default function Scenarios() {
 
   const useOption = (s: (typeof scenarios)[number]) =>
     upsert.mutate(
-      {
-        id: s.id,
-        dealId,
-        name: s.name,
-        descriptor: `${s.descriptor.replace(/ · Chosen$/, '')} · Chosen`,
-        blendedPsf: s.blendedPsf,
-        buildPsf: s.buildPsf,
-        gia: s.gia,
-        targetProfitPct: s.targetProfitPct,
-      },
+      // marking an option chosen changes its descriptor and nothing else
+      { id: s.id, dealId, descriptor: `${s.descriptor.replace(/ · Chosen$/, '')} · Chosen` },
       { onSuccess: () => navigate(`/deal/${dealId}/appraisal`) },
     );
 

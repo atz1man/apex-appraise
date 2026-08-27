@@ -9,11 +9,14 @@
  * delete). Returns the new demo org's id.
  */
 import type { PrismaClient } from '@prisma/client';
+import { depositsHeldAt } from '@apex/appraisal-engine';
 import { hashPassword } from './auth/password.js';
 
 const hash = (s: string) => hashPassword(s);
 /** pounds → integer pence */
 const p = (pounds: number) => BigInt(Math.round(pounds * 100));
+/** a date relative to the seed run, for fixtures that go stale on a fixed one */
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
 export async function seedDemo(prisma: PrismaClient): Promise<string> {
   // ENTERPRISE, not the TRIAL default: this workspace is the showcase, with 11
@@ -267,13 +270,20 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
   // ---- Sales units (Harbour Reach — Sales CRM prototype) ----
   const salesMilestones = ['Reserved', 'Memorandum of sale', 'Searches ordered', 'Enquiries raised', 'Mortgage offer', 'Exchanged', 'Completed', 'Handover & snagging'];
   const statusForProg = (prog: number) => (prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 3 ? 'RESERVED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE');
-  const depositOf = (prog: number, agreed: number) => (prog <= 0 ? null : prog >= 5 ? Math.round(agreed * 0.1) : 5000 + (prog >= 3 ? Math.round(agreed * 0.05) : 0));
+  /**
+   * The one schedule, so the demo shows figures the product would actually
+   * compute. This was a sixth variant — £5,000 plus 5% from the mortgage-offer
+   * stage — which is why Plot 5 carried £24,400 that no code path could produce,
+   * and why editing the plot's solicitor knocked it to £5,000.
+   */
+  const depositOf = (prog: number, agreed: number, appraised: number) =>
+    prog <= 0 ? null : depositsHeldAt(prog, { agreedValue: agreed || null, appraisedValue: appraised });
   const salesRows: Array<[string, string, number, number, number, string, string, string, string, string, boolean]> = [
     ['Plot 1', '2-bed apt · 78 m²', 385000, 392000, 7, 'A. & R. Coombes', 'Hartwell & Co', '2026-01-12', 'Rightmove', 'None', false],
     ['Plot 2', '2-bed apt · 80 m²', 390000, 395000, 6, 'J. Okafor', 'Lindsay Legal', '2026-01-20', 'Agent — Savills', '£3k flooring', false],
     ['Plot 3', '1-bed apt · 56 m²', 295000, 298000, 5, 'M. Bianchi', 'Hartwell & Co', '2026-02-28', 'Rightmove', 'None', false],
     ['Plot 4', '3-bed duplex · 112 m²', 525000, 540000, 5, 'The Reardons', 'Castle & Finch', '2026-03-08', 'Direct', 'Part-exchange', false],
-    ['Plot 5', '2-bed apt · 79 m²', 388000, 388000, 3, 'S. Whitaker', 'Lindsay Legal', '2026-04-22', 'Zoopla', '5% deposit paid', false],
+    ['Plot 5', '2-bed apt · 79 m²', 388000, 388000, 3, 'S. Whitaker', 'Lindsay Legal', '2026-04-22', 'Zoopla', 'Flooring package', false],
     ['Plot 6', '1-bed apt · 54 m²', 290000, 286000, 1, 'D. Petrova', 'Awaiting instruction', '2026-05-02', 'Agent — Savills', 'None', true],
     ['Plot 7', '3-bed duplex · 115 m²', 535000, 0, 0, '', '', '', '', '', false],
     ['Plot 8', '2-bed apt · 81 m²', 395000, 0, 0, '', '', '', '', '', false],
@@ -283,7 +293,7 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
   let buyerUnitId = '';
   for (let i = 0; i < salesRows.length; i++) {
     const [name, spec, appr, agreed, prog, buyer, solicitor, reserved, lead, incentive, stalled] = salesRows[i];
-    const dep = depositOf(prog, agreed || appr);
+    const dep = depositOf(prog, agreed, appr);
     const u = await prisma.unit.create({
       data: {
         orgId: org.id, dealId: harbourReach, name, spec, level: Math.floor(i / 3),
@@ -512,6 +522,16 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       ['dist', 'Final distribution', 'Parkstone Mews', '2026-04-02', 2_040_000],
       ['call', 'Capital call — drawdown 3', 'Harbour Reach', '2026-02-18', -1_100_000],
       ['call', 'Capital call — drawdown 2', 'Harbour Reach', '2025-11-06', -1_600_000],
+      /**
+       * One drawdown notice still ahead of its due date, so the portal's
+       * capital call panel has something real to show. It used to be hardcoded
+       * in the router — the same deal, amount and due date for every investor
+       * of every firm — and by the time anybody looked that fixed date had
+       * passed, so an LP was reading an OVERDUE demand for money nobody had
+       * issued. Relative to the seed run, because a fixed date goes stale the
+       * same way.
+       */
+      ['call', 'Capital call — drawdown 4', 'Harbour Reach', inDays(30), -900_000],
     ];
     for (const [kind, label, dealName, date, amount] of cfRows) {
       await prisma.cashflow.create({

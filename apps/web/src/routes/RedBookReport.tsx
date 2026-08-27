@@ -2,20 +2,27 @@ import { useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   DEFAULT_PURCHASER_COSTS_PCT,
+  analysedPsf,
   capitaliseIncome,
   computeAppraisal,
   discountedCashflow,
   formatMoneyFull,
   formatPct,
   formatRent,
+  reportedMarketValue,
+  toNearestThousand,
   type IncomeInput,
 } from '@apex/appraisal-engine';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
+import { poundsInWords } from '../lib/words';
+import { valuationConfidence } from '../lib/valuation-confidence';
+import { situationStatement } from '../lib/situation';
 import { n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
-import { A4Page as PaperPage, PRINT_CSS } from '../components/paper';
+import { A4Page as PaperPage, PRINT_CSS, docDate } from '../components/paper';
+import { reportDates } from '../lib/report-dates';
 
 /** the Red Book sets its own margins — see the note in components/paper.tsx */
 const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
@@ -24,6 +31,7 @@ const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boo
   </PaperPage>
 );
 import { CompsLadder } from '../components/charts';
+import { SiteMap } from '../components/SiteMap';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
 
@@ -67,36 +75,8 @@ const GENERAL_ASSUMPTIONS = [
 
 const SQFT_PER_SQM = 10.764;
 
-const fmtLong = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-const round1k = (n: number) => Math.round(n / 1000) * 1000;
-
-/* ------------------------- pounds in words ------------------------- */
-
-const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
-const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-
-function underThousand(n: number): string {
-  const h = Math.floor(n / 100);
-  const r = n % 100;
-  const tail = r === 0 ? '' : r < 20 ? ONES[r] : `${TENS[Math.floor(r / 10)]}${r % 10 ? `-${ONES[r % 10]}` : ''}`;
-  if (h === 0) return tail;
-  return tail ? `${ONES[h]} hundred and ${tail}` : `${ONES[h]} hundred`;
-}
-
-/** £625,000 → "Six hundred and twenty-five thousand pounds" (en-GB style, for the MV statement). */
-function poundsInWords(pounds: number): string {
-  const v = Math.round(Math.abs(pounds));
-  if (v === 0) return 'Zero pounds';
-  const m = Math.floor(v / 1e6);
-  const t = Math.floor((v % 1e6) / 1e3);
-  const u = v % 1e3;
-  const parts: string[] = [];
-  if (m) parts.push(`${underThousand(m)} million`);
-  if (t) parts.push(`${underThousand(t)} thousand`);
-  if (u) parts.push(m || t ? (u < 100 ? `and ${underThousand(u)}` : underThousand(u)) : underThousand(u));
-  const s = `${parts.join(' ')} pounds`;
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+/** every date this document prints is in the firm's time — see paper.tsx */
+const fmtLong = docDate;
 
 /* ---------------------------- page chrome ---------------------------- */
 
@@ -170,6 +150,13 @@ export default function RedBookReport() {
    * exist, in a document carrying professional indemnity.
    */
   const { data: sitePhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The inspection this report is written on the back of. Same reason as the
+   * photographs above: the report stated an inspection date of *today*, so a
+   * property nobody has ever attended was reported as inspected on whatever day
+   * the reader opened the file.
+   */
+  const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
   const valuer = valuerFrom(toe);
   const utils = trpc.useUtils();
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
@@ -209,13 +196,36 @@ export default function RedBookReport() {
   const pageTotal = pageNo.declaration;
 
   const firmName = org?.name ?? 'Apex Appraise';
+  /**
+   * The firm's RICS Regulated Firm number, or empty. "RICS Regulated" was a
+   * literal on the cover and on the signature seal, printed for every firm on
+   * the platform with nothing in the record that could make it true — the same
+   * defect as the hardcoded valuer name and registration number this file
+   * already had to be cured of, one level up: there the claim was about a
+   * person, here it is about the firm.
+   */
+  const ricsFirmNumber = org?.ricsFirmNumber?.trim() ?? '';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
-  const today = fmtLong(new Date());
+  const dates = reportDates({ appraisal: appr, terms: toe, inspection });
   const subject = deal?.name ?? 'Subject property';
 
   const comps = compsData?.comps ?? [];
   const summary = compsData?.summary;
   const hasComps = comps.length > 0 && !!summary;
+
+  /**
+   * The subject's coordinates, geocoded and cached by the API — the same
+   * `comparables.list` this page already calls, so plotting the site costs
+   * nothing extra. The situation panel used to embed google.com/maps in an
+   * iframe, which handed Google the subject property's address every time
+   * anybody opened a valuation and was the last third-party request left in
+   * the product. "Nobody else" is what the privacy notice says.
+   */
+  const located = compsData?.subject;
+  const subjectPin =
+    located?.status === 'located'
+      ? [{ lat: located.geo.latitude, lng: located.geo.longitude, label: deal?.name ?? 'Subject site', sub: deal?.address, kind: 'subject' as const }]
+      : [];
 
   /**
    * There is nothing to export until an appraisal exists. Offering the buttons
@@ -298,9 +308,9 @@ export default function RedBookReport() {
 
   /* ----- derived valuation figures (engine outputs, rounded for reporting) ----- */
   const nia = R.nia;
-  const mv = round1k(R.gdv); // Market Value — appraisal GDV, reported to the nearest £1,000
-  const compApproach = hasComps && nia > 0 ? round1k(summary.supportedPsf * nia) : mv;
-  const drcApproach = round1k(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
+  const mv = reportedMarketValue(R.gdv); // Market Value — appraisal GDV, to the nearest £1,000
+  const compApproach = hasComps && nia > 0 ? toNearestThousand(summary.supportedPsf * nia) : mv;
+  const drcApproach = toNearestThousand(R.landGross + R.build + R.fees + R.cont); // land + build components from the engine
   /**
    * Investment cross-check, run THROUGH THE ENGINE.
    *
@@ -350,20 +360,29 @@ export default function RedBookReport() {
    * reports the equated yield — the rate at which the two methods agree.
    */
   const invDcf = input.dcf ? discountedCashflow(investmentBasis, input.dcf) : null;
-  const invApproach = round1k(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
+  const invApproach = toNearestThousand(invDcf ? invDcf.netPresentValue : invCap.netCapitalValue);
   const reinstatement = Math.round((R.build + R.fees) / 5000) * 5000;
-  const range = hasComps && nia > 0
-    ? { lo: round1k(summary.range.lo * nia), hi: round1k(summary.range.hi * nia) }
-    : { lo: round1k(mv - R.gdv * 0.025), hi: round1k(mv + R.gdv * 0.025) };
-  const marker = range.hi > range.lo ? Math.min(95, Math.max(5, ((mv - range.lo) / (range.hi - range.lo)) * 100)) : 50;
-  const psf = nia > 0 ? Math.round(mv / nia) : 0;
-  const confidence = !hasComps
-    ? { label: 'Medium', tone: statusTokens.amber.text }
-    : summary.avgGrossAdjustment < 8
-      ? { label: 'High', tone: statusTokens.green.text }
-      : summary.avgGrossAdjustment < 15
-        ? { label: 'Medium', tone: statusTokens.amber.text }
-        : { label: 'Low', tone: statusTokens.red.text };
+  /**
+   * The range and the grade are claims about the evidence, so they come from
+   * the evidence or they are not made. `valuationConfidence` returns nulls
+   * where there is nothing to grade, and every panel below prints its `note`
+   * instead of a figure it cannot support.
+   */
+  const { range, marker, confidence, note: confidenceNote } = valuationConfidence({
+    marketValue: mv,
+    compRange: hasComps ? summary.range : null,
+    netInternalArea: nia,
+    avgGrossAdjustment: hasComps ? summary.avgGrossAdjustment : 0,
+    compCount: comps.length,
+  });
+  const confidenceTone = confidence === 'High'
+    ? statusTokens.green.text
+    : confidence === 'Low'
+      ? statusTokens.red.text
+      : confidence === 'Medium'
+        ? statusTokens.amber.text
+        : neutral.ink3;
+  const psf = analysedPsf(mv, nia);
   const avgNetAdj = hasComps ? summary.comps.reduce((a, c) => a + c.netAdjustment, 0) / summary.comps.length : 0;
 
   const assetLabel: Record<string, string> = {
@@ -419,7 +438,11 @@ export default function RedBookReport() {
             <div className="relative flex items-center gap-3">
               <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
               <span className="text-[20px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
-              <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>RICS Regulated</span>
+              {ricsFirmNumber ? (
+                <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>
+                  RICS Regulated · {ricsFirmNumber}
+                </span>
+              ) : null}
             </div>
             <div className="relative mt-[88px] fig text-[12px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: 'rgba(255,255,255,0.66)' }}>Valuation Report</div>
             <div className="relative mt-3.5 text-[40px] font-bold leading-[1.08]" style={{ letterSpacing: '-1.4px' }}>{subject}</div>
@@ -444,11 +467,20 @@ export default function RedBookReport() {
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Inspection date</div>
-                <div className="mt-1.5 text-[14px] font-semibold">{today}</div>
+                {dates.inspection ? (
+                  <div className="mt-1.5 text-[14px] font-semibold">{dates.inspection}</div>
+                ) : (
+                  /* the same rule as the valuer's name and the photographs: state
+                     the gap rather than fill it, because a reader relies on this */
+                  <div className="mt-1.5 text-[12.5px] leading-[1.45] text-ink-2">
+                    No inspection is recorded for this property. This valuation is made without
+                    inspection and on the assumptions stated.
+                  </div>
+                )}
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Valuation date</div>
-                <div className="mt-1.5 text-[14px] font-semibold">{today}</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{dates.valuation}</div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Valuer</div>
@@ -498,7 +530,9 @@ export default function RedBookReport() {
             </div>
             <div className="flex items-center">
               <div className="flex-1 text-[13.5px]" style={{ padding: '15px 18px', color: '#3C443D' }}>Indicated value range</div>
-              <div className="flex-1 fig text-[14px] font-medium" style={{ padding: '15px 18px' }}>{formatMoneyFull(range.lo)} – {formatMoneyFull(range.hi)}</div>
+              <div className="flex-1 fig text-[14px] font-medium" style={{ padding: '15px 18px' }}>
+                {range ? `${formatMoneyFull(range.lo)} – ${formatMoneyFull(range.hi)}` : 'Not assessed — no comparable evidence'}
+              </div>
             </div>
           </div>
 
@@ -529,7 +563,7 @@ export default function RedBookReport() {
             </div>
             <div className="text-[12.5px] leading-[1.55]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               Opinion of value supported by {hasComps ? `${comps.length} recent comparable ${comps.length === 1 ? 'sale' : 'sales'}, with average net adjustment of ${formatPct(Math.abs(avgNetAdj) / 100)}` : 'the current development appraisal pending comparable evidence'}.
-              Valuation confidence assessed as <b className="font-semibold">{confidence.label.toLowerCase()}</b> under the RICS confidence framework.
+              {confidenceNote}
             </div>
           </div>
 
@@ -604,20 +638,24 @@ export default function RedBookReport() {
           <Micro>2 · Situation &amp; locality</Micro>
           <div className="mt-2.5 flex" style={{ gap: 18 }}>
             <div className="flex-1 text-[13px] leading-[1.62]" style={{ color: '#2C342E' }}>
-              The property occupies an established position at {deal?.address}. Local amenities and arterial transport links are within
-              convenient reach, and occupier demand in the immediate locality is considered good. The surrounding pattern of use is
-              consistent with the subject's class, the site is identified as Flood Zone 1 (low risk) and no adverse environmental factors
-              were noted on inspection.
+              {situationStatement({ address: deal?.address ?? null, inspectedOn: dates.inspection })}
             </div>
             <div className="shrink-0 rounded-[12px] overflow-hidden border border-border-strong relative" style={{ width: 300, height: 188, background: neutral.sunken2 }}>
-              <iframe
-                src={`https://www.google.com/maps?q=${encodeURIComponent(deal?.address ?? '')}&z=16&output=embed`}
-                title={`Site location — ${deal?.address ?? 'subject property'}`}
-                style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-              <div className="absolute fig text-[9.5px] font-medium rounded-[7px] pointer-events-none" style={{ bottom: 10, left: 10, padding: '4px 9px', background: 'rgba(255,255,255,0.92)', color: brand[700] }}>
+              {subjectPin.length ? (
+                <SiteMap pins={subjectPin} height={188} />
+              ) : (
+                /* Nothing plotted rather than a map of somewhere else: without a
+                   resolved postcode there is no position to draw, and a panel
+                   saying so is what the certificate can stand behind. */
+                <div className="w-full h-full flex items-center justify-center text-center text-[11.5px] leading-[1.5]" style={{ padding: '0 22px', color: '#5F625F' }}>
+                  {located?.status === 'no-postcode'
+                    ? 'No postcode on this deal, so the site is not plotted.'
+                    : located?.status === 'bad-postcode'
+                      ? `“${located.postcode}” is not a recognised UK postcode, so the site is not plotted.`
+                      : 'The postcode lookup is unavailable, so the site is not plotted.'}
+                </div>
+              )}
+              <div className="absolute fig text-[9.5px] font-medium rounded-[7px] pointer-events-none" style={{ bottom: 10, left: 10, zIndex: 500, padding: '4px 9px', background: 'rgba(255,255,255,0.92)', color: brand[700] }}>
                 {deal?.address}
               </div>
             </div>
@@ -682,17 +720,25 @@ export default function RedBookReport() {
                 <div className="fig mt-1 text-[15px] font-semibold">£{n0(psf)} / sq ft</div>
               </div>
             </div>
-            <div className="mt-4 relative h-[7px] rounded-[4px]" style={{ background: neutral.sunken2 }}>
-              <div className="absolute inset-y-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
-              <div
-                className="absolute rounded-full"
-                style={{ left: `${marker}%`, top: -3, width: 13, height: 13, background: brand[700], border: '2.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transform: 'translateX(-50%)' }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between fig text-[11px] font-medium text-ink-3">
-              <span>{formatMoneyFull(range.lo)}</span>
-              <span>{formatMoneyFull(range.hi)}</span>
-            </div>
+            {range && marker !== null ? (
+              <>
+                <div className="mt-4 relative h-[7px] rounded-[4px]" style={{ background: neutral.sunken2 }}>
+                  <div className="absolute inset-y-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
+                  <div
+                    className="absolute rounded-full"
+                    style={{ left: `${marker}%`, top: -3, width: 13, height: 13, background: brand[700], border: '2.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transform: 'translateX(-50%)' }}
+                  />
+                </div>
+                <div className="mt-2 flex justify-between fig text-[11px] font-medium text-ink-3">
+                  <span>{formatMoneyFull(range.lo)}</span>
+                  <span>{formatMoneyFull(range.hi)}</span>
+                </div>
+              </>
+            ) : (
+              /* No bar where there is no range: a scale drawn around a single
+                 opinion reads as a spread of evidence that does not exist. */
+              <div className="mt-3 text-[11.5px] leading-[1.55] text-ink-3">{confidenceNote}</div>
+            )}
           </div>
 
           {/* Drafted commentary moves to its own page — three narrative sections do
@@ -778,7 +824,7 @@ export default function RedBookReport() {
             </div>
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Valuation confidence</div>
-              <div className="mt-1.5 text-[17px] font-semibold" style={{ color: confidence.tone }}>{confidence.label}</div>
+              <div className="mt-1.5 text-[17px] font-semibold" style={{ color: confidenceTone }}>{confidence ?? '—'}</div>
             </div>
           </div>
 
@@ -899,7 +945,16 @@ export default function RedBookReport() {
                   <div className="mt-2.5 text-[14px] font-semibold">{valuer.name}</div>
                   {valuer.reg && <div className="text-[12px] text-ink-2">{valuer.reg}</div>}
                   <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
-                  <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {today}</div>
+                  {dates.signedOff ? (
+                    <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                  ) : (
+                    /* the unnamed branch below already refuses to print "a date
+                       pretending it was signed"; a version nobody approved is
+                       the same claim with a name on it */
+                    <div className="mt-1.5 text-[11.5px] leading-[1.45] text-ink-2">
+                      Prepared {dates.report}. This version has not been approved for issue.
+                    </div>
+                  )}
                 </>
               ) : (
                 /* no name, no registration number, and no date pretending it was signed */
@@ -908,12 +963,17 @@ export default function RedBookReport() {
                 </div>
               )}
             </div>
-            <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={brand[700]} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" />
-              </svg>
-              <span className="fig mt-1 text-[7.5px] font-semibold text-center" style={{ letterSpacing: '0.5px' }}>RICS<br />REGULATED</span>
-            </div>
+            {/* A seal is the strongest form the claim takes on this document, so
+                it appears only where the firm has declared the number it rests on. */}
+            {ricsFirmNumber ? (
+              <div className="w-[88px] h-[88px] rounded-full flex flex-col items-center justify-center" style={{ border: `2px solid ${brand[700]}`, color: brand[700] }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={brand[700]} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l2.6 7.2L22 9.6l-5.8 4.6L18 22l-6-4.2L6 22l1.8-7.8L2 9.6l7.4-.4L12 2Z" />
+                </svg>
+                <span className="fig mt-1 text-[7.5px] font-semibold text-center" style={{ letterSpacing: '0.5px' }}>RICS<br />REGULATED</span>
+                <span className="fig text-[7px] font-medium text-center" style={{ letterSpacing: '0.3px' }}>{ricsFirmNumber}</span>
+              </div>
+            ) : null}
           </div>
 
           <PageFoot>Page {pageNo.declaration} of {pageTotal} · © {firmName} · This report remains the property of {firmName} until fees are settled in full.</PageFoot>

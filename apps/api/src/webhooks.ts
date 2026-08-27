@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from './context.js';
+import { settlePayment } from './payments.js';
 
 /**
  * Stripe webhook: marks buyer payments PAID when the PaymentIntent succeeds.
@@ -45,15 +46,12 @@ export function registerWebhooks(app: FastifyInstance) {
       const payment = await prisma.payment.findFirst({
         where: intent.metadata?.paymentId ? { id: intent.metadata.paymentId } : { stripeIntentId: intent.id },
       });
-      if (payment && payment.status !== 'PAID') {
-        await prisma.payment.update({ where: { id: payment.id }, data: { status: 'PAID', paidAt: new Date() } });
-        const unit = await prisma.unit.findFirst({ where: { id: payment.unitId } });
-        if (unit) {
-          await prisma.activityEvent.create({
-            data: { orgId: payment.orgId, dealId: unit.dealId, actor: 'Stripe', action: 'payment received', target: `${payment.kind} · ${unit.name}` },
-          });
-        }
-      }
+      /**
+       * Stripe retries a webhook until it is acknowledged, and confirmPayment
+       * may be settling the same intent from the browser at this moment. Both
+       * are expected; two receipts on the deal are not.
+       */
+      if (payment) await settlePayment(prisma, payment.id, { actor: 'Stripe', action: 'payment received' });
       }
       return { received: true };
     });

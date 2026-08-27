@@ -1,0 +1,14 @@
+-- The field app and the workbench edit the same inspection by design — the get
+-- procedure's own comment calls it "the field app ⇄ workbench handoff" — and
+-- save wrote every field with no check on what it was overwriting. A surveyor
+-- finishing notes on a phone and then continuing at a desk lost one or the
+-- other, silently.
+--
+-- Offline makes it systematic rather than unlucky: react-query holds a write
+-- made with no signal and replays it on reconnect, so the phone's older copy
+-- lands AFTER the desk edit by construction.
+--
+-- DEFAULT CURRENT_TIMESTAMP so existing rows get a value and this cannot block
+-- on real data; CURRENT_TIMESTAMP rather than NOW() because the same SQL has to
+-- run on SQLite in development (docs/DATABASE.md).
+ALTER TABLE "Inspection" ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

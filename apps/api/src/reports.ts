@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { currentAppraisal } from './current-appraisal.js';
 import jwt from 'jsonwebtoken';
 import { chromium, type Browser, type Page } from 'playwright';
 import { JWT_SECRET, prisma } from './context.js';
@@ -226,7 +227,7 @@ export function registerReports(app: FastifyInstance) {
        * when the truth is that the deal has no appraisal yet.
        */
       if (kind === 'appraisal' || kind === 'redbook') {
-        const appraisal = await prisma.appraisal.findFirst({ where: { dealId, orgId: user.orgId, isCurrent: true } });
+        const appraisal = await currentAppraisal(prisma.appraisal, dealId, user.orgId);
         if (!appraisal) {
           return reply.code(409).send({
             error: `${deal.name} has no saved appraisal yet — run or save one, then the ${KIND_LABEL[kind]} can be produced.`,

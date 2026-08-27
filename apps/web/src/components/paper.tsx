@@ -100,3 +100,34 @@ export function PageFoot({
     </div>
   );
 }
+
+/**
+ * Dates on a printed document — in the firm's time, never the reader's.
+ *
+ * `toLocaleDateString` without a zone formats in whatever timezone the browser
+ * is in. Measured: a terms of engagement whose valuation date the valuer typed
+ * as 30 June 2026 renders as **29 June 2026** to a client opening the same
+ * document from New York, because a date input stores UTC midnight and any
+ * negative offset lands on the day before.
+ *
+ * The buyer and investor portals and the terms-signing link are built for people
+ * outside the firm, so a reader abroad is the ordinary case, not the exotic one.
+ * This is the same rule these documents already follow for colour: a signed
+ * valuation must not change because of a setting on the reader's machine. Dates
+ * matter more than colour — a valuation date is what the opinion is "as at", and
+ * an inspection date is a statement about a day somebody attended a property.
+ *
+ * Europe/London rather than UTC because the figures, the conventions and the
+ * regulator are all UK (see CLAUDE.md) — a report produced at 00:30 BST on the
+ * 5th is dated the 5th, which is the day the valuer would say they produced it.
+ */
+export const DOC_TIMEZONE = 'Europe/London';
+
+const docDateFmt = (opts: Intl.DateTimeFormatOptions) => (d: Date | string) =>
+  new Date(d).toLocaleDateString('en-GB', { ...opts, timeZone: DOC_TIMEZONE });
+
+/** 30 June 2026 — the long form every document uses for a date it asserts. */
+export const docDate = docDateFmt({ day: 'numeric', month: 'long', year: 'numeric' });
+
+/** 30 Jun — for dense tables and exhibit captions. */
+export const docDay = docDateFmt({ day: 'numeric', month: 'short' });

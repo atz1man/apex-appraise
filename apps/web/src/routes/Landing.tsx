@@ -4,6 +4,7 @@ import { computeAppraisal } from '@apex/appraisal-engine';
 import { fM } from '../lib/format';
 import { BrandMark, Icon } from '../components/ui';
 import { TRIAL_DAYS } from '../legal/entity';
+import { PLANS } from '@apex/types/plan';
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -585,8 +586,8 @@ function PortalMock() {
           [
             ['Capital called', '£850k'],
             ['Distributions', '£312k'],
-            ['Net IRR', '18.4%'],
-            ['MOIC', '1.6×'],
+            ['Portfolio IRR', '18.4%'],
+            ['DPI', '1.6×'],
           ] as Array<[string, string]>
         ).map(([label, value]) => (
           <div key={label} className="rounded-[12px] bg-sunken border border-border-strong px-3.5 py-3">
@@ -865,11 +866,11 @@ export default function Landing() {
           flip
           eyebrow="Client & investor portals"
           title="Give investors the numbers, not a PDF."
-          body="LP statements, distributions, capital calls and net IRR / MOIC per investor — computed from the same JV waterfall that runs the appraisal. One set of figures, from the deal team to the boardroom."
+          body="LP statements, distributions, capital calls and per-investor returns — computed from that investor's own drawn and distributed capital, not from a house average. One set of figures, from the deal team to the boardroom."
           checks={[
             'Per-investor positions & statements',
             'Capital calls & distribution notices',
-            'Net IRR and MOIC from the live waterfall',
+            'Portfolio IRR and DPI from each investor’s own capital',
           ]}
           mock={<PortalMock />}
           onPeek={() => setTourAt(1)}
@@ -953,19 +954,26 @@ export default function Landing() {
           <div className="eyebrow">Pricing</div>
           <h2 className="mt-2 text-[34px] md:text-[42px] font-bold tracking-[-1.6px]">Simple plans, serious tooling.</h2>
           <p className="mt-3 text-[15px] text-ink-2 max-w-[520px] mx-auto">
-            Every plan includes the full appraisal engine, live UK data and print-ready reporting. No card required to start.
+            Every plan includes the full appraisal engine, live UK data, print-ready reporting and a one-click export of
+            everything in your workspace. No card required to start.
           </p>
         </div>
         <div className="mt-10 grid gap-5 md:grid-cols-3 items-stretch">
-          {(
-            [
-              ['Starter', 49, 'For a single developer running a handful of deals', ['3 active deals', '2 team members', 'Appraisal engine + reports', 'Site pack (live UK data)'], false],
-              ['Growth', 149, 'For teams running a live pipeline', ['Unlimited deals', '10 team members', 'AI Development Director', 'Buyer + investor portals', 'Benchmarking'], true],
-              ['Enterprise', 399, 'Multi-entity groups and funds', ['Everything in Growth', 'Unlimited members', 'Priority support', 'Data exports + API access'], false],
-            ] as Array<[string, number, string, string[], boolean]>
-          ).map(([name, price, blurb, features, featured]) => (
+          {/*
+            Rendered from the catalogue the server enforces, not from a copy.
+            There WAS a copy here, and it had already drifted: this page offered
+            Enterprise "Data exports + API access" where the product sells
+            "Public API + webhooks", and named the site pack differently. A
+            prospect and a subscriber were reading different promises about the
+            same tier. apps/api/test/plan-features.test.ts pins these words to
+            what each plan actually switches on, so it now covers this page too.
+          */}
+          {PLANS.map(({ key, name, pricePencePerMonth, blurb, features, featured }) => (
             <div
-              key={name}
+              key={key}
+              /* the hook e2e/pricing.spec.ts reads a card by, so the test does
+                 not have to guess at a Tailwind class to find one */
+              data-plan={key}
               className="rounded-[22px] bg-surface p-7 flex flex-col shadow-rest"
               style={featured ? { border: '2px solid #14503B', boxShadow: '0 24px 60px -24px rgba(20,80,59,0.35)' } : undefined}
             >
@@ -974,7 +982,7 @@ export default function Landing() {
                 {featured && <span className="label-mono rounded-[7px] bg-tint-success text-brand-ink px-2 py-[3px]">Most popular</span>}
               </div>
               <div className="fig mt-3 text-[38px] font-semibold tracking-[-1.5px]">
-                £{price}
+                £{(pricePencePerMonth / 100).toLocaleString('en-GB')}
                 <span className="text-[13px] text-ink-2b font-medium tracking-normal">/month</span>
               </div>
               <div className="mt-1.5 text-[13px] text-ink-2">{blurb}</div>

@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { computeAppraisal, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
+import { computeAppraisal, depositsHeldAt, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
@@ -11,23 +11,18 @@ import { orgCascadeDeletes } from '../org-delete.js';
 import { exportWorkspace } from '../org-export.js';
 import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
-import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, router } from '../trpc.js';
-import { assertCanAddMember, usageFor } from '../entitlements.js';
+import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, requiresFeature, router } from '../trpc.js';
+import { assertCanAddMember, featuresFor, usageFor } from '../entitlements.js';
+import { sealFor } from '../sealed-fields.js';
 import { signDownloadToken } from '../download-token.js';
 import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
 import { recordAudit } from '../audit.js';
+import { assertUnchanged } from '../optimistic.js';
 import { assertOwned } from '../auth/owned.js';
 import { WEBHOOK_EVENTS, isWebhookEvent, newWebhookSecret } from '../webhook-delivery.js';
-
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase())
-    .slice(0, 2)
-    .join('') || 'AA';
+import { initialsOf } from '../names.js';
 
 /** Admin-only guard on top of internal. */
 
@@ -43,6 +38,22 @@ const DEFAULT_INTEGRATIONS = [
   'Xero',
   'DocuSign',
 ];
+
+/**
+ * "Public API + webhooks" is an Enterprise line on the pricing page.
+ *
+ * Only the CREATION of a credential is gated. Listing, revoking and deleting stay
+ * open on every plan: a workspace that downgrades still has live keys and live
+ * endpoints out in the world, and the one thing it must always be able to do is
+ * take them back. A paywall in front of revocation would turn a billing change
+ * into a security incident.
+ *
+ * The credentials themselves are not deleted by a downgrade either. They simply
+ * stop being honoured — see authenticate() in src/public-api.ts and emitWebhook()
+ * in src/webhook-delivery.ts, which are the two places the plan is re-checked at
+ * use. Re-subscribing lights the same keys back up.
+ */
+const publicApiProcedure = adminProcedure.use(requiresFeature('publicApi'));
 
 export const orgRouter = router({
   /**
@@ -63,12 +74,19 @@ export const orgRouter = router({
   /**
    * The demo mailbox: what would have been emailed, when no SMTP is configured.
    *
-   * Returns nothing at all the moment SMTP_URL is set, so a production instance
-   * cannot serve messages even if this were called. It exists because on a demo
-   * instance an invite or a reset link otherwise goes to a console nobody reads,
-   * which makes those flows impossible to try — and impossible to test.
+   * It exists because on a demo instance an invite or a reset link otherwise
+   * goes to a console nobody reads, which makes those flows impossible to try —
+   * and impossible to test.
+   *
+   * Admin, and scoped to the caller's own workspace. Both are new: this was open
+   * to any internal user and returned a process-wide array, which on a
+   * multi-tenant instance with SMTP unset let any analyst read the reset link
+   * for anyone in any other workspace. See the note in email.ts.
    */
-  demoMailbox: internalProcedure.query(() => ({ enabled: mailboxEnabled(), messages: readMailbox() })),
+  demoMailbox: adminProcedure.query(({ ctx }) => ({
+    enabled: mailboxEnabled(),
+    messages: readMailbox(ctx.principal.orgId),
+  })),
 
   /** Self-serve tenant onboarding: new organisation + its first (admin) user. */
   register: publicProcedure
@@ -111,7 +129,7 @@ export const orgRouter = router({
       }
       const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
       const welcome = welcomeEmail(user.name, org.name, APP_URL());
-      void sendMail(email, welcome.subject, welcome.text);
+      void sendMail(org.id, email, welcome.subject, welcome.text);
       return {
         token,
         principal: {
@@ -132,7 +150,22 @@ export const orgRouter = router({
       ctx.prisma.user.count({ where: { orgId: org.id, principalType: 'internal' } }),
       ctx.prisma.investor.count({ where: { orgId: org.id } }),
     ]);
-    return { id: org.id, name: org.name, logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId), createdAt: org.createdAt, counts: { deals, users, investors } };
+    return {
+      id: org.id,
+      name: org.name,
+      logoUrl: signFileUrl(org.logoUrl, ctx.principal.userId),
+      ricsFirmNumber: org.ricsFirmNumber,
+      createdAt: org.createdAt,
+      counts: { deals, users, investors },
+      /**
+       * The plan and what it switches on, so the app can show a locked surface
+       * with an upgrade route instead of a live button that answers FORBIDDEN.
+       * The server refusal is still the thing that protects the feature — this
+       * only decides what the screen looks like before it is asked.
+       */
+      plan: org.plan,
+      features: featuresFor(org.plan),
+    };
   }),
 
   /** Activation checklist — real completion state for the Hub's getting-started card. */
@@ -161,9 +194,13 @@ export const orgRouter = router({
   firm: authedProcedure.query(async ({ ctx }) => {
     const org = await ctx.prisma.organisation.findUnique({
       where: { id: ctx.principal.orgId },
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, ricsFirmNumber: true },
     });
-    return { name: org?.name ?? 'Apex Appraise', logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId) };
+    return {
+      name: org?.name ?? 'Apex Appraise',
+      logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId),
+      ricsFirmNumber: org?.ricsFirmNumber ?? '',
+    };
   }),
 
   /** Remove the firm mark and fall back to the Apex mark on documents. */
@@ -173,10 +210,56 @@ export const orgRouter = router({
   }),
 
   update: adminProcedure
-    .input(z.object({ name: z.string().min(2).max(80) }))
-    .mutation(({ ctx, input }) =>
-      ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data: { name: input.name } }),
-    ),
+    .input(
+      z.object({
+        name: z.string().min(2).max(80).optional(),
+        /**
+         * The firm's RICS Regulated Firm number, or '' where it holds none.
+         *
+         * Patch semantics — only the keys supplied are written — for the reason
+         * `7dd1415` gives: the Settings panel holds several fields and posts
+         * them back, and a field nobody edited should not be able to travel.
+         */
+        ricsFirmNumber: z.string().max(20).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const before = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+      const data = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+      const org = await ctx.prisma.organisation.update({ where: { id: ctx.principal.orgId }, data });
+      // this name is printed on every signed valuation and every terms of
+      // engagement, so a report produced last month names a firm that may no
+      // longer be called that. The trail is how the two are reconciled.
+      if (input.name !== undefined && input.name !== before?.name) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'renamed the workspace',
+          target: `${before?.name ?? '—'} → ${input.name}`,
+          ip: ctx.ip,
+        });
+      }
+      /**
+       * Recorded separately, and always — this one decides whether a signed
+       * valuation carries a regulatory mark, so "who asserted that, and when"
+       * is a question a reviewer will ask about the claim itself rather than
+       * about the workspace.
+       */
+      if (input.ricsFirmNumber !== undefined && input.ricsFirmNumber !== before?.ricsFirmNumber) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: input.ricsFirmNumber ? 'declared the firm RICS regulated' : 'withdrew the firm’s RICS regulation',
+          target: input.ricsFirmNumber
+            ? `RICS Regulated Firm no. ${input.ricsFirmNumber}`
+            : `was ${before?.ricsFirmNumber || '—'}`,
+          ip: ctx.ip,
+        });
+      }
+      return org;
+    }),
 
   /**
    * Firm-level standing wording. Everyone can read it (the report and the terms
@@ -229,17 +312,42 @@ export const orgRouter = router({
         covLtgdvMaxPct: z.number().min(0).max(200).nullish(),
         covLtcMaxPct: z.number().min(0).max(200).nullish(),
         covMinProfitOnCostPct: z.number().min(0).max(200).nullish(),
+        /**
+         * The stamp of the policy this panel loaded.
+         *
+         * Seventeen fields, read once and posted back in full — the fourth
+         * instance of the shape `b39f174` first found, and the one above all the
+         * others: a lost update here does not change one instruction, it changes
+         * the wording every future instruction drafts from. `238d265` established
+         * that `toeSpecialAssumptions` is the field deciding what a valuation
+         * MEANS, and the settings panel destructured `updatedAt` out and threw it
+         * away.
+         *
+         * Demanded for an edit, absent for the first save: there is no policy yet
+         * to have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const { expectedUpdatedAt, ...fields } = input;
+      const existing = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+      if (existing) {
+        await assertUnchanged({
+          what: 'firm policy',
+          current: existing.updatedAt,
+          expected: expectedUpdatedAt,
+          advice: 'Reload to see the current wording before saving yours — nothing you can see here has been lost.',
+        });
+      }
       const data = {
-        ...input,
+        ...fields,
         toeLiabilityCap: input.toeLiabilityCap == null ? null : toPence(input.toeLiabilityCap),
         covLtgdvMaxPct: input.covLtgdvMaxPct ?? null,
         covLtcMaxPct: input.covLtcMaxPct ?? null,
         covMinProfitOnCostPct: input.covMinProfitOnCostPct ?? null,
       };
-      await ctx.prisma.orgPolicy.upsert({
+      const saved = await ctx.prisma.orgPolicy.upsert({
         where: { orgId: ctx.principal.orgId },
         create: { ...data, orgId: ctx.principal.orgId },
         update: data,
@@ -258,7 +366,8 @@ export const orgRouter = router({
           },
         });
       }
-      return { ok: true };
+      // the stamp comes from THIS save, never a refetch — see a48b7b3
+      return { ok: true, updatedAt: saved.updatedAt };
     }),
 
   members: internalProcedure.query(({ ctx }) =>
@@ -302,7 +411,15 @@ export const orgRouter = router({
       });
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       const mail = inviteEmail(input.name, org?.name ?? 'your team', email, tempPassword, APP_URL());
-      const { emailed } = await sendMail(email, mail.subject, mail.text);
+      const { emailed } = await sendMail(ctx.principal.orgId, email, mail.subject, mail.text);
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'invited a team member',
+        target: `${input.name} (${email}) as ${input.role}`,
+        ip: ctx.ip,
+      });
       return { tempPassword, emailed };
     }),
 
@@ -454,7 +571,7 @@ export const orgRouter = router({
           status: prog >= 6 ? 'COMPLETED' : prog >= 5 ? 'EXCHANGED' : prog >= 1 ? 'RESERVED' : 'AVAILABLE',
           buyerName: buyer || null,
           progress: prog,
-          depositHeld: prog > 0 ? p(prog >= 5 ? agreed * 0.1 : 5000) : null,
+          depositHeld: prog > 0 ? p(depositsHeldAt(prog, { agreedValue: agreed || null, appraisedValue: appr })) : null,
           reservedAt: prog > 0 ? new Date() : null,
           milestones: { create: milestoneNames.map((m, idx) => ({ name: m, index: idx, done: idx < prog })) },
         },
@@ -539,6 +656,33 @@ export const orgRouter = router({
       const apiKeysCreated = await ctx.prisma.apiKey.count({
         where: { orgId: ctx.principal.orgId, createdById: user.id, revokedAt: null },
       });
+
+      /**
+       * The links this person sent out, which are about to stop working.
+       *
+       * Different from the API keys above, and worse. A key goes on working
+       * after its creator leaves — the admin is warned because a leaver may hold
+       * a copy. A report share BREAKS: reports.ts looks the creator up on every
+       * request and answers 404 with "ask the sender for a new one", to a lender
+       * whose sender no longer exists, while the firm hears nothing.
+       *
+       * Only live ones. Padding the number with links that were already revoked
+       * or expired trains an admin to ignore it.
+       *
+       * Re-pointing the share at the removing admin would keep it working and is
+       * the wrong fix: the document is RENDERED as its creator, and a Red Book
+       * report carries the valuer's name. That would reissue somebody's signed
+       * valuation under a colleague who did not sign it.
+       */
+      const sharesCreated = await ctx.prisma.reportShare.count({
+        where: {
+          orgId: ctx.principal.orgId,
+          createdById: user.id,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
       await ctx.prisma.user.delete({ where: { id: user.id } });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId,
@@ -548,7 +692,7 @@ export const orgRouter = router({
         target: `${user.name} (${user.email})`,
         ip: ctx.ip,
       });
-      return { ok: true, apiKeysCreated };
+      return { ok: true, apiKeysCreated, sharesCreated };
     }),
 
   setRole: adminProcedure
@@ -559,11 +703,22 @@ export const orgRouter = router({
       });
       if (!user) throw new TRPCError({ code: 'NOT_FOUND' });
       if (user.id === ctx.principal.userId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot change your own role' });
-      return ctx.prisma.user.update({
+      const updated = await ctx.prisma.user.update({
         where: { id: user.id },
         data: { role: input.role },
         select: { id: true, role: true },
       });
+      // the FROM as well as the to: "made an admin" and "made a viewer" are
+      // different events, and only one of them is a question an insurer asks
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'changed a team member’s role',
+        target: `${user.name} (${user.email}): ${user.role} → ${input.role}`,
+        ip: ctx.ip,
+      });
+      return updated;
     }),
 
   /**
@@ -638,7 +793,7 @@ export const orgRouter = router({
     return rows.map((r) => ({ ...r, scopes: r.scopes.split(','), live: !r.revokedAt }));
   }),
 
-  createApiKey: adminProcedure
+  createApiKey: publicApiProcedure
     .input(z.object({ name: z.string().min(1).max(60), write: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
       const { key, prefix, keyHash } = mintApiKey();
@@ -685,7 +840,7 @@ export const orgRouter = router({
     return { endpoints: rows.map((r) => ({ ...r, events: r.events.split(',').filter(Boolean) })), available: WEBHOOK_EVENTS };
   }),
 
-  createWebhook: adminProcedure
+  createWebhook: publicApiProcedure
     .input(
       z.object({
         url: z.string().url().max(500),
@@ -704,7 +859,14 @@ export const orgRouter = router({
       }
       const secret = newWebhookSecret();
       const row = await ctx.prisma.webhookEndpoint.create({
-        data: { orgId: ctx.principal.orgId, url: input.url, secret, events: events.join(','), createdById: ctx.principal.userId },
+        data: {
+          orgId: ctx.principal.orgId,
+          url: input.url,
+          // shown once below and sealed here; the receiver keeps the only other copy
+          secret: sealFor('webhookEndpoint', 'secret', ctx.principal.orgId, secret),
+          events: events.join(','),
+          createdById: ctx.principal.userId,
+        },
       });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
@@ -750,6 +912,8 @@ export const orgRouter = router({
       enforced: c.enforced,
       defaultRole: c.defaultRole,
       lastLoginAt: c.lastLoginAt,
+      // the stamp the panel hands back when it saves — see saveSso
+      updatedAt: c.updatedAt,
     };
   }),
 
@@ -764,6 +928,17 @@ export const orgRouter = router({
         domains: z.array(z.string().min(3).max(200)).min(1),
         enforced: z.boolean().default(false),
         defaultRole: z.enum(['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER']).default('ANALYST'),
+        /**
+         * The stamp of the configuration this panel loaded.
+         *
+         * `SsoPanel` reads five fields once (`if (!sso || loaded) return`) and
+         * posts every one of them back, so a second administrator's save
+         * silently restored whatever the first changed — `enforced` included,
+         * which is the switch `a9cbb50` found could lock a firm out of its own
+         * workspace. Absent on the first configuration: there is nothing yet to
+         * have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -785,17 +960,40 @@ export const orgRouter = router({
       if (!existing && !input.clientSecret) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'A client secret is needed to set this up.' });
       }
+      if (existing) {
+        await assertUnchanged({
+          what: 'single sign-on configuration',
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          advice: 'Reload to see the current settings before saving yours — nothing you can see here has been lost.',
+        });
+      }
       const data = {
         issuer: input.issuer.replace(/\/$/, ''),
         clientId: input.clientId,
         domains: domains.join(','),
         enforced: input.enforced,
         defaultRole: input.defaultRole,
-        ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
+        ...(input.clientSecret
+          ? { clientSecret: sealFor('ssoConnection', 'clientSecret', ctx.principal.orgId, input.clientSecret) }
+          : {}),
       };
-      await ctx.prisma.ssoConnection.upsert({
+      const saved = await ctx.prisma.ssoConnection.upsert({
         where: { orgId: ctx.principal.orgId },
-        create: { orgId: ctx.principal.orgId, clientSecret: input.clientSecret ?? '', createdById: ctx.principal.userId, ...data },
+        create: {
+          orgId: ctx.principal.orgId,
+          createdById: ctx.principal.userId,
+          /**
+           * Only ever the placeholder that satisfies the required column: the
+           * guard above refuses a first-time save with no secret, so `...data`
+           * always carries the sealed one over the top on this path. It used to
+           * seal here as well — a second, unreachable copy of the same call,
+           * which meant the seal could be removed from it without any test
+           * noticing, because the value never survived the spread.
+           */
+          clientSecret: '',
+          ...data,
+        },
         update: data,
       });
       await recordAudit(ctx.prisma, {
@@ -803,7 +1001,8 @@ export const orgRouter = router({
         action: input.enforced ? 'required single sign-on' : 'configured single sign-on',
         target: domains.join(', '), ip: ctx.ip,
       });
-      return { ok: true };
+      // from THIS save, never a refetch — see a48b7b3
+      return { ok: true, updatedAt: saved.updatedAt };
     }),
 
   deleteSso: adminProcedure.mutation(async ({ ctx }) => {

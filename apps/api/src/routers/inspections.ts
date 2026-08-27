@@ -1,8 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { J, P, toPence } from '../mappers.js';
+import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { internalProcedure, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
+import { assertUnchanged } from '../optimistic.js';
+import { recordAudit } from '../audit.js';
 
 const zRoom = z.object({
   name: z.string(),
@@ -26,6 +28,8 @@ const inspectionOut = (i: any) => ({
   reconciledValue: i.reconciledValue != null ? P(i.reconciledValue) : null,
   approachWeights: J<z.infer<typeof zWeights>>(i.approachWeights, { salesComparison: 60, cost: 20, income: 20 }),
   status: i.status,
+  /** the stamp a save has to hand back — see save.expectedUpdatedAt */
+  updatedAt: i.updatedAt,
 });
 
 export const inspectionsRouter = router({
@@ -70,6 +74,22 @@ export const inspectionsRouter = router({
         reconciledValue: z.number().min(0).nullable(),
         approachWeights: zWeights,
         status: z.enum(['draft', 'submitted']).default('submitted'),
+        /**
+         * The stamp of the inspection the caller loaded.
+         *
+         * Required when editing an existing one. The field app and the workbench
+         * edit the same row on purpose — the get procedure above calls it "the
+         * field app ⇄ workbench handoff" — and this write carries EVERY field,
+         * so without a check the second save wipes the first with no version and
+         * nothing to say it happened.
+         *
+         * Offline turns that from unlucky into systematic. A write made with no
+         * signal is HELD by react-query and replayed on reconnect, so a phone's
+         * older copy lands after a desk edit that happened later, by
+         * construction. The bar telling a surveyor their work is held is what
+         * makes them rely on it.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -83,10 +103,61 @@ export const inspectionsRouter = router({
         surveyorId: ctx.principal.userId,
         inspectedAt: new Date(),
       };
-      if (input.id) await assertOwned(ctx.prisma.inspection, input.id, ctx.principal.orgId);
-      const row = input.id
-        ? await ctx.prisma.inspection.update({ where: { id: input.id }, data })
-        : await ctx.prisma.inspection.create({ data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId } });
+      /**
+       * The surveyor's own record of what they saw, and the value they
+       * reconciled from it — the evidence a Red Book valuation rests on. The row
+       * stamps `surveyorId` and `inspectedAt`, but that is only ever the LATEST
+       * author: every earlier reconciled value was replaced with nothing to say
+       * by whom or when. `audit.ts` names an insurer, a lender's credit
+       * committee and an RICS review as the readers of this trail, and "who
+       * changed the valuation" as one of the four questions it exists to answer.
+       */
+      const note = async (action: string) => {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action,
+          target:
+            input.reconciledValue != null
+              ? `${input.rooms.length} rooms, reconciled at ${moneyLabel(toPence(input.reconciledValue))}`
+              : `${input.rooms.length} rooms, no reconciled value`,
+          ip: ctx.ip,
+        });
+      };
+
+      if (!input.id) {
+        const created = await ctx.prisma.inspection.create({
+          data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId },
+        });
+        await note(input.status === 'submitted' ? 'submitted an inspection' : 'started an inspection');
+        return inspectionOut(created);
+      }
+
+      const existing = await assertOwned(ctx.prisma.inspection, input.id, ctx.principal.orgId);
+      /**
+       * Demanded rather than checked-when-present: an optional stamp silently
+       * reopens the hole for whichever caller forgets next, and the person it
+       * costs is a surveyor whose site notes vanish without a trace.
+       */
+      await assertUnchanged({
+        what: 'inspection',
+        current: existing.updatedAt,
+        expected: input.expectedUpdatedAt,
+        lastActor: async () =>
+          existing.surveyorId
+            ? (await ctx.prisma.user.findUnique({ where: { id: existing.surveyorId }, select: { name: true } }))?.name
+            : null,
+        advice: 'Reload to see the current notes before saving yours — nothing you can see here has been lost.',
+      });
+
+      const row = await ctx.prisma.inspection.update({ where: { id: existing.id }, data });
+      await note(
+        existing.status !== 'submitted' && input.status === 'submitted'
+          ? 'submitted an inspection'
+          : 'updated an inspection',
+      );
       return inspectionOut(row);
     }),
 });

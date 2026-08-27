@@ -5,7 +5,7 @@ import { appraisalRouter, autoAppraisalRouter, comparablesRouter, scenariosRoute
 import { salesRouter } from './routers/sales.js';
 import { bankRouter, costRouter, documentsRouter, integrationsRouter, photosRouter, tasksRouter, xeroRouter } from './routers/ops.js';
 import { orgRouter } from './routers/org.js';
-import { buyerRouter, investorsRouter } from './routers/portal.js';
+import { buyerRouter, investorsRouter, portalAccessRouter } from './routers/portal.js';
 import { inspectionsRouter } from './routers/inspections.js';
 import { sitePackRouter } from './routers/sitepack.js';
 import { billingRouter } from './routers/billing.js';
@@ -33,6 +33,7 @@ export const appRouter = router({
   benchmarks: benchmarksRouter,
   investors: investorsRouter,
   buyer: buyerRouter,
+  portalAccess: portalAccessRouter,
   integrations: integrationsRouter,
   xero: xeroRouter,
 });

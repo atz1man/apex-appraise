@@ -39,6 +39,11 @@ services:
     environment:
       DATABASE_URL: postgresql://apex:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment}@db:5432/apex
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the environment}
+      # Optional, and deliberately so — see infra/DEPLOY.md. Unset, the key that
+      # seals credentials at rest is derived from JWT_SECRET, so an existing
+      # deployment is protected on its next deploy instead of failing to boot.
+      # Set it and the signing key and the encryption key rotate independently.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       EPC_BEARER_TOKEN: ${EPC_BEARER_TOKEN:-}
       NODE_ENV: production

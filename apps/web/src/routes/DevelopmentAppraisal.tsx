@@ -16,6 +16,7 @@ import {
   type IncomeInput,
   type Periodicity,
   type Phase,
+  capitalStack,
 } from '@apex/appraisal-engine';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -164,8 +165,18 @@ export default function DevelopmentAppraisal() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: firm } = trpc.org.firm.useQuery();
   const { data: saved, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The version this page is holding.
+   *
+   * Sent back on every in-place save so the server can refuse one built on a
+   * copy somebody else has already changed. Taken from the save's own response
+   * as well as from the query, so two saves in a row do not depend on a refetch
+   * landing in between.
+   */
+  const [heldVersion, setHeldVersion] = useState<Date | null>(null);
   const save = trpc.appraisal.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setHeldVersion(res.updatedAt);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.deals.list.invalidate();
       setDirty(false);
@@ -192,7 +203,8 @@ export default function DevelopmentAppraisal() {
     },
   });
   const saveVersion = trpc.appraisal.save.useMutation({
-    onSuccess: (_res, vars) => {
+    onSuccess: (res, vars) => {
+      setHeldVersion(res.updatedAt);
       toast.success(`Saved version “${vars.label || 'new version'}”`);
       setVersionLabel('');
       setDirty(false);
@@ -202,11 +214,11 @@ export default function DevelopmentAppraisal() {
     },
   });
   const [input, setInput] = useState<AppraisalInput>(DEFAULT_INPUT);
-  const [mezz, setMezz] = useState({ mezzTo: 72, mezzRate: 12, drawFactor: 55 });
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
+    if (saved) setHeldVersion(saved.updatedAt);
     if (saved && !loaded) {
       setInput({ ...saved.input, jv: saved.input.jv ?? DEFAULT_INPUT.jv });
       setLoaded(true);
@@ -240,22 +252,35 @@ export default function DevelopmentAppraisal() {
     return `${MO[((tot % 12) + 12) % 12]} '${String(y % 100).padStart(2, '0')}`;
   };
 
-  // capital stack (senior + mezz + equity) — display model per the prototype
-  const stack = useMemo(() => {
-    const ltc = input.finance.ltcPct;
-    const mezzTo = Math.max(mezz.mezzTo, ltc);
-    const constr = ltc > 0 ? R.facility / (ltc / 100) : R.build + R.fees + R.cont + R.otherTotal;
-    const senior = (constr * ltc) / 100;
-    const mezzAmt = (constr * (mezzTo - ltc)) / 100;
-    const land = R.landGross;
-    const equity = Math.max(0, constr * (1 - mezzTo / 100) + land);
-    const total = senior + mezzAmt + equity || 1;
-    const mo = (input.finance.periodMonths + input.finance.salesMonths) / 12;
-    const draw = mezz.drawFactor / 100;
-    const mezzInt = (mezzAmt * mezz.mezzRate) / 100 * mo * draw;
-    const blended = senior + mezzAmt > 0 ? (senior * input.finance.ratePct + mezzAmt * mezz.mezzRate) / (senior + mezzAmt) : 0;
-    return { senior, mezzAmt, equity, total, mezzInt, blended };
-  }, [R, input.finance, mezz]);
+  /**
+   * The capital stack, from the engine — see packages/appraisal-engine/stack.ts.
+   *
+   * This was a `useMemo` here, and its inputs were component state, so changing
+   * the mezzanine rate did not mark the appraisal dirty: the Save button stayed
+   * disabled and the value was gone on reload. The terms are part of the
+   * appraisal input now, so they save with everything else.
+   */
+  const mezz = input.finance.mezz;
+  const setMezz = (patch: Partial<NonNullable<typeof mezz>>) =>
+    set({
+      finance: {
+        ...input.finance,
+        mezz: { toPct: input.finance.ltcPct, ratePct: 0, drawFactorPct: 55, ...mezz, ...patch },
+      },
+    });
+  const stack = useMemo(
+    () =>
+      capitalStack({
+        ltcPct: input.finance.ltcPct,
+        seniorRatePct: input.finance.ratePct,
+        facility: R.facility,
+        constructionCost: R.build + R.fees + R.cont + R.otherTotal,
+        landGross: R.landGross,
+        months: input.finance.periodMonths + input.finance.salesMonths,
+        mezz,
+      }),
+    [R, input.finance, mezz],
+  );
 
   // ---- Tasks card (per-aspect, persisted) ----
   const aspect = ASPECT[tab];
@@ -410,7 +435,11 @@ export default function DevelopmentAppraisal() {
             >
               Export .xlsx
             </Button>
-            <Button onClick={() => save.mutate({ dealId, input })} loading={save.isPending} disabled={!dirty}>
+            <Button
+              onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
+              loading={save.isPending}
+              disabled={!dirty}
+            >
               {dirty ? 'Save appraisal' : 'Saved'}
             </Button>
           </>
@@ -1320,9 +1349,9 @@ export default function DevelopmentAppraisal() {
                             : 'Blank = even spread over the sales period'}
                         </span>
                       </label>
-                      <NumField label="Mezzanine to" suffix="% of cost" value={mezz.mezzTo} onChange={(v) => setMezz({ ...mezz, mezzTo: v })} />
-                      <NumField label="Mezzanine rate" suffix="% pa" value={mezz.mezzRate} onChange={(v) => setMezz({ ...mezz, mezzRate: v })} />
-                      <NumField label="Avg drawn factor" suffix="%" value={mezz.drawFactor} onChange={(v) => setMezz({ ...mezz, drawFactor: v })} />
+                      <NumField label="Mezzanine to" suffix="% of cost" value={mezz?.toPct ?? input.finance.ltcPct} onChange={(v) => setMezz({ toPct: v })} />
+                      <NumField label="Mezzanine rate" suffix="% pa" value={mezz?.ratePct ?? 0} onChange={(v) => setMezz({ ratePct: v })} />
+                      <NumField label="Avg drawn factor" suffix="%" value={mezz?.drawFactorPct ?? 55} onChange={(v) => setMezz({ drawFactorPct: v })} />
                     </div>
                     <div className="mt-3.5 flex gap-6 border-t border-border-std pt-3 flex-wrap">
                       <Kv k="Facility (peak)" v={fM(R.facility)} />
@@ -1335,18 +1364,31 @@ export default function DevelopmentAppraisal() {
                   <Panel title="Capital stack">
                     <div className="flex h-9 rounded-[9px] overflow-hidden border border-border-std">
                       <div style={{ width: `${(stack.senior / stack.total) * 100}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} title="Senior" />
-                      <div style={{ width: `${(stack.mezzAmt / stack.total) * 100}%`, background: '#C79A4B' }} title="Mezzanine" />
+                      <div style={{ width: `${(stack.mezzanine / stack.total) * 100}%`, background: '#C79A4B' }} title="Mezzanine" />
                       <div style={{ width: `${(stack.equity / stack.total) * 100}%`, background: '#AECBBC' }} title="Equity + land" />
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-3">
                       <Kv k={`Senior · ${input.finance.ltcPct}% LTC`} v={fM(stack.senior)} dot="#14503B" />
-                      <Kv k={`Mezz to ${Math.max(mezz.mezzTo, input.finance.ltcPct)}%`} v={stack.mezzAmt < 1 ? '—' : fM(stack.mezzAmt)} dot="#C79A4B" />
+                      <Kv k={`Mezz to ${Math.max(mezz?.toPct ?? input.finance.ltcPct, input.finance.ltcPct)}%`} v={stack.mezzanine < 1 ? '—' : fM(stack.mezzanine)} dot="#C79A4B" />
                       <Kv k="Equity + land" v={fM(stack.equity)} dot="#AECBBC" />
                     </div>
                     <div className="mt-2 flex gap-6">
-                      <Kv k="Blended debt cost" v={`${stack.blended.toFixed(1)}%`} />
-                      <Kv k="Mezz interest (approx)" v={stack.mezzAmt < 1 ? '—' : fM(stack.mezzInt)} />
+                      <Kv k="Blended debt cost" v={`${stack.blendedRatePct.toFixed(1)}%`} />
+                      <Kv k="Mezz interest (approx)" v={stack.mezzanine < 1 ? '—' : fM(stack.mezzanineInterest)} />
                     </div>
+                    {/*
+                      Said plainly, because these figures sit beside engine ones.
+                      The appraisal's finance cost, profit, return on cost and
+                      residual land value are senior-only; treating mezzanine
+                      cost as an appraisal input is a modelling decision nobody
+                      has made, and a reader would otherwise assume it had been.
+                    */}
+                    {stack.mezzanine >= 1 && (
+                      <p className="mt-2.5 text-[11px] leading-[1.5] text-ink-3">
+                        The mezzanine is shown in the stack and its interest is indicative. The appraisal&rsquo;s finance
+                        cost, profit and residual land value are senior debt only.
+                      </p>
+                    )}
                   </Panel>
                 </>
               )}
@@ -1758,8 +1800,12 @@ function ReviewRow({
     utils.appraisal.versions.invalidate(dealId);
     utils.appraisal.getCurrent.invalidate(dealId);
   };
-  const submit = trpc.appraisal.submitForReview.useMutation({ onSuccess: refresh });
-  const decide = trpc.appraisal.review.useMutation({ onSuccess: () => { setNote(''); refresh(); } });
+  const submit = trpc.appraisal.submitForReview.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true }, onSuccess: refresh });
+  const decide = trpc.appraisal.review.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true }, onSuccess: () => { setNote(''); refresh(); } });
 
   const r = version.review;
   const chip: Record<string, { label: string; status: 'green' | 'amber' | 'neutral' | 'red' }> = {

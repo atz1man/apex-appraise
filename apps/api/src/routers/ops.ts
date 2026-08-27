@@ -1,8 +1,11 @@
 import { TRPCError } from '@trpc/server';
+import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
-import { J, P, toPence } from '../mappers.js';
+import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-engine';
+import { appraisalRowToEngineInput } from '../mappers.js';
+import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
@@ -30,6 +33,22 @@ import {
   newState,
   syncBank,
 } from '../open-banking.js';
+import { openFor, sealFor } from '../sealed-fields.js';
+
+/**
+ * A deal-scoped read has to refuse a deal that is not yours.
+ *
+ * Every one of these is already org-scoped, so nothing leaked — but answering a
+ * foreign deal id with an empty envelope instead of NOT_FOUND is a different
+ * sentence, and the wrong one. `cost.packages` was fixed for exactly this, with
+ * a note saying "its siblings all refuse". Three siblings did not, and the
+ * isolation sweep that now walks the whole router is what found them.
+ */
+async function assertOwnDeal(ctx: { prisma: any; principal: { orgId: string } }, dealId: string) {
+  const deal = await ctx.prisma.deal.findFirst({ where: { id: dealId, orgId: ctx.principal.orgId } });
+  if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+  return deal;
+}
 
 // ---------- Construction cost monitoring ----------
 
@@ -47,6 +66,16 @@ const pkgOut = (pk: any) => ({
   contractor: pk.contractor ? { id: pk.contractor.id, name: pk.contractor.name, trade: pk.contractor.trade } : null,
 });
 
+/**
+ * The AI Development Director — every language-model touchpoint in this file.
+ *
+ * Growth and above. Starter buys "Appraisal engine + reports" and the landing
+ * page says so in as many words: "or do it all by hand. Your call." The engine,
+ * the reports and every deterministic figure stay open on every plan; what a
+ * Starter subscriber does not get is the model reading the documents for them.
+ */
+const aiProcedure = internalProcedure.use(requiresFeature('aiDirector'));
+
 export const costRouter = router({
   packages: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     /**
@@ -61,24 +90,22 @@ export const costRouter = router({
       where: { dealId: input, orgId: ctx.principal.orgId },
       include: { contractor: true },
     });
-    const appraisal = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const appraisal = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     const out = packages.map(pkgOut);
-    const appraised = out.reduce((a, r) => a + r.budget, 0);
-    const committed = out.reduce((a, r) => a + r.committed, 0);
-    const spent = out.reduce((a, r) => a + r.spent, 0);
-    const forecast = out.reduce((a, r) => a + r.forecast, 0);
+    /**
+     * The baseline is the CURRENT APPRAISAL's construction cost.
+     *
+     * It used to be the sum of the packages' own budget fields — so the report
+     * measured the packages against themselves while four separate labels on
+     * the page said it came from the appraisal. The appraisal row was fetched
+     * on this very request and used for nothing but a boolean. Measured on
+     * Harbour Reach: £9,877,000 forecast against a £6,855,195 appraised build,
+     * reported as £167,000 over.
+     */
+    const engine = appraisal ? computeAppraisal(appraisalRowToEngineInput(appraisal)) : null;
     return {
       packages: out,
-      rollup: {
-        appraised,
-        committed,
-        spent,
-        forecast,
-        variance: forecast - appraised, // + = over budget
-        profitImpact: appraised - forecast, // mirrors variance onto profit
-      },
+      rollup: costRollup(out, { appraisedBuild: engine?.build ?? null, contingency: engine?.cont ?? null }),
       hasAppraisal: !!appraisal,
     };
   }),
@@ -88,37 +115,80 @@ export const costRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        name: z.string().min(1),
-        budget: z.number().min(0),
-        committed: z.number().min(0).default(0),
-        spent: z.number().min(0).default(0),
-        forecast: z.number().min(0),
-        progressPct: z.number().int().min(0).max(100).default(0),
-        contractorId: z.string().nullable().default(null),
+        /**
+         * Everything but the id is OPTIONAL, and an update writes only what it
+         * was actually given.
+         *
+         * It used to take the whole row, and the cost monitor's only call site
+         * is the contractor dropdown — which therefore posted back four money
+         * figures from whatever copy the browser was holding. That matters
+         * because this firm is not the only writer: `syncXero` updates
+         * `committed` and `spent` on `source: 'xero'` packages from the
+         * customer's ledger, and this screen renders the dropdown on every
+         * package including those. So choosing a groundworker on a page loaded
+         * before the last sync silently reverted it — and `a68f459` made this
+         * screen's variance real, which means the reverted figure is the one a
+         * lender pack reports.
+         *
+         * The sibling procedures in this class got an optimistic stamp. This one
+         * gets patch semantics instead, which is better where it applies: a stamp
+         * DETECTS the clobber and asks the user to reload, while not sending the
+         * fields at all means there is nothing to clobber. `deals.update` already
+         * works this way for the same reason.
+         */
+        name: z.string().min(1).optional(),
+        budget: z.number().min(0).optional(),
+        committed: z.number().min(0).optional(),
+        spent: z.number().min(0).optional(),
+        forecast: z.number().min(0).optional(),
+        progressPct: z.number().int().min(0).max(100).optional(),
+        contractorId: z.string().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       const { id, dealId, budget, committed, spent, forecast, ...rest } = input;
+      /**
+       * Creating still needs the figures — a package with no budget and no
+       * forecast is not a package, and defaulting them to zero would put a
+       * £0 line into the variance the cost report is built from.
+       */
+      if (!id && (rest.name == null || budget == null || forecast == null)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'A new cost package needs a name, a budget and a forecast.',
+        });
+      }
+      const money = { budget, committed, spent, forecast };
       const data = {
-        ...rest,
-        budget: toPence(budget),
-        committed: toPence(committed),
-        spent: toPence(spent),
-        forecast: toPence(forecast),
+        // only the keys actually supplied: `undefined` would be written as null
+        // by a spread, and Prisma treats a missing key as "leave it alone"
+        ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        ...Object.fromEntries(
+          Object.entries(money).filter(([, v]) => v !== undefined).map(([k, v]) => [k, toPence(v as number)]),
+        ),
       };
       if (id) await assertOwned(ctx.prisma.costPackage, id, ctx.principal.orgId);
       const row = id
         ? await ctx.prisma.costPackage.update({ where: { id }, data })
-        : await ctx.prisma.costPackage.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
+        : await ctx.prisma.costPackage.create({
+            data: {
+              progressPct: 0,
+              committed: 0n,
+              spent: 0n,
+              ...data,
+              orgId: ctx.principal.orgId,
+              dealId,
+            } as never,
+          });
       await ctx.prisma.activityEvent.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId,
           actor: ctx.principal.name,
           action: id ? 'updated cost package' : 'created cost package',
-          target: `${input.name} — forecast £${Math.round(forecast).toLocaleString('en-GB')}`,
+          target: `${row.name} — forecast ${moneyLabel(row.forecast)}`,
         },
       });
       return row;
@@ -140,9 +210,17 @@ export const costRouter = router({
       timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
       operatives: c.operatives,
       weeks: J<number[]>(c.weeks, []),
-      contractValue: c.packages.reduce((a, pk) => a + P(pk.committed), 0),
-      retention: c.packages.reduce((a, pk) => a + P(pk.committed) * (pk.retentionPct / 100), 0),
-      certificates: c.packages.reduce((a, pk) => a + pk.certificates, 0),
+      // the engine owns the retention rule; this used to keep its own copy of it
+      ...contractorTotals(
+        c.packages.map((pk: any) => ({
+          budget: P(pk.budget),
+          committed: P(pk.committed),
+          spent: P(pk.spent),
+          forecast: P(pk.forecast),
+          retentionPct: pk.retentionPct,
+          certificates: pk.certificates,
+        })),
+      ),
     }));
   }),
 
@@ -152,7 +230,18 @@ export const costRouter = router({
       const c = await ctx.prisma.contractor.findFirst({ where: { id: input.contractorId, orgId: ctx.principal.orgId } });
       if (!c) throw new TRPCError({ code: 'NOT_FOUND' });
       const weeks = [...J<number[]>(c.weeks, []), input.hours];
-      return ctx.prisma.contractor.update({ where: { id: c.id }, data: { weeks: JSON.stringify(weeks) } });
+      const updated = await ctx.prisma.contractor.update({ where: { id: c.id }, data: { weeks: JSON.stringify(weeks) } });
+      // `upsertPackage` next door records; the hours that get valued against
+      // those packages did not, and a week logged twice looked like a busy week
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'logged a timesheet week',
+        target: `${c.name} (${c.trade}) · ${input.hours} hours, week ${weeks.length}`,
+        ip: ctx.ip,
+      });
+      return updated;
     }),
 });
 
@@ -186,7 +275,7 @@ export const photosRouter = router({
       const taken = new Date(input.takenAt + 'T00:00:00Z');
       const wc = new Date(taken);
       wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
-      return ctx.prisma.sitePhoto.create({
+      const photo = await ctx.prisma.sitePhoto.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
@@ -196,6 +285,21 @@ export const photosRouter = router({
           weekCommencing: wc,
         },
       });
+      // the site log is what a disputed valuation of works-in-progress is argued
+      // from, and `takenAt` is typed by hand — so when it was RECORDED, and by
+      // whom, is a different fact from when it was taken, and the only one of the
+      // two that cannot be backdated
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'added a site photo',
+          target: `${input.caption} · taken ${input.takenAt}`,
+        },
+      });
+      return photo;
     }),
 });
 
@@ -204,8 +308,11 @@ export const photosRouter = router({
 export const tasksRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string().optional(), aspect: z.string().optional() }))
-    .query(({ ctx, input }) =>
-      ctx.prisma.task.findMany({
+    .query(async ({ ctx, input }) => {
+      // dealId is optional — the calendar lists across every deal — so this
+      // refuses only when one is named, and named wrongly
+      if (input.dealId) await assertOwnDeal(ctx, input.dealId);
+      return ctx.prisma.task.findMany({
         where: {
           orgId: ctx.principal.orgId,
           ...(input.dealId ? { dealId: input.dealId } : {}),
@@ -213,8 +320,8 @@ export const tasksRouter = router({
         },
         orderBy: [{ done: 'asc' }, { due: 'asc' }],
         include: { deal: { select: { name: true } } },
-      }),
-    ),
+      });
+    }),
 
   create: internalProcedure
     .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().default('AO'), due: z.string().optional() }))
@@ -246,6 +353,7 @@ export const documentsRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string(), category: z.string().optional() }))
     .query(async ({ ctx, input }) => {
+      await assertOwnDeal(ctx, input.dealId);
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
         orderBy: { addedAt: 'desc' },
@@ -400,23 +508,38 @@ export const documentsRouter = router({
           message: 'That document has not been received yet — upload the file to change its status.',
         });
       }
-      return ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
+      const updated = await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: input.status } });
+      // `documents.expect` records the placeholder being raised. Marking the same
+      // document EXTRACTED is the claim that its figures have been read into the
+      // appraisal, which is a larger claim and recorded nothing.
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: 'changed a document’s status',
+          target: `${doc.name}: ${doc.extraction} → ${input.status}`,
+        },
+      });
+      return updated;
     }),
 
-  activity: internalProcedure.input(z.string()).query(({ ctx, input }) =>
-    ctx.prisma.activityEvent.findMany({
+  activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    await assertOwnDeal(ctx, input);
+    return ctx.prisma.activityEvent.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       orderBy: { at: 'desc' },
       take: 20,
-    }),
-  ),
+    });
+  }),
 
   /**
    * "Ask the workfile" — AI Q&A over the deal's readable documents. The model
    * reads the actual uploaded PDFs/images and answers ONLY from them; without
    * an ANTHROPIC_API_KEY it returns a deterministic demo answer instead.
    */
-  ask: internalProcedure
+  ask: aiProcedure
     .input(z.object({ dealId: z.string(), question: z.string().min(3).max(500) }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
@@ -441,7 +564,14 @@ export const documentsRouter = router({
           },
         });
       if (!process.env.ANTHROPIC_API_KEY) {
-        await audit();
+        /**
+         * Not audited as an AI use, because none happened. What follows is not
+         * an answer — it is a sentence telling the reader to configure a key —
+         * and filing it under AI_ACTOR put "Data-room questions" in the AI-use
+         * declaration of a signed valuation on the strength of a model that was
+         * never called. The disclosure is derived from this trail; a logged
+         * non-call is a falsely disclosed one.
+         */
         return {
           status: 'demo' as const,
           answer: `The workfile holds ${readable.length} readable document${readable.length === 1 ? '' : 's'} (${readable.map((d) => d.name).join('; ')}). Configure ANTHROPIC_API_KEY and the AI will answer questions directly from their contents.`,
@@ -570,20 +700,24 @@ export const bankRouter = router({
       const accounts = await fetchAccounts(tokens.accessToken);
       const consentExpiresAt = new Date(Date.now() + CONSENT_DAYS * 86_400_000);
 
+      // a PSD2 refresh token reads the customer's bank feed for 90 days —
+      // it never reaches the database in the clear
+      const sealedAccess = sealFor('bankConnection', 'accessToken', ctx.principal.orgId, tokens.accessToken);
+      const sealedRefresh = sealFor('bankConnection', 'refreshToken', ctx.principal.orgId, tokens.refreshToken);
       const conn = await ctx.prisma.bankConnection.upsert({
         where: { orgId: ctx.principal.orgId },
         create: {
           orgId: ctx.principal.orgId,
           institution: accounts[0]?.name ?? 'Bank',
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          accessToken: sealedAccess,
+          refreshToken: sealedRefresh,
           expiresAt: tokens.expiresAt,
           consentExpiresAt,
           createdById: ctx.principal.userId,
         },
         update: {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          accessToken: sealedAccess,
+          refreshToken: sealedRefresh,
           expiresAt: tokens.expiresAt,
           // reconnecting renews the consent clock — that is the whole point of
           // doing it, and leaving the old date would keep the warning showing
@@ -616,10 +750,32 @@ export const bankRouter = router({
         if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       }
       await ctx.prisma.bankAccount.update({ where: { id: account.id }, data: { dealId: input.dealId } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        dealId: input.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: input.dealId ? 'mapped a bank account to a deal' : 'unmapped a bank account',
+        target: `${account.name} ••••${account.last4}`,
+        ip: ctx.ip,
+      });
       return { ok: true };
     }),
 
-  sync: adminProcedure.mutation(({ ctx }) => syncBank(ctx.prisma, ctx.principal.orgId)),
+  sync: adminProcedure.mutation(async ({ ctx }) => {
+    const result = await syncBank(ctx.prisma, ctx.principal.orgId);
+    // `xero.sync` and `integrations.sync` both record. This one pulls a firm's
+    // real bank transactions, and recorded nothing.
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId,
+      userId: ctx.principal.userId,
+      actor: ctx.principal.name,
+      action: 'synced the bank feed',
+      target: `${result.accounts} accounts`,
+      ip: ctx.ip,
+    });
+    return result;
+  }),
 
   /** Money in, awaiting a human saying what it is. */
   unclassified: internalProcedure.query(async ({ ctx }) => {
@@ -647,6 +803,20 @@ export const bankRouter = router({
         where: { id: tx.id },
         // who said so: a drawdown figure in a lender pack should be attributable
         data: { classification: input.classification, classifiedById: ctx.principal.userId },
+      });
+      /**
+       * `classifiedById` above answers "who says this is a drawdown" for the
+       * CURRENT answer only. A transaction reclassified from equity to drawdown
+       * moves money between two lines of a lender pack, and the previous answer —
+       * and whoever gave it — was overwritten with nothing to say it had changed.
+       */
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'classified a bank transaction',
+        target: `${moneyLabel(tx.amount)} ${tx.description}: ${tx.classification} → ${input.classification}`,
+        ip: ctx.ip,
       });
       return { ok: true };
     }),
@@ -720,8 +890,8 @@ export const xeroRouter = router({
       const data = {
         tenantId: tenants[0]!.tenantId,
         tenantName: tenants[0]!.tenantName,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        accessToken: sealFor('xeroConnection', 'accessToken', ctx.principal.orgId, tokens.access_token),
+        refreshToken: sealFor('xeroConnection', 'refreshToken', ctx.principal.orgId, tokens.refresh_token),
         expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         scopes: tokens.scope ?? XERO_SCOPES,
         connectedById: ctx.principal.userId,
@@ -758,6 +928,16 @@ export const xeroRouter = router({
         where: { orgId: ctx.principal.orgId },
         data: { trackingCategoryId: input.id, trackingCategoryName: input.name },
       });
+      // which Xero dimension the cost monitor reads. Change it and every
+      // subsequent sync attributes the firm's spend differently.
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'set the Xero tracking category',
+        target: input.name,
+        ip: ctx.ip,
+      });
       return { ok: true };
     }),
 
@@ -770,6 +950,18 @@ export const xeroRouter = router({
         where: { orgId_trackingOptionId: { orgId: ctx.principal.orgId, trackingOptionId: input.trackingOptionId } },
         create: { orgId: ctx.principal.orgId, dealId: input.dealId, trackingOptionId: input.trackingOptionId, trackingOptionName: input.trackingOptionName },
         update: { dealId: input.dealId, trackingOptionName: input.trackingOptionName },
+      });
+      // remapping sends a whole scheme's committed and spent figures to a
+      // different deal on the next sync, and the cost report will simply show
+      // the new answer
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        dealId: input.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'mapped a Xero tracking option to a deal',
+        target: `${input.trackingOptionName} → ${deal.name}`,
+        ip: ctx.ip,
       });
       return { ok: true };
     }),
@@ -859,10 +1051,27 @@ export const integrationsRouter = router({
       const existing = await ctx.prisma.integrationConnection.findFirst({
         where: { orgId: ctx.principal.orgId, provider: input.provider },
       });
-      const data = { status: 'CONNECTED', lastSync: new Date(), config: JSON.stringify(input.fields) };
+      const data = {
+        status: 'CONNECTED',
+        lastSync: new Date(),
+        // the customer's own API key for someone else's service — sealed here,
+        // opened by getIntegrationCreds and nowhere else
+        config: sealFor('integrationConnection', 'config', ctx.principal.orgId, JSON.stringify(input.fields)),
+      };
       const row = existing
         ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
         : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
+      // a credential for someone else's service, stored by this firm. `fde80d6`
+      // sealed these at rest; who put one there, and when, was still unrecorded.
+      // Never the key itself — the provider and the actor are the whole event.
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: existing ? 'replaced an integration key' : 'saved an integration key',
+        target: input.provider,
+        ip: ctx.ip,
+      });
       return { id: row.id, provider: row.provider, status: row.status };
     }),
 
@@ -877,16 +1086,38 @@ export const integrationsRouter = router({
         where: { id: conn.id },
         data: { status: 'NOT_CONNECTED', config: '{}' },
       });
+      // `bank.disconnect` and `xero.disconnect` both record; this one destroys a
+      // stored credential and did not
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'disconnected an integration',
+        target: input,
+        ip: ctx.ip,
+      });
       return { disconnected: true };
     }),
 
   connect: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
     if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
-    return ctx.prisma.integrationConnection.update({
+    const row = await ctx.prisma.integrationConnection.update({
       where: { id: conn.id },
       data: { status: 'CONNECTED', lastSync: new Date() },
     });
+    // not an OAuth redirect like `bank.connect` and `xero.connect`, which is why
+    // those two are exempt and this is not: it flips a data source ON, and the
+    // figures that then arrive are sourced to it
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId,
+      userId: ctx.principal.userId,
+      actor: ctx.principal.name,
+      action: 'connected an integration',
+      target: input,
+      ip: ctx.ip,
+    });
+    return row;
   }),
 
   /**

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { openFor, sealFor } from './sealed-fields.js';
 
 /**
  * Xero.
@@ -118,22 +119,27 @@ export async function accessTokenFor(
   const conn = await prisma.xeroConnection.findUnique({ where: { orgId } });
   if (!conn) throw new Error('This workspace is not connected to Xero');
 
-  if (conn.expiresAt.getTime() - Date.now() > REFRESH_MARGIN_MS) return conn.accessToken;
+  if (conn.expiresAt.getTime() - Date.now() > REFRESH_MARGIN_MS) {
+    return openFor('xeroConnection', 'accessToken', orgId, conn.accessToken);
+  }
 
   const existing = inFlight.get(conn.id);
   if (existing) return existing;
 
   const promise = (async () => {
     const fresh = await postToken(
-      new URLSearchParams({ grant_type: 'refresh_token', refresh_token: conn.refreshToken }),
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: openFor('xeroConnection', 'refreshToken', orgId, conn.refreshToken),
+      }),
       transport,
     );
     await prisma.xeroConnection.update({
       where: { id: conn.id },
       data: {
-        accessToken: fresh.access_token,
+        accessToken: sealFor('xeroConnection', 'accessToken', orgId, fresh.access_token),
         // the rotated token, saved before anything else happens
-        refreshToken: fresh.refresh_token,
+        refreshToken: sealFor('xeroConnection', 'refreshToken', orgId, fresh.refresh_token),
         expiresAt: new Date(Date.now() + fresh.expires_in * 1000),
         lastSyncError: null,
       },

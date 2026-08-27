@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
-import { Button, Panel, StatusChip } from './ui';
+import { Button, Panel, PlanLocked, StatusChip } from './ui';
+import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 /**
  * The three surfaces that make Apex something other systems talk to: API keys,
@@ -25,15 +26,15 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
   const utils = trpc.useUtils();
   const { data: keys } = trpc.org.apiKeys.useQuery(undefined, { enabled: isAdmin });
   const [name, setName] = useState('');
-  const [write, setWrite] = useState(false);
   /** Shown once. The server hashes it and cannot produce it again. */
   const [minted, setMinted] = useState<{ name: string; key: string } | null>(null);
 
   const create = trpc.org.createApiKey.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: (k) => {
       setMinted({ name: k.name, key: k.key });
       setName('');
-      setWrite(false);
       void utils.org.apiKeys.invalidate();
     },
   });
@@ -43,6 +44,15 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
       void utils.org.apiKeys.invalidate();
     },
   });
+
+  /**
+   * The public API is an Enterprise feature, so MINTING is what the plan gates —
+   * the list and the Revoke buttons below stay live on every plan. A workspace
+   * that downgrades still has keys out in the world, and a paywall between an
+   * admin and the revoke button turns a billing change into a security incident.
+   */
+  const { has } = usePlanFeatures();
+  const canMint = has('publicApi');
 
   if (!isAdmin) return null;
 
@@ -72,32 +82,46 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
-          <input
-            className="min-w-[220px]"
-            placeholder="e.g. Finance system"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Key name"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-[12px] pb-2">
-          <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
-          {/* most integrations read; a read-only key is a smaller thing to lose */}
-          Allow writes
-        </label>
-        <Button
-          size="sm"
-          className="mb-1"
-          disabled={!name.trim()}
-          loading={create.isPending}
-          onClick={() => create.mutate({ name: name.trim(), write })}
-        >
-          Create key
-        </Button>
-      </div>
+      {!canMint && (
+        <div className="mt-3">
+          <PlanLocked feature={featureName('publicApi')} plan={featurePlanName('publicApi')}>
+            New keys and webhook endpoints are created from {featurePlanName('publicApi')} upwards. Keys already issued
+            are listed below and can still be revoked — they resume working the moment the plan includes the API again.
+          </PlanLocked>
+        </div>
+      )}
+
+      {canMint && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
+            <input
+              className="min-w-[220px]"
+              placeholder="e.g. Finance system"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Key name"
+            />
+          </label>
+          {/*
+            There was an "Allow writes" checkbox here. Every route under /api/v1 is
+            a GET that asks for the read scope, and none asks for write — so
+            ticking it granted a permission nothing consumes, and a firm that
+            ticked it went away believing they had a key that could change their
+            data. The scope machinery is kept: when a write endpoint exists, offer
+            it again. apps/api/test/api-scopes.test.ts fails if the two drift.
+          */}
+          <Button
+            size="sm"
+            className="mb-1"
+            disabled={!name.trim()}
+            loading={create.isPending}
+            onClick={() => create.mutate({ name: name.trim(), write: false })}
+          >
+            Create key
+          </Button>
+        </div>
+      )}
 
       {!!keys?.length && (
         <div className="mt-3 flex flex-col gap-1.5">
@@ -119,6 +143,174 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* -------------------------------- Webhooks ------------------------------- */
+
+/**
+ * Where this workspace wants to be told when something happens.
+ *
+ * The procedures behind this panel have existed for a while — createWebhook
+ * validates the event names, deleteWebhook cleans up the deliveries, and five
+ * events fire. There was no screen. So "Public API + webhooks" was on the
+ * Enterprise column of the pricing page and there was no way for the customer
+ * who bought it to add an endpoint: the only callers were the test suite and
+ * whoever was willing to drive tRPC by hand.
+ */
+export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast();
+  const utils = trpc.useUtils();
+  const { data } = trpc.org.webhooks.useQuery(undefined, { enabled: isAdmin });
+  const { data: deliveries } = trpc.org.webhookDeliveries.useQuery({ limit: 10 }, { enabled: isAdmin });
+
+  const [url, setUrl] = useState('');
+  const [chosen, setChosen] = useState<string[]>([]);
+  /** Shown once, like a key: only the receiver and this row have it after now. */
+  const [minted, setMinted] = useState<{ url: string; secret: string } | null>(null);
+
+  const create = trpc.org.createWebhook.useMutation({
+    onSuccess: (e) => {
+      setMinted({ url: e.url, secret: e.secret });
+      setUrl('');
+      setChosen([]);
+      void utils.org.webhooks.invalidate();
+    },
+  });
+  const remove = trpc.org.deleteWebhook.useMutation({
+    onSuccess: () => {
+      toast.push('info', 'Endpoint removed — nothing further will be sent to it.');
+      void utils.org.webhooks.invalidate();
+      void utils.org.webhookDeliveries.invalidate();
+    },
+  });
+
+  // same shape as the API keys above: creating is what the plan gates, and
+  // listing and DELETING stay open so a downgraded workspace can still stop
+  // sending deal figures to somebody's server
+  const { has } = usePlanFeatures();
+  const canCreate = has('publicApi');
+
+  if (!isAdmin) return null;
+
+  const live = data?.endpoints.filter((e) => e.active).length ?? 0;
+  const toggle = (event: string) =>
+    setChosen((prev) => (prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]));
+
+  return (
+    <Panel title="Webhooks" right={<StatusChip status={live ? 'green' : 'neutral'} label={`${live} active`} />}>
+      <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        A POST to your server when something happens here — an appraisal approved, a covenant broken. Each delivery is
+        signed, so you can tell it came from us and was not altered: the <code className="fig text-[11.5px]">apex-signature</code>{' '}
+        header is <code className="fig text-[11.5px]">t=&lt;unix&gt;,v1=&lt;HMAC-SHA256 of "&lt;t&gt;.&lt;body&gt;" with your
+        endpoint secret&gt;</code>. Sign the timestamp with the body, not the body alone, or a delivery captured today
+        stays valid for ever. Failed deliveries are retried four times over half an hour.
+      </div>
+
+      {minted && (
+        <div className="mt-3 rounded-[10px] border p-3" style={{ borderColor: 'rgb(var(--brand-ink))' }} data-new-webhook>
+          <div className="text-[12px] font-semibold">Copy this signing secret now — it is not shown again</div>
+          <div className="mt-1 text-[11.5px] text-ink-2">
+            Only your server and this row hold it. Lose it and the endpoint has to be replaced.
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <input className="flex-1 fig text-[11.5px]" readOnly value={minted.secret} onFocus={(e) => e.currentTarget.select()} />
+            <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(minted.secret)}>
+              Copy
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setMinted(null)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!canCreate && (
+        <div className="mt-3">
+          <PlanLocked feature={featureName('publicApi')} plan={featurePlanName('publicApi')}>
+            New endpoints are added from {featurePlanName('publicApi')} upwards. Endpoints already here are listed below
+            and can still be removed — they resume sending when the plan includes the API again.
+          </PlanLocked>
+        </div>
+      )}
+
+      {canCreate && (
+        <div className="mt-3 flex flex-col gap-2.5">
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Endpoint URL</span>
+            <input
+              className="max-w-[420px]"
+              placeholder="https://your-system.example/apex"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              aria-label="Endpoint URL"
+            />
+          </label>
+          <fieldset className="flex flex-col gap-1">
+            <legend className="fig text-[10px] uppercase tracking-wide text-ink-3 mb-1">Events</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {(data?.available ?? []).map((event) => (
+                <label key={event} className="flex items-center gap-1.5 text-[12px]">
+                  <input type="checkbox" checked={chosen.includes(event)} onChange={() => toggle(event)} />
+                  <code className="fig text-[11.5px]">{event}</code>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div>
+            <Button
+              size="sm"
+              /* https only, and the server refuses otherwise — payloads carry
+                 deal figures, and a plaintext hop is somebody else's ledger */
+              disabled={!url.startsWith('https://') || chosen.length === 0}
+              loading={create.isPending}
+              onClick={() => create.mutate({ url: url.trim(), events: chosen })}
+            >
+              Add endpoint
+            </Button>
+          </div>
+          {create.error && <div className="text-[11.5px] text-status-red">{create.error.message}</div>}
+        </div>
+      )}
+
+      {!!data?.endpoints.length && (
+        <div className="mt-4 flex flex-col gap-1.5">
+          {data.endpoints.map((e) => (
+            <div key={e.id} className="flex items-center gap-3 text-[12px] border-t border-border-faint pt-1.5">
+              <span className="fig min-w-0 truncate">{e.url}</span>
+              <span className="fig text-[10.5px] text-ink-3 min-w-0 truncate">{e.events.join(' · ')}</span>
+              <span className="flex-1" />
+              {e.failureCount > 0 && <StatusChip status="amber" label={`${e.failureCount} FAILED`} />}
+              <Button size="sm" variant="secondary" loading={remove.isPending && remove.variables?.id === e.id} onClick={() => remove.mutate({ id: e.id })}>
+                Remove
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!!deliveries?.length && (
+        <div className="mt-4">
+          <div className="fig text-[10px] uppercase tracking-wide text-ink-3 mb-1.5">Recent deliveries</div>
+          <div className="flex flex-col gap-1">
+            {deliveries.map((d) => (
+              <div key={d.id} className="flex items-center gap-3 text-[11.5px] text-ink-2">
+                <code className="fig text-[11px] min-w-[150px]">{d.event}</code>
+                <StatusChip
+                  status={d.status === 'delivered' ? 'green' : d.status === 'failed' ? 'red' : 'neutral'}
+                  label={d.status.toUpperCase()}
+                />
+                <span className="fig text-[10.5px] text-ink-3">
+                  {d.responseCode ? `HTTP ${d.responseCode}` : (d.error ?? '')} · {d.attempts} attempt{d.attempts === 1 ? '' : 's'}
+                </span>
+                <span className="flex-1" />
+                <span className="fig text-[10.5px] text-ink-3">{shortDate(d.deliveredAt ?? d.createdAt)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </Panel>
@@ -302,6 +494,14 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
   const { data: sso, isLoading } = trpc.org.ssoConfig.useQuery(undefined, { enabled: isAdmin });
   const [form, setForm] = useState({ issuer: '', clientId: '', clientSecret: '', domains: '', enforced: false, defaultRole: 'ANALYST' });
   const [loaded, setLoaded] = useState(false);
+  /**
+   * The stamp of the configuration this panel loaded, so a second administrator
+   * cannot silently restore five fields — `enforced` among them, which is the
+   * switch that decides whether passwords work at all.
+   *
+   * Refreshed from the SAVE's own response, never re-read from the query.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!sso || loaded) return;
@@ -315,11 +515,13 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
       enforced: sso.enforced,
       defaultRole: sso.defaultRole,
     });
+    setStamp(sso.updatedAt ? new Date(sso.updatedAt) : null);
     setLoaded(true);
   }, [sso, loaded]);
 
   const save = trpc.org.saveSso.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       toast.success('Single sign-on saved.');
       setForm((f) => ({ ...f, clientSecret: '' }));
       void utils.org.ssoConfig.invalidate();
@@ -424,6 +626,7 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
               domains,
               enforced: form.enforced,
               defaultRole: form.defaultRole as 'ADMIN' | 'ANALYST' | 'SURVEYOR' | 'VIEWER',
+              expectedUpdatedAt: stamp ?? undefined,
             })
           }
         >

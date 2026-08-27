@@ -16,7 +16,9 @@ export default function SignTerms() {
 
   const [name, setName] = useState('');
   const [agreed, setAgreed] = useState(false);
-  const sign = trpc.engagement.sign.useMutation({ onSuccess: () => utils.engagement.publicGet.invalidate({ token }) });
+  const sign = trpc.engagement.sign.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true }, onSuccess: () => utils.engagement.publicGet.invalidate({ token }) });
 
   if (isLoading) {
     return (

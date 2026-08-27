@@ -121,6 +121,65 @@ test.describe('internal screens', () => {
     await expect(page.getByText('Sales progression')).toBeVisible();
   });
 
+  test('editing a plot saves, and saves again without a reload', async ({ page }) => {
+    /**
+     * upsertUnit now refuses a save that does not carry the stamp of the plot
+     * the drawer loaded, so that two agents on one plot cannot silently revert
+     * each other's agreed value. Everything about that lives on the client: the
+     * server cannot tell a browser that forgot to send it from an attack, and
+     * if the drawer stops sending it EVERY edit fails. No unit test can reach
+     * that wiring — this is the test that can.
+     */
+    await page.goto('/board');
+    await page.getByRole('link', { name: /Harbour Reach/ }).first().click();
+    const dealId = page.url().match(/deal\/([^/]+)/)![1];
+    await page.goto(`/deal/${dealId}/sales`);
+    await page.getByText('Plot 3').first().click();
+    await expect(page.getByText('Sales progression')).toBeVisible();
+
+    const agreed = page.getByLabel('Agreed (£)');
+    const editButton = page.getByRole('button', { name: 'Edit', exact: true }).first();
+    const save = page.getByRole('button', { name: 'Save', exact: true });
+
+    await editButton.click();
+    await agreed.fill('455000');
+    await save.click();
+    // back to the read view, showing what was saved
+    await expect(page.getByText('£455k').first()).toBeVisible();
+
+    /**
+     * The second save is the point, and this is what makes it a real test.
+     *
+     * With the list refetch held, the drawer cannot learn the new stamp from
+     * the list — so the save can only be accepted if it kept the one the first
+     * save handed back. Held rather than merely slowed: a delay only makes the
+     * client win a race it can also lose on a loaded machine, and a test that
+     * depends on winning a race reports the network, not the code. Measured:
+     * the delayed version passed alone and failed in the full suite.
+     */
+    let holdList = false;
+    await page.route('**/trpc/**', async (route) => {
+      if (holdList && route.request().url().includes('sales.units')) return route.abort();
+      return route.continue();
+    });
+    holdList = true;
+
+    await editButton.click();
+    await agreed.fill('462000');
+    await save.click();
+
+    // a refused save leaves the form open and says why; an accepted one returns
+    // to the read view
+    await expect(page.getByText(/after you opened it|expectedUpdatedAt/)).toHaveCount(0);
+    await expect(editButton).toBeVisible();
+
+    // and it reached the database, not just the screen
+    holdList = false;
+    await page.reload();
+    await page.getByText('Plot 3').first().click();
+    await expect(page.getByText('£462k').first()).toBeVisible();
+  });
+
   test('data room lists documents with extraction status', async ({ page }) => {
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/dataroom`);
@@ -1729,7 +1788,15 @@ test('a reviewer can see what changed between versions, and why', async ({ page 
     };
     const save = (body: unknown) =>
       fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: body }) });
-    await save({ dealId: id, input, label: `Base ${tag}` });
+    /**
+     * asNewVersion so the suite can be run twice against the same stack. A bare
+     * save edits the current version in place, which the server now refuses
+     * without the stamp of the row you loaded — so on the second run this setup
+     * failed, on a database CI never sees because it seeds fresh every time.
+     * Branching is also what the fixture means: add a version to whatever is
+     * already on this deal.
+     */
+    await save({ dealId: id, input, asNewVersion: true, label: `Base ${tag}` });
     await save({
       dealId: id,
       input: { ...input, trades: [{ label: 'Superstructure', rate: 130 }] },
@@ -2393,13 +2460,25 @@ test('the terms document paginates to fit whatever house style a firm writes', a
     return rest as Record<string, unknown>;
   });
 
+  /**
+   * Reads the current stamp before each write, and CHECKS the write landed.
+   *
+   * `org.savePolicy` refuses an edit that carries no `expectedUpdatedAt`, which
+   * this helper used to strip. Worse than being refused: it ignored the response,
+   * so a refusal was silent and the test failed four lines later on a page count
+   * that had not changed, saying nothing about why.
+   */
   const savePolicy = (body: Record<string, unknown>) =>
     page.evaluate(async (p) => {
-      await fetch('/trpc/org.savePolicy', {
+      const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}` };
+      const cur = await (await fetch('/trpc/org.policy', { headers: auth })).json();
+      const res = await fetch('/trpc/org.savePolicy', {
         method: 'POST',
-        headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ json: p }),
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ json: { ...p, expectedUpdatedAt: cur.result.data.json.updatedAt } }),
       });
+      const out = await res.json();
+      if (out.error) throw new Error(`org.savePolicy refused: ${out.error.json?.message ?? 'unknown'}`);
     }, body);
 
   try {
@@ -2570,7 +2649,9 @@ test('the report grids the DCF over growth and exit yield, and marks what it doe
       },
       dcf: { holdYears: 10, rentalGrowthPct: 0, discountRatePct: 8, exitYieldPct: 7 },
     };
-    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    // asNewVersion: this fixture adds a version to whatever the deal already
+    // carries, so a second run of the suite is not refused for a missing stamp
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input, asNewVersion: true } }) });
     const body = await out.json();
     return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
   });
@@ -2640,7 +2721,9 @@ test('the accommodation schedule paginates instead of running off the sheet', as
       disposal: { agentPct: 1.5, legalPct: 0.5 },
       targetProfitOnGdvPct: 20,
     };
-    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    // asNewVersion: this fixture adds a version to whatever the deal already
+    // carries, so a second run of the suite is not refused for a missing stamp
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input, asNewVersion: true } }) });
     const body = await out.json();
     return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
   });
@@ -2818,7 +2901,9 @@ test('the report prints phase cost overrides and states what it could not fit', 
       targetProfitOnGdvPct: 20,
       jv: { gpCoinvestPct: 10, prefPct: 8, promotePct: 20 },
     };
-    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input } }) });
+    // asNewVersion: this fixture adds a version to whatever the deal already
+    // carries, so a second run of the suite is not refused for a missing stamp
+    const out = await fetch('/trpc/appraisal.save', { method: 'POST', headers: auth, body: JSON.stringify({ json: { dealId, input, asNewVersion: true } }) });
     const body = await out.json();
     return { dealId, ok: !body.error, err: body.error?.json?.message?.slice(0, 140) ?? null };
   });

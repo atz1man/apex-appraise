@@ -29,7 +29,8 @@ export default function Comparables() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data, isLoading } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.comparables.upsert.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
-  const apply = trpc.comparables.applyToAppraisal.useMutation();
+  // this screen shows the error where it happened; see App.tsx
+  const apply = trpc.comparables.applyToAppraisal.useMutation({ meta: { inlineError: true } });
 
   // local overlay of adjustment edits for live recompute; persisted onBlur via upsert
   const [edits, setEdits] = useState<Record<string, Partial<Record<AdjKey, number>>>>({});
@@ -109,18 +110,18 @@ export default function Comparables() {
   const setAdj = (id: string, key: AdjKey, v: number) =>
     setEdits((e) => ({ ...e, [id]: { ...e[id], [key]: v } }));
 
-  const persist = (c: (typeof comps)[number]) =>
-    upsert.mutate({
-      id: c.id,
-      dealId,
-      address: c.address,
-      meta: c.meta,
-      basePsf: c.basePsf,
-      adjSize: c.adjSize,
-      adjCondition: c.adjCondition,
-      adjDate: c.adjDate,
-      adjLocation: c.adjLocation,
-    });
+  /**
+   * Only what this person actually changed.
+   *
+   * `edits[id]` holds exactly the columns they touched, so sending the merged
+   * row would write six more from whatever copy the page was holding — and
+   * another valuer's adjustment on the same comparable would vanish on blur.
+   */
+  const persist = (c: (typeof comps)[number]) => {
+    const changed = edits[c.id];
+    if (!changed || !Object.keys(changed).length) return;
+    upsert.mutate({ id: c.id, dealId, ...changed });
+  };
 
   const addComp = () =>
     upsert.mutate({

@@ -9,6 +9,8 @@ import { registerReports } from './reports.js';
 import { registerTiles } from './tiles.js';
 import { registerHealth } from './health.js';
 import { startRowSweeper } from './row-sweeper.js';
+import { backfillSealedFields } from './sealed-fields.js';
+import { assertKeyUsable } from './secret-box.js';
 import { registerWebhooks } from './webhooks.js';
 import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
@@ -101,6 +103,30 @@ async function main() {
     onSweep: (r) => app.log.warn(r, 'pruned expired rows'),
     onError: (e) => app.log.error(e, 'row sweep failed'),
   });
+
+  /**
+   * Seal anything still in the clear, once, before the port opens.
+   *
+   * Read-through means the server works either way, so this is not a
+   * prerequisite for serving — but a webhook signing secret and a pasted API key
+   * are written once and read for years, so without a sweep they would stay in
+   * plain text for the life of the workspace. Idempotent, so every boot after
+   * the first does nothing.
+   *
+   * It does NOT block startup on failure. A workspace whose fields cannot be
+   * re-sealed is a workspace that still needs to serve its valuers, and the log
+   * line is how somebody finds out.
+   */
+  // a malformed ENCRYPTION_KEY stops the process here rather than surfacing on
+  // the screen of whoever next connects Xero
+  assertKeyUsable();
+
+  try {
+    const { rows, fields } = await backfillSealedFields(prisma);
+    if (rows) app.log.warn({ rows, fields }, 'sealed credentials that were stored in plain text');
+  } catch (e) {
+    app.log.error(e, 'sealing existing credentials failed — they remain readable in the database');
+  }
 
   const drain = setInterval(() => {
     void drainWebhooks(prisma).catch((e: unknown) => app.log.error(e, 'webhook drain failed'));

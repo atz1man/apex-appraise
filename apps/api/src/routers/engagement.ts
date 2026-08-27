@@ -3,7 +3,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { internalProcedure, publicProcedure, router } from '../trpc.js';
 import { AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
-import { toPence, P } from '../mappers.js';
+import { toPence, P, moneyLabel } from '../mappers.js';
+import { assertUnchanged } from '../optimistic.js';
 
 /** How long a signing link stays live unless the valuer chooses otherwise. */
 const DEFAULT_LINK_DAYS = 30;
@@ -150,6 +151,7 @@ export const engagementRouter = router({
         saved: true,
         ...shape(row, org?.name ?? 'Apex Appraise'),
         orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
         signTokenExpiresAt: row.signTokenExpiresAt,
         linkExpired: linkExpired(row),
       };
@@ -159,6 +161,7 @@ export const engagementRouter = router({
       dealId: input,
       ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }, policy),
       orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       issuedAt: null,
       acceptedAt: null,
       acceptedBy: null,
@@ -167,7 +170,30 @@ export const engagementRouter = router({
   }),
 
   save: internalProcedure
-    .input(z.object({ dealId: z.string(), terms: zTerms }))
+    .input(
+      z.object({
+        dealId: z.string(),
+        terms: zTerms,
+        /**
+         * The stamp of the terms the caller loaded.
+         *
+         * The form holds nineteen fields, reads them once and posts every one of
+         * them back — the same shape as the appraisal workfile (`b39f174`), the
+         * phone/desk handoff (`81c398b`) and the sales drawer (`a48b7b3`). So a
+         * director adding "assuming planning permission is granted" could have it
+         * removed by an analyst who loaded the page first and never saw it, with
+         * no version and nothing to say it happened. `238d265` established that
+         * this document is what the Red Book narrative is checked AGAINST, so the
+         * valuation would then be measured by terms nobody meant.
+         *
+         * Demanded rather than checked-when-present, for the reason `save` on the
+         * appraisal gives: an optional stamp silently reopens the hole for
+         * whoever forgets next. Creating the first draft needs none — there is
+         * nothing yet to have changed underneath.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const existing = await ctx.prisma.engagementTerms.findFirst({
@@ -177,6 +203,15 @@ export const engagementRouter = router({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'These terms have been accepted by the client and can no longer be edited. Withdraw them to start a revision.',
+        });
+      }
+      if (existing) {
+        await assertUnchanged({
+          what: 'set of terms',
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          lastActor: async () => null,
+          advice: 'Reload to see the current terms before saving yours — nothing you can see here has been lost.',
         });
       }
       const data = {
@@ -189,7 +224,28 @@ export const engagementRouter = router({
         : await ctx.prisma.engagementTerms.create({
             data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, status: 'DRAFT' },
           });
-      return { id: row.id, status: row.status };
+      /**
+       * `issue`, `accept`, `sign` and `withdraw` all record — the whole lifecycle
+       * after the draft. But `238d265` established that the terms are what the
+       * Red Book narrative is checked AGAINST: the special assumptions a
+       * valuation declares are the ones recorded here. So the document the
+       * valuation is measured by was the one document whose drafting left no
+       * trace, including the liability cap and the valuation date.
+       */
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: existing ? 'edited the terms of engagement' : 'drafted the terms of engagement',
+          target: `basis ${input.terms.basisOfValue || '—'} · cap ${moneyLabel(data.liabilityCap)}`,
+        },
+      });
+      // the stamp comes from THIS save, never from a refetch: `a48b7b3` found a
+      // drawer re-reading it from the list, which refused its own user's second
+      // edit as a conflict with themselves
+      return { id: row.id, status: row.status, updatedAt: row.updatedAt };
     }),
 
   /** Freeze and date the terms — this is the version the client sees. */
@@ -317,6 +373,7 @@ export const engagementRouter = router({
     return {
       ...shape(terms, org?.name ?? 'Apex Appraise'),
       orgLogoUrl: org?.logoUrl ?? '',
+        orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       dealName: deal?.name ?? 'the property',
       dealAddress: deal?.address ?? '',
       dealPostcode: deal?.postcode ?? '',

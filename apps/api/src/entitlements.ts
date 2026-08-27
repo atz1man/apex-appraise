@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@prisma/client';
+import { FEATURE_COPY, cheapestPlanWith, planHasFeature, planLabel, type Feature, type PlanKey } from '@apex/types/plan';
 
 /**
  * What a plan actually entitles you to.
@@ -12,7 +13,7 @@ import type { PrismaClient } from '@prisma/client';
  * it, and the test that pins them together fails until it does.
  */
 
-export type PlanKey = 'TRIAL' | 'STARTER' | 'GROWTH' | 'ENTERPRISE';
+export type { PlanKey } from '@apex/types/plan';
 
 export interface Entitlements {
   /** null means unlimited */
@@ -34,6 +35,61 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, Entitlements> = {
 
 export const entitlementsFor = (plan: string): Entitlements =>
   PLAN_ENTITLEMENTS[(plan as PlanKey) in PLAN_ENTITLEMENTS ? (plan as PlanKey) : 'TRIAL'];
+
+/**
+ * FEATURES, as opposed to volumes.
+ *
+ * The pricing page sells two different kinds of thing and they need different
+ * enforcement. A volume ("3 active deals") is about how much of your own data
+ * you may accumulate. A feature ("Benchmarking", "Public API + webhooks") is a
+ * capability you rent by the month.
+ *
+ * Until this existed only the volumes were enforced, so every word on the Growth
+ * and Enterprise columns was already switched on for a Starter subscriber at
+ * £49: the AI Development Director, both portals, benchmarking, and the public
+ * API. Nobody had a reason to upgrade except to add a fourth deal.
+ *
+ * The catalogue itself is in @apex/types/plan because the app needs it too — to show a
+ * locked surface with an upgrade route rather than a live control that answers
+ * FORBIDDEN. Keeping a second copy here is precisely the mistake this whole
+ * change is about.
+ */
+export {
+  FEATURES,
+  FEATURE_COPY,
+  PLAN_FEATURES,
+  PAID_PLANS_BY_PRICE,
+  featuresFor,
+  planHasFeature,
+  cheapestPlanWith,
+  planLabel,
+} from '@apex/types/plan';
+export type { Feature } from '@apex/types/plan';
+
+/**
+ * Refuse a capability this workspace is not paying for.
+ *
+ * A downgrade turns features OFF, where it leaves volumes alone. The distinction
+ * is not arbitrary: deals and members are the customer's data and must never
+ * become unreachable, but a capability rented by the month stops when the month
+ * is not paid for. Nothing is deleted either way — API keys, webhook endpoints
+ * and portal logins survive a downgrade and light back up on re-subscription.
+ */
+export async function assertFeature(
+  prisma: PrismaClient,
+  orgId: string,
+  feature: Feature,
+): Promise<void> {
+  const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { plan: true } });
+  // a missing org resolves to '' — not in the map, so the restrictive fallback
+  const plan = org?.plan ?? '';
+  if (planHasFeature(plan, feature)) return;
+  const need = cheapestPlanWith(feature);
+  throw new TRPCError({
+    code: 'FORBIDDEN',
+    message: `${FEATURE_COPY[feature]} is included from ${planLabel(need)}. Upgrade in Settings → Billing to switch it on.`,
+  });
+}
 
 /**
  * A limit refusal names the limit, the plan it belongs to and what lifts it.

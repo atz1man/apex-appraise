@@ -3,7 +3,7 @@ import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, Spinner } from '../components/ui';
-import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS } from '../components/paper';
+import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
 
 /**
  * The funding pack — the book, as a lender receives it.
@@ -17,7 +17,8 @@ import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS } from '../compo
  * and the screen cannot disagree.
  */
 
-const fmtLong = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+/** every date this document prints is in the firm's time — see paper.tsx */
+const fmtLong = docDate;
 
 /**
  * MEASURED against a rendered pack, not reasoned about: a position row is 32px,

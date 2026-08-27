@@ -17,6 +17,18 @@ export interface AiTouchpoint {
   key: string;
   /** must match the ActivityEvent action written by the procedure */
   action: string;
+  /**
+   * The function that actually calls the model.
+   *
+   * The line above — "add it here, or it will be used without being
+   * disclosed" — was the only thing standing between a new AI feature and an
+   * undisclosed one, and this codebase's whole discipline is that an
+   * instruction is not a guard. `ai-disclosure-provenance.test.ts` sweeps the
+   * source for every call to the Anthropic API and requires each one to sit
+   * inside a function named here, so a fifth model call cannot be added
+   * without a fifth disclosure.
+   */
+  drafter: string;
   label: string;
   purpose: string;
 }
@@ -24,6 +36,7 @@ export interface AiTouchpoint {
 export const AI_TOUCHPOINTS: AiTouchpoint[] = [
   {
     key: 'extraction',
+    drafter: 'extractFromNotes',
     action: 'extracted scheme from',
     label: 'Document extraction',
     purpose:
@@ -31,6 +44,7 @@ export const AI_TOUCHPOINTS: AiTouchpoint[] = [
   },
   {
     key: 'narrative',
+    drafter: 'draftNarrativeSections',
     action: 'drafted Red Book narrative for',
     label: 'Report narrative',
     purpose:
@@ -38,6 +52,7 @@ export const AI_TOUCHPOINTS: AiTouchpoint[] = [
   },
   {
     key: 'dataroom',
+    drafter: 'answerFromWorkfile',
     action: 'asked the workfile about',
     label: 'Data-room questions',
     purpose:
@@ -45,6 +60,7 @@ export const AI_TOUCHPOINTS: AiTouchpoint[] = [
   },
   {
     key: 'scenarioRisk',
+    drafter: 'draftRiskCommentary',
     action: 'drafted scenario risk commentary for',
     label: 'Scenario risk commentary',
     purpose:

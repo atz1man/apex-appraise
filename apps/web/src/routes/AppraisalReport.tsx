@@ -13,7 +13,8 @@ import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
-import { A4Page, PRINT_CSS } from '../components/paper';
+import { A4Page, PRINT_CSS, docDate, docDay } from '../components/paper';
+import { reportDates } from '../lib/report-dates';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
@@ -43,8 +44,9 @@ const GRAD_NONE = 'linear-gradient(135deg,#9AA09A,#6E7269)';
 const DISCLAIMER =
   'This appraisal has been prepared for the named client for the stated purpose and may not be relied upon by any third party. Values are estimates based on the stated assumptions, comparable evidence and prevailing market conditions as at the effective date, and are not a guarantee of price achievable. The appraisal is sensitive to changes in build cost, sales value, finance and programme as illustrated. This document does not constitute a RICS Red Book valuation unless explicitly stated and signed as such.';
 
-const fmtLong = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-const fmtShort = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+/** every date this document prints is in the firm's time — see paper.tsx */
+const fmtLong = docDate;
+const fmtShort = docDay;
 
 /* ---------------------------- page chrome ---------------------------- */
 
@@ -57,14 +59,14 @@ function PageHead({ title, scheme }: { title: string; scheme: string }) {
   );
 }
 
-function PageFoot({ no, total, refCode, firmName }: { no: number; total: number; refCode: string; firmName: string }) {
+function PageFoot({ no, total, refCode, firmName, date }: { no: number; total: number; refCode: string; firmName: string; date: string }) {
   return (
     <div className="mt-auto pt-6">
       <div className="flex items-center justify-between pt-2.5 text-[9.5px] text-ink-3" style={{ borderTop: '1px solid #ECEBE5' }}>
         <span>
           <span className="font-semibold" style={{ color: brand[700] }}>{firmName}</span> · development appraisal
         </span>
-        <span className="fig">{refCode} · {fmtLong(new Date())}</span>
+        <span className="fig">{refCode} · {date}</span>
         <span className="fig font-medium">Page {no} of {total}</span>
       </div>
     </div>
@@ -218,7 +220,7 @@ export default function AppraisalReport() {
 
   const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
-  const today = fmtLong(new Date());
+  const dates = reportDates({ appraisal: appr, terms: toe });
   const scheme = deal?.name ?? 'Development appraisal';
 
   const toolbar = (
@@ -599,7 +601,7 @@ export default function AppraisalReport() {
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Effective date</div>
-                <div className="mt-1.5 text-[16px] font-semibold">{today}</div>
+                <div className="mt-1.5 text-[16px] font-semibold">{dates.report}</div>
               </div>
             </div>
             <div className="mt-10 rounded-card bg-canvas border border-border-std" style={{ padding: '28px 30px' }}>
@@ -622,7 +624,7 @@ export default function AppraisalReport() {
           </div>
           <div className="flex justify-between text-[11px] text-ink-3 border-t border-border-std" style={{ padding: '22px 60px' }}>
             <span>Strictly private &amp; confidential</span>
-            <span>{org?.name ?? 'Apex Appraise'} · {today}</span>
+            <span>{org?.name ?? 'Apex Appraise'} · {dates.report}</span>
           </div>
         </A4Page>
 
@@ -662,7 +664,7 @@ export default function AppraisalReport() {
             <KvRow k="Total development cost" v={formatMoneyFull(R.totalCost)} />
             <KvRow k="Equity requirement" v={formatMoneyFull(R.equity)} />
           </div>
-          <PageFoot no={2} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={2} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>
 
         {/* ===== SECTION 2 — ACCOMMODATION SCHEDULE, paginated ===== */}
@@ -750,7 +752,7 @@ export default function AppraisalReport() {
                   )}
                 </>
               )}
-              <PageFoot no={scheduleStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
+              <PageFoot no={scheduleStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
             </A4Page>
           );
         })}
@@ -767,7 +769,7 @@ export default function AppraisalReport() {
               no={scheduleStartPageNo + schedule.pages.length + ci}
               total={pageTotal}
               refCode={refCode}
-              firmName={firmName}
+              firmName={firmName} date={dates.report}
             />
           </A4Page>
         ))}
@@ -874,7 +876,7 @@ export default function AppraisalReport() {
                 are not printed here for space; the complete breakdown is in the .xlsx export.
               </p>
             )}
-            <PageFoot no={overridesPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={overridesPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         )}
 
@@ -937,7 +939,7 @@ export default function AppraisalReport() {
               ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of GDV after acquisition costs of ${input.site.acqPct}%.`
               : `Developer profit is the amount remaining after all costs including the fixed land price plus ${input.site.acqPct}% acquisition costs.`}
           </p>
-          <PageFoot no={residualPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={residualPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>
 
         {/* ===== INVESTMENT — only when the scheme holds and lets space ===== */}
@@ -1045,7 +1047,7 @@ export default function AppraisalReport() {
               </>
             )}
 
-            <PageFoot no={investmentPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={investmentPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         )}
 
@@ -1122,7 +1124,7 @@ export default function AppraisalReport() {
               {input.dcf.holdYears} years, {input.dcf.reviewCycleYears ?? 5}-yearly reviews and a{' '}
               {input.dcf.discountRatePct}% discount rate; only growth and the exit yield move.
             </p>
-            <PageFoot no={dcfGridPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={dcfGridPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         )}
 
@@ -1164,7 +1166,7 @@ export default function AppraisalReport() {
             price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
             A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in GDV moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
           </p>
-          <PageFoot no={sensitivityPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={sensitivityPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>
 
         {/* ===== PAGES 6.. — CASHFLOW & RETURNS PROFILE ===== */}
@@ -1220,7 +1222,7 @@ export default function AppraisalReport() {
               ))}
             </div>
             )}
-            <PageFoot no={cashStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={cashStartPageNo + pi} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         ))}
 
@@ -1272,10 +1274,10 @@ export default function AppraisalReport() {
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />
               <div className="text-[12px] font-medium">Date</div>
-              <div className="text-[11px] text-ink-3">{today}</div>
+              <div className="text-[11px] text-ink-3">{dates.report}</div>
             </div>
           </div>
-          <PageFoot no={assumptionsPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+          <PageFoot no={assumptionsPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>
 
         {/* ===== PAGE — CONSTRUCTION MONITORING (only when photos exist) ===== */}
@@ -1322,7 +1324,7 @@ export default function AppraisalReport() {
                 </div>
               ))}
             </div>
-            <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} firmName={firmName} />
+            <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         )}
       </div>

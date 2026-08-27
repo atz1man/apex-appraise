@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
-import { ApiKeysPanel, BankPanel, SsoPanel, XeroPanel } from '../components/settings-integrations';
-import { Avatar, Button, FirmMark, Panel, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
+import { Avatar, Button, FirmMark, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 type Role = (typeof ROLES)[number];
@@ -30,10 +31,18 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
   const utils = trpc.useUtils();
   const { data: org, isLoading } = trpc.org.get.useQuery();
   const [name, setName] = useState<string | null>(null);
+  const [rics, setRics] = useState<string | null>(null);
   const update = trpc.org.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       utils.org.get.invalidate();
-      toast.success('Workspace name updated');
+      setRics(null);
+      toast.success(
+        vars.ricsFirmNumber === undefined
+          ? 'Workspace name updated'
+          : vars.ricsFirmNumber
+            ? 'RICS regulation recorded — the mark now appears on your documents'
+            : 'RICS regulation withdrawn — the mark no longer appears on your documents',
+      );
     },
   });
   const [uploading, setUploading] = useState(false);
@@ -87,6 +96,48 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const draft = name ?? org.name;
   const dirty = draft.trim() !== org.name && draft.trim().length >= 2;
+  const ricsDraft = rics ?? org.ricsFirmNumber;
+  const ricsDirty = ricsDraft.trim() !== org.ricsFirmNumber;
+
+  /**
+   * "RICS Regulated" used to be printed on the Red Book cover, its signature
+   * seal and the terms of engagement for every firm on the platform, with
+   * nothing behind it. It is a claim about this firm's regulatory standing made
+   * to a lender, so the firm makes it here or the documents do not make it.
+   */
+  const ricsBlock = (
+    <div className="mt-5 border-t border-border-std pt-4">
+      <div className="text-[13.5px] font-semibold">RICS Regulated Firm number</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[520px]">
+        Shown on the Red Book valuation and the terms of engagement, so a reader can check the firm on the RICS register.
+        Leave it empty if the firm is not RICS regulated — those documents then carry no regulatory mark.
+      </div>
+      <div className="mt-3 max-w-[320px]">
+        {isAdmin ? (
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (ricsDirty) update.mutate({ ricsFirmNumber: ricsDraft.trim() });
+            }}
+          >
+            <input
+              className="flex-1 fig"
+              aria-label="RICS Regulated Firm number"
+              placeholder="e.g. 123456"
+              value={ricsDraft}
+              onChange={(e) => setRics(e.target.value)}
+            />
+            <Button type="submit" loading={update.isPending} disabled={!ricsDirty}>
+              Save
+            </Button>
+          </form>
+        ) : (
+          <div className="text-[15px] font-semibold fig">{org.ricsFirmNumber || 'Not declared'}</div>
+        )}
+      </div>
+    </div>
+  );
   const logoBlock = (
     <div className="mt-5 border-t border-border-std pt-4">
       <div className="text-[13.5px] font-semibold">Firm logo</div>
@@ -164,6 +215,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
         <StatCard label="Investors" value={org.counts.investors} />
       </div>
       {logoBlock}
+      {ricsBlock}
     </Panel>
   );
 }
@@ -251,6 +303,295 @@ function InviteForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ---------- Demo mailbox ----------
+
+/**
+ * What would have been emailed, on an instance that cannot send.
+ *
+ * The API has kept this in memory for a long time and nothing displayed it, so
+ * the flows it exists for — invite a colleague, forgot your password — were
+ * demonstrable only by reading a server console. The reset flow in particular
+ * could not be shown at all.
+ *
+ * The panel hides itself unless the server says the mailbox is on, which is
+ * demo mode AND no SMTP. On any instance that sends real email there is nothing
+ * here and nothing to hide.
+ */
+function DemoMailboxPanel({ isAdmin }: { isAdmin: boolean }) {
+  const { data } = trpc.org.demoMailbox.useQuery(undefined, { enabled: isAdmin, refetchInterval: 15_000 });
+  const [open, setOpen] = useState<string | null>(null);
+
+  if (!isAdmin || !data?.enabled) return null;
+
+  return (
+    <Panel
+      title="Demo mailbox"
+      right={<StatusChip status="amber" label={`${data.messages.length} HELD`} />}
+    >
+      <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        This server has no outbound email configured and is running in demo mode, so invitations and password-reset
+        links are held here instead of being sent. Only this workspace's messages appear, and nothing is kept once{' '}
+        <code className="fig text-[11.5px]">SMTP_URL</code> is set.
+      </div>
+
+      {data.messages.length === 0 ? (
+        <div className="mt-3 text-[12.5px] text-ink-3">Nothing yet.</div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-1.5">
+          {data.messages.map((m) => (
+            <div key={`${m.at}-${m.to}`} className="border-t border-border-faint pt-2">
+              <button
+                type="button"
+                className="w-full text-left flex items-baseline gap-3"
+                onClick={() => setOpen(open === `${m.at}-${m.to}` ? null : `${m.at}-${m.to}`)}
+              >
+                <span className="text-[12.5px] font-semibold min-w-0 truncate">{m.subject}</span>
+                <span className="text-[11.5px] text-ink-3 min-w-0 truncate">{m.to}</span>
+                <span className="flex-1" />
+                <span className="fig text-[10.5px] text-ink-3">
+                  {new Date(m.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </button>
+              {open === `${m.at}-${m.to}` && (
+                <pre className="fig mt-2 overflow-x-auto whitespace-pre-wrap rounded-[8px] bg-sunken px-3 py-2 text-[11.5px] leading-[1.6] text-ink-2">
+                  {m.text}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ---------- Portal access ----------
+
+/**
+ * Who from outside the firm can sign in, and what they see.
+ *
+ * The portals have worked for a long time and there was no way to let anybody
+ * into one: outside the demo seed, every User row was created by registration
+ * or by inviting a colleague, and both are internal. So a firm on Growth had
+ * bought "Buyer + investor portals" and could not give a single buyer or
+ * investor a login.
+ *
+ * Sits next to Members deliberately. It is the same question — who can sign in —
+ * and an admin looking for it will look here rather than under integrations.
+ */
+function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast();
+  const utils = trpc.useUtils();
+  const { data: logins, isLoading } = trpc.portalAccess.list.useQuery();
+  const { data: candidates } = trpc.portalAccess.candidates.useQuery(undefined, { enabled: isAdmin });
+
+  const [kind, setKind] = useState<'investor' | 'buyer'>('investor');
+  const [target, setTarget] = useState('');
+  const [form, setForm] = useState({ name: '', email: '' });
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  const { has } = usePlanFeatures();
+  const canInvite = has('portals');
+
+  const done = (res: { tempPassword: string; emailed: boolean }) => {
+    setTempPassword(res.tempPassword);
+    setEmailed(res.emailed);
+    setForm({ name: '', email: '' });
+    setTarget('');
+    void utils.portalAccess.list.invalidate();
+  };
+  const inviteInvestor = trpc.portalAccess.inviteInvestor.useMutation({ onSuccess: done });
+  const inviteBuyer = trpc.portalAccess.inviteBuyer.useMutation({ onSuccess: done });
+  const pending = inviteInvestor.isPending || inviteBuyer.isPending;
+
+  const revoke = trpc.portalAccess.revoke.useMutation({
+    onSuccess: (_res, vars) => {
+      const gone = (logins ?? []).find((l) => l.id === vars.userId);
+      setRevoking(null);
+      void utils.portalAccess.list.invalidate();
+      toast.success(gone ? `${gone.name} can no longer sign in` : 'Portal access revoked');
+    },
+  });
+
+  const options = kind === 'investor'
+    ? (candidates?.investors ?? []).map((i) => ({ id: i.id, label: i.name }))
+    : (candidates?.units ?? []).map((u) => ({ id: u.id, label: u.buyerName ? `${u.label} — ${u.buyerName}` : u.label }));
+
+  return (
+    <Panel
+      title="Portal access"
+      right={<StatusChip status={logins?.length ? 'green' : 'neutral'} label={`${logins?.length ?? 0} outside`} />}
+    >
+      <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        A buyer or an investor signs in and sees one thing: their own reservation, or their own position. Never the
+        pipeline, never another buyer, never the firm's figures. A portal login is not a team member and does not use a
+        seat on your plan.
+      </div>
+
+      {tempPassword && (
+        <div className="mt-3 rounded-card border border-status-amber-bg bg-sunken p-4">
+          <div className="label-mono text-status-amber mb-1.5">One-time temporary password</div>
+          <div className="flex gap-2 items-center">
+            <code className="fig flex-1 rounded-input border border-border-strong bg-sunken-2 px-3 py-2 text-[13px] select-all">
+              {tempPassword}
+            </code>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                navigator.clipboard.writeText(tempPassword).then(
+                  () => toast.success('Password copied to clipboard'),
+                  () => toast.error('Could not copy — select and copy it manually'),
+                );
+              }}
+            >
+              Copy
+            </Button>
+            <Button variant="secondary" onClick={() => setTempPassword(null)}>
+              Done
+            </Button>
+          </div>
+          <div className="mt-2 text-[11.5px] text-ink-2">
+            {emailed
+              ? 'Sent to them by email as well. It is not shown again.'
+              : 'No email is configured on this server, so pass it on yourself. It is not shown again.'}
+          </div>
+        </div>
+      )}
+
+      {isAdmin && !canInvite && (
+        <div className="mt-3">
+          <PlanLocked feature={featureName('portals')} plan={featurePlanName('portals')}>
+            New portal logins are issued from {featurePlanName('portals')} upwards. Anyone already invited is listed
+            below and can still be revoked.
+          </PlanLocked>
+        </div>
+      )}
+
+      {isAdmin && canInvite && (
+        <form
+          className="mt-3 flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const payload = { name: form.name.trim(), email: form.email.trim() };
+            if (kind === 'investor') inviteInvestor.mutate({ ...payload, investorId: target });
+            else inviteBuyer.mutate({ ...payload, unitId: target });
+          }}
+        >
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Portal</span>
+            <select
+              className="h-[36px]"
+              aria-label="Portal"
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value as 'investor' | 'buyer');
+                setTarget('');
+              }}
+            >
+              <option value="investor">Investor</option>
+              <option value="buyer">Buyer</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 min-w-0">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">
+              {kind === 'investor' ? 'Investor' : 'Reserved unit'}
+            </span>
+            <select
+              className="h-[36px] max-w-[260px]"
+              aria-label={kind === 'investor' ? 'Investor' : 'Reserved unit'}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Name</span>
+            {/* "Portal user name", not "Name": the members panel above has a Name
+                field too, and two inputs with one label is ambiguous to a screen
+                reader before it is ambiguous to a test */}
+            <input
+              className="min-w-[160px]"
+              aria-label="Portal user name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="fig text-[10px] uppercase tracking-wide text-ink-3">Email</span>
+            <input
+              className="min-w-[200px]"
+              aria-label="Portal user email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </label>
+          <Button type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
+            Invite to portal
+          </Button>
+          {kind === 'buyer' && candidates && candidates.units.length === 0 && (
+            <div className="w-full text-[11.5px] text-ink-3">
+              {/* an unsold unit has no buyer to invite, so the list is empty rather than wrong */}
+              No unit is reserved yet — a buyer portal is about a reservation.
+            </div>
+          )}
+        </form>
+      )}
+
+      <div className="mt-4">
+        {isLoading ? (
+          <SkeletonRows rows={2} />
+        ) : !logins?.length ? (
+          <div className="text-[12.5px] text-ink-3">Nobody outside the firm can sign in.</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {logins.map((l) => (
+              <div key={l.id} className="flex items-center gap-3 text-[12.5px] border-t border-border-faint pt-2">
+                <Avatar initials={l.initials} size={26} />
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{l.name}</div>
+                  <div className="text-[11px] text-ink-3 truncate">{l.email}</div>
+                </div>
+                <StatusChip status="neutral" label={l.kind.toUpperCase()} />
+                <span className="text-[11.5px] text-ink-2 min-w-0 truncate">
+                  {/* the row it pointed at can be deleted from under it; saying so
+                      beats printing a blank where a plot number should be */}
+                  {l.sees ?? 'no longer attached to anything'}
+                </span>
+                <span className="flex-1" />
+                {isAdmin &&
+                  (revoking === l.id ? (
+                    <>
+                      <span className="text-[11.5px] text-ink-2">Sign-in ends immediately.</span>
+                      <Button size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
+                        Revoke
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setRevoking(null)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => setRevoking(l.id)}>
+                      Revoke
+                    </Button>
+                  ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string }) {
   const toast = useToast();
   const utils = trpc.useUtils();
@@ -288,8 +629,19 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
           `They created ${res.apiKeysCreated} API key${res.apiKeysCreated === 1 ? '' : 's'} that ${res.apiKeysCreated === 1 ? 'is' : 'are'} still live — review them under Integrations.`,
         );
       }
+      /**
+       * The opposite problem, and the more urgent one. A key goes on working; a
+       * report link STOPS. Whoever holds it — a lender, a client's solicitor —
+       * gets "ask the sender for a new one", about a sender who has just been
+       * removed, and nobody here would otherwise know.
+       */
+      if (res.sharesCreated > 0) {
+        toast.push(
+          'info',
+          `${res.sharesCreated} report link${res.sharesCreated === 1 ? '' : 's'} they shared ${res.sharesCreated === 1 ? 'has' : 'have'} stopped working — re-share from the deal if anyone still needs ${res.sharesCreated === 1 ? 'it' : 'them'}.`,
+        );
+      }
     },
-    onError: (e) => toast.error(e.message),
   });
 
   return (
@@ -465,7 +817,6 @@ function DataPrivacyPanel() {
       clearSession();
       navigate('/welcome');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   const exportAll = async () => {
@@ -658,6 +1009,15 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const toast = useToast();
   const { data: policy, isLoading } = trpc.org.policy.useQuery();
   const [form, setForm] = useState<Record<string, string> | null>(null);
+  /**
+   * The stamp of the policy this panel loaded, so a second admin's save is
+   * refused rather than silently restoring seventeen clauses.
+   *
+   * Refreshed from the SAVE's own response, never re-read from the query: the
+   * drawer in `a48b7b3` re-read it from a list that had not refetched yet, and
+   * refused its own user's second edit as a conflict with themselves.
+   */
+  const [stamp, setStamp] = useState<Date | null>(null);
   const [cap, setCap] = useState<string>('');
   const [open, setOpen] = useState(false);
   // held as strings so an empty box stays empty: "" means no covenant, and a
@@ -666,8 +1026,9 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     if (policy && !form) {
-      const { updatedAt: _u, toeLiabilityCap, covLtgdvMaxPct, covLtcMaxPct, covMinProfitOnCostPct, ...rest } = policy;
+      const { updatedAt, toeLiabilityCap, covLtgdvMaxPct, covLtcMaxPct, covMinProfitOnCostPct, ...rest } = policy;
       setForm(Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, String(v ?? '')])));
+      setStamp(updatedAt ? new Date(updatedAt) : null);
       setCap(toeLiabilityCap == null ? '' : String(toeLiabilityCap));
       setCovenantText({
         covLtgdvMaxPct: covLtgdvMaxPct == null ? '' : String(covLtgdvMaxPct),
@@ -681,11 +1042,11 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const covNum = (v: string) => (v.trim() === '' ? null : Number.parseFloat(v));
 
   const save = trpc.org.savePolicy.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
+      setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       utils.org.policy.invalidate();
       toast.success('Firm policy saved — new terms will draft from it');
     },
-    onError: (e) => toast.error(e.message),
   });
 
   if (isLoading || !form) {
@@ -713,6 +1074,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
                 covLtgdvMaxPct: covNum(covenantText.covLtgdvMaxPct),
                 covLtcMaxPct: covNum(covenantText.covLtcMaxPct),
                 covMinProfitOnCostPct: covNum(covenantText.covMinProfitOnCostPct),
+                expectedUpdatedAt: stamp ?? undefined,
               })
             }
           >
@@ -1031,7 +1393,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                   {isAdmin && !current && data.configured && (
                     <Button
                       className="mt-3 w-full"
-                      variant={p.key === 'GROWTH' ? 'primary' : 'secondary'}
+                      variant={p.featured ? 'primary' : 'secondary'}
                       loading={checkout.isPending && checkout.variables?.plan === p.key}
                       disabled={checkout.isPending}
                       onClick={() => checkout.mutate({ plan: p.key })}
@@ -1068,12 +1430,15 @@ export default function Settings() {
         <OrganisationPanel isAdmin={isAdmin} />
         <BillingPanel isAdmin={isAdmin} />
         <MembersPanel isAdmin={isAdmin} selfId={principal?.userId ?? ''} />
+        <PortalAccessPanel isAdmin={isAdmin} />
         <PolicyPanel isAdmin={isAdmin} />
         {/* the three surfaces that let other systems talk to this one */}
         <SsoPanel isAdmin={isAdmin} />
         <XeroPanel isAdmin={isAdmin} />
         <BankPanel isAdmin={isAdmin} />
         <ApiKeysPanel isAdmin={isAdmin} />
+        <WebhooksPanel isAdmin={isAdmin} />
+        <DemoMailboxPanel isAdmin={isAdmin} />
         {isAdmin && <ErrorsPanel />}
         <SecurityPanel />
         {isAdmin && <DataPrivacyPanel />}

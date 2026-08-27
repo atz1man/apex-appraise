@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { openFor } from './sealed-fields.js';
 
 /**
  * Self-serve integration credentials. Keys live in IntegrationConnection.config
@@ -28,7 +29,7 @@ export async function getIntegrationCreds(
   const conn = await prisma.integrationConnection.findFirst({ where: { orgId, provider } });
   if (!conn?.config) return null;
   try {
-    const c = JSON.parse(conn.config) as unknown;
+    const c = JSON.parse(openFor('integrationConnection', 'config', orgId, conn.config)) as unknown;
     return c && typeof c === 'object' && !Array.isArray(c) ? (c as Record<string, string>) : null;
   } catch {
     return null;

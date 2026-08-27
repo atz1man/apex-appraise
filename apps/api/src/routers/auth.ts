@@ -16,10 +16,45 @@ import { APP_URL, resetEmail, sendMail, ssoResetEmail } from '../email.js';
 import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
+import { openFor } from '../sealed-fields.js';
 
 /** Pending SSO sign-ins. Ten minutes, single use, in memory — a restart costs
  *  someone one retry, which is a better trade than a table. */
+/**
+ * Pending single sign-on states, in memory.
+ *
+ * An entry was only ever removed by the `ssoComplete` that presented its exact
+ * state. Every abandoned sign-in — a closed tab, a failed redirect — left one
+ * behind for the life of the process, and `ssoStart` is PUBLIC, so the size of
+ * this map was set by whoever was calling it rather than by how many people
+ * actually sign in. The ten-minute check on read rejects a stale entry without
+ * ever deleting it, which is the part that reads as a TTL and is not one.
+ *
+ * Same criterion `row-sweeper.ts` names for AuthThrottle — "the row count is set
+ * by a stranger" — in a Map rather than a table, and with no sweeper.
+ *
+ * Pruned on write rather than on a timer: entries are only created here, so the
+ * map is bounded by the arrival rate times the TTL without any extra machinery.
+ * `xeroStates` in ops.ts has the same shape and is left alone deliberately —
+ * it is behind `adminProcedure`, so its size is set by trusted users.
+ */
+const SSO_STATE_TTL_MS = 10 * 60_000;
 const ssoStates = new Map<string, { connectionId: string; nonce: string; codeVerifier: string; at: number }>();
+
+/** Drop states that can no longer complete. Exported so the bound can be tested. */
+export function pruneSsoStates(now = Date.now()): number {
+  let dropped = 0;
+  for (const [state, pending] of ssoStates) {
+    if (now - pending.at > SSO_STATE_TTL_MS) {
+      ssoStates.delete(state);
+      dropped++;
+    }
+  }
+  return dropped;
+}
+
+/** test seam: the map is module-private, and its SIZE is the property under test */
+export const __ssoStateCount = () => ssoStates.size;
 
 export const authRouter = router({
   login: publicProcedure
@@ -111,6 +146,7 @@ export const authRouter = router({
       if (!conn) throw new TRPCError({ code: 'NOT_FOUND', message: 'No single sign-on is configured for that address.' });
       const meta = await discover(conn.issuer);
       const req = authRequest(meta, conn.clientId, `${APP_URL()}/sso/callback`);
+      pruneSsoStates();
       ssoStates.set(req.state, { connectionId: conn.id, nonce: req.nonce, codeVerifier: req.codeVerifier, at: Date.now() });
       return { url: req.url };
     }),
@@ -122,7 +158,7 @@ export const authRouter = router({
       const pending = ssoStates.get(input.state);
       // single use: a state that can be replayed is a login that can be
       ssoStates.delete(input.state);
-      if (!pending || Date.now() - pending.at > 10 * 60_000) {
+      if (!pending || Date.now() - pending.at > SSO_STATE_TTL_MS) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'That sign-in has expired — please start again.' });
       }
       const conn = await ctx.prisma.ssoConnection.findUnique({ where: { id: pending.connectionId } });
@@ -132,7 +168,7 @@ export const authRouter = router({
       const { id_token } = await exchangeCode(meta, {
         code: input.code,
         clientId: conn.clientId,
-        clientSecret: conn.clientSecret,
+        clientSecret: openFor('ssoConnection', 'clientSecret', conn.orgId, conn.clientSecret),
         redirectUri: `${APP_URL()}/sso/callback`,
         codeVerifier: pending.codeVerifier,
       });
@@ -191,7 +227,7 @@ export const authRouter = router({
         const sso = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: user.orgId } });
         if (sso?.enforced) {
           const mail = ssoResetEmail(user.name, APP_URL());
-          await sendMail(user.email, mail.subject, mail.text);
+          await sendMail(user.orgId, user.email, mail.subject, mail.text);
           await recordAudit(ctx.prisma, {
             orgId: user.orgId, userId: user.id, actor: user.name,
             action: AUDIT.passwordResetRequested, target: `${user.email} (SSO — no token issued)`, ip: ctx.ip,
@@ -205,7 +241,7 @@ export const authRouter = router({
           data: { resetTokenHash: hash, resetTokenExpiresAt: expiresAt },
         });
         const mail = resetEmail(user.name, APP_URL(), token);
-        await sendMail(user.email, mail.subject, mail.text);
+        await sendMail(user.orgId, user.email, mail.subject, mail.text);
         await recordAudit(ctx.prisma, {
           orgId: user.orgId, userId: user.id, actor: user.name,
           action: AUDIT.passwordResetRequested, target: user.email, ip: ctx.ip,

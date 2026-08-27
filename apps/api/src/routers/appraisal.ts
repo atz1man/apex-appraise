@@ -1,11 +1,15 @@
 import { TRPCError } from '@trpc/server';
-import { unsupportedFigures } from '../narrative-guard.js';
+import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
+import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
 import {
+  analysedPsf,
   autoAppraise,
   compareAppraisals,
   computeAppraisal,
+  reportedMarketValue,
+  testCovenants,
   jvWaterfall,
   sensitivityGrid,
   weightedComparables,
@@ -14,13 +18,15 @@ import {
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
 import { AI_ACTOR, AI_NONE_STATEMENT, AI_STANDING_STATEMENT, AI_TOUCHPOINTS } from '../ai-disclosure.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { assertOwned } from '../auth/owned.js';
 import { locate } from '../opendata-cache.js';
 import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
+import { assertUnchanged } from '../optimistic.js';
+import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
 const spendProfileToDb: Record<string, string> = {
   scurve: 'SCURVE', even: 'EVEN', linear: 'EVEN', front: 'FRONT', back: 'BACK',
@@ -44,6 +50,34 @@ function fullResult(input: z.infer<typeof zAppraisalInput>) {
   return { result, jv };
 }
 
+/**
+ * The deal card's headline figures, which are the CURRENT appraisal's.
+ *
+ * The pipeline board, the Hub and the deal card all read these columns rather
+ * than running the engine, so anything that changes which version is current
+ * has to write them. `save` did. `restore` did not — so restoring a prudent
+ * appraisal to undo an optimistic one left the whole firm's pipeline showing
+ * the version that had just been replaced, until somebody happened to save
+ * again. Measured: current appraisal GDV £3,150,000, deal card £4,500,000, and
+ * `deals.exposure` — which recomputes from the appraisal row — disagreeing with
+ * the board about the same deal.
+ *
+ * One function, because a rule written in two places is one place away from
+ * being written in one.
+ */
+async function syncDealHeadline(prisma: any, dealId: string, result: { gdv: number; profit: number; poc: number; equity: number }) {
+  await prisma.deal.update({
+    where: { id: dealId },
+    data: {
+      gdv: toPence(result.gdv),
+      forecastProfit: toPence(result.profit),
+      roc: result.poc,
+      equityRequired: toPence(result.equity),
+      viability: result.poc >= 0.17 ? 'PROCEED' : result.poc >= 0.1 ? 'CAUTION' : 'DECLINE',
+    },
+  });
+}
+
 /** persistence payload for appraisal inputs (money £ → pence) */
 function inputToRow(input: z.infer<typeof zAppraisalInput>) {
   return {
@@ -56,6 +90,14 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
     contingencyPct: input.contingencyPct,
     ltcPct: input.finance.ltcPct,
     ratePct: input.finance.ratePct,
+    /**
+     * The mezzanine tranche. These columns existed and were written only by the
+     * seed — the appraisal page held the terms in component state, so changing
+     * the mezzanine rate did not even mark the appraisal dirty.
+     */
+    mezzToPct: input.finance.mezz?.toPct ?? null,
+    mezzRatePct: input.finance.mezz?.ratePct ?? null,
+    drawFactorPct: input.finance.mezz?.drawFactorPct ?? 55,
     periodMonths: Math.round(input.finance.periodMonths),
     salesMonths: Math.round(input.finance.salesMonths),
     arrangementFeePct: input.finance.arrangementFeePct,
@@ -78,19 +120,73 @@ function inputToRow(input: z.infer<typeof zAppraisalInput>) {
   };
 }
 
+/**
+ * The AI Development Director — every language-model touchpoint in this file.
+ *
+ * Growth and above. Starter buys "Appraisal engine + reports" and the landing
+ * page says so in as many words: "or do it all by hand. Your call." The engine,
+ * the reports and every deterministic figure stay open on every plan; what a
+ * Starter subscriber does not get is the model reading the documents for them.
+ */
+const aiProcedure = internalProcedure.use(requiresFeature('aiDirector'));
+
+/**
+ * The rule that gives approval its meaning.
+ *
+ * Editing an approved version in place would change what somebody signed off
+ * without anyone signing off on the change — and the version history would show
+ * no trace of it. The way forward is a new version, which starts as a draft and
+ * has to be approved on its own merits.
+ *
+ * This lived inside `save`, which is where the defect had been found rather than
+ * where the rule belongs, and `save` is not the only procedure that writes an
+ * appraisal row. `comparables.applyToAppraisal` sets every unit cap on the
+ * current version, and `draftNarrative` replaces the Red Book prose and its
+ * AI-use disclosure; neither asked. Measured on one approved valuation:
+ *
+ *     reviewStatus       approved  (unchanged)
+ *     GDV      £3,150,000  ->  £5,250,000
+ *     profit     £630,000  ->  £1,050,000
+ *     residual £1,197,577  ->  £2,731,285
+ *     versions           1  (no new version, no trace)
+ *
+ * The residual is what a developer bids on a site with. It more than doubled on
+ * a valuation a named valuer had signed, and the version still read approved.
+ *
+ * `approved-immutable.test.ts` walks the router for any OTHER mutation that
+ * writes an appraisal row, so the next one cannot arrive without answering this.
+ */
+function assertNotApproved(row: { reviewStatus: string | null; label: string }) {
+  if (row.reviewStatus === 'approved') {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `“${row.label}” has been approved and cannot be edited. Save your changes as a new version.`,
+    });
+  }
+}
+
 export const appraisalRouter = router({
   getCurrent: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) return null;
     const engineInput = appraisalRowToEngineInput(row);
     return {
       id: row.id,
       dealId: row.dealId,
       label: row.label,
+      /** the token an in-place save has to hand back — see save.expectedUpdatedAt */
+      updatedAt: row.updatedAt,
+      /**
+       * When this version was signed off, and whether it was.
+       *
+       * A printed report needs a date of its own or it dates itself from the
+       * reader's clock — which is what both documents did, so a valuation
+       * re-dated itself every time anybody opened it. An approved version has a
+       * real signing date; a draft has only the moment it was last saved.
+       */
+      reviewStatus: row.reviewStatus,
+      reviewedAt: row.reviewedAt,
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,
@@ -114,14 +210,25 @@ export const appraisalRouter = router({
         label: z.string().max(60).optional(),
         /** why this version exists — the half of a review a diff cannot supply */
         note: z.string().max(500).optional(),
+        /**
+         * The updatedAt of the version the caller was looking at.
+         *
+         * Required for an in-place edit of an existing version, and checked
+         * before the write. Without it two analysts on one deal — which is the
+         * collaboration a ten-seat plan sells — silently overwrite each other:
+         * the second save carries EVERY field from a copy loaded before the
+         * first, so the first person's work disappears with no version, no
+         * conflict and no audit event. On a valuation workfile whose version
+         * history is the evidence trail, a change that leaves no trace is the
+         * exact thing the approved-version rule further down exists to prevent.
+         */
+        expectedUpdatedAt: z.coerce.date().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
       const { result, jv } = fullResult(input.input);
-      const existing = await ctx.prisma.appraisal.findFirst({
-        where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-      });
+      const existing = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
       const data = {
         ...inputToRow(input.input),
         source: input.source,
@@ -129,31 +236,44 @@ export const appraisalRouter = router({
       };
       let row;
       if (existing && input.asNewVersion) {
-        await ctx.prisma.appraisal.update({ where: { id: existing.id }, data: { isCurrent: false } });
-        row = await ctx.prisma.appraisal.create({
-          data: {
-            ...data,
-            orgId: ctx.principal.orgId,
-            dealId: input.dealId,
-            isCurrent: true,
-            label: input.label?.trim() || `v${(await ctx.prisma.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
-            note: input.note?.trim() || null,
-          },
+        /**
+         * Stand down the old version and raise the new one together.
+         *
+         * These were two statements. Two callers branching at once both read the
+         * same current row, both flipped it, and both created — leaving TWO rows
+         * marked current, after which "the current appraisal" is whichever
+         * findFirst happened to return. Measured: it produced exactly that.
+         *
+         * The transaction is not what fixes it. The compare-and-set is: the flip
+         * only counts if this call is the one that found it current, which is the
+         * same technique the webhook claim lease uses. The transaction is so a
+         * failure between the two cannot leave a deal with no current version at
+         * all.
+         */
+        row = await ctx.prisma.$transaction(async (tx) => {
+          const { count } = await tx.appraisal.updateMany({
+            where: { id: existing.id, isCurrent: true },
+            data: { isCurrent: false },
+          });
+          if (count !== 1) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Somebody else saved a new version a moment ago. Reload to see it, then branch from there.',
+            });
+          }
+          return tx.appraisal.create({
+            data: {
+              ...data,
+              orgId: ctx.principal.orgId,
+              dealId: input.dealId,
+              isCurrent: true,
+              label: input.label?.trim() || `v${(await tx.appraisal.count({ where: { dealId: input.dealId, orgId: ctx.principal.orgId } })) + 1}`,
+              note: input.note?.trim() || null,
+            },
+          });
         });
       } else if (existing) {
-        /**
-         * The rule that gives approval its meaning. Editing an approved version in
-         * place would change what somebody signed off without anyone signing off
-         * on the change — and the version history would show no trace of it. The
-         * way forward is a new version, which starts as a draft and has to be
-         * approved on its own merits.
-         */
-        if (existing.reviewStatus === 'approved') {
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: `“${existing.label}” has been approved and cannot be edited. Save your changes as a new version.`,
-          });
-        }
+        assertNotApproved(existing);
         /**
          * Editing a version that is out for review takes it back off the reviewer's
          * desk. Left in review it would be approved in a state nobody read — the
@@ -162,6 +282,30 @@ export const appraisalRouter = router({
          * Withdrawn rather than refused: the analyst is mid-thought, and blocking
          * the save would only teach them to stop submitting until they are certain.
          */
+        /**
+         * Whose copy is this?
+         *
+         * Demanded rather than merely checked when present: a caller that forgets
+         * gets a clear refusal, where an optional token silently reopens the hole
+         * for whoever forgets next. Not needed to CREATE a version or to branch a
+         * new one — only to edit a row somebody else may be holding.
+         *
+         * Compared to the millisecond, which is what @updatedAt records. Two
+         * saves inside the same millisecond would still race; that is a window
+         * far shorter than a person, and the consequence is only the behaviour
+         * this replaces.
+         */
+        await assertUnchanged({
+          what: `version “${existing.label}”`,
+          current: existing.updatedAt,
+          expected: input.expectedUpdatedAt,
+          lastActor: async () =>
+            existing.submittedById
+              ? (await ctx.prisma.user.findUnique({ where: { id: existing.submittedById }, select: { name: true } }))?.name
+              : null,
+          advice: 'Reload to see the current figures, then reapply your changes — or save yours as a new version.',
+        });
+
         const withdrawn = existing.reviewStatus === 'in_review';
         row = await ctx.prisma.appraisal.update({
           where: { id: existing.id },
@@ -176,21 +320,59 @@ export const appraisalRouter = router({
           });
         }
       } else {
-        row = await ctx.prisma.appraisal.create({
-          data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
+        /**
+         * The first version on a deal, and the third path to this invariant.
+         *
+         * `Appraisal.isCurrent` must be true for exactly one row per deal.
+         * `b39f174` fixed that for branching and `50ca9fc` for restoring, both
+         * with a compare-and-set: the demote only counts if this call is the one
+         * that found the row current. Here there is no row to compare against —
+         * both callers read `existing` as null and both created — so a
+         * compare-and-set has nothing to bite on. Measured before this change:
+         * two concurrent saves on a fresh deal left TWO rows marked current, and
+         * which one each surface then reports is whichever the database happens
+         * to return.
+         *
+         * The read is repeated INSIDE the transaction on purpose, and the
+         * isolation level is what makes that sound. `50ca9fc` recorded the trap:
+         * a read inside a transaction is serialised by SQLite whatever level is
+         * asked for, so the same code passes locally and, under Postgres READ
+         * COMMITTED, lets both transactions miss each other's uncommitted row
+         * and commit. Serializable is the only level at which "nobody else has
+         * one" stays true until this transaction commits.
+         */
+        row = await ctx.prisma.$transaction(
+          async (tx) => {
+            const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
+            if (raced) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+              });
+            }
+            return tx.appraisal.create({
+              data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
+            });
+          },
+          { isolationLevel: 'Serializable' },
+        ).catch((e: unknown) => {
+          if (e instanceof TRPCError) throw e;
+          /**
+           * Postgres aborts the loser of a serialisable conflict rather than
+           * blocking it (SQLSTATE 40001, which Prisma reports as P2034). That is
+           * this invariant working, so it reaches the user as the same refusal
+           * the other two paths give and not as a server fault.
+           */
+          if ((e as { code?: string })?.code === 'P2034') {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+            });
+          }
+          throw e;
         });
       }
-      // reflect hardened headline figures onto the deal card (derived, engine-owned)
-      await ctx.prisma.deal.update({
-        where: { id: input.dealId },
-        data: {
-          gdv: toPence(result.gdv),
-          forecastProfit: toPence(result.profit),
-          roc: result.poc,
-          equityRequired: toPence(result.equity),
-          viability: result.poc >= 0.17 ? 'PROCEED' : result.poc >= 0.1 ? 'CAUTION' : 'DECLINE',
-        },
-      });
+      await syncDealHeadline(ctx.prisma, input.dealId, result);
       // audit trail on every financial mutation
       await ctx.prisma.activityEvent.create({
         data: {
@@ -201,7 +383,9 @@ export const appraisalRouter = router({
           target: `GDV £${Math.round(result.gdv).toLocaleString('en-GB')} · profit £${Math.round(result.profit).toLocaleString('en-GB')}`,
         },
       });
-      return { id: row.id, result, jv };
+      // updatedAt so a client can save again without waiting for a refetch to
+      // tell it what the stamp is now
+      return { id: row.id, updatedAt: row.updatedAt, result, jv };
     }),
 
   /** Version history with headline figures for comparison (newest first). */
@@ -379,6 +563,16 @@ export const appraisalRouter = router({
         orgId: ctx.principal.orgId, dealId: input.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'shared a report by link', target: `${deal.name} — ${input.kind}`, ip: ctx.ip,
       });
+      // never the token: a webhook payload is a copy of the link, and the link IS
+      // the credential — anyone holding the delivery would hold the report
+      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'report.shared', {
+        dealId: input.dealId,
+        dealName: deal.name,
+        shareId: share.id,
+        kind: input.kind,
+        sharedBy: ctx.principal.name,
+        expiresAt,
+      });
       return { id: share.id, token, expiresAt };
     }),
 
@@ -447,6 +641,15 @@ export const appraisalRouter = router({
         orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: 'submitted an appraisal version for review', target: v.label, ip: ctx.ip,
       });
+      const submittedDeal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.submitted', {
+        dealId: v.dealId,
+        dealName: submittedDeal?.name ?? null,
+        appraisalId: row.id,
+        label: row.label,
+        submittedBy: ctx.principal.name,
+        submittedAt: row.submittedAt,
+      });
       return { id: row.id, status: row.reviewStatus };
     }),
 
@@ -509,6 +712,51 @@ export const appraisalRouter = router({
           profit: Math.round(result.profit * 100) / 100,
           profitOnCost: result.poc,
         });
+
+        /**
+         * And separately, if the figures just approved break one of the firm's
+         * own facility covenants.
+         *
+         * Emitted at APPROVAL rather than on every save, because approval is the
+         * firm's committed position and that is what a lender's covenant applies
+         * to — a draft that dips under a limit for an afternoon is not a breach,
+         * and reporting it as one would train everybody to ignore the alert.
+         * Approval is also discrete, so this needs no stored previous state to
+         * avoid re-sending the same breach.
+         *
+         * The alert nobody was getting: this event has been offered to
+         * integrators since outbound webhooks shipped — an endpoint could
+         * subscribe, and org.createWebhook would accept it — and nothing has ever
+         * emitted it. A lender's system watching for a breach heard silence, and
+         * silence from a covenant monitor reads as "no breaches".
+         */
+        const policy = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+        const covenants = testCovenants(
+          { facility: result.facility, totalCost: result.totalCost, gdv: result.gdv, profit: result.profit },
+          {
+            ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
+            ltcMaxPct: policy?.covLtcMaxPct ?? null,
+            minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
+          },
+        );
+        if (covenants.breaches.length > 0) {
+          await emitWebhook(ctx.prisma, ctx.principal.orgId, 'covenant.breached', {
+            dealId: v.dealId,
+            dealName: deal?.name ?? null,
+            appraisalId: row.id,
+            label: row.label,
+            approvedBy: ctx.principal.name,
+            approvedAt: row.reviewedAt,
+            breaches: covenants.breaches.map((b) => ({
+              key: b.key,
+              label: b.label,
+              actualPct: Math.round(b.actualPct * 100) / 100,
+              limitPct: b.limitPct,
+              direction: b.direction,
+              headroomPts: Math.round(b.headroomPts * 100) / 100,
+            })),
+          });
+        }
       }
       return { id: row.id, status: row.reviewStatus };
     }),
@@ -565,14 +813,65 @@ export const appraisalRouter = router({
       where: { id: input.versionId, dealId: input.dealId, orgId: ctx.principal.orgId },
     });
     if (!version) throw new TRPCError({ code: 'NOT_FOUND' });
-    await ctx.prisma.appraisal.updateMany({
-      where: { dealId: input.dealId, orgId: ctx.principal.orgId, isCurrent: true },
-      data: { isCurrent: false },
+    /**
+     * Stand the old version down and raise the restored one together, with the
+     * same compare-and-set `save` uses for a branch. These were two loose
+     * statements: two callers restoring at once both read the same current row,
+     * both flipped it and both created, leaving TWO rows marked current — after
+     * which "the current appraisal" is whichever findFirst happened to return.
+     *
+     * The current row is read OUTSIDE the transaction, exactly as `save` reads
+     * it, so the flip is a genuine compare-and-set against what this caller saw.
+     * Reading it inside would make the race impossible on SQLite by
+     * serialisation alone — which passes the test and leaves the guard that
+     * production actually needs unexercised.
+     */
+    const existingCurrent = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
+    const restored = await ctx.prisma.$transaction(async (tx) => {
+      if (existingCurrent) {
+        const { count } = await tx.appraisal.updateMany({
+          where: { id: existingCurrent.id, isCurrent: true },
+          data: { isCurrent: false },
+        });
+        if (count !== 1) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Somebody else changed the current version a moment ago. Reload to see it, then restore from there.',
+          });
+        }
+      }
+      /**
+       * A restored version is a NEW version and starts as a draft.
+       *
+       * The review fields were copied along with everything else, so restoring
+       * an approved version produced a fresh row asserting it had been approved
+       * — by that person, on that date — when nobody had seen this row at all.
+       * `save` already refuses to carry an approval onto a branch, and the
+       * review tests state the rule: "a new version inherits no approval — it
+       * has to earn its own."
+       */
+      const {
+        id: _id,
+        createdAt: _c,
+        updatedAt: _u,
+        reviewStatus: _rs,
+        reviewedById: _rb,
+        reviewedAt: _ra,
+        reviewNote: _rn,
+        submittedById: _sb,
+        submittedAt: _sa,
+        ...copy
+      } = version;
+      return tx.appraisal.create({
+        data: { ...copy, isCurrent: true, label: `${version.label} (restored)` },
+      });
     });
-    const { id: _id, createdAt: _c, updatedAt: _u, ...copy } = version;
-    const restored = await ctx.prisma.appraisal.create({
-      data: { ...copy, isCurrent: true, label: `${version.label} (restored)` },
-    });
+    /**
+     * The deal card is derived from whichever version is current, so restoring
+     * one has to move it. Without this the board kept the replaced version's
+     * GDV for good.
+     */
+    await syncDealHeadline(ctx.prisma, input.dealId, computeAppraisal(appraisalRowToEngineInput(restored)));
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
@@ -615,10 +914,7 @@ export const appraisalRouter = router({
     }).filter((t) => t.count > 0);
 
     const [row, policy] = await Promise.all([
-      ctx.prisma.appraisal.findFirst({
-        where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-        orderBy: { updatedAt: 'desc' },
-      }),
+      currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId),
       ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } }),
     ]);
     const narrative = J<NarrativePayload | null>(row?.narrative, null);
@@ -642,16 +938,21 @@ export const appraisalRouter = router({
    * only writes prose around them. Persisted onto the current appraisal so the
    * report renders the same narrative until it is redrafted.
    */
-  draftNarrative: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  draftNarrative: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to draft a narrative from — save an appraisal first.' });
+    // the narrative IS the Red Book prose, and it carries the AI-use disclosure
+    assertNotApproved(row);
     const engineInput = appraisalRowToEngineInput(row);
     const { result } = fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>);
     const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    /**
+     * The instruction's own terms. A special assumption is what determines what
+     * the figure MEANS — "assuming planning is granted" can move a value by
+     * millions — and the narrative was denying them unconditionally.
+     */
+    const terms = await ctx.prisma.engagementTerms.findFirst({ where: { dealId: input, orgId: ctx.principal.orgId } });
     const summary = comps.length
       ? weightedComparables(
           comps.map((c: any) => ({
@@ -673,6 +974,7 @@ export const appraisalRouter = router({
       compCount: comps.length,
       supportedPsf: summary ? Math.round(summary.supportedPsf) : null,
       compAddresses: comps.map((c: any) => c.address),
+      specialAssumptions: statedSpecialAssumptions(terms?.specialAssumptions),
     });
     /**
      * Provenance from what actually produced the prose, not from what is
@@ -750,6 +1052,27 @@ const NARRATIVE_TOOL = {
 const gbp = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`;
 
 /**
+ * The special assumptions actually stated in the terms of engagement, or null.
+ *
+ * The terms carry clause 11 as free text and the house-style default is the
+ * word "None." — so a firm that has not set one is not making one. Anything
+ * else is a stated special assumption, and the report has to say so: measured
+ * on a real instruction whose terms read "That full planning permission for 10
+ * dwellings is granted ... and that the site is free of contamination", the
+ * Red Book narrative printed "No special assumptions have been made."
+ *
+ * Two documents in the same product, on the same instruction, contradicting
+ * each other on the one clause that says what the valuation figure means.
+ */
+export function statedSpecialAssumptions(raw: string | null | undefined): string | null {
+  const text = (raw ?? '').trim();
+  if (!text) return null;
+  // "None", "None.", "none", "N/A" — a firm saying there are none, not making one
+  if (/^(none|n\/?a|nil|not applicable)\.?$/i.test(text)) return null;
+  return text;
+}
+
+/**
  * Draft the three report sections. The LLM is FORCED through a tool call so
  * output is schema-valid JSON by construction, and every number it may cite is
  * supplied (engine-computed) — it authors register, never arithmetic. Falls
@@ -767,9 +1090,22 @@ async function draftNarrativeSections(facts: {
   compCount: number;
   supportedPsf: number | null;
   compAddresses: string[];
+  /**
+   * The special assumptions from the terms of engagement, or null where the
+   * terms state none. Clause 11 of the signed terms, and the narrative used to
+   * deny them unconditionally — see the risk commentary below.
+   */
+  specialAssumptions: string | null;
 }): Promise<NarrativeSections & { source: 'model' | 'template' }> {
-  const mv = Math.round(facts.gdv / 1000) * 1000; // Market Value — GDV to the nearest £1,000, as reported
-  const psf = facts.nia > 0 ? Math.round(mv / facts.nia) : 0;
+  /**
+   * From the engine, not from a copy here. The certificate this narrative is
+   * printed beside derives the same two figures, and the figure guard below
+   * checks the model's draft against THIS list — so a local copy meant the
+   * guard was certifying the model against a number the API had computed for
+   * itself, which is the one thing it exists to prevent.
+   */
+  const mv = reportedMarketValue(facts.gdv);
+  const psf = analysedPsf(mv, facts.nia);
   const compLine = facts.compCount
     ? `${facts.compCount} adjusted comparable${facts.compCount === 1 ? '' : 's'} (${facts.compAddresses.join('; ')}) supporting ${facts.supportedPsf != null ? `£${facts.supportedPsf}/ft²` : 'the adopted rate'}`
     : 'no comparables logged — appraisal-led evidence only';
@@ -785,8 +1121,11 @@ FACTS (use these figures verbatim — do not invent or recompute any number):
 - Forecast developer's profit: ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost)
 - Planning status: ${facts.planningStatus ?? 'not assessed'}
 - Comparable evidence: ${compLine}
+- Special assumptions agreed in the terms of engagement: ${facts.specialAssumptions ?? 'none stated'}
 
-RULES: each section 90-140 words; UK valuation-report register; third person ("the valuer", "the subject property") — no first person; plain prose, no markdown; each section MUST reference the deal's actual figures above (Market Value/GDV, supported £/ft², comparable count as relevant); valuationRationale MUST end with the Market Value opinion of ${gbp(mv)}.`;
+RULES: each section 90-140 words; UK valuation-report register; third person ("the valuer", "the subject property") — no first person; plain prose, no markdown; each section MUST reference the deal's actual figures above (Market Value/GDV, supported £/ft², comparable count as relevant); valuationRationale MUST end with the Market Value opinion of ${gbp(mv)}.
+
+DO NOT ASSERT WHAT IS NOT ABOVE. Specifically: do not state transaction volumes, marketing periods, demand levels, supply of comparable stock, or any other market condition — none of it has been measured, and this goes into a signed valuation. Do not declare the evidence base adequate; state its extent and leave the judgement to the valuer. State the special assumptions exactly as given, and say none are made only when the line above says none stated.`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -810,10 +1149,21 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
          * and cannot drift — losing some prose quality rather than putting an
          * invented Market Value into a signed valuation.
          */
-        const unsupported = unsupportedFigures(parsed.data as unknown as Record<string, string>, {
-          money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
-          percents: [Number((facts.poc * 100).toFixed(1))],
-        });
+        const sections = parsed.data as unknown as Record<string, string>;
+        const unsupported = [
+          ...unsupportedFigures(sections, {
+            money: [mv, facts.gdv, facts.profit, psf, ...(facts.supportedPsf != null ? [facts.supportedPsf] : [])],
+            percents: [Number((facts.poc * 100).toFixed(1))],
+          }),
+          /**
+           * And what it CLAIMED. The prompt's rules about market conditions, the
+           * adequacy of the evidence and clause 11 were enforced by nothing —
+           * and none of those sentences carries a figure, so the check above
+           * cannot see them. Same disposal: fall back to the template, which
+           * makes none of them.
+           */
+          ...unsupportedClaims(sections, { specialAssumptions: facts.specialAssumptions }),
+        ];
         if (unsupported.length === 0) return { ...parsed.data, source: 'model' as const };
         narrativeRejections.push(...unsupported);
       } else {
@@ -834,7 +1184,7 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
    * mode, and whenever a model draft carried a figure the engine did not produce.
    */
   if (narrativeRejections.length) {
-    console.warn(`[narrative] draft discarded — figures not produced by the engine: ${narrativeRejections.join(', ')}`);
+    console.warn(`[narrative] draft discarded — not supported by the record: ${narrativeRejections.join(', ')}`);
   }
   const evidence = facts.compCount
     ? `${facts.compCount} adjusted comparable transaction${facts.compCount === 1 ? '' : 's'}, which support${facts.compCount === 1 ? 's' : ''} a rate of £${facts.supportedPsf}/ft²`
@@ -843,12 +1193,41 @@ RULES: each section 90-140 words; UK valuation-report register; third person ("t
     // the deterministic template — no model wrote a word of what follows, and
     // the AI-use disclosure has to be able to tell
     source: 'template' as const,
+    /**
+     * What this paragraph asserted, for every property, in every location, in
+     * every market: that the market "remains active, with steady occupier and
+     * investor demand and a limited supply of directly comparable stock", that
+     * "transaction volumes over the preceding twelve months have been stable",
+     * and that "marketing periods for well-presented accommodation are
+     * typically six to eight weeks". Nothing measured any of it. It printed the
+     * same sentences on a scheme with no comparables logged at all.
+     *
+     * What is left is what the product actually knows, and an explicit sentence
+     * saying the market appraisal is the valuer's to write. A gap a valuer can
+     * see is a gap they can fill; an invented paragraph reads as done.
+     */
     marketCommentary:
-      `The market for ${facts.assetType.toLowerCase().replace('_', ' ')} property in the locality of ${facts.subject} remains active, with steady occupier and investor demand and a limited supply of directly comparable stock. Pricing evidence is drawn from ${evidence}. Transaction volumes over the preceding twelve months have been stable and marketing periods for well-presented accommodation are typically six to eight weeks. Against a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft²` : ''}, the valuer considers current conditions to provide a reasonable evidential basis, and no material valuation uncertainty is reported as at the valuation date.`,
+      `Pricing evidence for this ${facts.assetType.toLowerCase().replace('_', ' ')} scheme at ${facts.subject} is drawn from ${evidence}. The appraisal indicates a gross development value of ${gbp(facts.gdv)}${psf ? ` and an analysed rate of £${psf}/ft² on ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area` : ''}. Local market conditions — occupier and investor demand, supply of comparable stock, transaction volumes and marketing periods — have not been assessed in this draft and are for the valuer to state.`,
     valuationRationale:
-      `Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches. ${facts.compCount ? `The ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'} analysed support${facts.compCount === 1 ? 's' : ''} £${facts.supportedPsf}/ft², which applied to ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area corroborates the appraisal-derived figure.` : 'In the absence of logged comparables, greatest weight is afforded to the residual development appraisal.'} The appraisal indicates a gross development value of ${gbp(facts.gdv)} and a forecast developer's profit of ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost), consistent with market-standard return requirements. Reconciling the approaches, the valuer's opinion of Market Value is ${gbp(mv)}.`,
+      `Primary reliance is placed on the comparable method, cross-checked against the depreciated replacement cost and investment approaches. ${facts.compCount ? `The ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'} analysed support${facts.compCount === 1 ? 's' : ''} £${facts.supportedPsf}/ft², against ${Math.round(facts.nia).toLocaleString('en-GB')} ft² of net internal area.` : 'In the absence of logged comparables, greatest weight is afforded to the residual development appraisal.'} The appraisal indicates a gross development value of ${gbp(facts.gdv)} and a forecast developer's profit of ${gbp(facts.profit)} (${(facts.poc * 100).toFixed(1)}% on cost). Reconciling the approaches, the valuer's opinion of Market Value is ${gbp(mv)}.`,
+    /**
+     * Two declarations here are required by VPS 3 and were both asserted rather
+     * than established.
+     *
+     * "The evidence base of N comparables is considered adequate for the class"
+     * fired on ANY count above zero — so one comparable was declared adequate
+     * evidence for a Market Value. Adequacy is the valuer's judgement; the
+     * report states the extent and leaves the conclusion to them.
+     *
+     * "No special assumptions have been made" was printed regardless of what the
+     * signed terms of engagement say at clause 11.
+     */
     riskCommentary:
-      `Planning status is recorded as ${(facts.planningStatus ?? 'not assessed').toLowerCase()}, and the valuation assumes all stated consents remain in effect. The principal risks to the reported figure of ${gbp(mv)} are movement in local sales rates${facts.supportedPsf ? ` away from the supported £${facts.supportedPsf}/ft²` : ''}, build-cost inflation compressing the ${(facts.poc * 100).toFixed(1)}% profit on cost, and any extension of the sales period. The evidence base of ${facts.compCount || 'no'} comparable${facts.compCount === 1 ? '' : 's'} is ${facts.compCount ? 'considered adequate for the class' : 'limited, and the figure should be read accordingly'}. No special assumptions have been made and no material valuation uncertainty is declared.`,
+      `Planning status is recorded as ${(facts.planningStatus ?? 'not assessed').toLowerCase()}${facts.planningStatus ? ', and the valuation assumes all stated consents remain in effect' : ''}. The principal risks to the reported figure of ${gbp(mv)} are movement in local sales rates${facts.supportedPsf ? ` away from the supported £${facts.supportedPsf}/ft²` : ''}, build-cost inflation compressing the ${(facts.poc * 100).toFixed(1)}% profit on cost, and any extension of the sales period. ${facts.compCount ? `The evidence base is ${facts.compCount} comparable${facts.compCount === 1 ? '' : 's'}, and its adequacy for the class is for the valuer to confirm` : 'No comparables have been logged, so the figure is appraisal-led and should be read accordingly'}. ${
+        facts.specialAssumptions
+          ? `The following special assumption${/\band\b|;|\n/.test(facts.specialAssumptions) ? 's are' : ' is'} made, as agreed in the terms of engagement: ${facts.specialAssumptions.replace(/\s+/g, ' ').trim().replace(/[.;]+$/, '')}`
+          : 'No special assumptions have been made'
+      }. Material valuation uncertainty has not been assessed in this draft.`,
   };
 }
 
@@ -1092,7 +1471,7 @@ function indicative(extraction: Extraction, buildPerSqft: number) {
 }
 
 export const autoAppraisalRouter = router({
-  extract: internalProcedure
+  extract: aiProcedure
     .input(
       z
         .object({
@@ -1212,23 +1591,77 @@ export const comparablesRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        address: z.string(),
-        meta: z.string().default(''),
-        basePsf: z.number(),
-        adjSize: z.number(),
-        adjCondition: z.number(),
-        adjDate: z.number(),
-        adjLocation: z.number(),
+        /**
+         * Optional, and an update writes only what it was given.
+         *
+         * The Comparables screen persists on blur and sent the WHOLE row every
+         * time, so adjusting one column wrote all seven fields from the copy the
+         * page was holding. Two valuers on one deal — the collaboration this
+         * product sells — meant the second blur silently reverted the first's
+         * adjustments, and an adjustment is a judgement a Red Book valuation is
+         * defended with.
+         *
+         * Patch rather than a stamp, for the reason `7dd1415` gives: a stamp
+         * DETECTS the clobber and asks the user to reload; not sending the field
+         * means there is nothing to clobber. Two people adjusting DIFFERENT
+         * columns should both land. Only the same column is last-write-wins,
+         * which is what editing one number means.
+         */
+        address: z.string().optional(),
+        meta: z.string().optional(),
+        basePsf: z.number().optional(),
+        adjSize: z.number().optional(),
+        adjCondition: z.number().optional(),
+        adjDate: z.number().optional(),
+        adjLocation: z.number().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
-      const { id, ...data } = input;
+      const { id, dealId: _d, ...supplied } = input;
+      /**
+       * Only the keys actually supplied. `undefined` in a spread is written as
+       * null; a missing key tells Prisma to leave the column alone, which is the
+       * whole point of a partial write.
+       */
+      const data = Object.fromEntries(Object.entries(supplied).filter(([, v]) => v !== undefined));
+      if (!id && (data.address == null || data.basePsf == null)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A new comparable needs an address and a base £/ft².' });
+      }
+      /**
+       * These ARE the evidence. A Red Book valuation is defended by its
+       * comparables and the adjustments made to them, and an adjustment is a
+       * judgement — the reviewer's question is never "what is the number" but
+       * "who decided that, and when". `sitePack.applyComps` records the comps it
+       * imports from open data; the ones a valuer types or edits by hand, which
+       * are the ones carrying a judgement, recorded nothing.
+       */
+      // read from the ROW, never the input: after a partial write the input may
+      // carry only the one column that changed
+      const note = (action: string, row: { address: string; basePsf: number; adjSize: number; adjCondition: number; adjDate: number; adjLocation: number }) =>
+        ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            userId: ctx.principal.userId,
+            actor: ctx.principal.name,
+            action,
+            target: `${row.address} · £${Math.round(row.basePsf).toLocaleString('en-GB')}/ft² base, adjustments ${
+              [row.adjSize, row.adjCondition, row.adjDate, row.adjLocation].map((n) => `${n > 0 ? '+' : ''}${n}%`).join(' ')
+            }`,
+          },
+        });
       if (id) {
         await assertOwned(ctx.prisma.comparable, id, ctx.principal.orgId);
-        return ctx.prisma.comparable.update({ where: { id }, data });
+        const updated = await ctx.prisma.comparable.update({ where: { id }, data });
+        await note('edited a comparable', updated);
+        return updated;
       }
-      return ctx.prisma.comparable.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.comparable.create({
+        data: { meta: '', adjSize: 0, adjCondition: 0, adjDate: 0, adjLocation: 0, ...data, orgId: ctx.principal.orgId, dealId: input.dealId } as never,
+      });
+      await note('added a comparable', created);
+      return created;
     }),
 
   /** Writes the supported £/ft² onto every unit cap of the current appraisal. */
@@ -1243,11 +1676,11 @@ export const comparablesRouter = router({
         adjustments: { size: c.adjSize, condition: c.adjCondition, date: c.adjDate, location: c.adjLocation },
       })),
     );
-    const appraisal = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: input, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const appraisal = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!appraisal) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No current appraisal to apply to' });
+    assertNotApproved(appraisal);
     const supported = Math.round(summary.supportedPsf);
+    const before = (JSON.parse(appraisal.units) as any[]).map((u) => u.cap);
     const units = (JSON.parse(appraisal.units) as any[]).map((u) => ({
       ...u,
       cap: supported,
@@ -1255,6 +1688,25 @@ export const comparablesRouter = router({
       source: `Comparables — supported £${supported}/ft²`,
     }));
     await ctx.prisma.appraisal.update({ where: { id: appraisal.id }, data: { units: JSON.stringify(units) } });
+    /**
+     * This overwrites the sale price of EVERY unit type on the current
+     * appraisal, which moves GDV, profit and the residual land value — the most
+     * consequential single write outside `save`, and the only one that left no
+     * trace. `sitePack.applyComps`, which does the same job from open data,
+     * records; this one, driven by a valuer's own adjusted comparables, did not.
+     */
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: input,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'applied comparables to the appraisal',
+        target: `${comps.length} comparables · every unit cap set to £${supported.toLocaleString('en-GB')}/ft² (was ${
+          [...new Set(before)].map((c) => `£${Math.round(Number(c)).toLocaleString('en-GB')}`).join(', ') || '—'
+        })`,
+      },
+    });
     return { supportedPsf: supported };
   }),
 });
@@ -1270,22 +1722,54 @@ export const scenariosRouter = router({
       z.object({
         id: z.string().optional(),
         dealId: z.string(),
-        name: z.string(),
-        descriptor: z.string().default(''),
-        blendedPsf: z.number(),
-        buildPsf: z.number(),
-        gia: z.number(),
-        targetProfitPct: z.number(),
+        // optional for the same reason as the comparables above: the Scenarios
+        // screen persists a lever on blur and used to write all six fields
+        name: z.string().optional(),
+        descriptor: z.string().optional(),
+        blendedPsf: z.number().optional(),
+        buildPsf: z.number().optional(),
+        gia: z.number().optional(),
+        targetProfitPct: z.number().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertDeal(ctx, input.dealId);
-      const { id, ...data } = input;
+      const { id, dealId: _d, ...supplied } = input;
+      /**
+       * Only the keys actually supplied. `undefined` in a spread is written as
+       * null; a missing key tells Prisma to leave the column alone, which is the
+       * whole point of a partial write.
+       */
+      const data = Object.fromEntries(Object.entries(supplied).filter(([, v]) => v !== undefined));
+      if (!id && (data.name == null || data.blendedPsf == null || data.buildPsf == null || data.gia == null || data.targetProfitPct == null)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A new scheme option needs a name and all four levers.' });
+      }
+      // a scheme option is what a promoter takes to a lender or a JV partner, and
+      // `draftRisk` right below records the commentary written ABOUT these — so
+      // the prose was traceable and the levers it describes were not
+      // from the ROW, not the input — a partial write may name only one lever
+      const note = (action: string, row: { name: string; blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }) =>
+        ctx.prisma.activityEvent.create({
+          data: {
+            orgId: ctx.principal.orgId,
+            dealId: input.dealId,
+            userId: ctx.principal.userId,
+            actor: ctx.principal.name,
+            action,
+            target: `${row.name} · £${row.blendedPsf}/ft² blended, £${row.buildPsf}/ft² build, ${row.gia.toLocaleString('en-GB')} ft² GIA, ${row.targetProfitPct}% target`,
+          },
+        });
       if (id) {
         await assertOwned(ctx.prisma.scenario, id, ctx.principal.orgId);
-        return ctx.prisma.scenario.update({ where: { id }, data });
+        const updated = await ctx.prisma.scenario.update({ where: { id }, data });
+        await note('edited a scheme option', updated);
+        return updated;
       }
-      return ctx.prisma.scenario.create({ data: { ...data, orgId: ctx.principal.orgId } });
+      const created = await ctx.prisma.scenario.create({
+        data: { descriptor: '', ...data, orgId: ctx.principal.orgId, dealId: input.dealId } as never,
+      });
+      await note('added a scheme option', created);
+      return created;
     }),
 
   /**
@@ -1294,7 +1778,7 @@ export const scenariosRouter = router({
    * grid); the LLM only writes prose around them. Ephemeral — returned to the
    * caller, never persisted.
    */
-  draftRisk: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+  draftRisk: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
     const rows = await ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
     const options = rows.slice(0, 3).map((s: any) => ({
@@ -1308,14 +1792,22 @@ export const scenariosRouter = router({
     }));
     if (options.length < 2)
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'At least two scheme options are needed to compare risk — add another option first.' });
-    const commentary = await draftRiskCommentary({ subject: deal.name, options });
-    // audited like every other AI touchpoint — the report's AI-use disclosure is
-    // derived from this trail, so an unlogged call would be an undisclosed one
+    const { commentary, source } = await draftRiskCommentary({ subject: deal.name, options });
+    /**
+     * Audited like every other AI touchpoint — the report's AI-use disclosure is
+     * derived from this trail, so an unlogged call would be an undisclosed one.
+     *
+     * And the converse, which this missed: a LOGGED non-call is a falsely
+     * disclosed one. With no key the commentary comes from a deterministic
+     * template, and filing it under AI_ACTOR put "Scenario risk commentary" in
+     * the AI-use declaration of a signed valuation over prose no model wrote.
+     * Recorded either way, under whoever actually did it.
+     */
     await ctx.prisma.activityEvent.create({
       data: {
         orgId: ctx.principal.orgId,
         dealId: input,
-        actor: AI_ACTOR,
+        actor: source === 'model' ? AI_ACTOR : ctx.principal.name,
         action: 'drafted scenario risk commentary for',
         target: deal.name,
       },
@@ -1330,56 +1822,6 @@ export const scenariosRouter = router({
 
 // ---------- Scenario risk commentary (AI-drafted, figures from the engine) ----------
 
-/**
- * Fixed appraisal assumptions behind the scenario compare — kept in lockstep
- * with the grid in apps/web/src/routes/Scenarios.tsx (fees 11%, contingency 5%,
- * CIL £40/m² + S106 £150k, disposal 2%, 60% LTC @ 7.5% over 18+3 months,
- * 1.5% arrangement, 6.8% acq).
- */
-const SCENARIO_ASSUMPTIONS = {
-  efficiency: 90,
-  profFeePct: 11,
-  contingencyPct: 5,
-  cilPerSqm: 40,
-  s106: 150_000,
-  agentPct: 1.5,
-  legalPct: 0.5,
-  ltcPct: 60,
-  ratePct: 7.5,
-  periodMonths: 18,
-  salesMonths: 3,
-  arrangementFeePct: 1.5,
-  acqPct: 6.8,
-} as const;
-
-/** Scenario levers → engine metrics — identical maths to the web compare grid. */
-function scenarioMetrics(s: { blendedPsf: number; buildPsf: number; gia: number; targetProfitPct: number }) {
-  const A = SCENARIO_ASSUMPTIONS;
-  const r = autoAppraise({
-    units: [{ label: 'Blended', count: 1, area: s.gia * (A.efficiency / 100), cap: s.blendedPsf }],
-    efficiency: A.efficiency,
-    buildPerSqft: s.buildPsf,
-    profFeePct: A.profFeePct,
-    contingencyPct: A.contingencyPct,
-    cilPerSqm: A.cilPerSqm,
-    s106: A.s106,
-    agentPct: A.agentPct,
-    legalPct: A.legalPct,
-    ltcPct: A.ltcPct,
-    ratePct: A.ratePct,
-    periodMonths: A.periodMonths,
-    salesMonths: A.salesMonths,
-    arrangementFeePct: A.arrangementFeePct,
-    targetProfitPct: s.targetProfitPct,
-    acqPct: A.acqPct,
-    asking: 0,
-  });
-  const land = r.residualNet * (1 + A.acqPct / 100);
-  const totalCost = r.saleCosts + r.build + r.fees + r.cont + r.other + r.finance + land;
-  const profit = r.gdv - totalCost;
-  return { residual: r.residualNet, gdv: r.gdv, totalCost, profit, poc: totalCost > 0 ? profit / totalCost : 0 };
-}
-
 type RiskOption = {
   name: string;
   descriptor: string;
@@ -1393,6 +1835,135 @@ type RiskOption = {
   profit: number;
   poc: number;
 };
+
+export type RiskFactsForGuard = { subject: string; options: RiskOption[] };
+
+/**
+ * Every figure the risk commentary is allowed to carry.
+ *
+ * Built from the options being compared, which is what the instruction hands
+ * the model — so the guard's allowance and the model's brief cannot drift apart
+ * the way two hand-kept lists would.
+ */
+export function riskFigures(facts: RiskFactsForGuard): { money: number[]; percents: number[] } {
+  return {
+    money: facts.options.flatMap((o) => [o.gdv, o.residual, o.profit, o.totalCost, o.blendedPsf, o.buildPsf]),
+    percents: [
+      ...facts.options.flatMap((o) => [Number((o.poc * 100).toFixed(1)), o.targetProfitPct]),
+      SCENARIO_ASSUMPTIONS.ltcPct,
+      SCENARIO_ASSUMPTIONS.ratePct,
+    ],
+  };
+}
+
+/**
+ * The deterministic commentary, in one place.
+ *
+ * It is both the demo-mode output AND what a rejected model draft falls back
+ * to, so it has to satisfy `riskFigures` itself — a guard its own fallback
+ * fails would reject every draft and then print prose it had just called
+ * unsupported. `risk-commentary-guard.test.ts` asserts exactly that.
+ */
+export function riskTemplate(facts: RiskFactsForGuard): string {
+  const best = bestOption(facts);
+  const others = facts.options.filter((o) => o !== best);
+  const spread = others
+    .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
+    .join(', while ');
+  return (
+    `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
+    `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
+    `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
+    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
+  );
+}
+
+/**
+ * Which option the engine actually ranks best, by profit on cost.
+ *
+ * The template and the instruction both derive it here, so the brief the model
+ * is given and the answer it is checked against cannot drift apart.
+ */
+const bestOption = (facts: RiskFactsForGuard) => facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+
+/** the option names, longest first, so "Scheme A2" is matched before "Scheme A" */
+const namesIn = (facts: RiskFactsForGuard) => [...facts.options].sort((a, b) => b.name.length - a.name.length);
+
+const escapeName = (n: string) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const mentions = (text: string, name: string) => new RegExp(`(?<![\\w-])${escapeName(name)}(?![\\w-])`, 'i').test(text);
+
+/**
+ * Words a reader takes as "this is the one".
+ *
+ * The instruction asks the model to name the resilient option and say why its
+ * margin is widest, so this is the vocabulary it was pointed at.
+ */
+const PREFERRED =
+  /\b(?:more|most)\s+resilient\b|\bresilient\s+option\b|\bpreferred\b|\brecommend(?:ed|s|ation)?\b|\bwidest\s+margin\b|\b(?:most|more)\s+(?:robust|defensive|attractive)\b|\bstrongest\b|\bbest\s+(?:option|placed|risk[- ]adjusted)\b|\bfavoured\b/i;
+
+/**
+ * Does the commentary recommend the option the ENGINE ranked best?
+ *
+ * `unsupportedFigures` checks that every number came from the engine. Choosing
+ * WHICH option those numbers make the better scheme is a financial conclusion —
+ * the first non-negotiable in this codebase is that the model never draws one —
+ * and it was checked by nothing. Every figure in "Scheme B is the more resilient
+ * option" is a figure the model was handed, so the figure guard returns [] and
+ * a commentary recommending the scheme the engine ranks lower is shown as the
+ * model's own work, to a promoter taking it to a lender or a JV partner.
+ *
+ * Sentence-level and comparison-aware: "Scheme B is less resilient than Scheme A"
+ * names both, and naming the engine's choice in the same breath is what makes it
+ * a comparison rather than a rival recommendation.
+ */
+export function unsupportedRecommendation(commentary: string, facts: RiskFactsForGuard): string[] {
+  if (facts.options.length < 2) return [];
+  const best = bestOption(facts);
+  const bad: string[] = [];
+  if (!mentions(commentary, best.name)) {
+    bad.push(`the commentary never names ${best.name}, which the engine ranks best on profit on cost`);
+  }
+  for (const sentence of commentary.split(/(?<=[.;])\s+/)) {
+    if (!PREFERRED.test(sentence) || mentions(sentence, best.name)) continue;
+    for (const o of namesIn(facts)) {
+      if (o.name === best.name) continue;
+      if (mentions(sentence, o.name)) {
+        bad.push(`recommends ${o.name} over the engine's choice of ${best.name} — "${sentence.trim()}"`);
+        break;
+      }
+    }
+  }
+  return bad;
+}
+
+/**
+ * Whether a drafted commentary may be shown, or the template used instead.
+ *
+ * The model was told to use these figures verbatim. This checks it did — the
+ * same reasoning as the Red Book narrative, which has had it since
+ * `narrative-guard.ts`: the instruction is right, and it is still only an
+ * instruction. This commentary is what a promoter takes to a lender or a JV
+ * partner, beside a comparison grid showing the real numbers, so a transposed
+ * digit is a residual land value nobody calculated in the one paragraph a
+ * reader takes on trust.
+ *
+ * Separated from the fetch on purpose. Behind the live call it could only be
+ * exercised with an API key and a model that misbehaves on cue, so removing it
+ * would have failed nothing — the split is what lets the decision be driven
+ * backwards.
+ */
+export function acceptRiskDraft(
+  commentary: string,
+  facts: RiskFactsForGuard,
+): { commentary: string; source: 'model' | 'template' } {
+  const unsupported = [
+    ...unsupportedFigures({ commentary }, riskFigures(facts)),
+    ...unsupportedRecommendation(commentary, facts),
+  ];
+  if (unsupported.length === 0) return { commentary, source: 'model' };
+  console.warn(`[risk] draft discarded — not supported by the engine: ${unsupported.join(', ')}`);
+  return { commentary: riskTemplate(facts), source: 'template' };
+}
 
 const zRiskCommentary = z.object({ commentary: z.string().min(1) });
 
@@ -1419,8 +1990,10 @@ const RISK_TOOL = {
  * is supplied (engine-computed) — it authors register, never arithmetic. Falls
  * back to a deterministic template when no ANTHROPIC_API_KEY (demo mode).
  */
-async function draftRiskCommentary(facts: { subject: string; options: RiskOption[] }): Promise<string> {
-  const best = facts.options.reduce((a, b) => (b.poc > a.poc ? b : a));
+async function draftRiskCommentary(
+  facts: { subject: string; options: RiskOption[] },
+): Promise<{ commentary: string; source: 'model' | 'template' }> {
+  const best = bestOption(facts);
   const optionLines = facts.options
     .map(
       (o) =>
@@ -1453,8 +2026,10 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
       const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
       const toolUse = body.content.find((c) => c.type === 'tool_use');
       const parsed = zRiskCommentary.safeParse(toolUse?.input);
-      if (parsed.success) return parsed.data.commentary;
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
+      if (!parsed.success) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI risk drafting returned an unusable response — try again.' });
+      }
+      return acceptRiskDraft(parsed.data.commentary, facts);
     }
     // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
     const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -1463,15 +2038,11 @@ RULES: 100-160 words; UK development-appraisal register; third person — no fir
       message: `AI risk drafting unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
     });
   }
-  // demo fallback: deterministic template interpolating the same engine figures
-  const others = facts.options.filter((o) => o !== best);
-  const spread = others
-    .map((o) => `${o.name} returns ${(o.poc * 100).toFixed(1)}% on cost against a GDV of ${gbp(o.gdv)} and a residual of ${gbp(o.residual)}`)
-    .join(', while ');
-  return (
-    `The options for ${facts.subject} carry distinct risk profiles. ${spread}. ` +
-    `Planning exposure sits with the unconsented variants, whose residuals assume value that has yet to be secured, and build-cost inflation bears hardest on the larger floorplates. ` +
-    `On sales absorption, the higher-GDV schemes lean more heavily on rate and take-up holding through the ${SCENARIO_ASSUMPTIONS.salesMonths}-month disposal window, and with all options geared at ${SCENARIO_ASSUMPTIONS.ltcPct}% loan-to-cost at ${SCENARIO_ASSUMPTIONS.ratePct}%, any extension of the programme compounds finance costs across the board. ` +
-    `${best.name} is considered the more resilient option: its forecast profit of ${gbp(best.profit)} at ${(best.poc * 100).toFixed(1)}% on cost, against a GDV of ${gbp(best.gdv)} and a residual land value of ${gbp(best.residual)}, provides the widest margin against planning delay, cost overrun and softer sales rates.`
-  );
+  /**
+   * Demo fallback: a deterministic template interpolating the same engine
+   * figures. No model wrote a word of it, and the caller has to be able to tell
+   * — the AI-use disclosure in the Red Book is derived from whether this was an
+   * AI touchpoint.
+   */
+  return { source: 'template' as const, commentary: riskTemplate(facts) };
 }

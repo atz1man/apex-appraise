@@ -359,6 +359,48 @@ export function ProgressBar({ pct, color = '#1E7A55', height = 6 }: { pct: numbe
   );
 }
 
+/**
+ * A surface this plan does not include.
+ *
+ * Deliberately a PANEL and not a hidden nav item. Hiding benchmarking from a
+ * Starter workspace makes it undiscoverable, and a feature nobody can see is a
+ * feature nobody upgrades for — the locked surface IS the upsell. It says what
+ * the feature is, which plan carries it, and gives one route to change that.
+ *
+ * It is never the protection. Every gated procedure refuses on the server, so a
+ * stale cache or a devtools edit changes what is drawn and nothing else.
+ */
+export function PlanLocked({
+  feature,
+  plan,
+  children,
+  cta = true,
+}: {
+  feature: string;
+  plan: string;
+  children: ReactNode;
+  cta?: boolean;
+}) {
+  return (
+    <EmptyState
+      icon={<Icon d="M7 11V7a5 5 0 0 1 10 0v4|M5 11h14v10H5z" size={22} />}
+      title={`${feature} is included from ${plan}`}
+      cta={
+        cta ? (
+          <Link to="/settings">
+            {/* Settings is one scrolling page, and Billing is its second panel —
+                a hash deep-link would need scroll restoration this app does not
+                have, and a CTA that lands you nowhere is worse than one scroll */}
+            <Button variant="primary">See plans</Button>
+          </Link>
+        ) : undefined
+      }
+    >
+      {children}
+    </EmptyState>
+  );
+}
+
 export function EmptyState({ icon, title, children, cta }: { icon?: ReactNode; title?: ReactNode; children: ReactNode; cta?: ReactNode }) {
   return (
     <div className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center">

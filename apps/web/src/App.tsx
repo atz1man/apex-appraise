@@ -1,8 +1,16 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+declare module '@tanstack/react-query' {
+  interface Register {
+    /** Declared by a mutation whose screen shows its own error — see the cache handler below. */
+    mutationMeta: { inlineError?: boolean };
+  }
+}
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
+import { OfflineBanner } from './components/OfflineBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BrandMark } from './components/ui';
 
@@ -53,6 +61,8 @@ const Settings = lazy(() => import('./routes/Settings'));
 const Register = lazy(() => import('./routes/Register'));
 const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
+const SsoCallback = lazy(() => import('./routes/SsoCallback'));
+const ApiDocs = lazy(() => import('./routes/ApiDocs'));
 const SitePack = lazy(() => import('./routes/SitePack'));
 const WhatsNew = lazy(() => import('./routes/WhatsNew'));
 // public, and deliberately not behind Protected: a privacy notice you have to
@@ -152,10 +162,25 @@ export default function App() {
             toastGlobal('error', `Couldn't load this page's data — ${message}`);
           },
         }),
-        // every failed mutation surfaces as a toast — no more silent failures
+        /**
+         * Every failed mutation surfaces — once.
+         *
+         * This handler is the single owner of the error toast, which is what it
+         * was written to be: "no more silent failures". What it did not account
+         * for is that a screen may already be showing the failure where it
+         * happened, and react-query runs BOTH this and the mutation's own
+         * onError. Measured in a browser: one refused invite produced two
+         * identical toasts, and a form rendering its error inline showed the
+         * same sentence twice in two places.
+         *
+         * So a mutation whose screen displays its own error says so with
+         * `meta: { inlineError: true }` and this stays quiet. A toast is for a
+         * failure with nowhere else to appear.
+         */
         mutationCache: new MutationCache({
-          onError: (err) => {
+          onError: (err, _vars, _ctx, mutation) => {
             if (handleAuthError(err)) return;
+            if (mutation.meta?.inlineError) return;
             toastGlobal('error', err instanceof Error ? err.message : 'Something went wrong');
           },
         }),
@@ -166,6 +191,8 @@ export default function App() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
+        {/* every screen, because the field app is the one that needs it — see OfflineBanner */}
+        <OfflineBanner />
         {/* a render fault must not leave a blank page — see ErrorBoundary */}
         <ErrorBoundary>
         <Suspense fallback={<Splash />}>
@@ -175,6 +202,8 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/reset" element={<ResetPassword />} />
+          {/* the redirect URI auth.ssoStart hands the identity provider */}
+          <Route path="/sso/callback" element={<SsoCallback />} />
           <Route path="/welcome" element={<Landing />} />
           <Route path="/whats-new" element={<WhatsNew />} />
           <Route path="/privacy" element={<Privacy />} />
@@ -182,6 +211,8 @@ export default function App() {
               client signing a specific engagement — React Router ranks the static
               path first, so the two do not collide */}
           <Route path="/terms" element={<Terms />} />
+          {/* the address /api/v1 hands every integrator */}
+          <Route path="/docs/api" element={<ApiDocs />} />
           {/* The root is the front door for BOTH audiences. A signed-in user gets
               their workspace; a stranger gets the product and its pricing, rather
               than being bounced to a login form with demo credentials on it —

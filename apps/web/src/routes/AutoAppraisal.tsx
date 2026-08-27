@@ -229,6 +229,16 @@ export default function AutoAppraisal() {
   const extract = trpc.autoAppraisal.extract.useMutation();
   const whatIf = trpc.autoAppraisal.whatIf.useMutation();
   const save = trpc.appraisal.save.useMutation();
+  /**
+   * Does this deal already have an appraisal?
+   *
+   * If it does, accepting an extraction BRANCHES rather than overwrites. An AI
+   * reading of some drawings replacing a valuer's own figures in place, with no
+   * version and nothing in the history to say it happened, is the same silent
+   * loss the save lock exists to stop — and here the thing being lost is human
+   * work replaced by a machine's.
+   */
+  const { data: existingAppraisal } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
 
   const [engine, setEngine] = useState<'ai' | 'manual'>('ai');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result'>('idle');
@@ -363,6 +373,8 @@ export default function AutoAppraisal() {
       await save.mutateAsync({
         dealId,
         source: 'ai',
+        asNewVersion: !!existingAppraisal,
+        label: existingAppraisal ? 'Auto-Appraisal' : undefined,
         input: {
           units: x.units.map((u) => ({ label: u.label, count: u.count, area: u.area, cap: u.value, conf: u.conf, source: u.source })),
           efficiency: x.efficiency,

@@ -130,6 +130,28 @@ export const zAppraisalInput = z.object({
     arrangementFeePct: z.number().min(0).max(10),
     spendProfile: z.enum(['scurve', 'even', 'linear', 'front', 'back']).optional(),
     absorptionUnitsPerMonth: z.number().positive().max(500).optional(),
+    /**
+     * The mezzanine tranche, when the stack has one.
+     *
+     * These had a screen and three database columns and nothing in between: the
+     * appraisal page's Capital stack panel held them in component state, so
+     * changing the mezzanine rate did not even mark the appraisal dirty — the
+     * Save button stayed disabled — and the values were discarded on reload.
+     * `Appraisal.mezzToPct`, `mezzRatePct` and `drawFactorPct` were written only
+     * by the seed and read by nothing.
+     *
+     * Optional, and absent means no mezzanine tranche. Existing appraisals have
+     * none, and none of their figures move.
+     */
+    mezz: z
+      .object({
+        /** gearing ceiling including the mezzanine, % of construction cost */
+        toPct: z.number().min(0).max(100),
+        ratePct: z.number().min(0).max(40),
+        /** average drawn proportion over the term, % — mezzanine is rarely fully drawn */
+        drawFactorPct: z.number().min(0).max(100).default(55),
+      })
+      .optional(),
   }),
   site: z.object({
     mode: z.enum(['residual', 'profit']),
@@ -213,3 +235,6 @@ export const zWhatIfResponse = z.object({
   changes: z.record(z.unknown()),
   reply: z.string(),
 });
+
+// ---- Plans: what each tier switches on (see ./plan.ts) ----
+export * from './plan.js';

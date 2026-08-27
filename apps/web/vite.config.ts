@@ -27,5 +27,18 @@ export default defineConfig({
    */
   test: {
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    /**
+     * The suite runs in a timezone that is not the firm's, deliberately.
+     *
+     * Everything this product prints is for a UK firm, but the people who READ
+     * it — buyers, investors, a client following a signing link — are often not
+     * in the UK. A date entered as a day is stored at UTC midnight, so anywhere
+     * west of Greenwich renders it as the day before: a valuation date typed as
+     * 30 June reached a client in New York as 29 June.
+     *
+     * Run in UTC or London, a test asserting "30 June" passes whether or not
+     * the code pins a zone, so the guard is decoration. Here it is not.
+     */
+    env: { TZ: 'America/New_York' },
   },
 });

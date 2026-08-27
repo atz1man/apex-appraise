@@ -11,7 +11,8 @@ import {
   type CohortPoint,
 } from '@apex/appraisal-engine';
 import { recordAudit } from '../audit.js';
-import { adminProcedure, internalProcedure, router } from '../trpc.js';
+import { currentAppraisal } from '../current-appraisal.js';
+import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 
 /**
  * Benchmarks built from what firms actually contribute.
@@ -48,9 +49,22 @@ const REGION_BY_COUNTY: Array<[RegExp, string]> = [
  */
 export type CohortBasis = 'contributed' | 'illustrative' | 'none';
 
+/**
+ * Benchmarking is a Growth feature, so READING the pool is gated — the reading is
+ * the thing being sold.
+ *
+ * The contribution procedures below are deliberately NOT gated. setContribution
+ * is a consent control, and turning it off withdraws points already given; a
+ * paywall in front of it would mean a firm that shared during its trial and then
+ * subscribed to Starter could no longer take its figures back out of other
+ * firms' medians. Consent has to be as easy to revoke as it was to give,
+ * whatever anybody is paying.
+ */
+const benchmarkProcedure = internalProcedure.use(requiresFeature('benchmarking'));
+
 export const benchmarksRouter = router({
   /** Percentile strips per metric, plus where this firm sits — when that can be said honestly. */
-  metrics: internalProcedure
+  metrics: benchmarkProcedure
     .input(z.object({ region: z.string(), useClass: z.string() }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.principal.orgId;
@@ -115,7 +129,7 @@ export const benchmarksRouter = router({
     }),
 
   /** Build-cost trend: the cohort median per quarter against this firm's own schemes. */
-  trend: internalProcedure
+  trend: benchmarkProcedure
     .input(z.object({ region: z.string(), useClass: z.string() }))
     .query(async ({ ctx, input }) => {
       const orgId = ctx.principal.orgId;
@@ -166,7 +180,7 @@ export const benchmarksRouter = router({
    * average price + annual growth, latest 12 published months. Genuinely
    * measured data, and distinct from the contributed appraisal cohorts above.
    */
-  hpi: internalProcedure.input(z.object({ region: z.string() })).query(async ({ input }) => {
+  hpi: benchmarkProcedure.input(z.object({ region: z.string() })).query(async ({ input }) => {
     const { fetchHpi } = await import('../opendata.js');
     try {
       return { status: 'ok' as const, ...(await fetchHpi(input.region)) };
@@ -203,24 +217,36 @@ export const benchmarksRouter = router({
    * is not a decision for whoever happens to be looking at the screen.
    */
   setContribution: adminProcedure.input(z.object({ enabled: z.boolean() })).mutation(async ({ ctx, input }) => {
-    await ctx.prisma.organisation.update({
-      where: { id: ctx.principal.orgId },
-      data: { contributesBenchmarks: input.enabled },
-    });
-
+    /**
+     * Both writes or neither.
+     *
+     * Opting out WITHDRAWS what was already given. A switch that only stops
+     * future contributions would leave a firm's figures in other firms' medians
+     * after it asked to leave — which is not what anyone means by turning it
+     * off, and is the whole point of the test below.
+     *
+     * The flag was flipped first and the points deleted second, on separate
+     * round trips. A fault between them — a dropped connection, the process
+     * killed mid-request — left the switch reading "not contributing" while the
+     * points stayed in the pool, and the audit event never written, because the
+     * throw came before it. Consent withdrawn in the interface and not in the
+     * data is the one direction that must not be possible: these are ratios
+     * derived from client-confidential appraisals, and this repo has twice had
+     * to go back for rows an erasure left behind (`1cdf171`, `77c95e2`).
+     */
     let withdrawn = 0;
-    if (!input.enabled) {
-      /**
-       * Opting out WITHDRAWS what was already given. A switch that only stops
-       * future contributions would leave a firm's figures in other firms'
-       * medians after it asked to leave — which is not what anyone means by
-       * turning it off.
-       */
-      const { count } = await ctx.prisma.benchmarkPoint.deleteMany({
-        where: { orgId: ctx.principal.orgId, source: 'contributed' },
+    await ctx.prisma.$transaction(async (tx) => {
+      await tx.organisation.update({
+        where: { id: ctx.principal.orgId },
+        data: { contributesBenchmarks: input.enabled },
       });
-      withdrawn = count;
-    }
+      if (!input.enabled) {
+        const { count } = await tx.benchmarkPoint.deleteMany({
+          where: { orgId: ctx.principal.orgId, source: 'contributed' },
+        });
+        withdrawn = count;
+      }
+    });
 
     await recordAudit(ctx.prisma, {
       orgId: ctx.principal.orgId,
@@ -253,9 +279,7 @@ export const benchmarksRouter = router({
 
     const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-    const row = await ctx.prisma.appraisal.findFirst({
-      where: { dealId: deal.id, orgId: ctx.principal.orgId, isCurrent: true },
-    });
+    const row = await currentAppraisal(ctx.prisma.appraisal, deal.id, ctx.principal.orgId);
     if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save an appraisal before contributing' });
     const R = computeAppraisal(appraisalRowToEngineInput(row));
     if (R.gia <= 0 || R.gdv <= 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Appraisal has no areas/revenue yet' });

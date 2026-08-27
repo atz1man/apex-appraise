@@ -121,8 +121,15 @@ describe('editing a version that is out for review', () => {
     await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
     expect((await current()).reviewStatus).toBe('in_review');
 
-    // the analyst keeps working — the save is allowed, but it withdraws
-    await callerFor(analyst).appraisal.save({ dealId: T.dealId, input: input(125) } as never);
+    // the analyst keeps working — the save is allowed, but it withdraws.
+    // expectedUpdatedAt because this edits the version in place; submitForReview
+    // touched the row, so it is the post-submission stamp that has to be sent
+    const held = await current();
+    await callerFor(analyst).appraisal.save({
+      dealId: T.dealId,
+      input: input(125),
+      expectedUpdatedAt: held.updatedAt,
+    } as never);
     const after = await current();
     expect(after.reviewStatus).toBe('draft');
     expect(after.submittedById).toBeNull();
@@ -164,6 +171,44 @@ describe('resubmission', () => {
     // so rather than leaving a reader to notice two names are the same
     expect(cur.review.selfApproved).toBe(true);
     expect(cur.review.reviewedBy).toBe('Review Owner');
+  });
+});
+
+describe('what the printed report can learn about a signature', () => {
+  it('tells the report when the version was signed off, and by what decision', async () => {
+    // both reports dated themselves from the reader's clock, so a valuation
+    // re-dated its own signature every time anybody opened it. The date they
+    // print now comes from here — see apps/web/src/lib/report-dates.ts
+    // the describes above leave the current version approved; branch a fresh
+    // one so this is testing its own state rather than the previous test's
+    await callerFor(T.principal).appraisal.save({
+      dealId: T.dealId, input: input(112), asNewVersion: true, label: 'For signature',
+    } as never);
+    const v = await current();
+    await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'approve' } as never);
+
+    const cur = (await callerFor(T.principal).appraisal.getCurrent(T.dealId)) as {
+      reviewStatus: string;
+      reviewedAt: Date | null;
+      updatedAt: Date;
+    };
+    expect(cur.reviewStatus).toBe('approved');
+    expect(cur.reviewedAt).toBeInstanceOf(Date);
+    // the two are different facts: a version can be saved after it was signed
+    expect(cur.reviewedAt).not.toBeNull();
+  });
+
+  it('says plainly that a draft has no signing date, rather than offering one', async () => {
+    await callerFor(T.principal).appraisal.save({
+      dealId: T.dealId, input: input(115), asNewVersion: true, label: 'Unsigned',
+    } as never);
+    const cur = (await callerFor(T.principal).appraisal.getCurrent(T.dealId)) as {
+      reviewStatus: string;
+      reviewedAt: Date | null;
+    };
+    expect(cur.reviewStatus).toBe('draft');
+    expect(cur.reviewedAt).toBeNull();
   });
 });
 

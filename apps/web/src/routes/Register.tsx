@@ -15,6 +15,8 @@ export default function Register() {
   const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
   const [serverError, setServerError] = useState('');
   const register = trpc.org.register.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
     onSuccess: (res) => {
       setSession(res.token, res.principal as StoredPrincipal);
       navigate('/', { replace: true });

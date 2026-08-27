@@ -1,0 +1,13 @@
+-- The single sign-on panel loads its five fields once and posts every one of
+-- them back, which is the shape this branch has now found seven times. Two
+-- administrators configuring SSO is rare, but `enforced` is the switch
+-- `a9cbb50` found could lock a firm out of its own workspace — so the field
+-- that a lost update would silently flip is the one with the teeth.
+--
+-- Found by `lost-update-sweep.test.ts` rather than by reading, which is what
+-- that sweep exists for.
+--
+-- DEFAULT CURRENT_TIMESTAMP so existing rows get a value and this cannot block
+-- on real data; CURRENT_TIMESTAMP rather than NOW() because the same SQL has to
+-- run on SQLite in development (docs/DATABASE.md).
+ALTER TABLE "SsoConnection" ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

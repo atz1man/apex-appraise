@@ -1,5 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { planHasFeature } from '@apex/types/plan';
+import { openFor } from './sealed-fields.js';
 
 /**
  * Outbound webhooks.
@@ -21,17 +23,15 @@ import type { PrismaClient } from '@prisma/client';
  *   valid forever.
  */
 
-export const WEBHOOK_EVENTS = [
-  'appraisal.approved',
-  'appraisal.submitted',
-  'covenant.breached',
-  'deal.created',
-  'report.shared',
-] as const;
-
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
-
-export const isWebhookEvent = (s: string): s is WebhookEvent => (WEBHOOK_EVENTS as readonly string[]).includes(s);
+/**
+ * The event names live in @apex/types/api, because the API documentation page
+ * lists them and the browser cannot import from this package. Re-exported so
+ * every existing import still resolves — and api-docs.test.ts asserts this is
+ * the SAME array, not a second one that happens to agree today.
+ */
+import { WEBHOOK_EVENTS, isWebhookEvent, type WebhookEvent } from '@apex/types/api';
+export { WEBHOOK_EVENTS, isWebhookEvent };
+export type { WebhookEvent };
 
 /** Shown once when an endpoint is created, exactly like an API key. */
 export const newWebhookSecret = () => `whsec_${randomBytes(24).toString('base64url')}`;
@@ -166,6 +166,19 @@ export async function emitWebhook(
   payload: unknown,
 ): Promise<number> {
   try {
+    /**
+     * The plan is re-checked at DELIVERY, not only when the endpoint was added.
+     *
+     * Endpoints are not deleted by a downgrade — the workspace keeps them, and
+     * they resume the moment it is back on a plan that includes them. But a
+     * Starter workspace that once subscribed to Enterprise must not keep
+     * receiving deal figures on someone else's server; that is the feature it
+     * stopped paying for. Nothing is queued, so nothing accumulates to be
+     * flushed later either.
+     */
+    const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { plan: true } });
+    if (!planHasFeature(org?.plan ?? '', 'publicApi')) return 0;
+
     const endpoints = await prisma.webhookEndpoint.findMany({ where: { orgId, active: true } });
     const wanted = endpoints.filter((e) => e.events.split(',').map((x) => x.trim()).includes(event));
     if (!wanted.length) return 0;
@@ -223,7 +236,11 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
     const timestamp = Math.floor(now.getTime() / 1000);
     const headers = {
       'content-type': 'application/json',
-      'apex-signature': signatureHeader(d.endpoint.secret, timestamp, d.payload),
+      'apex-signature': signatureHeader(
+        openFor('webhookEndpoint', 'secret', d.orgId, d.endpoint.secret),
+        timestamp,
+        d.payload,
+      ),
       'apex-event': d.event,
       'apex-delivery': d.id,
     };

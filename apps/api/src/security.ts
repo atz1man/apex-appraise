@@ -48,8 +48,21 @@ const num = (name: string, fallback: number) => {
  * guessing, reset-token guessing, and using the reset endpoint to mail-bomb a
  * user. Matched by substring so tRPC's batched paths ("/trpc/auth.login,org.get")
  * cannot slip past a prefix check.
+ *
+ * `org.register` belongs here for the third of those reasons and was missing.
+ * It is public, it sends a welcome email to an address the caller supplies, and
+ * the subject and body carry the caller's own `name` and `orgName` — so at the
+ * general budget it is a relay for a hundred and sixty characters of somebody
+ * else's text, from this firm's domain, sixty times a minute. It is also the
+ * only public procedure that creates permanent rows: an Organisation, a User
+ * and a connector row per workspace, none of which any sweeper removes.
+ *
+ * The throttle inside the procedure does not cover this. It is keyed
+ * `register:<email>` and only `recordFailure`s when the address is already
+ * taken, so it limits probing ONE address and not registering a thousand new
+ * ones — which is the case that costs something.
  */
-const SENSITIVE = ['auth.login', 'auth.requestPasswordReset', 'auth.resetPassword'];
+const SENSITIVE = ['auth.login', 'auth.requestPasswordReset', 'auth.resetPassword', 'org.register'];
 
 export const isSensitive = (url: string) => SENSITIVE.some((p) => url.includes(p));
 

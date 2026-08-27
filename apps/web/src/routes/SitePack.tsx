@@ -511,7 +511,17 @@ export default function SitePack() {
                       {company.data.officers.map((o, i) => (
                         <div key={i} className="text-[11.5px] text-ink-2 py-0.5">{o.name} · {o.role}</div>
                       ))}
-                      <div className="mt-2.5 label-mono text-ink-3">Charges · {company.data.charges.outstanding} outstanding of {company.data.charges.total}</div>
+                      {/*
+                        "at least" when the register holds more charges than one
+                        page returned. The count used to be taken from the three
+                        rows below and printed as though it were the whole
+                        register — on the panel that says how much of a
+                        counterparty's assets a lender already holds.
+                      */}
+                      <div className="mt-2.5 label-mono text-ink-3">
+                        Charges · {company.data.charges.complete ? '' : 'at least '}
+                        {company.data.charges.outstanding} outstanding of {company.data.charges.total}
+                      </div>
                       {company.data.charges.items.slice(0, 3).map((c, i) => (
                         <div key={i} className="text-[11.5px] text-ink-2 py-0.5 min-w-0">
                           <span className={c.status === 'outstanding' ? 'text-status-red font-medium' : ''}>{c.status}</span> · {c.personsEntitled.join(', ') || c.description}

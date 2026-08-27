@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { SEALED_FIELDS } from './sealed-fields.js';
 
 /**
  * Everything a workspace holds, in one file it can take away.
@@ -29,10 +30,28 @@ import { Prisma, type PrismaClient } from '@prisma/client';
  */
 const CREDENTIAL_FIELD = /(password|secret|token|hash|signature)/i;
 
-/** Values that are credentials by shape rather than by name. */
-const redactValue = (key: string, value: unknown) => (CREDENTIAL_FIELD.test(key) ? '[redacted]' : value);
+/**
+ * The name rule has a blind spot, and it had already been walked into.
+ *
+ * IntegrationConnection.config holds the API key a firm pastes in for the EPC
+ * register and Companies House. It is a credential by any reading, and neither
+ * `config` nor anything in the "smells like one" guard in export.test.ts matches
+ * it — so every workspace export carried those keys in the clear, in a file
+ * whose own notes say credentials are excluded.
+ *
+ * So the SEALED_FIELDS registry decides too. It is the definitive list of
+ * columns holding somebody's credential, which makes it the right authority
+ * here: adding a column there now also takes it out of exports, whatever it is
+ * called.
+ */
+const SEALED = new Set(SEALED_FIELDS.flatMap(({ model, fields }) => fields.map((f) => `${model}.${f}`)));
 
-export const isCredentialField = (key: string) => CREDENTIAL_FIELD.test(key);
+export const isCredentialField = (key: string, model?: string) =>
+  CREDENTIAL_FIELD.test(key) || (model !== undefined && SEALED.has(`${lowerFirst(model)}.${key}`));
+
+/** Values that are credentials by shape rather than by name. */
+const redactValue = (model: string, key: string, value: unknown) =>
+  isCredentialField(key, model) ? '[redacted]' : value;
 
 /**
  * Models carrying an orgId, straight from the generated datamodel — the same
@@ -74,31 +93,31 @@ export async function exportWorkspace(prisma: PrismaClient, orgId: string): Prom
   for (const model of orgScopedModels()) {
     const client = (prisma as unknown as Record<string, { findMany: (a: object) => Promise<unknown[]> }>)[lowerFirst(model)];
     if (!client) continue;
-    data[model] = redactRows(await client.findMany({ where: { orgId } }));
+    data[model] = redactRows(model, await client.findMany({ where: { orgId } }));
   }
   for (const [model, where] of Object.entries(VIA_PARENT)) {
     const client = (prisma as unknown as Record<string, { findMany: (a: object) => Promise<unknown[]> }>)[lowerFirst(model)];
     if (!client) continue;
-    data[model] = redactRows(await client.findMany({ where: where(orgId) }));
+    data[model] = redactRows(model, await client.findMany({ where: where(orgId) }));
   }
-  data.Organisation = redactRows(org ? [org] : []);
+  data.Organisation = redactRows('Organisation', org ? [org] : []);
 
   return {
     exportedAt: new Date().toISOString(),
     workspace: org?.name ?? 'Unknown workspace',
     data,
     notes: [
-      'Credentials are excluded: password hashes, API key hashes, SSO client secrets, integration refresh tokens and document signatures are shown as [redacted].',
+      'Credentials are excluded: password hashes, API key hashes, SSO client secrets, integration API keys and refresh tokens, webhook signing secrets and document signatures are shown as [redacted].',
       'Uploaded files are not embedded in this file. Download them from the deal data rooms; this export lists their names, sizes and where they were attached.',
       'Money is in pence, as it is stored, so nothing is lost to rounding on the way out.',
     ],
   };
 }
 
-function redactRows(rows: unknown[]): unknown[] {
+function redactRows(model: string, rows: unknown[]): unknown[] {
   return rows.map((row) =>
     jsonSafe(
-      Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([k, v]) => [k, redactValue(k, v)])),
+      Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([k, v]) => [k, redactValue(model, k, v)])),
     ),
   );
 }
