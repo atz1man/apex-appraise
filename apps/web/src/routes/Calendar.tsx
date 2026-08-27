@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { brand, brandInk, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
+import { firmDayKey, firmDayLabel, firmToday, groupByDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 
@@ -36,19 +37,18 @@ const STAGE_ACCENT: Record<string, string> = {
   COMPLETED: 'rgb(var(--ink-2b, 110 114 105))',
 };
 
-// ---- Date helpers (all local-time; en-GB) ----
-const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const fmtDue = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+// ---- Dates: decided in the FIRM's timezone, not the reader's — see lib/firm-day.ts ----
+// This screen used the reader's local clock on values stored as UTC midnight, so
+// west of Greenwich every task sat one square early and a task due today read as
+// overdue. paper.tsx had already settled the question for the documents.
 
 export default function Calendar() {
   const toast = useToast();
   const utils = trpc.useUtils();
 
-  const today = useMemo(() => startOfDay(new Date()), []);
-  const todayKey = dayKey(today);
+  const todayKey = useMemo(() => firmToday(), []);
 
-  const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [view, setView] = useState(() => viewOf(todayKey));
   const [filter, setFilter] = useState<string>('all');
 
   // add-task form
@@ -84,7 +84,8 @@ export default function Calendar() {
   const allTasks = taskData ?? [];
   const tasks = useMemo(() => (filter === 'all' ? allTasks : allTasks.filter((t) => t.assignee === filter)), [allTasks, filter]);
 
-  const isOverdue = (t: { done: boolean; due: Date | null }) => !t.done && !!t.due && startOfDay(t.due).getTime() < today.getTime();
+  // 'YYYY-MM-DD' keys compare chronologically as plain strings
+  const isOverdue = (t: { done: boolean; due: Date | null }) => !t.done && !!t.due && firmDayKey(t.due) < todayKey;
 
   // ---- Calendar cells (Monday-first) ----
   const cells = useMemo(() => {
@@ -95,14 +96,14 @@ export default function Calendar() {
     const byDay = new Map<string, typeof tasks>();
     for (const t of tasks) {
       if (!t.due) continue;
-      const k = dayKey(t.due);
+      const k = firmDayKey(t.due);
       if (!byDay.has(k)) byDay.set(k, []);
       byDay.get(k)!.push(t);
     }
     return Array.from({ length: total }, (_, i) => {
       const dayNum = i - offset + 1;
       const inMonth = dayNum >= 1 && dayNum <= dim;
-      const k = inMonth ? dayKey(new Date(view.y, view.m, dayNum)) : null;
+      const k = inMonth ? keyOf(view.y, view.m + 1, dayNum) : null;
       const dayTasks = (k ? byDay.get(k) : undefined) ?? [];
       // open tasks first, done last
       const sorted = [...dayTasks].sort((a, b) => Number(a.done) - Number(b.done));
@@ -112,15 +113,8 @@ export default function Calendar() {
 
   // ---- Groups (Overdue / Today / This week / Later / Completed) ----
   const groups = useMemo(() => {
+    const { overdue, dueToday, thisWeek, later, done } = groupByDue(tasks, todayKey);
     const open = tasks.filter((t) => !t.done);
-    const weekEnd = today.getTime() + 7 * 86400000;
-    const ts = (t: { due: Date | null }) => (t.due ? startOfDay(t.due).getTime() : Number.MAX_SAFE_INTEGER);
-    const byDue = (a: { due: Date | null }, b: { due: Date | null }) => ts(a) - ts(b);
-    const overdue = open.filter((t) => ts(t) < today.getTime()).sort(byDue);
-    const dueToday = open.filter((t) => t.due && dayKey(t.due) === todayKey);
-    const thisWeek = open.filter((t) => ts(t) > today.getTime() && ts(t) <= weekEnd).sort(byDue);
-    const later = open.filter((t) => ts(t) > weekEnd).sort(byDue);
-    const done = tasks.filter((t) => t.done);
     return {
       list: [
         { label: 'Overdue', color: statusTokens.red.text, tasks: overdue },
@@ -131,7 +125,7 @@ export default function Calendar() {
       ],
       stats: { open: open.length, overdue: overdue.length, done: done.length },
     };
-  }, [tasks, today, todayKey]);
+  }, [tasks, todayKey]);
 
   const milestones = deals.filter((d) => d.nextMilestone);
 
@@ -258,7 +252,7 @@ export default function Calendar() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={neutral.ink2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
                   </button>
                 </div>
-                <Button variant="secondary" size="sm" onClick={() => setView({ y: today.getFullYear(), m: today.getMonth() })}>
+                <Button variant="secondary" size="sm" onClick={() => setView(viewOf(todayKey))}>
                   Today
                 </Button>
               </div>
@@ -422,7 +416,7 @@ export default function Calendar() {
                                 {t.aspect}
                               </span>
                               <span className="fig text-[11px] font-medium" style={{ color: over ? statusTokens.red.text : neutral.ink2b }}>
-                                {t.due ? fmtDue(t.due) : '—'}
+                                {t.due ? firmDayLabel(t.due) : '—'}
                               </span>
                             </div>
                           </div>
