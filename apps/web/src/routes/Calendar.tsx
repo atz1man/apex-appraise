@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { brand, brandInk, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
-import { firmDayKey, firmDayLabel, firmToday, groupByDue, keyOf, viewOf } from '../lib/firm-day';
+import { firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
 
@@ -84,8 +84,7 @@ export default function Calendar() {
   const allTasks = taskData ?? [];
   const tasks = useMemo(() => (filter === 'all' ? allTasks : allTasks.filter((t) => t.assignee === filter)), [allTasks, filter]);
 
-  // 'YYYY-MM-DD' keys compare chronologically as plain strings
-  const isOverdue = (t: { done: boolean; due: Date | null }) => !t.done && !!t.due && firmDayKey(t.due) < todayKey;
+  const isOverdue = (t: { done: boolean; due: Date | null }) => !t.done && isPastDue(t.due, todayKey);
 
   // ---- Calendar cells (Monday-first) ----
   const cells = useMemo(() => {

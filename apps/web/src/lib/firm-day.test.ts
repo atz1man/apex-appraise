@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysBetween, firmDayKey, firmDayLabel, firmToday, groupByDue, keyOf, viewOf } from './firm-day';
+import { daysBetween, firmDate, firmDay, firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from './firm-day';
 
 /**
  * A task due date is a calendar date. The picker sends `2026-06-30`, the API
@@ -127,5 +127,43 @@ describe('today', () => {
   it('is read in the firm’s timezone', () => {
     // 23:30 UTC on 4 August is already the 5th in London
     expect(firmToday(new Date('2026-08-04T23:30:00.000Z'))).toBe('2026-08-05');
+  });
+});
+
+describe('is it past due', () => {
+  /**
+   * The two screens showing a due date disagreed. Calendar compared start-of-day
+   * to start-of-day — right in the UK, a day early west of Greenwich. The cost
+   * monitor compared the stored instant to `Date.now()`, so a task due TODAY was
+   * painted red from midnight UTC onward for every reader in every timezone, the
+   * UK included. This is now asked once.
+   */
+  it('is not past on the day it is due', () => {
+    expect(isPastDue(new Date('2026-06-30'), '2026-06-30')).toBe(false);
+  });
+
+  it('is past the day after', () => {
+    expect(isPastDue(new Date('2026-06-30'), '2026-07-01')).toBe(true);
+  });
+
+  it('is not past for a task with no due date', () => {
+    expect(isPastDue(null, '2026-07-01')).toBe(false);
+    expect(isPastDue(undefined, '2026-07-01')).toBe(false);
+  });
+});
+
+describe('the day, written out', () => {
+  it('names the day the firm would name, not the reader’s', () => {
+    // the suite runs in America/New_York on purpose; local formatting of this
+    // instant reads 29 Jun
+    expect(firmDay(new Date('2026-06-30'))).toBe('30 Jun');
+    expect(firmDate(new Date('2026-06-30'))).toBe('30 Jun 2026');
+    expect(firmDayLabel(new Date('2026-06-30'))).toBe('Tue 30 Jun');
+  });
+
+  it('names a week commencing by its Monday, as the server computed it', () => {
+    // ops.ts builds weekCommencing with setUTCDate; rendering it locally moved
+    // "Week commencing 29 Jun" to Sunday the 28th
+    expect(firmDate(new Date('2026-06-29T00:00:00.000Z'))).toBe('29 Jun 2026');
   });
 });

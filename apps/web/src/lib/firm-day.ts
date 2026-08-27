@@ -60,6 +60,38 @@ const LABEL = new Intl.DateTimeFormat('en-GB', {
 });
 export const firmDayLabel = (d: Date | string) => LABEL.format(new Date(d));
 
+/** '30 Jun' — the same day, where a weekday would not fit. */
+const DAY = new Intl.DateTimeFormat('en-GB', { timeZone: DOC_TIMEZONE, day: 'numeric', month: 'short' });
+export const firmDay = (d: Date | string) => DAY.format(new Date(d));
+
+/** '30 Jun 2026' — where the year matters, as it does across a build programme. */
+const DATE = new Intl.DateTimeFormat('en-GB', {
+  timeZone: DOC_TIMEZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+export const firmDate = (d: Date | string) => DATE.format(new Date(d));
+
+/**
+ * Is this due date already past?
+ *
+ * Asked once, because the two screens showing a due date disagreed about it.
+ * Calendar compared start-of-day to start-of-day, which is right in the UK and a
+ * day early west of Greenwich. The cost monitor compared the stored instant to
+ * `Date.now()`:
+ *
+ *     task due       2026-06-30T00:00:00.000Z
+ *     now            2026-06-30T09:00:00.000Z   (10am BST, the day it is due)
+ *     rendered red?  true
+ *
+ * — so a task due TODAY was painted overdue from midnight UTC onward, for every
+ * reader in every timezone, the UK included. A due date is a day, and a day is
+ * not past until the day after it.
+ */
+export const isPastDue = (due: Date | null | undefined, todayKey: string) =>
+  !!due && firmDayKey(due) < todayKey;
+
 /** Build a key from the parts of a month grid, with no Date in the way. */
 export const keyOf = (year: number, month1: number, day: number) =>
   `${year}-${String(month1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
+import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
 import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 
@@ -30,8 +31,10 @@ const initialsOf = (name: string) =>
     .join('')
     .toUpperCase();
 
-const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+// A photo's takenAt, a week commencing and a task's due date are DAYS, stored at
+// UTC midnight. Formatting them with the reader's clock moved them — see
+// lib/firm-day.ts. Instants elsewhere on this screen stay local, which is right
+// for a timestamp.
 
 const contractorChip = (s: string): { key: StatusKey; label: string } =>
   s === 'On site'
@@ -62,6 +65,8 @@ function GradDot({ grad, label, size = 22, radius = 6 }: { grad: string; label: 
 export default function CostMonitoring() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  // today as the firm reckons it, for the due-date colour below
+  const todayKey = useMemo(() => firmToday(), []);
 
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: cost, isLoading } = trpc.cost.packages.useQuery(dealId, { enabled: !!dealId });
@@ -585,7 +590,7 @@ export default function CostMonitoring() {
                       {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
-                    <span className="fig text-[10.5px]" style={{ color: !t.done && t.due && t.due.getTime() < Date.now() ? statusTokens.red.text : neutral.ink3 }}>{t.due ? fmtDay(t.due) : '—'}</span>
+                    <span className="fig text-[10.5px]" style={{ color: !t.done && isPastDue(t.due, todayKey) ? statusTokens.red.text : neutral.ink3 }}>{t.due ? firmDay(t.due) : '—'}</span>
                     <Avatar initials={t.assignee} size={20} />
                   </button>
                 ))}
@@ -665,7 +670,7 @@ export default function CostMonitoring() {
           {photoGroups.map((g) => (
             <div key={g.wc.getTime()} className="mb-5">
               <div className="flex items-center gap-2.5 mb-2.5">
-                <span className="label-mono text-brand-ink" style={{ letterSpacing: '0.5px' }}>Week commencing {fmtDate(g.wc)}</span>
+                <span className="label-mono text-brand-ink" style={{ letterSpacing: '0.5px' }}>Week commencing {firmDate(g.wc)}</span>
                 <span className="h-px flex-1 bg-border-strong" />
                 <span className="fig text-[10.5px] text-ink-3">{g.items.length} {g.items.length === 1 ? 'photo' : 'photos'}</span>
               </div>
@@ -682,7 +687,7 @@ export default function CostMonitoring() {
                     <div className="px-3 py-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[12.5px] font-semibold truncate">{ph.caption}</span>
-                        <span className="fig text-[10px] text-ink-3 shrink-0">{fmtDay(ph.takenAt)}</span>
+                        <span className="fig text-[10px] text-ink-3 shrink-0">{firmDay(ph.takenAt)}</span>
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-ink-3">
                         <GradDot grad={gradOf(ph.contractorId)} label={ph.contractor ? initialsOf(ph.contractor) : '—'} size={14} radius={4} />
@@ -716,7 +721,7 @@ export default function CostMonitoring() {
               <div className="min-w-0">
                 <div className="text-[15px] font-semibold text-white truncate">{lightbox.caption}</div>
                 <div className="mt-0.5 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  {lightbox.contractor ?? 'No contractor'} · {fmtDate(lightbox.takenAt)}
+                  {lightbox.contractor ?? 'No contractor'} · {firmDate(lightbox.takenAt)}
                 </div>
               </div>
               <button
