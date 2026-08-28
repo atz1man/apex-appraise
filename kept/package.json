@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Kept — local-first UK return-deadline tracker (PWA + landing page)",
+  "description": "Kept \u2014 local-first UK return-deadline tracker (PWA + landing page)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -14,7 +14,8 @@
     "icons": "node scripts/make-icons.mjs",
     "contrast": "node scripts/contrast.mjs",
     "a11y": "node scripts/a11y.mjs",
-    "layout": "node scripts/layout.mjs"
+    "layout": "node scripts/layout.mjs",
+    "perf": "node scripts/perf.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -30,6 +30,7 @@ npm run smoke      # 28 end-to-end checks, including offline with the network cu
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
+npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 ```
 
 In a sandbox whose Chromium is not the build Playwright expects, point it at
@@ -277,6 +278,25 @@ than the content box it sat in. Every grid there now uses
 `minmax(min(Npx, 100%), 1fr)`, which lets the floor collapse to the space that
 exists. It also turned up a receipt row whose untruncated shop name wrapped to
 five lines while the item beneath it was still being clipped to one.
+
+### It stays usable as the library grows
+
+Every other suite runs against a small list — the free tier caps at ten active
+receipts and the seed has five. `npm run perf` asks what happens to someone on
+the paid tier two years in. On this container:
+
+| receipts | to first row | to filter |
+|---:|---:|---:|
+| 25 | 644ms | 73ms |
+| 60 | 650ms | 74ms |
+| 150 | 693ms | 80ms |
+| 500 | 851ms | 114ms |
+
+Boot is about 640ms of that regardless; the list costs roughly 0.4ms per
+receipt. The shape is linear and nothing needs virtualising. It is deliberately
+not a CI gate — wall-clock on a shared runner measures the runner as much as
+the app, and a threshold drawn from it would fail for reasons nobody could act
+on.
 
 ### Offline is verified, not asserted
 

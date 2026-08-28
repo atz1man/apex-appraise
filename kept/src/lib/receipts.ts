@@ -86,9 +86,23 @@ export function derive(r: Receipt, today: Date): DerivedReceipt {
   };
 }
 
-/** Soonest deadline first — the order every list in the app uses. */
-export function byDeadline(today: Date) {
-  return (a: Receipt, b: Receipt) => derive(a, today).daysLeft - derive(b, today).daysLeft;
+/**
+ * Soonest deadline first — the order every list in the app uses.
+ *
+ * Pair each receipt with its derived form ONCE, then sort on the number. Used
+ * as a bare comparator this derives twice per comparison, which on a few
+ * hundred receipts is thousands of redundant date parses to establish an
+ * order that was already knowable.
+ */
+export function sortByDeadline(receipts: readonly Receipt[], today: Date): DerivedPair[] {
+  return receipts
+    .map((r) => ({ receipt: r, derived: derive(r, today) }))
+    .sort((a, b) => a.derived.daysLeft - b.derived.daysLeft);
+}
+
+export interface DerivedPair {
+  receipt: Receipt;
+  derived: DerivedReceipt;
 }
 
 export interface Buckets {
@@ -104,10 +118,10 @@ export interface Buckets {
  * most needs to see.
  */
 export function bucket(receipts: readonly Receipt[], today: Date, urgentDays: number): Buckets {
-  const active = receipts.filter((r) => r.status === 'active').sort(byDeadline(today));
+  const active = sortByDeadline(receipts.filter((r) => r.status === 'active'), today);
   return {
-    urgent: active.filter((r) => derive(r, today).daysLeft <= urgentDays),
-    later: active.filter((r) => derive(r, today).daysLeft > urgentDays),
+    urgent: active.filter((x) => x.derived.daysLeft <= urgentDays).map((x) => x.receipt),
+    later: active.filter((x) => x.derived.daysLeft > urgentDays).map((x) => x.receipt),
     returned: receipts.filter((r) => r.status === 'returned'),
   };
 }
@@ -116,13 +130,13 @@ export function bucket(receipts: readonly Receipt[], today: Date, urgentDays: nu
 export function timelineDots(receipts: readonly Receipt[], today: Date) {
   return receipts
     .filter((r) => r.status === 'active')
-    .map((r) => ({ receipt: r, d: derive(r, today) }))
-    .filter(({ d }) => d.daysLeft >= 0 && d.daysLeft <= 30)
-    .map(({ receipt, d }) => ({
+    .map((r) => ({ receipt: r, derived: derive(r, today) }))
+    .filter(({ derived }) => derived.daysLeft >= 0 && derived.daysLeft <= 30)
+    .map(({ receipt, derived }) => ({
       store: receipt.store,
-      daysLeft: d.daysLeft,
+      daysLeft: derived.daysLeft,
       // Clamped away from the rail's ends so a dot is never half off the strip.
-      left: Math.max(2, Math.min(98, Math.round((d.daysLeft / 30) * 100))),
+      left: Math.max(2, Math.min(98, Math.round((derived.daysLeft / 30) * 100))),
     }));
 }
 
