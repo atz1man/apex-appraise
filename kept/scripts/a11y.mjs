@@ -27,6 +27,20 @@ const AXE_SOURCE = readFileSync(require.resolve('axe-core'), 'utf8');
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
 
+
+// The search box only appears above a handful of receipts, so the seeded
+// five would leave it unaudited. Top the list up first.
+const SEED_MORE = () => {
+  const s = JSON.parse(localStorage.getItem('kept.v1'));
+  const base = s.receipts[0];
+  const extra = ['Sony WH-1000XM5', 'Dyson V15', 'Le Creuset casserole', 'Adidas Sambas'];
+  s.receipts = s.receipts.concat(
+    extra.map((item, i) => ({ ...base, id: 'seedmore' + i, item, status: 'active' })),
+  );
+  s.onboardingSeen = true;
+  localStorage.setItem('kept.v1', JSON.stringify(s));
+};
+
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
 
 async function audit(page, label, findings) {
@@ -55,8 +69,14 @@ const page = await ctx.newPage();
 await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
 await audit(page, 'onboarding', findings);
+// Seed THEN reload: the app reads storage once at init, so writing it into a
+// running page changes nothing — which is exactly what the first version of
+// this did, leaving the search box unaudited while reporting a pass.
+await page.evaluate(SEED_MORE);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
 
-await page.getByRole('button', { name: 'Skip' }).click();
+await page.getByRole('button', { name: 'Skip' }).click().catch(() => {});
 await page.waitForTimeout(400);
 await audit(page, 'home', findings);
 

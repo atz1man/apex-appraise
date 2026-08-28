@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fmtDateNear } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
+import { search, shouldOfferSearch } from '../../lib/search';
 import { heroCount, urgency } from '../../lib/urgency';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, Logo, LogoDashed, LogoWatermark, Tick, Wordmark } from '../components/Icons';
@@ -27,14 +29,23 @@ const sectionLabel = (c: string) => ({
 });
 
 export function Home({ receipts, today, urgentDays, policyAlert, changedStores, onOpen, onReturn, onAdd, onWatch }: Props) {
-  const { urgent, later, returned } = bucket(receipts, today, urgentDays);
+  const [query, setQuery] = useState('');
+  const offerSearch = shouldOfferSearch(receipts);
+  const searching = offerSearch && query.trim().length > 0;
+  // Filtered inside the urgency buckets rather than flattened into one list:
+  // "which of these is about to close" is the question the grouping answers,
+  // and it is still the question while you are looking for something.
+  const visible = searching ? search(receipts, query) : receipts;
+
+  const { urgent, later, returned } = bucket(visible, today, urgentDays);
   const active = [...urgent, ...later];
-  const next = active[0];
+  const next = searching ? undefined : active[0];
   const stillReturnable = sumPence(active.map((r) => r.amount));
   const keptBack = sumPence(returned.map((r) => r.amount));
   const dots = timelineDots(receipts, today);
   const empty = receipts.length === 0;
-  const allDone = active.length === 0 && returned.length > 0;
+  const allDone = !searching && active.length === 0 && returned.length > 0;
+  const nothingMatched = searching && visible.length === 0;
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -66,7 +77,27 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
         />
       )}
 
-      {policyAlert && (
+      {offerSearch && (
+        <div style={{ margin: '0 2px 4px' }}>
+          <label htmlFor="receipt-search" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+            Search your receipts
+          </label>
+          <input
+            id="receipt-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search shop or item"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 999,
+              border: `1.5px solid ${color.border}`, background: color.white,
+              fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+            }}
+          />
+        </div>
+      )}
+
+      {policyAlert && !searching && (
         <Pressable
           className="k-banner k-fade"
           onClick={onWatch}
@@ -105,6 +136,17 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
       )}
 
       {empty && <EmptyState onAdd={onAdd} />}
+
+      {nothingMatched && (
+        <div style={{ textAlign: 'center', padding: '40px 24px' }}>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px' }}>
+            Nothing matches “{query.trim()}”
+          </div>
+          <div style={{ fontSize: 14, color: color.muted, lineHeight: 1.6, marginTop: 8 }}>
+            Try the shop’s name, or what the thing was.
+          </div>
+        </div>
+      )}
 
       {allDone && (
         <div style={{ textAlign: 'center', padding: '36px 24px 8px' }}>

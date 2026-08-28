@@ -88,6 +88,20 @@ const SWEEP = `() => {
   return out;
 }`;
 
+
+// The search box only appears above a handful of receipts, so the seeded
+// five would leave it unaudited. Top the list up first.
+const SEED_MORE = () => {
+  const s = JSON.parse(localStorage.getItem('kept.v1'));
+  const base = s.receipts[0];
+  const extra = ['Sony WH-1000XM5', 'Dyson V15', 'Le Creuset casserole', 'Adidas Sambas'];
+  s.receipts = s.receipts.concat(
+    extra.map((item, i) => ({ ...base, id: 'seedmore' + i, item, status: 'active' })),
+  );
+  s.onboardingSeen = true;
+  localStorage.setItem('kept.v1', JSON.stringify(s));
+};
+
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
 const ctx = await browser.newContext({ viewport: { width: 402, height: 874 } });
 const page = await ctx.newPage();
@@ -107,8 +121,13 @@ await sweep('onboarding 2');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.waitForTimeout(300);
 await sweep('onboarding 3');
-await page.getByRole('button', { name: 'Let’s go' }).click();
-await page.waitForTimeout(400);
+// Seed THEN reload: the app reads storage once at init, so writing storage
+// into a running page changes nothing — which is what the first version of
+// this did, leaving the search box unaudited while reporting a pass. The seed
+// also marks onboarding seen, so the reload lands straight on home.
+await page.evaluate(SEED_MORE);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
 await sweep('home');
 
 await page.getByRole('button', { name: /Currys, JBL/ }).click();

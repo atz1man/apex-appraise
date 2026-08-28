@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 235 unit tests over the decision logic
+npm test           # 248 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -130,6 +130,18 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **There is a way to find a receipt.** The list is grouped by urgency, which
+  is right for "what must go back this week" and useless for "where did I put
+  the headphones". A search box appears once the library outgrows a screenful
+  — below that it is furniture in the way of the thing it would search — and
+  filters *within* the urgency buckets, because that grouping is still the
+  answer to the more important question. Substring matching over the shop and
+  the item, every term required, no fuzzy matching: a near-miss in a list
+  about money and deadlines invites acting on the wrong row.
+- **The policy feed was unreachable by keyboard.** Every other screen holds
+  buttons or inputs, so tabbing through them scrolls the region as a side
+  effect. Watch holds nothing focusable, so its feed could not be scrolled by
+  keyboard at all.
 - **Delete can be undone.** It was one tap, immediate, and the only action in
   the app with no recovery — on a screen you reach by tapping a row, beside a
   button you might have been aiming for. A backup is not an undo. Deleting now

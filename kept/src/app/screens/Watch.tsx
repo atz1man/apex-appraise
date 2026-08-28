@@ -19,7 +19,19 @@ export function Watch({ updates, receipts, today }: Props) {
   const assessed = assess(updates, receipts, today);
 
   return (
-    <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
+    // tabIndex on a scroll container looks odd until you notice this screen
+    // has nothing focusable in it: every other screen holds buttons or inputs,
+    // so tabbing through them scrolls the region as a side effect. Here there
+    // is nothing to tab to, and a keyboard user could not scroll the feed at
+    // all. The role and label keep it announced as a place rather than an
+    // unexplained stop on the tab order.
+    <div
+      className="k-fade"
+      tabIndex={0}
+      role="region"
+      aria-label="Policy updates"
+      style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 4px' }}>
         <span className="k-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: color.yellow }} />
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Policy watch</h1>
