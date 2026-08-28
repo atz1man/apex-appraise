@@ -46,6 +46,16 @@ the only target that can be built, run, screenshotted and tested in one place,
 so the design was verified against a real render rather than shipped on trust.
 The service worker is what makes the deadline checkable with no signal.
 
+## CI
+
+`.github/workflows/kept.yml` runs on changes under `kept/` only — Apex's own
+workflow never runs for these and this one never runs for Apex, which is the
+same separation the directory layout already makes. Two jobs: a fast one
+(typecheck, 235 unit tests, build) and a browser one that serves the built app
+and runs all four sweeps against it. Each of those sweeps found real defects
+the day it was written, which is why they are gates rather than a ritual
+someone remembers to perform.
+
 ## Layout
 
 ```
@@ -213,10 +223,13 @@ deliberate departure, not an oversight:
   exist. A native shell or a push path replaces `notify.ts` alone; the
   decision engine does not change.
 - **Payments.** The pricing tiers set the local plan flag. No billing.
-- **Policy delivery.** `seedUpdates` ships a static feed. Production wants a
-  signed feed fetched on a schedule — and, to keep the privacy claim true,
-  the download must be of *all* policy changes, never a query naming the
-  shops a particular user holds.
+- **Signing the policy feed.** The feed is fetched from the app's own origin,
+  validated entry by entry and merged (`lib/policy-feed.ts`), and the download
+  is of *all* changes — never a query naming the shops a particular user
+  holds, which would be the leak the privacy notice rules out. What is missing
+  is provenance: the entries in `public/policy-feed.json` are maintained by
+  hand and nothing proves they came from us. Production wants them signed, and
+  a pipeline that verifies each retailer's published terms before publishing.
 
 ## Accessibility is checked, not claimed
 
@@ -264,7 +277,6 @@ and still navigate. The service worker caches the shell at install and fills
 in the hashed bundles, fonts, icons and the policy feed on first run, so the
 Watch tab shows the last-known feed offline too.
 
-## Not built, and why
 ## Before this ships
 
 `src/landing/placeholder-content.ts` holds the social-proof figures and

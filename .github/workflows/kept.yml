@@ -1,0 +1,72 @@
+# CI for kept/ — a separate product sharing this repository.
+#
+# Scoped by paths so it never runs for Apex Appraise changes, and Apex's own
+# workflow never runs for these: kept/ sits outside the pnpm-workspace globs
+# and shares no dependencies, so the two suites have nothing to say to each
+# other. See kept/README.md.
+name: kept
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['kept/**', '.github/workflows/kept.yml']
+  pull_request:
+    paths: ['kept/**', '.github/workflows/kept.yml']
+
+defaults:
+  run:
+    working-directory: kept
+
+jobs:
+  # The fast half: pure logic, strict types, and a build. Nothing here needs a
+  # browser, so it fails in seconds rather than minutes when it fails at all.
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kept/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        # Under a non-UK, DST-observing zone on purpose: in UTC or London a
+        # date parsed as UTC midnight still lands on the right calendar day,
+        # so the timezone bugs these tests exist to catch would pass unnoticed.
+        run: npm test
+      - name: Build
+        run: npx vite build
+
+  # The half that needs a real browser. Each of these three found genuine
+  # defects the day it was written, which is why they are gates and not
+  # a manual ritual someone remembers to perform.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kept/package-lock.json
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npx vite build
+      - name: Serve the built app
+        run: |
+          npx vite preview --port 5183 --strictPort &
+          npx wait-on http://localhost:5183/app/ --timeout 60000
+      - name: End to end, including offline
+        run: npm run smoke
+      - name: WCAG AA contrast over every rendered text node
+        run: npm run contrast
+      - name: axe-core audit of every screen
+        run: npm run a11y
+      - name: Narrow screens, adversarial content, empty states
+        run: npm run layout
