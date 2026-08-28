@@ -171,7 +171,15 @@ await page.getByRole('button', { name: /Boots, No7/ }).click();
 await page.waitForTimeout(300);
 await page.getByRole('button', { name: 'Delete' }).click();
 await page.waitForTimeout(400);
-const deleted = !(await page.getByText('No7 skincare set').first().isVisible().catch(() => false));
+// Asserted against stored state, not text on screen: the undo bar names the
+// receipt it just deleted, so "is this string visible" answers the wrong
+// question — and answered it wrongly the moment that bar was added.
+const holds = (item) =>
+  page.evaluate(
+    (needle) => JSON.parse(localStorage.getItem('kept.v1')).receipts.some((r) => r.item === needle),
+    item,
+  );
+const deleted = !(await holds('No7 skincare set'));
 
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(300);
@@ -180,7 +188,9 @@ await page.waitForTimeout(600);
 await page.getByRole('button', { name: 'Receipts', exact: true }).click();
 await page.waitForTimeout(400);
 results['a deleted receipt comes back from a backup'] =
-  deleted && (await page.getByText('No7 skincare set').first().isVisible());
+  deleted &&
+  (await holds('No7 skincare set')) &&
+  (await page.getByRole('button', { name: /Boots, No7/ }).isVisible());
 
 // A file that is not a backup must be refused without touching anything.
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -193,7 +203,7 @@ const refused = ((await page.getByRole('status').first().textContent()) ?? '').i
 await page.getByRole('button', { name: 'Receipts', exact: true }).click();
 await page.waitForTimeout(300);
 results['a file that is not a backup is refused, and nothing is lost'] =
-  refused && (await page.getByText('No7 skincare set').first().isVisible());
+  refused && (await holds('No7 skincare set'));
 
 // An order email shared in from another app must land already read — the
 // three-step strip on the Add screen promises exactly this.
