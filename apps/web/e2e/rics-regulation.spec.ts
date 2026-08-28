@@ -106,3 +106,83 @@ test('the RICS mark appears only where the firm has declared its number', async 
     await restore(before);
   }
 });
+
+
+/**
+ * The Red Book may weight its approaches, and may conclude on a figure that is
+ * not their blend — but it must not say it blended them when it did not.
+ *
+ * Section 3 shows three approaches, each with a "Weight N%". Those weights are
+ * deliberate: they follow the scheme rather than sitting at a fixed 70/20/10,
+ * and `screens.spec.ts` holds them to it. They express EMPHASIS, which is what
+ * the prose above them says — primary reliance on the comparable method, the
+ * others "prepared as cross-checks and afforded limited weight".
+ *
+ * The conclusion beneath was headed "Reconciled Market Value", which claims a
+ * different thing: an arithmetic. Measured on the seeded scheme:
+ *
+ *   Comparable  £14,925,000 × 70%  = 10,447,500
+ *   DRC         £10,847,000 × 20%  =  2,169,400
+ *   Investment  £13,975,000 × 10%  =  1,397,500
+ *                                    ——————————
+ *                                     14,014,400   against a stated 14,925,000
+ *
+ * £910,600 apart, under a valuer's signature. The Market Value is
+ * `reportedMarketValue(R.gdv)` — the derivation `one-engine-sweep` owns — so
+ * the value is right and the word was wrong.
+ *
+ * Stated as the general property, so either half can move: weight them how you
+ * like, conclude where you like, but if the page calls the conclusion a
+ * reconciliation then the weights have to produce it.
+ */
+test('the Red Book does not call its conclusion a reconciliation unless the weights produce it', async ({ page }) => {
+  test.setTimeout(60_000);
+  await signIn(page);
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id as string;
+  });
+  await page.goto(`/deal/${id}/redbook`);
+  await expect(page.locator('.a4-page').first()).toBeVisible();
+
+  const methodology = page.locator('.a4-page').filter({ hasText: 'Valuation methodology' });
+  const text = await methodology.innerText();
+
+  /**
+   * Read the approach CARDS, not a regex across the page.
+   *
+   * The first version of this matched "£value, one line, Weight N%", and a
+   * mutation printing the weight one line further down walked straight past it
+   * — the check reporting success for a question it had stopped asking. Same
+   * lesson as the residual table in `report-figures.spec.ts`.
+   */
+  const approaches: Array<{ value: number; weight: number }> = [];
+  for (const name of ['Comparable', 'DRC', 'Investment']) {
+    const card = methodology.locator('div').filter({ hasText: new RegExp(`^${name}£`) }).last();
+    if (!(await card.count())) continue;
+    const t = await card.innerText();
+    const w = /Weight\s*(\d+)\s*%/.exec(t);
+    const v = /£([\d,]+)/.exec(t);
+    if (w && v) approaches.push({ value: Number(v[1]!.replace(/,/g, '')), weight: Number(w[1]) });
+  }
+
+  // teeth now, not only under a future change: the panel is still three
+  // weighted approaches, which is the behaviour screens.spec.ts pins
+  expect(approaches, 'three weighted approaches are on the page').toHaveLength(3);
+  expect(approaches.reduce((a, x) => a + x.weight, 0), 'the weights total 100%').toBe(100);
+
+  const stated = /market value\s*\n\s*£([\d,]+)/i.exec(text);
+  expect(stated, 'the Red Book states a Market Value').not.toBeNull();
+  const mv = Number(stated![1]!.replace(/,/g, ''));
+
+  /** does the page claim the conclusion IS the blend? */
+  const claimsABlend = /reconcil|weighted average|blend/i.test(text);
+  if (!claimsABlend) return;
+
+  const blend = approaches.reduce((a, x) => a + (x.value * x.weight) / 100, 0);
+  expect(
+    Math.abs(blend - mv),
+    `the page calls its conclusion a reconciliation, but the weights give £${Math.round(blend).toLocaleString('en-GB')} against a stated £${mv.toLocaleString('en-GB')}`,
+  ).toBeLessThanOrEqual(1000); // the statement is rounded to the nearest £1,000
+});

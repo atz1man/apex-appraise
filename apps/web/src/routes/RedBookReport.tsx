@@ -707,11 +707,36 @@ export default function RedBookReport() {
             ))}
           </div>
 
-          {/* reconciliation — the Market Value statement */}
+          {/*
+            * The Market Value statement — a conclusion, not a blend.
+            *
+            * This was headed "Reconciled Market Value" above three approach
+            * cards each printing a "Weight N%". That invites a reader to do the
+            * sum, and on the seeded scheme the sum does not come out:
+            *
+            *   Comparable  £14,925,000 × 70%  = 10,447,500
+            *   DRC         £10,847,000 × 20%  =  2,169,400
+            *   Investment  £13,975,000 × 10%  =  1,397,500
+            *                                    ——————————
+            *   the blend the heading implies     14,014,400
+            *   the figure stated beneath it      14,925,000
+            *
+            * £910,600 apart, under a valuer's signature. The weights are real
+            * and deliberate — they follow the scheme rather than sitting at a
+            * fixed 70/20/10, and a spec holds them to that — but they express
+            * EMPHASIS, which is what the prose above already says: primary
+            * reliance on the comparable method, the others "prepared as
+            * cross-checks and afforded limited weight". They are not a formula.
+            *
+            * The Market Value is `reportedMarketValue(R.gdv)`, the derivation
+            * `one-engine-sweep` owns so that one answer serves every surface. It
+            * is not a blend and must not become one. So the word claiming an
+            * arithmetic nobody performed is what goes.
+            */}
           <div className="mt-5 border border-border-strong rounded-[14px] bg-sunken p-5">
             <div className="flex items-end justify-between">
               <div>
-                <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.8px' }}>Reconciled Market Value</div>
+                <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.8px' }}>Market Value</div>
                 <div className="fig mt-1.5 text-[32px] font-semibold" style={{ letterSpacing: '-1.5px', color: brand[700] }}>{formatMoneyFull(mv)}</div>
                 <div className="mt-1 text-[12px] text-ink-2">{poundsInWords(mv)}</div>
               </div>
