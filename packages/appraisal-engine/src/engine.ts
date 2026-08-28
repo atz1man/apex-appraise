@@ -702,6 +702,7 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     residualNet = input.site.landFixed;
     profit = gdv - (saleCosts + build + fees + cont + otherTotal + finance + landGross);
   }
+  const acqCost = landGross - residualNet;
   const totalCost = saleCosts + build + fees + cont + otherTotal + finance + landGross;
   const equity = landGross + constructionTotal * (1 - ltcF);
   const poc = totalCost > 0 ? profit / totalCost : 0;
@@ -733,6 +734,7 @@ export function computeAppraisal(input: AppraisalInput, opts: ComputeOpts = {}):
     equity,
     residualNet,
     landGross,
+    acqCost,
     profit,
     totalCost,
     poc,

@@ -365,6 +365,21 @@ export interface AppraisalResult {
   equity: number;
   residualNet: number;
   landGross: number;
+  /**
+   * The acquisition cost inside `landGross` — SDLT, agent and legal on the land.
+   *
+   * `landGross` is what the scheme can afford to spend acquiring the site;
+   * `residualNet` is what it can pay the vendor. The difference is this, and
+   * every surface that prints the residual waterfall needs it as a LINE, or the
+   * column does not add up: on the golden fixture the printed rows total
+   * £434,368 against a stated residual of £406,711, a £27,656 step with nothing
+   * on the page to explain it.
+   *
+   * Exported rather than left to callers for the reason the JV result records
+   * one field down — callers "re-derived them by hand, each with its own copy of
+   * the acquisition-cost rule".
+   */
+  acqCost: number;
   profit: number;
   totalCost: number;
   poc: number;

@@ -138,3 +138,82 @@ test('the printed appraisal report quotes the engine, to the pound', async ({ pa
     ).toBe(true);
   }
 });
+
+/**
+ * The column adds up.
+ *
+ * Every other check here holds a printed figure to the engine. This one holds
+ * the page to ITSELF: a lender reads the residual appraisal as a waterfall,
+ * subtracts the bracketed rows from gross development value, and expects the
+ * bottom line. On the golden fixture that came to £434,368 against a printed
+ * residual of £406,711 — a £27,656 gap, because the acquisition-cost step had
+ * no row and nothing on the page said it had been taken.
+ *
+ * The spreadsheet export was always honest about it, labelling its total
+ * "Residual land value (net of acquisition costs)" and leaving the /(1+acq)
+ * division visible in the cell formula. The signed valuation, which is the one
+ * a lender actually receives, did neither.
+ *
+ * Subtotals are excluded for free: only DEDUCTIONS are printed in brackets, so
+ * "Net development value" and "Land budget before acquisition" are skipped
+ * without naming them, and so are the two rows that decompose GDV.
+ */
+test('the residual column on the report adds up, as a lender would check it', async ({ page }) => {
+  test.setTimeout(60_000);
+  await signIn(page);
+  const id = await dealNamed(page, 'Harbour');
+  await page.goto(`/deal/${id}/report`);
+  await expect(page.locator('.a4-page').first()).toBeVisible();
+
+  /**
+   * Anchored on a label that appears ONLY in this waterfall. "Residual land
+   * value" is also a KPI tile on page 1 and "Gross development value" is also
+   * the accommodation schedule's total row, so either would have picked up the
+   * wrong table.
+   */
+  const anchor = page.getByText('Less: sale & letting costs', { exact: true });
+  await expect(anchor, 'the residual waterfall is on the report').toHaveCount(1);
+  // label div -> row div -> the bordered table
+  const table = anchor.locator('xpath=../..');
+
+  const money = (t: string) => Number(t.replace(/[^0-9.]/g, ''));
+
+  /**
+   * Row by row, not by splitting the table's text: a row renders its label, its
+   * note and its value as three separate text nodes, so a flat split loses which
+   * label a figure belongs to.
+   */
+  const rows = table.locator('xpath=./div');
+  const count = await rows.count();
+  let gdv: number | null = null;
+  let residual: number | null = null;
+  const deductions: Array<{ label: string; amount: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const parts = (await rows.nth(i).innerText()).split('\n').map((t) => t.trim()).filter(Boolean);
+    const label = parts[0] ?? '';
+    const value = parts[parts.length - 1] ?? '';
+    // a deduction is printed in brackets: "(£85,560)"
+    if (/^\(£[\d,]+\)$/.test(value)) {
+      deductions.push({ label, amount: money(value) });
+      continue;
+    }
+    if (label === 'Gross development value') gdv = money(value);
+    if (label === 'Residual land value') residual = money(value);
+  }
+
+  expect(gdv, 'gross development value is on the page').not.toBeNull();
+  expect(residual, 'residual land value is on the page').not.toBeNull();
+  expect(deductions.length, 'the waterfall has deduction rows').toBeGreaterThan(4);
+
+  // the acquisition step must be one of them, or the column cannot reconcile
+  expect(
+    deductions.some((d) => /acquisition/i.test(d.label)),
+    `no acquisition-cost row: ${deductions.map((d) => d.label).join(' | ')}`,
+  ).toBe(true);
+
+  const checked = gdv! - deductions.reduce((a, d) => a + d.amount, 0);
+  expect(
+    Math.abs(checked - residual!),
+    `the column adds to £${checked.toLocaleString('en-GB')} but the page prints £${residual!.toLocaleString('en-GB')}`,
+  ).toBeLessThanOrEqual(2); // pounds, for independent rounding of each row
+});

@@ -218,6 +218,37 @@ export default function AppraisalReport() {
     ? R.build + R.fees + R.cont - (R.phases ?? []).reduce((a, ph) => a + ph.cost, 0)
     : 0;
 
+  /**
+   * The other costs that belong to a PHASE rather than to the scheme.
+   *
+   * `R.otherTotal` sums both — `input.otherCosts` plus every phase's own — but
+   * the residual column only ever listed the scheme's. On the seeded phased
+   * scheme that hid "Quayside remediation", £180,000, from the cost breakdown
+   * of a signed valuation: the printed rows came to £2,760,481 against a stated
+   * residual land value of £2,580,480, and a lender adding the column up found
+   * £180,001 they could not account for.
+   *
+   * Same reasoning as `unphasedConstruction` directly above, which the page
+   * already applies to build/fees/contingency: "print it rather than let the
+   * column fail to add up." Remediation is not a line to leave off a lender's
+   * copy.
+   */
+  const phaseOtherCosts = (input?.phases ?? []).flatMap((ph) =>
+    (ph.otherCosts ?? [])
+      .filter((o) => o.amount !== 0)
+      .map((o) => ({ label: `${ph.name} · ${o.label}`, amount: o.amount })),
+  );
+  /**
+   * No balance row, deliberately. `otherTotal` is defined as the scheme's list
+   * plus every phase's, and `phaseCalc` is non-null on exactly the condition
+   * this component uses (`input.phases` non-empty) — so a catch-all here would
+   * be provably zero. It would also be worse than nothing: a vague "other" row
+   * silently absorbing a future third source of cost is precisely how £180,000
+   * of remediation went unprinted in the first place. If one ever appears, the
+   * reconciliation check in `report-figures.spec.ts` fails and it gets a row
+   * with its own name on it.
+   */
+
   const firmName = org?.name ?? 'Apex Appraise';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const dates = reportDates({ appraisal: appr, terms: toe });
@@ -318,11 +349,26 @@ export default function AppraisalReport() {
     ...input.otherCosts
       .filter((o) => o.amount !== 0)
       .map((o) => ({ label: o.label, val: `(${formatMoneyFull(o.amount)})` })),
+    ...phaseOtherCosts.map((o) => ({ label: o.label, val: `(${formatMoneyFull(o.amount)})` })),
     { label: 'Finance (interest + fees)', note: `${input.finance.ratePct}% pa`, val: `(${formatMoneyFull(R.finance)})` },
     ...(isResidual
       ? ([
           { label: 'Developer profit', note: `${Math.round(R.poc * 100)}% on cost`, val: `(${formatMoneyFull(R.profit)})`, kind: 'sub' },
-          { label: 'Residual land value', val: formatMoneyFull(R.residualNet), kind: 'final' },
+          /**
+           * The acquisition step, as a LINE.
+           *
+           * Without it the column does not add up and nothing on the page says
+           * why. Measured on the golden fixture: the printed rows total
+           * £434,368 against a stated residual of £406,711 — a £27,656 gap a
+           * lender checking the arithmetic finds and cannot account for. The
+           * spreadsheet export has always been honest about this, labelling its
+           * total "Residual land value (net of acquisition costs)" and leaving
+           * the /(1+acq) division visible in the cell formula. The signed
+           * valuation did neither.
+           */
+          { label: 'Land budget before acquisition', val: formatMoneyFull(R.landGross), kind: 'sub' },
+          { label: 'Less: acquisition costs', note: formatPct(input.site.acqPct / 100), val: `(${formatMoneyFull(R.acqCost)})` },
+          { label: 'Residual land value', note: 'payable to vendor', val: formatMoneyFull(R.residualNet), kind: 'final' },
         ] as BreakRow[])
       : ([
           { label: 'Land (incl. acquisition)', note: `${input.site.acqPct}% acq.`, val: `(${formatMoneyFull(R.landGross)})`, kind: 'sub' },
