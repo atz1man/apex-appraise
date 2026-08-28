@@ -114,10 +114,16 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 700, fontSize: 15 }}>{receipt.store}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {/* Truncated like the item beneath it. A store name is free text —
+                the edit form accepts anything — and an untruncated one wrapped
+                to five lines on a 320px phone while the item it belongs to was
+                still being clipped to one. */}
+            <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+              {receipt.store}
+            </span>
             {policyChanged && (
-              <span style={{ fontSize: 9.5, fontWeight: 700, background: color.yellowLight, padding: '2px 7px', borderRadius: 999, letterSpacing: '0.3px' }}>
+              <span style={{ fontSize: 9.5, fontWeight: 700, background: color.yellowLight, padding: '2px 7px', borderRadius: 999, letterSpacing: '0.3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 POLICY CHANGED
               </span>
             )}
@@ -127,7 +133,7 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
           </div>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 15, fontWeight: 700 }}>{money(receipt.amount)}</div>
           <div style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: urgency.bg, color: urgency.fg }}>
             {urgency.label}

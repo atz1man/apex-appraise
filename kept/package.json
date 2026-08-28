@@ -13,7 +13,8 @@
     "smoke": "node scripts/smoke.mjs",
     "icons": "node scripts/make-icons.mjs",
     "contrast": "node scripts/contrast.mjs",
-    "a11y": "node scripts/a11y.mjs"
+    "a11y": "node scripts/a11y.mjs",
+    "layout": "node scripts/layout.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

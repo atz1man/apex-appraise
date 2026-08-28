@@ -29,6 +29,7 @@ npm run build && npx vite preview --port 5183 &
 npm run smoke      # 23 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
+npm run layout     # 320px and 402px, adversarial content, empty states
 ```
 
 In a sandbox whose Chromium is not the build Playwright expects, point it at
@@ -235,6 +236,23 @@ discarded; there was no `<main>` on any screen, so all content sat outside
 every landmark a screen reader navigates between; and Home and Celebrate had
 no level-one heading at all. All fixed. axe-core is a devDependency injected
 at audit time — the app never imports it and it never reaches a bundle.
+
+## Narrow screens and untidy data
+
+Everything else here is driven at 402px with the seeded demo receipts — the
+width the design was drawn at, and the content it was drawn with. Real phones
+go down to 320px, and a real receipt can have a long shop name, a long item
+name and an amount in the thousands, because the edit form accepts whatever
+someone types. `npm run layout` sweeps both widths across every screen, with
+adversarial content and with the empty and all-returned states that never
+appear in the seed data, and fails on any sideways scroll.
+
+Its first run found the landing page scrolling 48px sideways on a 320px
+phone: `minmax(340px, 1fr)` sets a *hard* floor, so the hero's track was wider
+than the content box it sat in. Every grid there now uses
+`minmax(min(Npx, 100%), 1fr)`, which lets the floor collapse to the space that
+exists. It also turned up a receipt row whose untruncated shop name wrapped to
+five lines while the item beneath it was still being clipped to one.
 
 ## Offline is verified, not asserted
 

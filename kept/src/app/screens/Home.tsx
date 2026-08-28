@@ -39,7 +39,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
       <header className="k-fade" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px 16px' }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: 0, fontWeight: 400 }}>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: 0, fontWeight: 400, minWidth: 0 }}>
           <Logo size={28} />
           <span>
             <Wordmark />
@@ -48,7 +48,9 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
             </span>
           </span>
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 700 }}>
+        {/* nowrap + no shrink: at 320px this was breaking to "ON-" / "DEVICE".
+            The masthead beside it wraps instead, which it does gracefully. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 999, background: color.yellow }} />
           ON-DEVICE
         </div>

@@ -5,6 +5,14 @@ import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './pla
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
 import { AppStoreButton, Card, Eyebrow, SectionTitle, WRAP } from './sections/primitives';
 
+/*
+ * Every grid below uses `minmax(min(Npx, 100%), 1fr)` rather than a bare
+ * `minmax(Npx, 1fr)`. The bare form sets a HARD floor: on a 320px phone a
+ * 340px track is wider than the content box, and the entire page scrolls
+ * sideways — 48px of it, on the hero. The min() lets the floor collapse to
+ * the space that actually exists. scripts/layout.mjs fails the build if it
+ * comes back.
+ */
 const PROBLEMS = [
   { art: <HaulArt />, title: 'The haul is the easy part', body: 'Five shops, one afternoon, five different return clocks — all already ticking.' },
   { art: <LostReceiptsArt />, title: 'Receipts go to die', body: 'Jacket pockets, kitchen drawers, a 9,000-email inbox. Proof of purchase, permanently lost.' },
@@ -52,7 +60,7 @@ export function Landing() {
 
       <main>
       {/* Hero */}
-      <section style={{ ...WRAP, padding: '48px 28px 72px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 56, alignItems: 'center' }}>
+      <section style={{ ...WRAP, padding: '48px 28px 72px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap: 56, alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1.5px solid ${color.ink}`, borderRadius: 999, padding: '7px 14px', fontSize: 12, fontWeight: 700, letterSpacing: '0.5px', marginBottom: 26, flexWrap: 'wrap' }}>
             <span style={{ width: 8, height: 8, borderRadius: 999, background: color.yellow, flexShrink: 0 }} />
@@ -116,7 +124,7 @@ export function Landing() {
       <section style={{ ...WRAP, padding: '80px 28px 0' }}>
         <Eyebrow>THE PROBLEM</Eyebrow>
         <SectionTitle>You shop in seconds. The fine print takes hours.</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, margin: '38px 0 80px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 18, margin: '38px 0 80px' }}>
           {PROBLEMS.map((p) => (
             <Card key={p.title} style={{ overflow: 'hidden' }}>
               <div style={{ height: 220 }}>{p.art}</div>
@@ -138,7 +146,7 @@ export function Landing() {
           the day they change, and checks every receipt you hold against them. A purchase keeps the terms it was made
           under; you just find out when the shop moves the goalposts for the next one.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18, margin: '38px 0 80px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: 18, margin: '38px 0 80px' }}>
           {UPDATES.map((u) => (
             <Card key={u.store} emphasised={u.emphasised} style={{ padding: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -154,7 +162,7 @@ export function Landing() {
       {/* Social proof */}
       <section id="reviews" style={{ background: color.creamAlt, borderTop: `1.5px solid ${color.borderHair}`, borderBottom: `1.5px solid ${color.borderHair}`, padding: '80px 28px' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, textAlign: 'center', marginBottom: SOCIAL_PROOF_IS_PLACEHOLDER ? 20 : 56 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 18, textAlign: 'center', marginBottom: SOCIAL_PROOF_IS_PLACEHOLDER ? 20 : 56 }}>
             {STATS.map((s) => (
               <div key={s.label}>
                 <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 'clamp(34px, 4vw, 46px)', fontWeight: 700, letterSpacing: '-2px', color: color.amber }}>{s.value}</div>
@@ -184,7 +192,7 @@ export function Landing() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 18 }}>
             {REVIEWS.map((r) => (
               <Card key={r.who} style={{ padding: 26 }}>
                 {/* Amber, not the brand yellow: five yellow stars on white measured
@@ -203,7 +211,7 @@ export function Landing() {
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <Eyebrow onInk>WHY KEPT</Eyebrow>
           <SectionTitle maxWidth={640}>The shop’s clock, the law’s clock, and yours — on one screen.</SectionTitle>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 1, background: color.onInkBorder, border: `1px solid ${color.onInkBorder}`, borderRadius: 20, overflow: 'hidden', marginTop: 44 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 1, background: color.onInkBorder, border: `1px solid ${color.onInkBorder}`, borderRadius: 20, overflow: 'hidden', marginTop: 44 }}>
             {WHY.map((w) => (
               <div key={w.n} style={{ background: color.ink, padding: '30px 28px' }}>
                 <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 22, color: color.yellow }}>{w.n}</div>
@@ -224,7 +232,7 @@ export function Landing() {
           </h2>
           <p style={{ fontSize: 16, color: color.muted, margin: '12px 0 0' }}>Pro when it’s earning its keep.</p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, maxWidth: 880, margin: '44px auto 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: 20, maxWidth: 880, margin: '44px auto 0' }}>
           {TIERS.map((t) =>
             t.featured ? (
               <div key={t.name} style={{ background: color.ink, color: color.cream, borderRadius: 22, padding: '30px 26px', position: 'relative', boxShadow: `6px 6px 0 ${color.yellow}` }}>
