@@ -113,6 +113,23 @@ results['a return can be undone'] =
 await page.getByRole('button', { name: 'Back', exact: true }).click();
 await page.waitForTimeout(300);
 
+// Delete was the only action with no way out. It offers one now — and the
+// undo has to put the receipt back, not merely hide the message.
+const receiptCount = () =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length);
+const beforeDelete = await receiptCount();
+await page.getByRole('button', { name: /Argos, Kenwood/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Delete' }).click();
+await page.waitForTimeout(400);
+const afterDelete = await receiptCount();
+await page.getByRole('button', { name: 'Undo' }).click();
+await page.waitForTimeout(400);
+results['a deleted receipt can be undone'] =
+  afterDelete === beforeDelete - 1 &&
+  (await receiptCount()) === beforeDelete &&
+  (await page.getByText('Kenwood kMix stand mixer').first().isVisible());
+
 results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })
   .isVisible()

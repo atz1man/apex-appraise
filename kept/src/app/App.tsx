@@ -6,6 +6,7 @@ import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
 import { exportBackup } from '../lib/storage';
 import { TabBar } from './components/TabBar';
+import { UndoBar } from './components/UndoBar';
 import { Add } from './screens/Add';
 import { Celebrate } from './screens/Celebrate';
 import { Detail } from './screens/Detail';
@@ -232,6 +233,14 @@ export function App() {
       )}
 
       </main>
+
+      {state.justDeleted && (
+        <UndoBar
+          label={`Deleted ${state.justDeleted.item}`}
+          onUndo={() => dispatch({ type: 'undo-delete' })}
+          onDismiss={() => dispatch({ type: 'dismiss-undo' })}
+        />
+      )}
 
       {!onboarding && (
         <TabBar

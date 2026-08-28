@@ -13,6 +13,12 @@ export interface AppState extends KeptState {
   sharedText: string | null;
   /** True in the landing page's iframe demo: nothing is read or written to disk. */
   embedded: boolean;
+  /**
+   * The receipt just deleted, held only long enough to offer it back.
+   * Deliberately not persisted: if the app is closed during the window the
+   * delete stands, which is the safer reading of walking away.
+   */
+  justDeleted: Receipt | null;
   /** The receipt open on the detail screen. */
   selId: string | null;
   obStep: number;
@@ -29,6 +35,8 @@ export type Action =
   | { type: 'return'; id: string }
   | { type: 'delete'; id: string }
   | { type: 'unreturn'; id: string }
+  | { type: 'undo-delete' }
+  | { type: 'dismiss-undo' }
   | { type: 'add'; receipt: Receipt }
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
@@ -44,11 +52,12 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       // selection survives the trip in both directions.
       return {
         ...state,
+        justDeleted: null,
         screen: action.screen,
         selId: action.screen === 'detail' || action.screen === 'edit' ? state.selId : null,
       };
     case 'open':
-      return { ...state, screen: 'detail', selId: action.id };
+      return { ...state, justDeleted: null, screen: 'detail', selId: action.id };
     case 'ob-next':
       return state.obStep >= 2
         ? { ...state, screen: 'home', onboardingSeen: true }
@@ -80,11 +89,28 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         ),
       };
     case 'delete': {
+      const removed = state.receipts.find((x) => x.id === action.id) ?? null;
       const receipts = state.receipts.filter((x) => x.id !== action.id);
-      // Forget what we said about a receipt that no longer exists, so the
-      // sent-list cannot grow without bound over years of use.
-      return { ...state, receipts, alertsSent: pruneSent(state.alertsSent, receipts), screen: 'home', selId: null };
+      return {
+        ...state,
+        receipts,
+        // Held so it can be offered back. Delete is one tap, immediate, and
+        // was the only action in the app with no way out — a backup is not an
+        // undo.
+        justDeleted: removed,
+        // Forget what we said about a receipt that no longer exists, so the
+        // sent-list cannot grow without bound over years of use.
+        alertsSent: pruneSent(state.alertsSent, receipts),
+        screen: 'home',
+        selId: null,
+      };
     }
+    case 'undo-delete':
+      return state.justDeleted
+        ? { ...state, receipts: [...state.receipts, state.justDeleted], justDeleted: null }
+        : state;
+    case 'dismiss-undo':
+      return state.justDeleted ? { ...state, justDeleted: null } : state;
     case 'add':
       return { ...state, receipts: [...state.receipts, action.receipt], screen: 'home' };
     case 'update':
@@ -152,6 +178,7 @@ export function useApp() {
         screen: incoming ? 'add' : base.onboardingSeen || embedded ? 'home' : 'onboard',
         sharedText: incoming,
         embedded,
+        justDeleted: null,
         selId: null,
         obStep: 0,
         celebrating: null,

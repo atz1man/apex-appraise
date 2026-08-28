@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 25 end-to-end checks, including offline with the network cut
+npm run smoke      # 26 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -130,6 +130,14 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **Delete can be undone.** It was one tap, immediate, and the only action in
+  the app with no recovery — on a screen you reach by tapping a row, beside a
+  button you might have been aiming for. A backup is not an undo. Deleting now
+  offers the receipt back for eight seconds. A timed offer rather than a
+  confirmation dialog: confirmations tax every deliberate delete to catch the
+  rare accidental one, and this app's posture is getting out of the way. The
+  held receipt is deliberately not persisted — close the app during the window
+  and the delete stands, which is the safer reading of walking away.
 - **A return can be undone.** Returned receipts were rendered as inert list
   items, and the detail screen's returned state — which existed in the code —
   could not be reached from anywhere. So a receipt marked returned by a stray
