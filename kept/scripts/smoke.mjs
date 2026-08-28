@@ -211,6 +211,39 @@ results['a full free tier actually refuses the save'] =
   (await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length)) === beforeBlocked;
 
 results['nothing is fetched from a third party'] = foreign.size === 0;
+
+// The manifest has to be installable-shaped, because "add it to your home
+// screen" is how the share target and the offline promise are reached at all.
+const manifest = await page.evaluate(async () => (await fetch('/manifest.webmanifest')).json());
+results['the manifest is installable and declares the share target'] =
+  !!manifest.name && !!manifest.start_url && manifest.display === 'standalone' &&
+  Array.isArray(manifest.icons) && manifest.icons.some((i) => i.sizes === '512x512') &&
+  manifest.share_target?.method === 'GET';
+
+/*
+ * Offline, for real. "Works offline" is the app's central claim — a deadline
+ * you can check on the train, in the shop, with no signal — and it is the one
+ * claim that cannot be verified by reading the code. The network is cut
+ * completely, then the app has to launch, render receipts, load its
+ * self-hosted fonts, and still navigate.
+ */
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+await ctx.setOffline(true);
+await page.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+await page.waitForTimeout(1200);
+results['the app launches with the network cut'] =
+  (await page.getByText('RETURN DEADLINES, WATCHED').isVisible().catch(() => false)) &&
+  (await page.evaluate(() => document.fonts.check('700 16px "Space Grotesk"')));
+// Whichever row happens to be first — earlier steps in this script rewrite
+// the receipt list, so naming a specific shop here would be testing the
+// fixture rather than the app.
+await page.locator('li button').first().click().catch(() => {});
+await page.waitForTimeout(600);
+results['it is still usable offline, not just painted'] =
+  await page.getByText('STORE POLICY').isVisible().catch(() => false);
+await ctx.setOffline(false);
+
 results['no console or page errors'] = problems.length === 0;
 
 await browser.close();

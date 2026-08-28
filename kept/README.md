@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 18 end-to-end checks across every screen
+npm run smoke      # 21 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 ```
 
@@ -210,6 +210,17 @@ deliberate departure, not an oversight:
   the download must be of *all* policy changes, never a query naming the
   shops a particular user holds.
 
+## Offline is verified, not asserted
+
+"Works offline" is the app's central claim — a deadline you can check on the
+train, in the shop, with no signal — and it is the one claim that cannot be
+verified by reading the code. The smoke test cuts the network completely and
+then requires the app to launch, render receipts, load its self-hosted fonts
+and still navigate. The service worker caches the shell at install and fills
+in the hashed bundles, fonts, icons and the policy feed on first run, so the
+Watch tab shows the last-known feed offline too.
+
+## Not built, and why
 ## Before this ships
 
 `src/landing/placeholder-content.ts` holds the social-proof figures and
