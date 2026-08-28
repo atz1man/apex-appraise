@@ -83,3 +83,20 @@ self.addEventListener('fetch', (event) => {
     ),
   );
 });
+
+/**
+ * A deadline alert exists to get someone back into the app, so clicking one
+ * must land them there — focusing the tab they already have open rather than
+ * stacking up a second copy of the app beside it.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes('/app/') && 'focus' in client) return client.focus();
+      }
+      return self.clients.openWindow('/app/');
+    }),
+  );
+});

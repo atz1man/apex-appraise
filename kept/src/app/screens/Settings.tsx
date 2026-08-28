@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { color, radius } from '../../tokens';
 import { mergeBackup, parseBackup } from '../../lib/backup';
+import { notifyState, requestNotifyPermission, type NotifyState } from '../notify';
 import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { VERIFIED_STORE_COUNT } from '../../lib/stores';
@@ -26,6 +27,31 @@ const RESTORE_FAILURES = {
 export function Settings({ settings, receiptCount, receipts, onExport, onRestore, onUpgrade, onChange }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [restoreNote, setRestoreNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  const [permission, setPermission] = useState<NotifyState>(() => notifyState());
+
+  /**
+   * Turning alerts on asks the browser first. A switch that flips to "on"
+   * while the browser is refusing to show anything is the same lie the
+   * original static row told, one layer down.
+   */
+  const toggleAlerts = async (want: boolean) => {
+    if (!want) {
+      onChange({ deadlineAlerts: false });
+      return;
+    }
+    const next = permission === 'granted' ? permission : await requestNotifyPermission();
+    setPermission(next);
+    onChange({ deadlineAlerts: next === 'granted' });
+  };
+
+  const alertDetail =
+    permission === 'unsupported'
+      ? 'Not available here'
+      : permission === 'denied'
+        ? 'Blocked by your browser'
+        : settings.deadlineAlerts
+          ? 'On'
+          : 'Off';
 
   const restore = async (file: File) => {
     const outcome = parseBackup(await file.text());
@@ -131,12 +157,26 @@ export function Settings({ settings, receiptCount, receipts, onExport, onRestore
       )}
 
       <section style={{ background: color.white, border: `1.5px solid ${color.border}`, borderRadius: radius.cardLg, marginTop: 12, overflow: 'hidden' }}>
-        <Toggle
-          label="Deadline alerts"
-          value={settings.deadlineAlerts}
-          detail={settings.deadlineAlerts ? 'This week' : 'Off'}
-          onChange={(v) => onChange({ deadlineAlerts: v })}
-        />
+        {/* The row and its caveat share one block, so the separator falls below
+            both rather than striking through the explanation. */}
+        <div style={{ borderBottom: `1.5px solid ${color.borderHair}` }}>
+          <Toggle
+            label="Deadline alerts"
+            value={settings.deadlineAlerts && permission === 'granted'}
+            detail={alertDetail}
+            disabled={permission === 'unsupported' || permission === 'denied'}
+            separator={false}
+            onChange={(v) => void toggleAlerts(v)}
+          />
+          {/* The honest ceiling for a web app, stated where the switch is
+              rather than implied away: Notification Triggers never shipped,
+              and periodic background sync is one engine's, at its discretion. */}
+          <div style={{ padding: '0 18px 14px', fontSize: 12, color: color.faint, lineHeight: 1.5 }}>
+            {permission === 'denied'
+              ? 'Your browser is blocking notifications for kept. Turn them back on in site settings.'
+              : 'Checked each time you open kept. Alerts that arrive while the app is closed need the App Store version.'}
+          </div>
+        </div>
         <Toggle
           label="Policy watch"
           value={settings.policyWatch}
@@ -205,13 +245,21 @@ function Tier({ price, period, featured, onClick }: { price: string; period: str
  * things the app actually does to you unprompted, so they are switches: a
  * notification setting you can read but not change is a setting in name only.
  */
-function Toggle({ label, detail, value, onChange }: { label: string; detail: string; value: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ label, detail, value, disabled, separator = true, onChange }: {
+  label: string; detail: string; value: boolean; disabled?: boolean; separator?: boolean; onChange: (v: boolean) => void;
+}) {
   return (
     <Pressable
       onClick={() => onChange(!value)}
       role="switch"
       aria-checked={value}
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '15px 18px', borderBottom: `1.5px solid ${color.borderHair}` }}
+      disabled={disabled}
+      style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        padding: '15px 18px',
+        borderBottom: separator ? `1.5px solid ${color.borderHair}` : undefined,
+        opacity: disabled ? 0.55 : 1, cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
     >
       <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

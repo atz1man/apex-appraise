@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 123 unit tests over the decision logic
+npm test           # 143 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -51,6 +51,7 @@ src/lib/          the decision logic — pure, tested, no React
   money.ts        integer pence
   receipts.ts     days left, deadlines, bucketing, the 30-day timeline
   urgency.ts      the red / yellow / neutral ladder
+  alerts.ts       which deadlines are worth interrupting someone about
   legal.ts        Consumer Rights Act + distance-selling wording
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
@@ -104,6 +105,14 @@ deliberate departure, not an oversight:
   field is editable afterwards from the receipt itself. Changing the shop
   brings the new shop's verified policy with it and drops the old one's
   dispatch clock, so a corrected receipt cannot keep quoting the wrong terms.
+- **The alert switch does something.** "Deadline alerts" was a stored
+  preference nothing read. Alerts now fire, and the rule is restraint: each
+  receipt raises each rung of the ladder at most once ever, and a phone left
+  in a drawer through several rungs yields one alert — the most urgent — with
+  the rungs it skipped recorded silently. An app that says the same thing
+  every morning gets muted, and then it cannot say the one thing that
+  mattered. Turning the switch on asks the browser first, so it cannot read
+  "on" while the browser is refusing to show anything.
 - **A backup can come back.** "Export a backup" was a dead end. On a product
   with no account that file is the *only* way anything reaches a new phone, so
   restore reads it back — validating every row, dropping and counting what it
@@ -114,8 +123,15 @@ deliberate departure, not an oversight:
 
 - **Receipt scanning.** The button is present and visibly disabled with a
   `SOON` chip rather than silently doing nothing. Needs a camera + OCR pass.
-- **Notifications.** The Settings switches persist a preference; no scheduler
-  is wired to them. Deadline alerts want either Web Push or a native shell.
+- **Background notifications.** Deadline alerts are real — `lib/alerts.ts`
+  decides which deadlines are worth an interruption and `app/notify.ts`
+  delivers them — but a web app cannot wake itself at 9am. Notification
+  Triggers never shipped, and Periodic Background Sync is one engine's, for
+  installed apps only, granted at the browser's discretion. So alerts are
+  computed whenever kept is opened or brought back to the foreground, and
+  Settings says exactly that instead of implying a service that does not
+  exist. A native shell or a push path replaces `notify.ts` alone; the
+  decision engine does not change.
 - **Payments.** The pricing tiers set the local plan flag. No billing.
 - **Policy delivery.** `seedUpdates` ships a static feed. Production wants a
   signed feed fetched on a schedule — and, to keep the privacy claim true,

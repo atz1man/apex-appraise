@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { color, paperGrain } from '../tokens';
+import { dueAlerts, supersededKeys } from '../lib/alerts';
+import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
 import { exportBackup } from '../lib/storage';
 import { TabBar } from './components/TabBar';
@@ -39,6 +41,43 @@ export function App() {
         : `${affecting.length} shops changed their returns policies — your receipts are affected`;
 
   const recovered = sumPence(state.receipts.filter((r) => r.status === 'returned').map((r) => r.amount));
+
+  /**
+   * Deadline alerts, computed on open and whenever the app comes back to the
+   * foreground. That is the honest ceiling for a web app — see notify.ts — and
+   * the Settings screen says so rather than implying a background service.
+   */
+  const delivering = useRef(false);
+  useEffect(() => {
+    if (!settings.deadlineAlerts) return;
+    let cancelled = false;
+
+    const run = async () => {
+      // React 18 mounts effects twice in development; without this guard the
+      // same alert is delivered twice before either is recorded.
+      if (delivering.current) return;
+      const alerts = dueAlerts(state.receipts, today, settings.urgentDays, new Set(state.alertsSent));
+      if (alerts.length === 0) return;
+      delivering.current = true;
+      try {
+        const shown = await deliver(alerts);
+        if (cancelled || shown.length === 0) return;
+        dispatch({ type: 'alerted', keys: shown.flatMap((a) => [a.key, ...supersededKeys(a)]) });
+      } finally {
+        delivering.current = false;
+      }
+    };
+
+    void run();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void run();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [state.receipts, state.alertsSent, settings.deadlineAlerts, settings.urgentDays, today, dispatch]);
   const onboarding = screen === 'onboard';
 
   const exportNow = () => {

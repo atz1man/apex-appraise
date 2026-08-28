@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer } from 'react';
+import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { makeReceiptId } from '../lib/receipts';
 import { FREE_TIER_LIMIT, load, save, type KeptState, type Settings } from '../lib/storage';
@@ -24,6 +25,7 @@ export type Action =
   | { type: 'add'; receipt: Receipt }
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
+  | { type: 'alerted'; keys: string[] }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'shared' };
 
@@ -59,8 +61,12 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         selId: null,
       };
     }
-    case 'delete':
-      return { ...state, receipts: state.receipts.filter((x) => x.id !== action.id), screen: 'home', selId: null };
+    case 'delete': {
+      const receipts = state.receipts.filter((x) => x.id !== action.id);
+      // Forget what we said about a receipt that no longer exists, so the
+      // sent-list cannot grow without bound over years of use.
+      return { ...state, receipts, alertsSent: pruneSent(state.alertsSent, receipts), screen: 'home', selId: null };
+    }
     case 'add':
       return { ...state, receipts: [...state.receipts, action.receipt], screen: 'home' };
     case 'update':
@@ -74,9 +80,19 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       // Deliberately stays on Settings: the screen reports what the restore
       // actually did ("12 restored · 2 updated"), and bouncing to the list
       // would throw that away at the moment it matters most.
-      return { ...state, receipts: action.receipts, selId: null };
+      return {
+        ...state,
+        receipts: action.receipts,
+        alertsSent: pruneSent(state.alertsSent, action.receipts),
+        selId: null,
+      };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'alerted':
+      // Recorded only for what was actually shown (plus the gentler rungs it
+      // superseded), so an alert that failed to display is tried again rather
+      // than lost.
+      return { ...state, alertsSent: [...new Set([...state.alertsSent, ...action.keys])] };
     case 'shared':
       return { ...state, shared: true };
   }
@@ -118,8 +134,9 @@ export function useApp() {
       updates: state.updates,
       onboardingSeen: state.onboardingSeen,
       settings: state.settings,
+      alertsSent: state.alertsSent,
     });
-  }, [state.version, state.receipts, state.updates, state.onboardingSeen, state.settings]);
+  }, [state.version, state.receipts, state.updates, state.onboardingSeen, state.settings, state.alertsSent]);
 
   return { state, dispatch: rawDispatch, today };
 }

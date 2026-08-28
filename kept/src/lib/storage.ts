@@ -30,6 +30,12 @@ export interface KeptState {
   updates: PolicyUpdate[];
   onboardingSeen: boolean;
   settings: Settings;
+  /**
+   * Dedup keys for deadline alerts already delivered. Persisted, because the
+   * whole value of an alert is that it arrives once — a list that reset on
+   * reload would re-announce the same coat every launch.
+   */
+  alertsSent: string[];
 }
 
 export const FREE_TIER_LIMIT = 10;
@@ -48,6 +54,7 @@ export function freshState(today: Date): KeptState {
     updates: seedUpdates(today),
     onboardingSeen: false,
     settings: { ...DEFAULT_SETTINGS },
+    alertsSent: [],
   };
 }
 
@@ -76,6 +83,7 @@ export function load(today: Date): KeptState {
       updates: Array.isArray(parsed.updates) && parsed.updates.length ? parsed.updates : seedUpdates(today),
       onboardingSeen: parsed.onboardingSeen === true,
       settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+      alertsSent: Array.isArray(parsed.alertsSent) ? parsed.alertsSent.filter((k) => typeof k === 'string') : [],
     };
   } catch {
     // Corrupt JSON: start clean rather than trap the user on a broken launch.

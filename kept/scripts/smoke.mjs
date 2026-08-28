@@ -19,8 +19,32 @@ const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
 
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
-const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, acceptDownloads: true });
+const ctx = await browser.newContext({
+  viewport: { width: 402, height: 874 },
+  acceptDownloads: true,
+  permissions: ['notifications'],
+});
 const page = await ctx.newPage();
+
+// Record every notification the app tries to show, through both delivery
+// paths, so alert behaviour can be asserted rather than taken on trust.
+await page.addInitScript(() => {
+  window.__notes = [];
+  const record = (title, opts) => window.__notes.push({ title, body: opts?.body, tag: opts?.tag });
+  class StubNotification {
+    static permission = 'granted';
+    static requestPermission() { return Promise.resolve('granted'); }
+    constructor(title, opts) { record(title, opts); }
+  }
+  window.Notification = StubNotification;
+  navigator.serviceWorker?.ready.then((reg) => {
+    const original = reg.showNotification?.bind(reg);
+    reg.showNotification = (title, opts) => {
+      record(title, opts);
+      return original ? original(title, opts).catch(() => {}) : Promise.resolve();
+    };
+  }).catch(() => {});
+});
 
 const problems = [];
 const foreign = new Set();
@@ -34,6 +58,15 @@ page.on('console', (m) => {
 });
 
 await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+
+// One alert for the receipt that is actually urgent, and only one — the
+// gentler rung it passed on the way is recorded silently.
+const opening = await page.evaluate(() => window.__notes);
+const results = {
+  'a due deadline raises exactly one alert': opening.length === 1 && opening[0].tag === 'seed_currys:soon',
+};
+
 await page.getByRole('button', { name: 'Skip' }).click();
 await page.waitForTimeout(300);
 
@@ -50,9 +83,7 @@ for (let dx = 0; dx <= 110; dx += 22) {
 await page.mouse.up();
 await page.waitForTimeout(600);
 
-const results = {
-  'swipe marks the receipt returned': await page.getByText('MONEY BACK').isVisible(),
-};
+results['swipe marks the receipt returned'] = await page.getByText('MONEY BACK').isVisible();
 
 await page.getByRole('button', { name: 'Share the win' }).click();
 await page.waitForTimeout(300);
@@ -65,6 +96,8 @@ await page.waitForTimeout(400);
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
 results['the return survives a reload'] = await page.getByText('MONEY BACK ✓').isVisible();
+// The sent list is on disk, so a reload must not re-announce anything.
+results['an alert is never repeated'] = (await page.evaluate(() => window.__notes)).length === 0;
 results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })
   .isVisible()
