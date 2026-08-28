@@ -184,7 +184,9 @@ export function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
             {REVIEWS.map((r) => (
               <Card key={r.who} style={{ padding: 26 }}>
-                <div style={{ color: color.yellow, fontSize: 15, letterSpacing: '2px' }} aria-label="Five stars">★★★★★</div>
+                {/* Amber, not the brand yellow: five yellow stars on white measured
+                    1.79:1, and a rating nobody can see is not a rating. */}
+                <div style={{ color: color.amber, fontSize: 15, letterSpacing: '2px' }} aria-label="Five stars">★★★★★</div>
                 <div style={{ fontSize: 15, lineHeight: 1.6, marginTop: 12, fontWeight: 500 }}>“{r.quote}”</div>
                 <div style={{ fontSize: 13, color: color.muted, marginTop: 14, fontWeight: 600 }}>{r.who}</div>
               </Card>

@@ -58,7 +58,7 @@ export function Watch({ updates, receipts, today }: Props) {
         })}
       </ul>
 
-      <p style={{ fontSize: 11, color: color.faint, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 11, color: color.muted, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
         Policies verified daily by kept · last check today 06:00
         <br />
         Updates download in the background — receipts never leave your phone.

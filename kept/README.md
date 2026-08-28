@@ -17,16 +17,17 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 143 unit tests over the decision logic
+npm test           # 170 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
 
-The end-to-end smoke test needs a built preview server:
+The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke
+npm run smoke      # 13 end-to-end checks across every screen
+npm run contrast   # WCAG AA sweep over every rendered text node
 ```
 
 In a sandbox whose Chromium is not the build Playwright expects, point it at
@@ -52,6 +53,7 @@ src/lib/          the decision logic — pure, tested, no React
   receipts.ts     days left, deadlines, bucketing, the 30-day timeline
   urgency.ts      the red / yellow / neutral ladder
   alerts.ts       which deadlines are worth interrupting someone about
+  contrast.ts     WCAG luminance and ratio, used to hold the palette to AA
   legal.ts        Consumer Rights Act + distance-selling wording
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
@@ -113,6 +115,19 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The palette was darkened to meet WCAG AA.** A sweep over every rendered
+  text node found ten failing colour pairings across 43 elements: the
+  handoff's amber measured 3.0:1 on cream and 2.7:1 on the secondary surface
+  and carries almost every small label in the product; muted body text fell to
+  4.14:1; the tagline on the ink card sat at 3.13:1. Amber, muted and the
+  on-ink faint tone all moved, and footnotes that were using a tone only
+  legible on ink now use one legible on cream. The brand's energy is in the
+  yellow *fills*, which are untouched — this is the ink that has to be read.
+  The one exemption is the one WCAG itself grants: the wordmark's yellow full
+  stop is a logotype (SC 1.4.3), and it claims that in the DOM via
+  `data-logotype` rather than through an allowlist in the checker that would
+  rot. Guarded twice — `npm test` holds the tokens to their ratios in a
+  millisecond, `npm run contrast` proves the real screens still match.
 - **A backup can come back.** "Export a backup" was a dead end. On a product
   with no account that file is the *only* way anything reaches a new phone, so
   restore reads it back — validating every row, dropping and counting what it

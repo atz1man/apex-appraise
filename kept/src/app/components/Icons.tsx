@@ -52,7 +52,15 @@ export function LogoDashed({ size = 72 }: { size?: number }) {
 
 export function Wordmark({ size = 24 }: { size?: number }) {
   return (
-    <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: size, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}>
+    // data-logotype: WCAG 1.4.3 exempts text that is part of a logo or brand
+    // name from the contrast minimum, and the yellow full stop is the
+    // wordmark's whole signature. Marked in the DOM rather than waved through,
+    // so scripts/contrast.mjs applies the real exception to the real element
+    // instead of carrying a hand-kept allowlist that would rot.
+    <span
+      data-logotype
+      style={{ fontFamily: "'Space Grotesk', monospace", fontSize: size, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}
+    >
       kept<span style={{ color: color.yellow }}>.</span>
     </span>
   );

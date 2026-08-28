@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "TZ=America/New_York vitest run",
     "smoke": "node scripts/smoke.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "contrast": "node scripts/contrast.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

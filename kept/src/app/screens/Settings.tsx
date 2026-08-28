@@ -171,7 +171,7 @@ export function Settings({ settings, receiptCount, receipts, onExport, onRestore
           {/* The honest ceiling for a web app, stated where the switch is
               rather than implied away: Notification Triggers never shipped,
               and periodic background sync is one engine's, at its discretion. */}
-          <div style={{ padding: '0 18px 14px', fontSize: 12, color: color.faint, lineHeight: 1.5 }}>
+          <div style={{ padding: '0 18px 14px', fontSize: 12, color: color.muted, lineHeight: 1.5 }}>
             {permission === 'denied'
               ? 'Your browser is blocking notifications for kept. Turn them back on in site settings.'
               : 'Checked each time you open kept. Alerts that arrive while the app is closed need the App Store version.'}
@@ -210,7 +210,7 @@ export function Settings({ settings, receiptCount, receipts, onExport, onRestore
         </div>
       </section>
 
-      <p style={{ fontSize: 11, color: color.faint, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 11, color: color.muted, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
         kept · work hard, play hard — get your money back
         <br />
         {LEGAL_DISCLAIMER}

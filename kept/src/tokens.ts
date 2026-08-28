@@ -16,15 +16,30 @@ export const color = {
   yellowHover: '#E5AC00',
   yellowLight: '#FBDD6E',
   yellowLightHover: '#F8D24A',
-  amber: '#B98A00',
+  /**
+   * Amber carries almost every small label in the product, and the handoff's
+   * #B98A00 measured 3.0:1 on cream and 2.7:1 on the secondary surface —
+   * below WCAG AA wherever it was actually used. Darkened until it clears
+   * 4.5:1 on all three light grounds (5.08 cream / 5.30 white / 4.61
+   * creamAlt). The brand's energy lives in the yellow FILLS, which are
+   * unchanged; this is the ink that has to be read.
+   */
+  amber: '#896600',
 
-  muted: '#7A7261',
+  /** Nudged from the handoff's #7A7261, which fell to 4.14:1 on creamAlt. */
+  muted: '#746C5C',
+  /**
+   * Only legible on the INK surfaces (6.1:1 there). It measures under 3:1 on
+   * cream, so anything reading on a light ground uses `muted` instead — see
+   * scripts/contrast.mjs, which fails the build if that slips.
+   */
   faint: '#9C9484',
   fainter: '#B4AC9C',
   body: '#4C463A',
   bodyStrong: '#2E2A22',
   onInkBody: '#D6CFC0',
-  onInkFaint: '#6B6455',
+  /** Lifted from the handoff's #6B6455, which measured 3.13:1 on ink. */
+  onInkFaint: '#857E6F',
 
   danger: '#C13A27',
   dangerDot: '#D8422E',
