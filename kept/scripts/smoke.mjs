@@ -128,7 +128,10 @@ await page.waitForTimeout(400);
 results['a deleted receipt can be undone'] =
   afterDelete === beforeDelete - 1 &&
   (await receiptCount()) === beforeDelete &&
-  (await page.getByText('Kenwood kMix stand mixer').first().isVisible());
+  // By role, not by text: the undo bar names the receipt it deleted, so a
+  // text match here could be satisfied by the message rather than the row —
+  // the same trap that made the backup check pass for the wrong reason.
+  (await page.getByRole('button', { name: /Argos, Kenwood/ }).isVisible());
 
 results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })

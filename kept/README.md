@@ -217,6 +217,58 @@ deliberate departure, not an oversight:
   cannot understand, and merging by id so a receipt added since the backup was
   taken is never silently discarded.
 
+## How it is verified
+
+Five suites, each asking a question the others cannot. Three of them found
+real defects the day they were written, which is the argument for having
+them at all.
+
+### Accessibility is checked, not claimed
+
+Three passes, because they catch different things:
+
+- `npm test` holds the palette's tokens to their WCAG ratios in a millisecond.
+- `npm run contrast` re-measures what is actually rendered, compositing
+  through translucent layers, catching a component that reached for the wrong
+  token.
+- `npm run a11y` runs axe-core over every screen for the questions contrast
+  cannot ask — is every control named, is the heading order sane, are there
+  landmarks, does anything rely on colour alone.
+
+That last one found four real faults on its first run: the onboarding step
+dots carried an `aria-label` on a bare `<div>`, which is prohibited and simply
+discarded; there was no `<main>` on any screen, so all content sat outside
+every landmark a screen reader navigates between; and Home and Celebrate had
+no level-one heading at all. All fixed. axe-core is a devDependency injected
+at audit time — the app never imports it and it never reaches a bundle.
+
+### Narrow screens and untidy data
+
+Everything else here is driven at 402px with the seeded demo receipts — the
+width the design was drawn at, and the content it was drawn with. Real phones
+go down to 320px, and a real receipt can have a long shop name, a long item
+name and an amount in the thousands, because the edit form accepts whatever
+someone types. `npm run layout` sweeps both widths across every screen, with
+adversarial content and with the empty and all-returned states that never
+appear in the seed data, and fails on any sideways scroll.
+
+Its first run found the landing page scrolling 48px sideways on a 320px
+phone: `minmax(340px, 1fr)` sets a *hard* floor, so the hero's track was wider
+than the content box it sat in. Every grid there now uses
+`minmax(min(Npx, 100%), 1fr)`, which lets the floor collapse to the space that
+exists. It also turned up a receipt row whose untruncated shop name wrapped to
+five lines while the item beneath it was still being clipped to one.
+
+### Offline is verified, not asserted
+
+"Works offline" is the app's central claim — a deadline you can check on the
+train, in the shop, with no signal — and it is the one claim that cannot be
+verified by reading the code. The smoke test cuts the network completely and
+then requires the app to launch, render receipts, load its self-hosted fonts
+and still navigate. The service worker caches the shell at install and fills
+in the hashed bundles, fonts, icons and the policy feed on first run, so the
+Watch tab shows the last-known feed offline too.
+
 ## Not built yet
 
 - **Receipt scanning.** The button is present and visibly disabled with a
@@ -245,52 +297,6 @@ deliberate departure, not an oversight:
   is provenance: the entries in `public/policy-feed.json` are maintained by
   hand and nothing proves they came from us. Production wants them signed, and
   a pipeline that verifies each retailer's published terms before publishing.
-
-## Accessibility is checked, not claimed
-
-Three passes, because they catch different things:
-
-- `npm test` holds the palette's tokens to their WCAG ratios in a millisecond.
-- `npm run contrast` re-measures what is actually rendered, compositing
-  through translucent layers, catching a component that reached for the wrong
-  token.
-- `npm run a11y` runs axe-core over every screen for the questions contrast
-  cannot ask — is every control named, is the heading order sane, are there
-  landmarks, does anything rely on colour alone.
-
-That last one found four real faults on its first run: the onboarding step
-dots carried an `aria-label` on a bare `<div>`, which is prohibited and simply
-discarded; there was no `<main>` on any screen, so all content sat outside
-every landmark a screen reader navigates between; and Home and Celebrate had
-no level-one heading at all. All fixed. axe-core is a devDependency injected
-at audit time — the app never imports it and it never reaches a bundle.
-
-## Narrow screens and untidy data
-
-Everything else here is driven at 402px with the seeded demo receipts — the
-width the design was drawn at, and the content it was drawn with. Real phones
-go down to 320px, and a real receipt can have a long shop name, a long item
-name and an amount in the thousands, because the edit form accepts whatever
-someone types. `npm run layout` sweeps both widths across every screen, with
-adversarial content and with the empty and all-returned states that never
-appear in the seed data, and fails on any sideways scroll.
-
-Its first run found the landing page scrolling 48px sideways on a 320px
-phone: `minmax(340px, 1fr)` sets a *hard* floor, so the hero's track was wider
-than the content box it sat in. Every grid there now uses
-`minmax(min(Npx, 100%), 1fr)`, which lets the floor collapse to the space that
-exists. It also turned up a receipt row whose untruncated shop name wrapped to
-five lines while the item beneath it was still being clipped to one.
-
-## Offline is verified, not asserted
-
-"Works offline" is the app's central claim — a deadline you can check on the
-train, in the shop, with no signal — and it is the one claim that cannot be
-verified by reading the code. The smoke test cuts the network completely and
-then requires the app to launch, render receipts, load its self-hosted fonts
-and still navigate. The service worker caches the shell at install and fills
-in the hashed bundles, fonts, icons and the policy feed on first run, so the
-Watch tab shows the last-known feed offline too.
 
 ## Before this ships
 
