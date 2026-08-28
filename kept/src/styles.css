@@ -1,0 +1,93 @@
+/*
+ * Self-hosted typefaces. Not a preference: the app has to render on a phone
+ * with no signal (the whole point is a deadline you can check anywhere), and
+ * the privacy notice promises nobody else sees your receipts — a font request
+ * to a third party on every launch is a request that says when you opened it.
+ * Both families ship as variable fonts, so one file covers 400–700.
+ */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  color: #171410;
+  -webkit-font-smoothing: antialiased;
+}
+
+svg { display: block; flex-shrink: 0; }
+
+a { color: #171410; text-decoration: none; }
+a:hover { color: #B98A00; }
+
+/*
+ * Every tappable thing in the design is a styled <div>. Here they are real
+ * <button>s stripped back to the same look, so the app is reachable by
+ * keyboard and announces itself to a screen reader — the design's appearance
+ * with the semantics it assumed.
+ */
+.k-press {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+}
+
+:focus-visible {
+  outline: 2.5px solid #F2B90D;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.k-cta-yellow:hover { background: #E5AC00 !important; }
+.k-row-white:hover { background: #FFFBEE; }
+.k-row-plain:hover { border-color: #171410; }
+.k-banner:hover { background: #F8D24A !important; }
+.k-soft:hover { background: #EDE8D8 !important; }
+.k-ink:hover { background: #000 !important; }
+
+textarea:focus { outline: 2px solid #F2B90D; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.k-fade { animation: fadeUp .35s ease both; }
+.k-pulse { animation: pulseDot 1.6s ease infinite; }
+
+/*
+ * Reduced motion: the ticker and the pulsing "live" dots are decorative, and
+ * a 28-second infinite marquee is exactly what this setting exists to stop.
+ * The fade-in becomes an instant paint rather than being removed, so screen
+ * transitions still register as a change of place.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .k-fade { animation-duration: .01ms; }
+  .k-pulse, .k-ticker { animation: none !important; }
+}
+
+/* The scrolling policy headline bar on the landing page. */
+.k-ticker { animation: ticker 28s linear infinite; }
+
+::selection { background: #FBDD6E; color: #171410; }

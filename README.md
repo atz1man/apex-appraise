@@ -5,6 +5,12 @@ sourcing → AI/manual appraisal → comparables → scenarios → development m
 construction cost monitoring → sales & lettings → buyer/investor portals →
 benchmarking. Built from the design handoff in `design_handoff_apex_appraise/`.
 
+> **Note** — `kept/` is a separate product that happens to share this
+> repository: a local-first UK return-deadline tracker, built from its own
+> design handoff. It shares no code, dependencies or build with Apex Appraise
+> and sits outside the `pnpm-workspace.yaml` globs on purpose. See
+> `kept/README.md`.
+
 ## Quick start
 
 ```bash
