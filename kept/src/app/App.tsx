@@ -207,7 +207,6 @@ export function App() {
       {screen === 'settings' && (
         <Settings
           settings={settings}
-          receiptCount={state.receipts.length}
           receipts={state.receipts}
           onExport={exportNow}
           onRestore={(receipts) => dispatch({ type: 'restore', receipts })}

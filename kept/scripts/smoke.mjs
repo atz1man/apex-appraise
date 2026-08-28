@@ -187,6 +187,29 @@ results['a policy change is checked against the receipts held'] =
   (await page.getByText('AFFECTS YOUR RECEIPTS').first().isVisible()) &&
   (await page.getByText(/deadline unchanged, already checked/).first().isVisible());
 
+// The free tier is claimed on the pricing page, in Settings and on the Add
+// screen. Fill it and the Save must actually refuse.
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('kept.v1'));
+  const base = state.receipts[0];
+  state.receipts = Array.from({ length: 10 }, (_, i) => ({ ...base, id: `q${i}`, item: `Item ${i}`, status: 'active' }));
+  localStorage.setItem('kept.v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+await page.getByRole('button', { name: 'Add a receipt' }).click();
+await page.waitForTimeout(300);
+await page.fill('#paste', 'Your Apple order · Total £129.00 · 25 Aug');
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+const cappedSave = page.getByRole('button', { name: /Go unlimited to save this/ });
+const beforeBlocked = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length);
+await cappedSave.click({ force: true }).catch(() => {});
+await page.waitForTimeout(300);
+results['a full free tier actually refuses the save'] =
+  (await cappedSave.isDisabled()) &&
+  (await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length)) === beforeBlocked;
+
 results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 

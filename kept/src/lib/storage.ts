@@ -38,8 +38,6 @@ export interface KeptState {
   alertsSent: string[];
 }
 
-export const FREE_TIER_LIMIT = 10;
-
 export const DEFAULT_SETTINGS: Settings = {
   urgentDays: DEFAULT_URGENT_DAYS,
   plan: 'free',

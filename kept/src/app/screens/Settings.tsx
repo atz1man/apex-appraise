@@ -5,12 +5,12 @@ import { notifyState, requestNotifyPermission, type NotifyState } from '../notif
 import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { VERIFIED_STORE_COUNT } from '../../lib/stores';
-import { FREE_TIER_LIMIT, type Settings as SettingsShape } from '../../lib/storage';
+import type { Settings as SettingsShape } from '../../lib/storage';
+import { countedAgainstQuota, FREE_TIER_LIMIT } from '../../lib/quota';
 import { Pressable } from '../components/Pressable';
 
 interface Props {
   settings: SettingsShape;
-  receiptCount: number;
   receipts: Receipt[];
   onExport: () => void;
   onRestore: (receipts: Receipt[]) => void;
@@ -24,7 +24,7 @@ const RESTORE_FAILURES = {
   'nothing-usable': 'That backup’s receipts couldn’t be read — nothing was changed.',
 } as const;
 
-export function Settings({ settings, receiptCount, receipts, onExport, onRestore, onUpgrade, onChange }: Props) {
+export function Settings({ settings, receipts, onExport, onRestore, onUpgrade, onChange }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [restoreNote, setRestoreNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [permission, setPermission] = useState<NotifyState>(() => notifyState());
@@ -70,7 +70,10 @@ export function Settings({ settings, receiptCount, receipts, onExport, onRestore
   };
 
   const free = settings.plan === 'free';
-  const usagePct = Math.min(100, (receiptCount / FREE_TIER_LIMIT) * 100);
+  // The meter has to count what the cap counts, or it reports a wall the app
+  // will not actually put up.
+  const used = countedAgainstQuota(receipts);
+  const usagePct = Math.min(100, (used / FREE_TIER_LIMIT) * 100);
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -133,12 +136,12 @@ export function Settings({ settings, receiptCount, receipts, onExport, onRestore
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 15 }}>Free plan</span>
             <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, color: color.faint }}>
-              {receiptCount} of {FREE_TIER_LIMIT} free receipts
+              {used} of {FREE_TIER_LIMIT} free receipts
             </span>
           </div>
           <div
             role="progressbar"
-            aria-valuenow={receiptCount}
+            aria-valuenow={used}
             aria-valuemin={0}
             aria-valuemax={FREE_TIER_LIMIT}
             aria-label="Free receipts used"

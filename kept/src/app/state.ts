@@ -3,7 +3,8 @@ import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
-import { FREE_TIER_LIMIT, load, save, type KeptState, type Settings } from '../lib/storage';
+import { load, save, type KeptState, type Settings } from '../lib/storage';
+import { quotaFull as quotaFullFor } from '../lib/quota';
 import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
 export interface AppState extends KeptState {
@@ -164,9 +165,8 @@ export function useApp() {
   return { state, dispatch: rawDispatch, today };
 }
 
-/** The free tier counts every receipt ever added, returned ones included. */
 export function quotaFull(state: AppState): boolean {
-  return state.settings.plan === 'free' && state.receipts.length >= FREE_TIER_LIMIT;
+  return quotaFullFor(state.receipts, state.settings.plan);
 }
 
 export { makeReceiptId };

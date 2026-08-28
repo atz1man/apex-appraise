@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 227 unit tests over the decision logic
+npm test           # 235 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 17 end-to-end checks across every screen
+npm run smoke      # 18 end-to-end checks across every screen
 npm run contrast   # WCAG AA sweep over every rendered text node
 ```
 
@@ -56,6 +56,7 @@ src/lib/          the decision logic — pure, tested, no React
   contrast.ts     WCAG luminance and ratio, used to hold the palette to AA
   share.ts        reading an order email shared in from another app
   policy-feed.ts  downloading policy changes, and what they mean for you
+  quota.ts        what the free tier counts, and when it is full
   legal.ts        Consumer Rights Act + distance-selling wording
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
@@ -117,6 +118,16 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The free tier is enforced, and counts what you are still tracking.** The
+  10-receipt cap is claimed on the pricing page, in the Settings meter and on
+  the Add screen, and nothing stopped an eleventh — the upsell was theatre.
+  Save now refuses, and says the way out. One judgement worth flagging:
+  `quota.ts` counts *active* receipts, not every receipt ever added. Counting
+  all of them would consume a slot permanently for a return the person already
+  made, so someone using the app exactly as intended — tracking things, and
+  getting their money back — would hit the wall in a month and find it
+  refusing the one thing it is for. If the business wants the stricter
+  reading, `countedAgainstQuota` is the only line that changes.
 - **Policy updates arrive, and "re-calculates itself" was the wrong promise.**
   The Watch feed was frozen into the bundle; it is now fetched from the app's
   own origin, validated entry by entry, and merged by a stable id that names

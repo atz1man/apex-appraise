@@ -4,7 +4,7 @@ import { addDays, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
-import { FREE_TIER_LIMIT } from '../../lib/storage';
+import { FREE_TIER_LIMIT } from '../../lib/quota';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, CameraGlyph, LogoMark, MailGlyph, ShareGlyph, Warning } from '../components/Icons';
 import { Pressable } from '../components/Pressable';
@@ -58,7 +58,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
   }, [sharedText, readShare]);
 
   const save = () => {
-    if (!parsed) return;
+    if (!parsed || quotaFull) return;
     const store = parsed.store ?? 'Unknown store';
     onSave({
       id: makeReceiptId(today),
@@ -130,7 +130,8 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
         <div style={{ background: color.ink, color: color.cream, borderRadius: radius.cardLg, padding: 18, marginTop: 14 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>That’s your {FREE_TIER_LIMIT} free receipts</div>
           <div style={{ fontSize: 13, color: color.fainter, lineHeight: 1.55, marginTop: 6 }}>
-            Kept has tracked {trackedTotal} for free. Go unlimited — one missed return pays for the year.
+            Kept has tracked {trackedTotal} for free. Return something you are already tracking and a slot frees up —
+            or go unlimited, and one missed return pays for the year.
           </div>
           <Pressable
             className="k-cta-yellow"
@@ -168,12 +169,22 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
           <Row label="Bought" value={`${fmtDate(fromISODate(parsed.purchasedOn))}${parsed.dateFound ? '' : ' (assumed today)'}`} mono />
           <Row label="Return window" value={`${parsed.windowDays} days`} mono={false} />
           <Row label="Deadline" value={deadline} mono accent />
+          {/* The cap is claimed on the pricing page, in Settings and on the
+              card above; a Save that quietly ignored it would make all three
+              of those decorative. */}
           <Pressable
-            className="k-ink"
+            className={quotaFull ? undefined : 'k-ink'}
             onClick={save}
-            style={{ marginTop: 14, padding: 14, textAlign: 'center', background: color.ink, color: color.cream, borderRadius: 999, fontWeight: 700, fontSize: 14 }}
+            disabled={quotaFull}
+            style={{
+              marginTop: 14, padding: 14, textAlign: 'center',
+              background: quotaFull ? color.creamAlt : color.ink,
+              color: quotaFull ? color.muted : color.cream,
+              borderRadius: 999, fontWeight: 700, fontSize: 14,
+              cursor: quotaFull ? 'not-allowed' : 'pointer',
+            }}
           >
-            Save receipt
+            {quotaFull ? 'Go unlimited to save this' : 'Save receipt'}
           </Pressable>
         </div>
       )}
