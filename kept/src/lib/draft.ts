@@ -21,6 +21,8 @@ export interface ReceiptDraft {
   amountText: string;
   purchasedOn: string;
   windowDaysText: string;
+  /** Blank means no warranty at all — not a warranty of zero months. */
+  warrantyMonthsText: string;
 }
 
 export type DraftField = keyof ReceiptDraft;
@@ -30,6 +32,8 @@ export type DraftErrors = Partial<Record<DraftField, string>>;
 const MAX_WINDOW_DAYS = 3650;
 /** £1,000,000. Above this a typo is far likelier than a purchase. */
 const MAX_AMOUNT_PENCE = 100_000_000;
+/** A hundred years. Longer than any guarantee anyone will honour. */
+const MAX_WARRANTY_MONTHS = 1200;
 
 export interface ValidDraft {
   store: string;
@@ -38,6 +42,8 @@ export interface ValidDraft {
   amount: Pence;
   purchasedOn: string;
   windowDays: number;
+  /** Absent when the receipt should carry no warranty clock. */
+  warrantyMonths?: number;
 }
 
 export type DraftOutcome = { ok: true; value: ValidDraft } | { ok: false; errors: DraftErrors };
@@ -82,8 +88,20 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     errors.windowDaysText = 'That is longer than any real return window';
   }
 
+  const warrantyRaw = draft.warrantyMonthsText.trim();
+  let warrantyMonths: number | undefined;
+  if (warrantyRaw) {
+    const months = Number(warrantyRaw);
+    if (!Number.isInteger(months) || months < 1) errors.warrantyMonthsText = 'Whole months, or leave it blank';
+    else if (months > MAX_WARRANTY_MONTHS) errors.warrantyMonthsText = 'Longer than any guarantee anyone honours';
+    else warrantyMonths = months;
+  }
+
   if (Object.keys(errors).length > 0) return { ok: false, errors };
-  return { ok: true, value: { store, item, cat: draft.cat, amount, purchasedOn, windowDays } };
+  return {
+    ok: true,
+    value: { store, item, cat: draft.cat, amount, purchasedOn, windowDays, ...(warrantyMonths ? { warrantyMonths } : {}) },
+  };
 }
 
 export function draftFrom(r: Receipt): ReceiptDraft {
@@ -96,6 +114,7 @@ export function draftFrom(r: Receipt): ReceiptDraft {
     amountText: (r.amount / 100).toFixed(2),
     purchasedOn: r.purchasedOn,
     windowDaysText: String(r.windowDays),
+    warrantyMonthsText: r.warranty && r.warranty.months > 0 ? String(r.warranty.months) : '',
   };
 }
 
@@ -117,6 +136,12 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     amount: valid.amount,
     purchasedOn: valid.purchasedOn,
     windowDays: valid.windowDays,
+    // Clearing the field clears the clock. The note, if any, came from the
+    // manufacturer's own wording and is kept only while a clock is there to
+    // caption.
+    warranty: valid.warrantyMonths
+      ? { months: valid.warrantyMonths, ...(original.warranty?.note ? { note: original.warranty.note } : {}) }
+      : undefined,
     ...(storeChanged
       ? {
           policy: policy?.policy ?? `${valid.store} · ${valid.windowDays}-day return window as entered — check the receipt.`,

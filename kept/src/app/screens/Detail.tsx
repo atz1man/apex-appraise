@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { fmtDate, fmtDateLong, fromISODate } from '../../lib/dates';
+import { fmtDateLong, fmtDateNear, fromISODate } from '../../lib/dates';
 import { legalRight } from '../../lib/legal';
 import { money } from '../../lib/money';
 import { derive } from '../../lib/receipts';
@@ -99,10 +99,10 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
               {d.expired ? 'WINDOW CLOSED' : 'RETURN BY'}
             </div>
             <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-              {fmtDate(d.deadline)}
+              {fmtDateNear(d.deadline, today)}
             </div>
             <div style={{ fontSize: 12, color: color.faint, marginTop: 6 }}>
-              {d.daysUsed} of {receipt.windowDays} days used · bought {fmtDate(fromISODate(receipt.purchasedOn))}
+              {d.daysUsed} of {receipt.windowDays} days used · bought {fmtDateNear(fromISODate(receipt.purchasedOn), today)}
             </div>
           </div>
         </div>
@@ -136,8 +136,33 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
 
         {receipt.warranty && (
           <div style={{ borderTop: `1.5px solid ${color.borderHair}`, padding: '15px 18px' }}>
-            <div style={cardLabel}>WARRANTY</div>
-            <div style={{ fontSize: 14, marginTop: 5, color: color.bodyStrong }}>{receipt.warranty}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <div style={cardLabel}>WARRANTY</div>
+              {/* The clock, not a sentence about one. The question a warranty
+                  has to answer is "is the repair free today?", and prose could
+                  not answer it. */}
+              {d.warranty && d.warranty.months > 0 && (
+                <div
+                  style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+                    background: d.warranty.expired ? color.creamAlt : color.yellowLight,
+                    color: d.warranty.expired ? color.body : color.ink,
+                  }}
+                >
+                  {d.warranty.expired ? 'expired' : `${d.warranty.label} left`}
+                </div>
+              )}
+            </div>
+            {d.warranty && d.warranty.months > 0 && (
+              <div style={{ fontSize: 14, marginTop: 5, color: color.bodyStrong }}>
+                {d.warranty.expired
+                  ? `Cover ran out on ${fmtDateLong(d.warranty.ends)}.`
+                  : `Repairs should be free until ${fmtDateLong(d.warranty.ends)}.`}
+              </div>
+            )}
+            {receipt.warranty.note && (
+              <div style={{ fontSize: 13, marginTop: 4, color: color.muted }}>{receipt.warranty.note}</div>
+            )}
           </div>
         )}
       </div>

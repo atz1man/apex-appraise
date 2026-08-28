@@ -7,7 +7,7 @@ const TODAY = new Date(2026, 7, 28);
 
 const base: ReceiptDraft = {
   store: 'Currys', item: 'Headphones', cat: 'audio',
-  amountText: '89.00', purchasedOn: '2026-08-16', windowDaysText: '14',
+  amountText: '89.00', purchasedOn: '2026-08-16', windowDaysText: '14', warrantyMonthsText: '',
 };
 
 function valid(patch: Partial<ReceiptDraft> = {}) {
@@ -100,6 +100,46 @@ describe('required text and window', () => {
   });
 });
 
+describe('the warranty field', () => {
+  it('means no warranty when left blank', () => {
+    expect(valid({ warrantyMonthsText: '   ' }).warrantyMonths).toBeUndefined();
+  });
+
+  it('reads whole months', () => {
+    expect(valid({ warrantyMonthsText: '24' }).warrantyMonths).toBe(24);
+  });
+
+  it.each([['0'], ['-3'], ['18.5'], ['two years']])('rejects "%s"', (v) => {
+    expect(errors({ warrantyMonthsText: v }).warrantyMonthsText).toBeTruthy();
+  });
+
+  it('rejects a length nobody would honour', () => {
+    expect(errors({ warrantyMonthsText: '2000' }).warrantyMonthsText).toBeTruthy();
+  });
+
+  it('clearing the field clears the clock', () => {
+    const receipt: Receipt = {
+      id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
+      purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status: 'active',
+      warranty: { months: 24, note: 'Manufacturer cover' },
+    };
+    const out = validateDraft({ ...draftFrom(receipt), warrantyMonthsText: '' }, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(receipt, out.value).warranty).toBeUndefined();
+  });
+
+  it('keeps the manufacturer’s own wording when the length changes', () => {
+    const receipt: Receipt = {
+      id: 'r1', store: 'IKEA', item: 'MALM', cat: 'furniture', amount: toPence(199),
+      purchasedOn: '2026-08-16', windowDays: 365, policy: 'p', legalDays: 30, status: 'active',
+      warranty: { months: 120, note: '10-year guarantee on MALM frames' },
+    };
+    const out = validateDraft({ ...draftFrom(receipt), warrantyMonthsText: '60' }, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(receipt, out.value).warranty).toEqual({ months: 60, note: '10-year guarantee on MALM frames' });
+  });
+});
+
 describe('round-tripping an existing receipt', () => {
   const receipt: Receipt = {
     id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
@@ -117,10 +157,15 @@ describe('round-tripping an existing receipt', () => {
   });
 
   it('keeps fields the form does not touch', () => {
-    const out = validateDraft({ ...draftFrom(receipt), item: 'Renamed' }, TODAY);
+    // Warranty is NOT in this list — the form owns it, so a draft built from a
+    // receipt without one clears it deliberately (see "clearing the field").
+    const withHistory: Receipt = { ...receipt, status: 'returned', returnedOn: '2026-08-20', gotcha: 'dispatch, not delivery' };
+    const out = validateDraft({ ...draftFrom(withHistory), item: 'Renamed' }, TODAY);
     if (!out.ok) throw new Error('expected valid');
-    const edited = applyDraft({ ...receipt, warranty: '2 years', status: 'returned' }, out.value);
-    expect(edited).toMatchObject({ item: 'Renamed', warranty: '2 years', status: 'returned', id: 'r1' });
+    expect(applyDraft(withHistory, out.value)).toMatchObject({
+      item: 'Renamed', id: 'r1', status: 'returned', returnedOn: '2026-08-20', gotcha: 'dispatch, not delivery',
+      policy: 'Currys · 14 days',
+    });
   });
 });
 

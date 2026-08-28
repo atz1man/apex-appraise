@@ -1,5 +1,5 @@
 import { color, radius, shadow } from '../../tokens';
-import { fmtDate, addDays } from '../../lib/dates';
+import { addDays, fmtDate, fmtDateNear } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
 import { heroCount, urgency } from '../../lib/urgency';
@@ -212,7 +212,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
         </span>
       </div>
       <div style={{ fontSize: 13.5, color: color.faint, marginTop: 8 }}>
-        {receipt.store} · {money(receipt.amount)} back if it goes back by {fmtDate(d.deadline)}
+        {receipt.store} · {money(receipt.amount)} back if it goes back by {fmtDateNear(d.deadline, today)}
       </div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '11px 20px', background: color.yellow, color: color.ink, borderRadius: 999, fontWeight: 700, fontSize: 13.5 }}>
         See what to do <ArrowRight />

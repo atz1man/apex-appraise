@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 177 unit tests over the decision logic
+npm test           # 208 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -116,6 +116,21 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **A warranty is a clock, not a sentence.** The landing page promises
+  "warranty clocks added to your receipts automatically", and a warranty was a
+  free-text string that could not answer the question that promise implies —
+  is the repair still free today? It is now `{ months, note }`, and the detail
+  screen shows when cover ends and how much is left, said the way a person
+  would say it: "10 years", then "5 months", then "9 days" as the unit starts
+  to matter. It runs from the purchase date, not the retailer's dispatch
+  clock — a manufacturer's cover starts when the thing was bought, whatever
+  the shop counts its own window from. Month arithmetic clamps to the end of
+  short months, because the naive `setMonth` turns 31 January into 3 March and
+  hands someone two days of cover they do not have. Backups written before the
+  change still restore: the old string is kept as the note, with no clock
+  invented from prose.
+- **Dates carry a year when they need one.** IKEA's 365-day window put "bought
+  14 Feb" and "return by 14 Feb" on the same card, twelve months apart.
 - **The share sheet works.** The Add screen taught a three-step flow — open
   the order, tap share, pick kept — and nothing was listening. Kept is now a
   PWA share target: an order email shared from a mail app arrives already

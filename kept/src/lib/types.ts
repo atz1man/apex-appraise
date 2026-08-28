@@ -1,5 +1,12 @@
 import type { Pence } from './money';
 
+export interface Warranty {
+  /** Quoted the way manufacturers quote them: 12, 24, 120 months. */
+  months: number;
+  /** Anything the months cannot say — "10-year guarantee on MALM frames". */
+  note?: string;
+}
+
 export type Category = 'audio' | 'kitchen' | 'clothing' | 'beauty' | 'furniture' | 'other';
 
 export type ReceiptStatus = 'active' | 'returned';
@@ -32,7 +39,12 @@ export interface Receipt {
   policy: string;
   /** Which statutory clock this purchase carries: 30-day reject, or 14-day online cooling-off. */
   legalDays: 14 | 30;
-  warranty?: string;
+  /**
+   * A tracked clock, not a sentence. "Warranty clocks added to your receipts
+   * automatically" was the claim; a free-text string could not answer the
+   * question the claim implies — is the repair still free today?
+   */
+  warranty?: Warranty;
   gotcha?: string;
   status: ReceiptStatus;
   /** ISO date the refund landed — set when the receipt is marked returned. */

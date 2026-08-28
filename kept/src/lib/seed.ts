@@ -1,4 +1,4 @@
-import { addDays, fmtDateLong, toISODate } from './dates';
+import { addDays, toISODate } from './dates';
 import { toPence } from './money';
 import type { PolicyUpdate, Receipt } from './types';
 
@@ -14,14 +14,14 @@ export function seedReceipts(today: Date): Receipt[] {
       id: 'seed_currys', store: 'Currys', item: 'JBL Tune 770NC headphones', cat: 'audio',
       amount: toPence(89.0), purchasedOn: ago(12), windowDays: 14,
       policy: 'Currys · 14 days change of mind, unopened or unwanted. Refund to original payment method.',
-      legalDays: 30, warranty: `2-year manufacturer warranty · repairs free until ${fmtDateLong(addDays(today, 730 - 12))}`,
+      legalDays: 30, warranty: { months: 24, note: 'Manufacturer warranty — repairs free within it' },
       status: 'active',
     },
     {
       id: 'seed_argos', store: 'Argos', item: 'Kenwood kMix stand mixer', cat: 'kitchen',
       amount: toPence(64.99), purchasedOn: ago(21), windowDays: 30,
       policy: 'Argos · 30 days with proof of purchase. Return to any store or arrange collection.',
-      legalDays: 30, warranty: `1-year guarantee · until ${fmtDateLong(addDays(today, 365 - 21))}`, status: 'active',
+      legalDays: 30, warranty: { months: 12, note: 'Kenwood guarantee' }, status: 'active',
     },
     {
       // The dispatch gotcha as data, not prose: the order was placed two days
@@ -44,7 +44,7 @@ export function seedReceipts(today: Date): Receipt[] {
       id: 'seed_ikea', store: 'IKEA', item: 'MALM chest of 6 drawers', cat: 'furniture',
       amount: toPence(199.0), purchasedOn: ago(195), windowDays: 365,
       policy: 'IKEA · 365 days, even assembled, with proof of purchase. 14 days for cut fabric.',
-      legalDays: 30, warranty: '10-year guarantee on MALM frames', status: 'active',
+      legalDays: 30, warranty: { months: 120, note: '10-year guarantee on MALM frames' }, status: 'active',
     },
   ];
 }

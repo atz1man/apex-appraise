@@ -70,10 +70,30 @@ describe('validating rows', () => {
   });
 
   it('carries the optional fields through when present', () => {
-    const rich = { ...good, windowStartsOn: '2026-08-18', warranty: '2 years', gotcha: 'watch out', returnedOn: '2026-08-20', status: 'returned' };
+    const rich = { ...good, windowStartsOn: '2026-08-18', warranty: { months: 24, note: 'Manufacturer cover' }, gotcha: 'watch out', returnedOn: '2026-08-20', status: 'returned' };
     expect(ok(file([rich])).receipts[0]).toMatchObject({
-      windowStartsOn: '2026-08-18', warranty: '2 years', gotcha: 'watch out', returnedOn: '2026-08-20',
+      windowStartsOn: '2026-08-18',
+      warranty: { months: 24, note: 'Manufacturer cover' },
+      gotcha: 'watch out',
+      returnedOn: '2026-08-20',
     });
+  });
+
+  it('keeps a free-text warranty from an older backup as a note, with no clock', () => {
+    // Warranties were prose before they were a clock. Inventing a length from
+    // "2 years or so" would be worse than carrying the words and saying less.
+    expect(ok(file([{ ...good, warranty: '2-year manufacturer warranty' }])).receipts[0].warranty)
+      .toEqual({ months: 0, note: '2-year manufacturer warranty' });
+  });
+
+  it('drops a warranty it cannot make sense of, rather than the receipt', () => {
+    const r = ok(file([{ ...good, warranty: { months: -5 } }])).receipts[0];
+    expect(r.warranty).toBeUndefined();
+    expect(r.id).toBe('r1');
+  });
+
+  it('refuses an implausible warranty length', () => {
+    expect(ok(file([{ ...good, warranty: { months: 5000 } }])).receipts[0].warranty).toBeUndefined();
   });
 
   it('does not invent optional fields that were absent', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { addDays, fmtDate, fromISODate } from '../../lib/dates';
+import { addDays, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
@@ -81,7 +81,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     });
   };
 
-  const deadline = parsed ? fmtDate(addDays(fromISODate(parsed.purchasedOn), parsed.windowDays)) : '';
+  const deadline = parsed ? fmtDateNear(addDays(fromISODate(parsed.purchasedOn), parsed.windowDays), today) : '';
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>

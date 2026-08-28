@@ -68,3 +68,31 @@ export function relativeAgo(then: Date, today: Date): string {
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
 }
+
+/**
+ * Add whole months, clamping to the end of the target month.
+ *
+ * Warranties are quoted in months and years, never days, and the naive
+ * `setMonth(m + n)` overflows: 31 January plus one month becomes 3 March,
+ * which would hand someone two days of cover they do not have. The last day
+ * of a short month is the honest answer.
+ */
+export function addMonths(d: Date, months: number): Date {
+  const start = startOfDay(d);
+  const day = start.getDate();
+  const out = new Date(start.getFullYear(), start.getMonth() + months, 1);
+  const lastDayOfTarget = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate();
+  out.setDate(Math.min(day, lastDayOfTarget));
+  return out;
+}
+
+/**
+ * Short form, with the year only when it is not this year.
+ *
+ * IKEA's 365-day window puts the deadline a year out, and "bought 14 Feb ·
+ * return by 14 Feb" reads as the same day when it is twelve months apart. The
+ * year earns its space exactly when it disambiguates, and not otherwise.
+ */
+export function fmtDateNear(d: Date, today: Date): string {
+  return d.getFullYear() === today.getFullYear() ? fmtDate(d) : `${fmtDate(d)} ${d.getFullYear()}`;
+}

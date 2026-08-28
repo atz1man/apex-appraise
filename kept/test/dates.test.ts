@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysBetween, fmtDate, fromISODate, relativeAgo, startOfDay, toISODate } from '../src/lib/dates';
+import { addDays, addMonths, daysBetween, fmtDate, fmtDateNear, fromISODate, relativeAgo, startOfDay, toISODate } from '../src/lib/dates';
 
 /**
  * This suite runs under TZ=America/New_York on purpose (see package.json).
@@ -57,6 +57,31 @@ describe('day arithmetic', () => {
   });
 });
 
+describe('addMonths — the unit warranties are quoted in', () => {
+  it('adds a plain month', () => {
+    expect(toISODate(addMonths(new Date(2026, 0, 15), 1))).toBe('2026-02-15');
+  });
+
+  it('clamps to the end of a shorter month rather than overflowing', () => {
+    // The naive setMonth(m + 1) turns 31 January into 3 March, handing someone
+    // two days of cover they do not have.
+    expect(toISODate(addMonths(new Date(2026, 0, 31), 1))).toBe('2026-02-28');
+  });
+
+  it('lands on 29 February in a leap year', () => {
+    expect(toISODate(addMonths(new Date(2028, 0, 31), 1))).toBe('2028-02-29');
+  });
+
+  it('crosses years', () => {
+    expect(toISODate(addMonths(new Date(2026, 7, 16), 24))).toBe('2028-08-16');
+    expect(toISODate(addMonths(new Date(2026, 7, 16), 120))).toBe('2036-08-16');
+  });
+
+  it('goes backwards too', () => {
+    expect(toISODate(addMonths(new Date(2026, 0, 15), -2))).toBe('2025-11-15');
+  });
+});
+
 describe('relativeAgo', () => {
   const today = new Date(2026, 7, 28);
   it.each([
@@ -71,5 +96,23 @@ describe('relativeAgo', () => {
     [400, '1y ago'],
   ])('renders %i days back as "%s"', (back, expected) => {
     expect(relativeAgo(addDays(today, -back), today)).toBe(expected);
+  });
+});
+
+describe('fmtDateNear — the year, only when it earns its space', () => {
+  const today = new Date(2026, 7, 28);
+
+  it('leaves the year off for a date this year', () => {
+    expect(fmtDateNear(new Date(2026, 1, 14), today)).toBe('14 Feb');
+  });
+
+  it('adds the year for one that is not', () => {
+    // IKEA's 365-day window: "bought 14 Feb · return by 14 Feb" reads as the
+    // same day when it is twelve months apart.
+    expect(fmtDateNear(new Date(2027, 1, 14), today)).toBe('14 Feb 2027');
+  });
+
+  it('adds the year for a date in the past too', () => {
+    expect(fmtDateNear(new Date(2025, 11, 3), today)).toBe('3 Dec 2025');
   });
 });

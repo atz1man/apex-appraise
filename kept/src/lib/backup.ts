@@ -1,5 +1,5 @@
 import { fromISODate, toISODate } from './dates';
-import type { Category, Receipt, ReceiptStatus } from './types';
+import type { Category, Receipt, ReceiptStatus, Warranty } from './types';
 
 /**
  * Reading a backup file back in.
@@ -39,6 +39,20 @@ function isISODate(v: unknown): v is string {
   return toISODate(fromISODate(v)) === v;
 }
 
+/**
+ * Warranties were free text before they were a clock. A backup written by that
+ * version is still a real backup, so its string is kept as the note and the
+ * receipt simply carries no clock — dropping the row, or inventing a length
+ * from prose, would both be worse than saying less.
+ */
+function readWarranty(raw: unknown): Warranty | undefined {
+  if (isStr(raw)) return { months: 0, note: raw };
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const w = raw as Record<string, unknown>;
+  if (typeof w.months !== 'number' || !Number.isInteger(w.months) || w.months < 0 || w.months > 1200) return undefined;
+  return { months: w.months, ...(isStr(w.note) ? { note: w.note } : {}) };
+}
+
 /** One row, validated field by field. Returns null when it cannot be trusted. */
 function readReceipt(raw: unknown): Receipt | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -69,7 +83,10 @@ function readReceipt(raw: unknown): Receipt | null {
     windowDays: r.windowDays,
     policy: r.policy,
     legalDays: r.legalDays,
-    ...(isStr(r.warranty) ? { warranty: r.warranty } : {}),
+    ...(() => {
+      const warranty = readWarranty(r.warranty);
+      return warranty ? { warranty } : {};
+    })(),
     ...(isStr(r.gotcha) ? { gotcha: r.gotcha } : {}),
     status: r.status as ReceiptStatus,
     ...(r.returnedOn !== undefined ? { returnedOn: r.returnedOn as string } : {}),

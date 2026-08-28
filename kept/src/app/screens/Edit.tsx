@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
 import { applyDraft, draftFrom, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
-import { addDays, fmtDate, fromISODate, toISODate } from '../../lib/dates';
+import { addDays, addMonths, fmtDateLong, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { STORE_POLICIES } from '../../lib/stores';
 import type { Category, Receipt } from '../../lib/types';
 import { CatIcon, ChevronLeft } from '../components/Icons';
@@ -49,7 +49,13 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
   // about.
   const windowDays = Number(draft.windowDaysText);
   const previewable = /^\d{4}-\d{2}-\d{2}$/.test(draft.purchasedOn) && Number.isInteger(windowDays) && windowDays > 0;
-  const deadline = previewable ? fmtDate(addDays(fromISODate(draft.purchasedOn), windowDays)) : null;
+  const deadline = previewable ? fmtDateNear(addDays(fromISODate(draft.purchasedOn), windowDays), today) : null;
+
+  const warrantyMonths = Number(draft.warrantyMonthsText.trim());
+  const warrantyEnds =
+    /^\d{4}-\d{2}-\d{2}$/.test(draft.purchasedOn) && Number.isInteger(warrantyMonths) && warrantyMonths > 0
+      ? fmtDateLong(addMonths(fromISODate(draft.purchasedOn), warrantyMonths))
+      : null;
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -171,11 +177,29 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
             />
           )}
         </Field>
+
+        <Field
+          id="e-warranty"
+          label="Warranty (months)"
+          error={errors.warrantyMonthsText}
+          hint={warrantyEnds ? `Cover until ${warrantyEnds}` : 'Leave blank if there is none.'}
+        >
+          {(p) => (
+            <input
+              {...p}
+              inputMode="numeric"
+              value={draft.warrantyMonthsText}
+              placeholder="24"
+              onChange={(e) => set('warrantyMonthsText', e.target.value)}
+              style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+            />
+          )}
+        </Field>
       </div>
 
       {receipt.windowStartsOn && receipt.windowStartsOn !== receipt.purchasedOn && (
         <p style={{ fontSize: 12.5, color: color.muted, lineHeight: 1.55, margin: '12px 4px 0' }}>
-          This shop counts from dispatch ({fmtDate(fromISODate(receipt.windowStartsOn))}), so the deadline is measured from
+          This shop counts from dispatch ({fmtDateNear(fromISODate(receipt.windowStartsOn), today)}), so the deadline is measured from
           that date rather than the one above.
         </p>
       )}

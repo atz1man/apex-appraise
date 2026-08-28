@@ -100,3 +100,67 @@ describe('timeline', () => {
     expect(dot.left).toBeLessThanOrEqual(98);
   });
 });
+
+describe('the warranty clock', () => {
+  const withWarranty = (months: number, boughtDaysAgo: number) =>
+    derive(receipt({ purchasedOn: ago(boughtDaysAgo), warranty: { months } }), TODAY);
+
+  it('is absent when the receipt carries no warranty', () => {
+    expect(derive(receipt(), TODAY).warranty).toBeUndefined();
+  });
+
+  it('runs from the purchase date, not the retailer’s dispatch clock', () => {
+    // Zara counts returns from dispatch; a manufacturer's cover starts when the
+    // thing was bought, whatever the shop counts its own window from — so the
+    // two-day gap must not shift the warranty's end date.
+    const shared = { purchasedOn: ago(30), warranty: { months: 24 } } as const;
+    const plain = derive(receipt(shared), TODAY);
+    const dispatched = derive(receipt({ ...shared, windowStartsOn: ago(28) }), TODAY);
+    expect(toISODate(dispatched.warranty!.ends)).toBe(toISODate(plain.warranty!.ends));
+    // ...while the RETURN deadline does move with dispatch.
+    expect(dispatched.daysLeft).not.toBe(plain.daysLeft);
+  });
+
+  it('expires on the right day two years out', () => {
+    const d = withWarranty(24, 12); // bought 16 Aug 2026
+    expect(toISODate(d.warranty!.ends)).toBe('2028-08-16');
+    expect(d.warranty!.expired).toBe(false);
+  });
+
+  it('knows when cover has run out', () => {
+    const d = withWarranty(12, 400);
+    expect(d.warranty!.expired).toBe(true);
+    expect(d.warranty!.daysLeft).toBeLessThan(0);
+  });
+
+  it('is still live on its last day', () => {
+    const d = withWarranty(12, 365);
+    expect(d.warranty!.daysLeft).toBe(0);
+    expect(d.warranty!.expired).toBe(false);
+  });
+
+  it('says years when there are years left', () => {
+    expect(withWarranty(120, 0).warranty!.label).toBe('10 years');
+  });
+
+  it('says years and months when the remainder matters', () => {
+    expect(withWarranty(24, 90).warranty!.label).toBe('1y 9m');
+  });
+
+  it('drops to months in the last year', () => {
+    expect(withWarranty(12, 200).warranty!.label).toBe('5 months');
+  });
+
+  it('drops to days at the end, when the unit starts to matter', () => {
+    expect(withWarranty(12, 356).warranty!.label).toBe('9 days');
+  });
+
+  it('uses the singular on the last day', () => {
+    expect(withWarranty(12, 364).warranty!.label).toBe('1 day');
+  });
+
+  it('carries a note with no clock, for a warranty imported as prose', () => {
+    const d = derive(receipt({ warranty: { months: 0, note: '2-year manufacturer warranty' } }), TODAY);
+    expect(d.warranty!.months).toBe(0);
+  });
+});
