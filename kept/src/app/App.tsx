@@ -168,6 +168,7 @@ export function App() {
       {screen === 'add' && (
         <Add
           today={today}
+          sharedText={state.sharedText ?? undefined}
           quotaFull={quotaFull(state)}
           trackedTotal={money(sumPence(state.receipts.map((r) => r.amount)))}
           onSave={(receipt) => dispatch({ type: 'add', receipt })}

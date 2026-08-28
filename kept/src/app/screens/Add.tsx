@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fromISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
@@ -11,23 +11,31 @@ import { Pressable } from '../components/Pressable';
 
 interface Props {
   today: Date;
+  /**
+   * An order email shared in from another app. Arriving with text already in
+   * hand, the screen reads it immediately — a share that lands on an empty box
+   * and waits to be told to try is not the flow the three-step strip promises.
+   */
+  sharedText?: string;
   quotaFull: boolean;
   trackedTotal: string;
   onSave: (r: Receipt) => void;
   onUpgrade: () => void;
 }
 
-export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props) {
-  const [text, setText] = useState('');
+export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgrade }: Props) {
+  const [text, setText] = useState(sharedText ?? '');
   const [parsed, setParsed] = useState<ParsedReceipt | null>(null);
   const [error, setError] = useState(false);
   // The parser can read a shop and a total, but nothing in an order email
   // reliably says what the thing WAS. Asking here is why the list stops
   // filling up with rows called "From pasted email".
   const [item, setItem] = useState('');
+  // Read once, on arrival. A later keystroke must not re-trigger it.
+  const [readShare, setReadShare] = useState(false);
 
-  const read = () => {
-    const outcome = parseReceiptText(text, today);
+  const readText = (source: string) => {
+    const outcome = parseReceiptText(source, today);
     if (!outcome.ok) {
       setParsed(null);
       setError(true);
@@ -37,6 +45,17 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
     setError(false);
     setItem('');
   };
+
+  const read = () => readText(text);
+
+  useEffect(() => {
+    if (!sharedText || readShare) return;
+    setReadShare(true);
+    readText(sharedText);
+    // readText is stable enough for this one-shot: the effect is gated on a
+    // flag, so a changing identity cannot make it fire twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedText, readShare]);
 
   const save = () => {
     if (!parsed) return;
@@ -184,6 +203,9 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
 
       <div style={{ background: color.creamAlt, border: '1.5px dashed rgba(23,20,16,0.2)', borderRadius: radius.card, padding: '16px 18px', marginTop: 20 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.4px', color: color.muted }}>COMING FROM YOUR EMAIL APP?</div>
+        <div style={{ fontSize: 12, color: color.muted, lineHeight: 1.5, marginTop: 6 }}>
+          Add kept to your home screen and it appears in the share sheet — the order lands here already read.
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
           <Step icon={<MailGlyph />} label="Open the order" />
           <ArrowRight stroke={color.fainter} />

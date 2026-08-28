@@ -163,6 +163,19 @@ await page.waitForTimeout(300);
 results['a file that is not a backup is refused, and nothing is lost'] =
   refused && (await page.getByText('No7 skincare set').first().isVisible());
 
+// An order email shared in from another app must land already read — the
+// three-step strip on the Add screen promises exactly this.
+const shareUrl =
+  `${ORIGIN}/app/?title=${encodeURIComponent('Your Currys order')}` +
+  `&text=${encodeURIComponent('Order placed 16 Aug 2026\nTotal £129.00')}`;
+await page.goto(shareUrl, { waitUntil: 'networkidle' });
+await page.waitForTimeout(700);
+results['a shared order lands on Add, already read'] =
+  (await page.getByRole('heading', { name: 'Add a receipt' }).isVisible()) &&
+  (await page.getByText('FOUND IN YOUR PASTE').isVisible());
+// The payload must not linger in the address bar, or a reload re-adds it.
+results['the shared payload is stripped from the URL'] = !/[?&]text=/.test(page.url());
+
 results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 

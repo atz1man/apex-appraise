@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 170 unit tests over the decision logic
+npm test           # 177 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 13 end-to-end checks across every screen
+npm run smoke      # 15 end-to-end checks across every screen
 npm run contrast   # WCAG AA sweep over every rendered text node
 ```
 
@@ -54,6 +54,7 @@ src/lib/          the decision logic — pure, tested, no React
   urgency.ts      the red / yellow / neutral ladder
   alerts.ts       which deadlines are worth interrupting someone about
   contrast.ts     WCAG luminance and ratio, used to hold the palette to AA
+  share.ts        reading an order email shared in from another app
   legal.ts        Consumer Rights Act + distance-selling wording
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
@@ -115,6 +116,14 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The share sheet works.** The Add screen taught a three-step flow — open
+  the order, tap share, pick kept — and nothing was listening. Kept is now a
+  PWA share target: an order email shared from a mail app arrives already
+  read, on the Add screen, with the shop, total, date and deadline filled in.
+  A GET target was chosen over POST so no service worker sits in the path and
+  a cold start still works. The payload is stripped from the address bar as
+  soon as it is in hand — a reload must not silently re-add the same receipt,
+  and an order email has no business sitting in browser history.
 - **The palette was darkened to meet WCAG AA.** A sweep over every rendered
   text node found ten failing colour pairings across 43 elements: the
   handoff's amber measured 3.0:1 on cream and 2.7:1 on the secondary surface
@@ -137,7 +146,14 @@ deliberate departure, not an oversight:
 ## Not built yet
 
 - **Receipt scanning.** The button is present and visibly disabled with a
-  `SOON` chip rather than silently doing nothing. Needs a camera + OCR pass.
+  `SOON` chip rather than silently doing nothing. On-device OCR was evaluated
+  and deliberately deferred: doing it without a third party means self-hosting
+  Tesseract's wasm core and English model, roughly 6 MB of binary committed to
+  the repo and downloaded on first scan, and its accuracy on a creased thermal
+  receipt cannot be assessed from a synthetic test image. The flow it would
+  feed — parse, confirm, edit before saving — already exists and is where a
+  scan should land, so adding it later is a contained change rather than a
+  redesign.
 - **Background notifications.** Deadline alerts are real — `lib/alerts.ts`
   decides which deadlines are worth an interruption and `app/notify.ts`
   delivers them — but a web app cannot wake itself at 9am. Notification

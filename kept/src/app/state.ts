@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useReducer } from 'react';
 import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
+import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
 import { FREE_TIER_LIMIT, load, save, type KeptState, type Settings } from '../lib/storage';
 import type { Receipt, Screen } from '../lib/types';
 
 export interface AppState extends KeptState {
   screen: Screen;
+  /** An order email shared in from another app, waiting for the Add screen. */
+  sharedText: string | null;
   /** The receipt open on the detail screen. */
   selId: string | null;
   obStep: number;
@@ -115,10 +118,16 @@ export function useApp() {
       // demo. A visitor who has never opened the app should land on the
       // receipts list there, not on step one of an onboarding flow they
       // cannot see the point of yet.
-      const embedded = typeof location !== 'undefined' && new URLSearchParams(location.search).has('embed');
+      const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+      const embedded = params.has('embed');
+      const incoming = sharedTextFrom(params);
       return {
         ...persisted,
-        screen: persisted.onboardingSeen || embedded ? 'home' : 'onboard',
+        // A shared order goes straight to Add, whether or not onboarding was
+        // ever finished: someone who shared an email is telling you exactly
+        // what they came to do.
+        screen: incoming ? 'add' : persisted.onboardingSeen || embedded ? 'home' : 'onboard',
+        sharedText: incoming,
         selId: null,
         obStep: 0,
         celebrating: null,
@@ -126,6 +135,17 @@ export function useApp() {
       };
     },
   );
+
+  // Strip the shared payload from the address bar once it is in hand: a
+  // reload must not silently re-add the same receipt, and an order email has
+  // no business sitting in browser history.
+  useEffect(() => {
+    if (typeof location === 'undefined' || typeof history === 'undefined') return;
+    const url = new URL(location.href);
+    if (!SHARE_PARAMS.some((k) => url.searchParams.has(k))) return;
+    for (const k of SHARE_PARAMS) url.searchParams.delete(k);
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }, []);
 
   useEffect(() => {
     save({

@@ -1,5 +1,5 @@
 {
-  "name": "kept. — return deadlines, watched",
+  "name": "kept. \u2014 return deadlines, watched",
   "short_name": "kept",
   "description": "Track every receipt, know each shop's real return window and your legal rights, and get pinged before either clock runs out. Nothing leaves your device.",
   "start_url": "/app/",
@@ -9,11 +9,41 @@
   "background_color": "#FDFAF1",
   "theme_color": "#FDFAF1",
   "lang": "en-GB",
-  "categories": ["finance", "productivity", "shopping"],
+  "categories": [
+    "finance",
+    "productivity",
+    "shopping"
+  ],
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/app/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
