@@ -39,15 +39,15 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
       <header className="k-fade" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: 0, fontWeight: 400 }}>
           <Logo size={28} />
-          <div>
+          <span>
             <Wordmark />
-            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.8px', color: color.muted, marginTop: 3 }}>
+            <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.8px', color: color.muted, marginTop: 3 }}>
               RETURN DEADLINES, WATCHED
-            </div>
-          </div>
-        </div>
+            </span>
+          </span>
+        </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 700 }}>
           <span style={{ width: 7, height: 7, borderRadius: 999, background: color.yellow }} />
           ON-DEVICE

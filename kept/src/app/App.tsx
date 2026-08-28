@@ -148,6 +148,10 @@ export function App() {
         overflow: 'hidden',
       }}
     >
+      {/* One main landmark. Without it every screen's content sits outside any
+          region, which is what a screen reader's landmark navigation moves
+          between. */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {onboarding && (
         <Onboarding
           step={state.obStep}
@@ -225,6 +229,8 @@ export function App() {
           onDone={() => dispatch({ type: 'go', screen: 'home' })}
         />
       )}
+
+      </main>
 
       {!onboarding && (
         <TabBar

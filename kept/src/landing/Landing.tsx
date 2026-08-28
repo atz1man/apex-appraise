@@ -50,6 +50,7 @@ export function Landing() {
         </nav>
       </header>
 
+      <main>
       {/* Hero */}
       <section style={{ ...WRAP, padding: '48px 28px 72px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 56, alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
@@ -261,6 +262,8 @@ export function Landing() {
           <AppStoreButton large />
         </div>
       </section>
+
+      </main>
 
       <footer style={{ borderTop: '1.5px solid rgba(23,20,16,0.1)', padding: 28 }}>
         <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: color.muted, gap: 14, flexWrap: 'wrap' }}>

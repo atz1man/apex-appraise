@@ -28,6 +28,7 @@ The browser checks need a built preview server:
 npm run build && npx vite preview --port 5183 &
 npm run smoke      # 21 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
+npm run a11y       # axe-core audit of every screen
 ```
 
 In a sandbox whose Chromium is not the build Playwright expects, point it at
@@ -209,6 +210,25 @@ deliberate departure, not an oversight:
   signed feed fetched on a schedule — and, to keep the privacy claim true,
   the download must be of *all* policy changes, never a query naming the
   shops a particular user holds.
+
+## Accessibility is checked, not claimed
+
+Three passes, because they catch different things:
+
+- `npm test` holds the palette's tokens to their WCAG ratios in a millisecond.
+- `npm run contrast` re-measures what is actually rendered, compositing
+  through translucent layers, catching a component that reached for the wrong
+  token.
+- `npm run a11y` runs axe-core over every screen for the questions contrast
+  cannot ask — is every control named, is the heading order sane, are there
+  landmarks, does anything rely on colour alone.
+
+That last one found four real faults on its first run: the onboarding step
+dots carried an `aria-label` on a bare `<div>`, which is prohibited and simply
+discarded; there was no `<main>` on any screen, so all content sat outside
+every landmark a screen reader navigates between; and Home and Celebrate had
+no level-one heading at all. All fixed. axe-core is a devDependency injected
+at audit time — the app never imports it and it never reaches a bundle.
 
 ## Offline is verified, not asserted
 

@@ -56,7 +56,17 @@ export function Onboarding({ step, onNext, onSkip }: Props) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 6 }} aria-label={`Step ${step + 1} of ${STEPS.length}`}>
+        {/* A bare <div aria-label> is prohibited — no role, nothing to name.
+            These dots are literally progress, so they say that. */}
+        <div
+          role="progressbar"
+          aria-label="Onboarding progress"
+          aria-valuemin={1}
+          aria-valuemax={STEPS.length}
+          aria-valuenow={step + 1}
+          aria-valuetext={`Step ${step + 1} of ${STEPS.length}`}
+          style={{ display: 'flex', gap: 6 }}
+        >
           {STEPS.map((_, i) => (
             <span
               key={i}
