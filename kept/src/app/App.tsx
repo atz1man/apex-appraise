@@ -6,6 +6,7 @@ import { TabBar } from './components/TabBar';
 import { Add } from './screens/Add';
 import { Celebrate } from './screens/Celebrate';
 import { Detail } from './screens/Detail';
+import { Edit } from './screens/Edit';
 import { Home } from './screens/Home';
 import { Onboarding } from './screens/Onboarding';
 import { Settings } from './screens/Settings';
@@ -110,8 +111,18 @@ export function App() {
           today={today}
           urgentDays={settings.urgentDays}
           onBack={() => dispatch({ type: 'go', screen: 'home' })}
+          onEdit={() => dispatch({ type: 'go', screen: 'edit' })}
           onReturn={() => dispatch({ type: 'return', id: selected.id })}
           onDelete={() => dispatch({ type: 'delete', id: selected.id })}
+        />
+      )}
+
+      {screen === 'edit' && selected && (
+        <Edit
+          receipt={selected}
+          today={today}
+          onSave={(receipt) => dispatch({ type: 'update', receipt })}
+          onCancel={() => dispatch({ type: 'go', screen: 'detail' })}
         />
       )}
 
@@ -129,7 +140,9 @@ export function App() {
         <Settings
           settings={settings}
           receiptCount={state.receipts.length}
+          receipts={state.receipts}
           onExport={exportNow}
+          onRestore={(receipts) => dispatch({ type: 'restore', receipts })}
           onUpgrade={() => dispatch({ type: 'settings', patch: { plan: 'pro' } })}
           onChange={(patch) => dispatch({ type: 'settings', patch })}
         />

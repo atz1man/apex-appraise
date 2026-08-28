@@ -50,4 +50,4 @@ export interface PolicyUpdate {
   affectNote: string;
 }
 
-export type Screen = 'onboard' | 'home' | 'watch' | 'detail' | 'add' | 'settings' | 'celebrate';
+export type Screen = 'onboard' | 'home' | 'watch' | 'detail' | 'edit' | 'add' | 'settings' | 'celebrate';

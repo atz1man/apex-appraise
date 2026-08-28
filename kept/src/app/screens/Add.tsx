@@ -21,6 +21,10 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState<ParsedReceipt | null>(null);
   const [error, setError] = useState(false);
+  // The parser can read a shop and a total, but nothing in an order email
+  // reliably says what the thing WAS. Asking here is why the list stops
+  // filling up with rows called "From pasted email".
+  const [item, setItem] = useState('');
 
   const read = () => {
     const outcome = parseReceiptText(text, today);
@@ -31,6 +35,7 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
     }
     setParsed(outcome.value);
     setError(false);
+    setItem('');
   };
 
   const save = () => {
@@ -39,7 +44,9 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
     onSave({
       id: makeReceiptId(today),
       store,
-      item: 'From pasted email',
+      // A generic fallback, not a dead end: it is editable from the receipt
+      // itself the moment this saves.
+      item: item.trim() || `${store} purchase`,
       cat: parsed.policy?.cat ?? 'other',
       amount: parsed.amount ?? 0,
       purchasedOn: parsed.purchasedOn,
@@ -120,6 +127,22 @@ export function Add({ today, quotaFull, trackedTotal, onSave, onUpgrade }: Props
         <div className="k-fade" style={{ background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: radius.cardLg, padding: 18, marginTop: 16, boxShadow: shadow.hard }}>
           <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 11, letterSpacing: '1.6px', color: color.amber, fontWeight: 700 }}>
             FOUND IN YOUR PASTE
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <label htmlFor="add-item" style={{ display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '0.6px', color: color.muted, marginBottom: 6 }}>
+              WHAT IS IT?
+            </label>
+            <input
+              id="add-item"
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
+              placeholder="Wool-blend overcoat"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
+                border: `1.5px solid ${color.border}`, background: color.white,
+                fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+              }}
+            />
           </div>
           <Row label="Store" value={parsed.store ?? 'Not recognised'} mono={false} />
           <Row label="Total" value={parsed.amount === null ? 'Not found' : money(parsed.amount)} mono />

@@ -17,13 +17,14 @@ interface Props {
   today: Date;
   urgentDays: number;
   onBack: () => void;
+  onEdit: () => void;
   onReturn: () => void;
   onDelete: () => void;
 }
 
 const cardLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '1.4px', color: color.muted } as const;
 
-export function Detail({ receipt, today, urgentDays, onBack, onReturn, onDelete }: Props) {
+export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, onDelete }: Props) {
   const [legalOpen, setLegalOpen] = useState(true);
   const d = derive(receipt, today);
   const u = urgency(d.daysLeft, urgentDays);
@@ -40,18 +41,31 @@ export function Detail({ receipt, today, urgentDays, onBack, onReturn, onDelete 
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
-      <Pressable
-        className="k-row-white"
-        onClick={onBack}
-        style={{
-          display: 'inline-flex', width: 'auto', alignItems: 'center', gap: 6, padding: '9px 15px 9px 11px',
-          background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: 999,
-          fontSize: 13, fontWeight: 700, margin: '8px 0 16px',
-        }}
-      >
-        <ChevronLeft />
-        Back
-      </Pressable>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '8px 0 16px' }}>
+        <Pressable
+          className="k-row-white"
+          onClick={onBack}
+          style={{
+            display: 'inline-flex', width: 'auto', alignItems: 'center', gap: 6, padding: '9px 15px 9px 11px',
+            background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: 999,
+            fontSize: 13, fontWeight: 700,
+          }}
+        >
+          <ChevronLeft />
+          Back
+        </Pressable>
+        <Pressable
+          className="k-row-white"
+          onClick={onEdit}
+          style={{
+            display: 'inline-flex', width: 'auto', alignItems: 'center', gap: 6, padding: '9px 16px',
+            background: color.white, border: `1.5px solid ${color.border}`, borderRadius: 999,
+            fontSize: 13, fontWeight: 700,
+          }}
+        >
+          Edit
+        </Pressable>
+      </div>
 
       <div style={{ background: color.ink, color: color.cream, borderRadius: radius.hero, padding: '22px 20px', boxShadow: shadow.lift }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>

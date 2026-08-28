@@ -4,18 +4,22 @@
  *   npm run build && npx vite preview --port 5183 &
  *   CHROMIUM_PATH=/path/to/chrome node scripts/smoke.mjs
  *
- * It checks the four things unit tests cannot: that the swipe gesture
- * actually returns a receipt, that state survives a reload (the whole
- * local-first promise), that the page contacts NO third party, and that
- * nothing throws on the way through.
+ * It checks what unit tests cannot: that the swipe gesture actually returns a
+ * receipt, that an edit reaches the screen and the disk, that a backup file
+ * genuinely round-trips through export and restore, that state survives a
+ * reload (the whole local-first promise), that the page contacts NO third
+ * party, and that nothing throws on the way through.
  */
 import { chromium } from 'playwright';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
 
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
-const ctx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, acceptDownloads: true });
 const page = await ctx.newPage();
 
 const problems = [];
@@ -65,6 +69,67 @@ results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })
   .isVisible()
   .catch(() => false));
+// An edit must reach the screen, and the disk.
+await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Edit', exact: true }).click();
+await page.waitForTimeout(300);
+await page.fill('#e-item', '');
+await page.getByRole('button', { name: 'Save changes' }).click();
+await page.waitForTimeout(300);
+results['an invalid edit is refused, not saved'] =
+  (await page.getByRole('alert').count()) > 0 &&
+  (await page.getByRole('button', { name: 'Save changes' }).isVisible());
+
+await page.fill('#e-item', 'Charcoal wool coat');
+await page.fill('#e-amount', '39.50');
+await page.getByRole('button', { name: 'Save changes' }).click();
+await page.waitForTimeout(400);
+results['an edit reaches the receipt'] =
+  (await page.getByText('Charcoal wool coat').first().isVisible()) &&
+  (await page.getByText('£39.50').first().isVisible());
+
+// Export, delete something, restore it back.
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(300);
+const [download] = await Promise.all([
+  page.waitForEvent('download'),
+  page.getByRole('button', { name: 'Export a backup' }).click(),
+]);
+const backupPath = join(tmpdir(), 'kept-smoke-backup.json');
+await download.saveAs(backupPath);
+results['the export is a kept backup'] = JSON.parse(readFileSync(backupPath, 'utf8')).app === 'kept';
+
+await page.getByRole('button', { name: 'Receipts', exact: true }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Boots, No7/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Delete' }).click();
+await page.waitForTimeout(400);
+const deleted = !(await page.getByText('No7 skincare set').first().isVisible().catch(() => false));
+
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(300);
+await page.setInputFiles('input[type=file]', backupPath);
+await page.waitForTimeout(600);
+await page.getByRole('button', { name: 'Receipts', exact: true }).click();
+await page.waitForTimeout(400);
+results['a deleted receipt comes back from a backup'] =
+  deleted && (await page.getByText('No7 skincare set').first().isVisible());
+
+// A file that is not a backup must be refused without touching anything.
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(300);
+const junkPath = join(tmpdir(), 'kept-smoke-junk.json');
+writeFileSync(junkPath, '{"app":"not-kept"}');
+await page.setInputFiles('input[type=file]', junkPath);
+await page.waitForTimeout(500);
+const refused = ((await page.getByRole('status').first().textContent()) ?? '').includes('not a kept backup');
+await page.getByRole('button', { name: 'Receipts', exact: true }).click();
+await page.waitForTimeout(300);
+results['a file that is not a backup is refused, and nothing is lost'] =
+  refused && (await page.getByText('No7 skincare set').first().isVisible());
+
 results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 

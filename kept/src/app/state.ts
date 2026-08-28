@@ -22,13 +22,21 @@ export type Action =
   | { type: 'return'; id: string }
   | { type: 'delete'; id: string }
   | { type: 'add'; receipt: Receipt }
+  | { type: 'update'; receipt: Receipt }
+  | { type: 'restore'; receipts: Receipt[] }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'shared' };
 
 export function reducer(state: AppState, action: Action, today: Date): AppState {
   switch (action.type) {
     case 'go':
-      return { ...state, screen: action.screen, selId: action.screen === 'detail' ? state.selId : null };
+      // The edit screen belongs to the receipt open behind it, so the
+      // selection survives the trip in both directions.
+      return {
+        ...state,
+        screen: action.screen,
+        selId: action.screen === 'detail' || action.screen === 'edit' ? state.selId : null,
+      };
     case 'open':
       return { ...state, screen: 'detail', selId: action.id };
     case 'ob-next':
@@ -55,6 +63,18 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       return { ...state, receipts: state.receipts.filter((x) => x.id !== action.id), screen: 'home', selId: null };
     case 'add':
       return { ...state, receipts: [...state.receipts, action.receipt], screen: 'home' };
+    case 'update':
+      return {
+        ...state,
+        receipts: state.receipts.map((r) => (r.id === action.receipt.id ? action.receipt : r)),
+        screen: 'detail',
+        selId: action.receipt.id,
+      };
+    case 'restore':
+      // Deliberately stays on Settings: the screen reports what the restore
+      // actually did ("12 restored · 2 updated"), and bouncing to the list
+      // would throw that away at the moment it matters most.
+      return { ...state, receipts: action.receipts, selId: null };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
     case 'shared':

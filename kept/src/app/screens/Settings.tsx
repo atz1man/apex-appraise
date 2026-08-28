@@ -1,4 +1,7 @@
+import { useRef, useState } from 'react';
 import { color, radius } from '../../tokens';
+import { mergeBackup, parseBackup } from '../../lib/backup';
+import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { VERIFIED_STORE_COUNT } from '../../lib/stores';
 import { FREE_TIER_LIMIT, type Settings as SettingsShape } from '../../lib/storage';
@@ -7,12 +10,39 @@ import { Pressable } from '../components/Pressable';
 interface Props {
   settings: SettingsShape;
   receiptCount: number;
+  receipts: Receipt[];
   onExport: () => void;
+  onRestore: (receipts: Receipt[]) => void;
   onUpgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => void;
   onChange: (patch: Partial<SettingsShape>) => void;
 }
 
-export function Settings({ settings, receiptCount, onExport, onUpgrade, onChange }: Props) {
+const RESTORE_FAILURES = {
+  'not-json': 'That file isn’t readable — pick the .json file kept exported.',
+  'not-a-kept-backup': 'That’s a JSON file, but not a kept backup.',
+  'nothing-usable': 'That backup’s receipts couldn’t be read — nothing was changed.',
+} as const;
+
+export function Settings({ settings, receiptCount, receipts, onExport, onRestore, onUpgrade, onChange }: Props) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [restoreNote, setRestoreNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+
+  const restore = async (file: File) => {
+    const outcome = parseBackup(await file.text());
+    if (!outcome.ok) {
+      setRestoreNote({ tone: 'bad', text: RESTORE_FAILURES[outcome.reason] });
+      return;
+    }
+    const { receipts: merged, added, replaced } = mergeBackup(receipts, outcome.summary.receipts);
+    onRestore(merged);
+    const parts = [
+      `${added} restored`,
+      ...(replaced ? [`${replaced} updated`] : []),
+      ...(outcome.summary.skipped ? [`${outcome.summary.skipped} unreadable and skipped`] : []),
+    ];
+    setRestoreNote({ tone: 'ok', text: `${parts.join(' · ')}. Nothing already here was lost.` });
+  };
+
   const free = settings.plan === 'free';
   const usagePct = Math.min(100, (receiptCount / FREE_TIER_LIMIT) * 100);
 
@@ -28,13 +58,48 @@ export function Settings({ settings, receiptCount, onExport, onUpgrade, onChange
         <p style={{ fontSize: 13, color: color.muted, lineHeight: 1.55, marginTop: 6, marginBottom: 0 }}>
           Everything lives on this device. No account, no server, no one reading your purchases.
         </p>
-        <Pressable
-          className="k-soft"
-          onClick={onExport}
-          style={{ marginTop: 12, padding: 12, textAlign: 'center', background: color.creamAlt, borderRadius: 999, fontWeight: 700, fontSize: 13 }}
-        >
-          Export a backup
-        </Pressable>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <Pressable
+            className="k-soft"
+            onClick={onExport}
+            style={{ flex: 1, padding: 12, textAlign: 'center', background: color.creamAlt, borderRadius: 999, fontWeight: 700, fontSize: 13 }}
+          >
+            Export a backup
+          </Pressable>
+          {/* Export without restore is a dead end. With no account, this file is
+              the only way anything moves to a new phone. */}
+          <Pressable
+            className="k-soft"
+            onClick={() => fileInput.current?.click()}
+            style={{ flex: 1, padding: 12, textAlign: 'center', background: color.creamAlt, borderRadius: 999, fontWeight: 700, fontSize: 13 }}
+          >
+            Restore
+          </Pressable>
+        </div>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void restore(f);
+            // Cleared so picking the same file twice fires change again.
+            e.target.value = '';
+          }}
+        />
+        {restoreNote && (
+          <div
+            role="status"
+            style={{
+              marginTop: 10, padding: '10px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.5,
+              background: restoreNote.tone === 'ok' ? color.yellowLight : 'rgba(216,66,46,0.10)',
+              color: restoreNote.tone === 'ok' ? color.ink : color.danger,
+            }}
+          >
+            {restoreNote.text}
+          </div>
+        )}
       </section>
 
       {free && (

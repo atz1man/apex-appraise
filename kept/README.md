@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 69 unit tests over the decision logic
+npm test           # 123 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -97,6 +97,18 @@ deliberate departure, not an oversight:
 - **The onboarding and landing photo slots are drawn**, in the brand's own
   line-work, rather than shipped as empty "drop a photo" boxes. Replace
   `StepArt` and `ProblemArt` when the photography exists.
+- **Receipts are editable.** Neither the prototype nor the first build had a
+  way to correct one, so anything saved from a paste was called "From pasted
+  email" forever — the parser can read a shop and a total, but nothing in an
+  order email says what the thing *was*. The add flow now asks, and every
+  field is editable afterwards from the receipt itself. Changing the shop
+  brings the new shop's verified policy with it and drops the old one's
+  dispatch clock, so a corrected receipt cannot keep quoting the wrong terms.
+- **A backup can come back.** "Export a backup" was a dead end. On a product
+  with no account that file is the *only* way anything reaches a new phone, so
+  restore reads it back — validating every row, dropping and counting what it
+  cannot understand, and merging by id so a receipt added since the backup was
+  taken is never silently discarded.
 
 ## Not built yet
 

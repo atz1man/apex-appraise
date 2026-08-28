@@ -55,11 +55,19 @@ export function TabBar({ screen, alert, onGo }: Props) {
         <span style={label}>Receipts</span>
       </Pressable>
 
-      <Pressable style={tab(screen === 'watch')} aria-current={screen === 'watch' ? 'page' : undefined} onClick={() => onGo('watch')}>
+      <Pressable
+        style={tab(screen === 'watch')}
+        aria-current={screen === 'watch' ? 'page' : undefined}
+        // The dot's meaning belongs to the TAB, as its name. Labelling the dot
+        // itself glued "Policy updates affect your receipts" onto the front of
+        // the button's accessible name, so the tab announced as a sentence and
+        // stopped being findable by the word on it.
+        aria-label={alert ? 'Watch — policy updates affect your receipts' : undefined}
+        onClick={() => onGo('watch')}
+      >
         {alert && (
           <span
-            aria-label="Policy updates affect your receipts"
-            role="status"
+            aria-hidden="true"
             style={{ position: 'absolute', top: 5, right: 9, width: 7, height: 7, borderRadius: 999, background: color.danger }}
           />
         )}
