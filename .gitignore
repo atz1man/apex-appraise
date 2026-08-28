@@ -8,3 +8,10 @@ apps/api/prisma/dev.db*
 apps/web/dist/
 coverage/
 test-results/
+
+# This is a pnpm workspace (see packageManager in package.json). An npm command
+# run from the repo root leaves a stub package-lock.json behind, and a stray one
+# invites `npm install` here — which would build a flat node_modules that
+# disagrees with pnpm-lock.yaml. Anchored to the root on purpose: kept/ is a
+# separate npm project outside the workspace and its lockfile is real.
+/package-lock.json
