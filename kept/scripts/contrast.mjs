@@ -157,6 +157,14 @@ await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(400);
 await sweep('settings');
 
+// The destructive confirm is a state, not a screen, and its red fill is a
+// colour pairing that appears nowhere else — so it has to be opened to be
+// swept at all.
+await page.getByRole('button', { name: 'Erase everything' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await sweep('settings · erase confirm');
+await page.getByRole('button', { name: 'Keep them' }).click().catch(() => {});
+
 // The landing page too — it is the first thing anyone reads.
 const wide = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
 const lp = await wide.newPage();

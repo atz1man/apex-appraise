@@ -323,6 +323,28 @@ results['it is still usable offline, not just painted'] =
   await page.getByText('STORE POLICY').isVisible().catch(() => false);
 await ctx.setOffline(false);
 
+// Last, because it takes everything with it: erase must clear the disk, not
+// just the screen, and must not resurrect the demo data on the next launch.
+await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Erase everything' }).click();
+await page.waitForTimeout(300);
+const heldBeforeWipe = await receiptCount();
+await page.getByRole('button', { name: 'Keep them' }).click();
+await page.waitForTimeout(300);
+results['the first tap only asks'] = (await receiptCount()) === heldBeforeWipe && heldBeforeWipe > 0;
+
+await page.getByRole('button', { name: 'Erase everything' }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Erase everything' }).click();
+await page.waitForTimeout(600);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(700);
+results['erasing clears the disk and does not reseed'] =
+  (await receiptCount()) === 0 && (await page.getByText('Nothing tracked yet').isVisible());
+
 results['no console or page errors'] = problems.length === 0;
 
 await browser.close();

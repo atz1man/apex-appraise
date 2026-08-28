@@ -61,6 +61,12 @@ describe('text on the yellow fills', () => {
   });
 });
 
+describe('the destructive action', () => {
+  it('white reads on the danger fill — the erase-everything confirm', () => {
+    expect(contrast(color.white, color.danger)).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+});
+
 describe('the large-text pairings', () => {
   it('the amber statistics clear the large-text bar on creamAlt', () => {
     expect(contrast(color.amber, color.creamAlt)).toBeGreaterThanOrEqual(AA_LARGE);

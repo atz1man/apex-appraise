@@ -100,6 +100,25 @@ export function save(state: KeptState): void {
   }
 }
 
+/**
+ * Erase everything this app has stored.
+ *
+ * On a product whose entire promise is that the data is yours and lives here,
+ * being able to take it all back is not a nice-to-have. Uninstalling clears a
+ * native app; a web app's storage outlives a closed tab and clearing it by
+ * hand means digging through browser settings.
+ */
+export function wipe(): void {
+  const store = storage();
+  if (!store) return;
+  try {
+    store.removeItem(KEY);
+  } catch {
+    // Nothing more to do — the in-memory state is reset by the caller either
+    // way, and a storage that refuses writes has nothing persisted to remove.
+  }
+}
+
 /** The Settings screen's "Export a backup" — the user's data, in their hands. */
 export function exportBackup(state: KeptState): string {
   return JSON.stringify(

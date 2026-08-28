@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 248 unit tests over the decision logic
+npm test           # 249 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 26 end-to-end checks, including offline with the network cut
+npm run smoke      # 28 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -130,6 +130,13 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **Your data can actually be taken back.** On a product whose whole promise
+  is that the data is yours and lives here, there was no way to remove it.
+  Uninstalling clears a native app; a web app's storage outlives a closed tab,
+  and clearing it by hand means digging through browser settings. Settings now
+  has an erase, behind a two-step confirm that names how many receipts will go
+  and points at the backup first — not the eight-second undo, which is right
+  for one receipt taken back by mistake and wrong for everything at once.
 - **There is a way to find a receipt.** The list is grouped by urgency, which
   is right for "what must go back this week" and useless for "where did I put
   the headphones". A search box appears once the library outgrows a screenful

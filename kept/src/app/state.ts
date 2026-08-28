@@ -37,6 +37,7 @@ export type Action =
   | { type: 'unreturn'; id: string }
   | { type: 'undo-delete' }
   | { type: 'dismiss-undo' }
+  | { type: 'wipe' }
   | { type: 'add'; receipt: Receipt }
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
@@ -132,6 +133,18 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'wipe':
+      // Everything, including what the app remembers about having spoken:
+      // alert keys naming receipts that no longer exist would be a residue of
+      // exactly the thing the user just asked to be rid of.
+      return {
+        ...state,
+        receipts: [],
+        alertsSent: [],
+        justDeleted: null,
+        selId: null,
+        screen: 'home',
+      };
     case 'feed':
       return { ...state, updates: action.updates };
     case 'alerted':

@@ -111,6 +111,14 @@ await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(400);
 await audit(page, 'settings', findings);
 
+// The destructive confirm is a state, not a screen, and its red fill is a
+// colour pairing that appears nowhere else — so it has to be opened to be
+// swept at all.
+await page.getByRole('button', { name: 'Erase everything' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await audit(page, 'settings · erase confirm', findings);
+await page.getByRole('button', { name: 'Keep them' }).click().catch(() => {});
+
 const wide = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
 const lp = await wide.newPage();
 await lp.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });

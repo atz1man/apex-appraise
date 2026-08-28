@@ -4,7 +4,7 @@ import { dueAlerts, supersededKeys } from '../lib/alerts';
 import { FEED_URL, mergeFeed, readFeed } from '../lib/policy-feed';
 import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
-import { exportBackup } from '../lib/storage';
+import { exportBackup, wipe } from '../lib/storage';
 import { TabBar } from './components/TabBar';
 import { UndoBar } from './components/UndoBar';
 import { Add } from './screens/Add';
@@ -216,6 +216,13 @@ export function App() {
           receipts={state.receipts}
           onExport={exportNow}
           onRestore={(receipts) => dispatch({ type: 'restore', receipts })}
+          onWipe={() => {
+            // Cleared from disk as well as from state: leaving the old blob
+            // behind would mean "erase everything" removed it from the screen
+            // and nowhere else.
+            wipe();
+            dispatch({ type: 'wipe' });
+          }}
           onUpgrade={() => dispatch({ type: 'settings', patch: { plan: 'pro' } })}
           onChange={(patch) => dispatch({ type: 'settings', patch })}
         />

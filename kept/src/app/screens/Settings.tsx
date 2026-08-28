@@ -14,6 +14,7 @@ interface Props {
   receipts: Receipt[];
   onExport: () => void;
   onRestore: (receipts: Receipt[]) => void;
+  onWipe: () => void;
   onUpgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => void;
   onChange: (patch: Partial<SettingsShape>) => void;
 }
@@ -24,10 +25,13 @@ const RESTORE_FAILURES = {
   'nothing-usable': 'That backup’s receipts couldn’t be read — nothing was changed.',
 } as const;
 
-export function Settings({ settings, receipts, onExport, onRestore, onUpgrade, onChange }: Props) {
+export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUpgrade, onChange }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [restoreNote, setRestoreNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [permission, setPermission] = useState<NotifyState>(() => notifyState());
+  // Two steps, not an eight-second undo. The undo bar is right for one receipt
+  // taken back by mistake; this is everything, and it wants a decision.
+  const [confirmingWipe, setConfirmingWipe] = useState(false);
 
   /**
    * Turning alerts on asks the browser first. A switch that flips to "on"
@@ -44,12 +48,16 @@ export function Settings({ settings, receipts, onExport, onRestore, onUpgrade, o
     onChange({ deadlineAlerts: next === 'granted' });
   };
 
+  // Must agree with the switch beside it, which is gated on permission as well
+  // as the preference — otherwise the row reads "On" next to a switch sitting
+  // in the off position, which is exactly what it did.
+  const alertsLive = settings.deadlineAlerts && permission === 'granted';
   const alertDetail =
     permission === 'unsupported'
       ? 'Not available here'
       : permission === 'denied'
         ? 'Blocked by your browser'
-        : settings.deadlineAlerts
+        : alertsLive
           ? 'On'
           : 'Off';
 
@@ -165,7 +173,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onUpgrade, o
         <div style={{ borderBottom: `1.5px solid ${color.borderHair}` }}>
           <Toggle
             label="Deadline alerts"
-            value={settings.deadlineAlerts && permission === 'granted'}
+            value={alertsLive}
             detail={alertDetail}
             disabled={permission === 'unsupported' || permission === 'denied'}
             separator={false}
@@ -190,6 +198,51 @@ export function Settings({ settings, receipts, onExport, onRestore, onUpgrade, o
           <span style={{ fontSize: 14, fontWeight: 600 }}>Retailer policies</span>
           <span style={{ fontSize: 14, color: color.muted }}>{VERIFIED_STORE_COUNT} verified today</span>
         </div>
+      </section>
+
+      <section style={{ background: color.white, border: `1.5px solid ${color.borderSoft}`, borderRadius: radius.cardLg, marginTop: 12, padding: 18 }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Erase everything</div>
+        <p style={{ fontSize: 13, color: color.muted, lineHeight: 1.55, marginTop: 6, marginBottom: 0 }}>
+          {confirmingWipe
+            ? `This removes all ${receipts.length} ${receipts.length === 1 ? 'receipt' : 'receipts'} from this device. There is no undo — export a backup first if you might want them.`
+            : 'Removes every receipt stored here. Your data is yours; taking it back is part of that.'}
+        </p>
+        {confirmingWipe ? (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Pressable
+              className="k-soft"
+              onClick={() => setConfirmingWipe(false)}
+              style={{ flex: 1, padding: 12, textAlign: 'center', background: color.creamAlt, borderRadius: 999, fontWeight: 700, fontSize: 13 }}
+            >
+              Keep them
+            </Pressable>
+            <Pressable
+              onClick={() => {
+                setConfirmingWipe(false);
+                setRestoreNote(null);
+                onWipe();
+              }}
+              style={{ flex: 1, padding: 12, textAlign: 'center', background: color.danger, color: color.white, borderRadius: 999, fontWeight: 700, fontSize: 13 }}
+            >
+              Erase everything
+            </Pressable>
+          </div>
+        ) : (
+          <Pressable
+            className="k-soft"
+            onClick={() => setConfirmingWipe(true)}
+            disabled={receipts.length === 0}
+            style={{
+              marginTop: 12, padding: 12, textAlign: 'center', background: color.creamAlt,
+              borderRadius: 999, fontWeight: 700, fontSize: 13,
+              color: receipts.length === 0 ? color.muted : color.danger,
+              opacity: receipts.length === 0 ? 0.55 : 1,
+              cursor: receipts.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {receipts.length === 0 ? 'Nothing stored' : 'Erase everything'}
+          </Pressable>
+        )}
       </section>
 
       <section style={{ background: color.white, border: `1.5px solid ${color.border}`, borderRadius: radius.cardLg, marginTop: 12, padding: '15px 18px' }}>
