@@ -210,6 +210,40 @@ results['a full free tier actually refuses the save'] =
   (await cappedSave.isDisabled()) &&
   (await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length)) === beforeBlocked;
 
+/*
+ * The marketing page embeds this same build at this same origin, so the demo
+ * was reading and writing the real app's storage — swipe a receipt in the shop
+ * window and you had changed what the installed app shows. It must be able to
+ * do anything and change nothing.
+ */
+const storedBefore = await page.evaluate(() => localStorage.getItem('kept.v1'));
+const landing = await ctx.newPage();
+await landing.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+await landing.waitForTimeout(1200);
+// This context is phone-width, so the demo sits well below the fold. Without
+// scrolling to it the drag below lands on empty page and the check measures
+// nothing.
+await landing.locator('iframe[title="kept — live app demo"]').scrollIntoViewIfNeeded();
+await landing.waitForTimeout(600);
+const demo = landing.frameLocator('iframe[title="kept — live app demo"]');
+const demoRow = demo.getByRole('button', { name: /Currys, JBL/ });
+const demoBox = await demoRow.boundingBox();
+if (demoBox) {
+  const y = demoBox.y + demoBox.height / 2;
+  await landing.mouse.move(demoBox.x + demoBox.width - 30, y);
+  await landing.mouse.down();
+  for (let dx = 0; dx <= 110; dx += 22) {
+    await landing.mouse.move(demoBox.x + demoBox.width - 30 - dx, y);
+    await landing.waitForTimeout(30);
+  }
+  await landing.mouse.up();
+  await landing.waitForTimeout(700);
+}
+results['the landing demo works'] = await demo.getByText('MONEY BACK').isVisible().catch(() => false);
+results['the landing demo cannot touch the real app’s data'] =
+  (await page.evaluate(() => localStorage.getItem('kept.v1'))) === storedBefore;
+await landing.close();
+
 results['nothing is fetched from a third party'] = foreign.size === 0;
 
 // The manifest has to be installable-shaped, because "add it to your home

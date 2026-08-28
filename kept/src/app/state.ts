@@ -3,7 +3,7 @@ import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
-import { load, save, type KeptState, type Settings } from '../lib/storage';
+import { freshState, load, save, type KeptState, type Settings } from '../lib/storage';
 import { quotaFull as quotaFullFor } from '../lib/quota';
 import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
@@ -11,6 +11,8 @@ export interface AppState extends KeptState {
   screen: Screen;
   /** An order email shared in from another app, waiting for the Add screen. */
   sharedText: string | null;
+  /** True in the landing page's iframe demo: nothing is read or written to disk. */
+  embedded: boolean;
   /** The receipt open on the detail screen. */
   selId: string | null;
   obStep: number;
@@ -125,13 +127,20 @@ export function useApp() {
       const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
       const embedded = params.has('embed');
       const incoming = sharedTextFrom(params);
+      // The demo on the marketing page is this same build at this same origin,
+      // so it was reading and writing the real app's storage: swipe a receipt
+      // in the shop window and you had changed what the installed app shows.
+      // It runs entirely in memory instead — fully working, resetting to the
+      // designed state on every load, touching nothing.
+      const base = embedded ? freshState(t) : persisted;
       return {
-        ...persisted,
+        ...base,
         // A shared order goes straight to Add, whether or not onboarding was
         // ever finished: someone who shared an email is telling you exactly
         // what they came to do.
-        screen: incoming ? 'add' : persisted.onboardingSeen || embedded ? 'home' : 'onboard',
+        screen: incoming ? 'add' : base.onboardingSeen || embedded ? 'home' : 'onboard',
         sharedText: incoming,
+        embedded,
         selId: null,
         obStep: 0,
         celebrating: null,
@@ -152,6 +161,7 @@ export function useApp() {
   }, []);
 
   useEffect(() => {
+    if (state.embedded) return;
     save({
       version: state.version,
       receipts: state.receipts,
@@ -160,7 +170,7 @@ export function useApp() {
       settings: state.settings,
       alertsSent: state.alertsSent,
     });
-  }, [state.version, state.receipts, state.updates, state.onboardingSeen, state.settings, state.alertsSent]);
+  }, [state.embedded, state.version, state.receipts, state.updates, state.onboardingSeen, state.settings, state.alertsSent]);
 
   return { state, dispatch: rawDispatch, today };
 }

@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 21 end-to-end checks, including offline with the network cut
+npm run smoke      # 23 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 ```
@@ -119,6 +119,12 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The marketing demo cannot touch your data.** The landing page embeds this
+  same build at this same origin, so the "live demo" was reading and writing
+  the real app's `localStorage` — swipe a receipt in the shop window and you
+  had changed what the installed app shows. It runs entirely in memory now:
+  fully working, resetting to the designed state on every page load, writing
+  nothing.
 - **The free tier is enforced, and counts what you are still tracking.** The
   10-receipt cap is claimed on the pricing page, in the Settings meter and on
   the Add screen, and nothing stopped an eleventh — the upsell was theatre.
