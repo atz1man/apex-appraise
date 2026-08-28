@@ -26,10 +26,13 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (254; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (602). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (625). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (57): the pure decision modules in
-  `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx).
+- `cd apps/web && npx vitest run` — web unit tests (77): the pure decision modules in
+  `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
+  firm-day). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
+  zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
 - `cd apps/web && npx playwright test` — e2e (140, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
@@ -86,13 +89,23 @@ the point, so read the failure rather than adding an exemption.
 - `one-current-read-sweep` — "the current appraisal" is asked once, in
   `current-appraisal.ts`; no other file spells the query out, and a rollup lands on
   the same row a single deal's report does.
+- `token-purpose-sweep` — a token minted for a named purpose cannot sign in. It walks the
+  real `DownloadKind` union out of the source, so a sixth kind is covered the day it is
+  added, and pins the three PDF routes to a render token of their own.
+- `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
+  `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
+  beside them; this one builds a real Fastify instance from the same registrars `main.ts`
+  uses and collects routes through `onRoute`, then asks the mutating ones the provenance
+  question. It also checks its own import list against `main.ts`, so a new surface of raw
+  routes cannot appear unswept. Note what a grep would have missed: three routes whose path
+  sits on the line after a generic type parameter, and two more entirely.
 - `one-engine-sweep` (in `packages/appraisal-engine/test`) — nothing outside the engine
   re-derives a quantity the engine owns. Deliberately narrow: it matches the specific
   derived figures that have a house rule and print on more than one surface
   (`reportedMarketValue`, `analysedPsf`), not "money maths" in general. Add to its RULES
   when a fourth is found rather than widening the matchers.
 
-Two of these carry a "finds what it is meant to be sweeping" case, and any new sweep should:
+Several of these carry a "finds what it is meant to be sweeping" case, and any new sweep must:
 a sweep over an empty file list passes silently, reporting success for a question it never
 asked.
 
@@ -123,6 +136,15 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   && npx vitest run'`. The image is Node 22 and this Mac is Node 25: `10 ** -4` differs between
   them, which once let the Red Book narrative guard accept a transposed Market Value in
   production while its test was green locally.
+- A cloud/sandbox container may carry a DIFFERENT Playwright browser build from the one the
+  pinned `@playwright/test` wants (seen: `/opt/pw-browsers` has `chromium_headless_shell-1194`,
+  Playwright asks for `-1228`). Every browser spec then dies with "Executable doesn't exist"
+  before any test body runs, which reads as a total regression. Point the SUITE at the
+  installed binary with `use: { launchOptions: { executablePath:
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } }` — temporary, NEVER committed. That
+  does not fix `reports.ts`, which launches its own browser server-side, so the two PDF specs
+  (funding pack, shared report link) still fail with a 501 for the environment, not the code.
+  Do not run `playwright install`.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
 - New Prisma model ⇒ add it to the seed wipe list, or stale rows accumulate across reseeds.

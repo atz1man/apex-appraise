@@ -167,6 +167,8 @@ export function registerReports(app: FastifyInstance) {
       req.log.error(e, 'chromium unavailable for PDF rendering');
       return reply.code(501).send({ error: 'PDF rendering unavailable on this server — use Print / Save PDF instead.' });
     }
+    // a short-lived token for the RENDERER only; it never leaves this process
+    const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '2m' });
     const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
     try {
       await context.addInitScript(
@@ -174,7 +176,7 @@ export function registerReports(app: FastifyInstance) {
           localStorage.setItem('apex_token', t);
           localStorage.setItem('apex_principal', p);
         },
-        [token, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
+        [renderToken, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
       );
       const page = await context.newPage();
       await page.goto(`${WEB_URL}/portfolio/pack`, { waitUntil: 'networkidle' });
@@ -244,6 +246,8 @@ export function registerReports(app: FastifyInstance) {
           error: 'PDF rendering unavailable on this server — use the in-app Print / Save PDF button instead.',
         });
       }
+      // a short-lived token for the RENDERER only; it never leaves this process
+      const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '2m' });
       const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
       try {
         await context.addInitScript(
@@ -251,7 +255,7 @@ export function registerReports(app: FastifyInstance) {
             localStorage.setItem('apex_token', t);
             localStorage.setItem('apex_principal', p);
           },
-          [token, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
+          [renderToken, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
         );
         const page = await context.newPage();
         const route = kind === 'appraisal' ? 'report' : kind === 'engagement' ? 'engagement/document' : 'redbook';
