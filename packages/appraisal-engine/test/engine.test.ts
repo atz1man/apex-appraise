@@ -98,6 +98,52 @@ describe('computeAppraisal — Bournemouth golden fixture', () => {
   });
 });
 
+describe('the residual waterfall a lender adds up', () => {
+  const R = computeAppraisal(referenceCase, { withCash: true });
+
+  /**
+   * The identity the printed page asserts by laying its rows out in a column.
+   *
+   * `residualNet` is what the scheme can pay the vendor; `landGross` is what it
+   * can spend acquiring the site. Everything between GDV and the bottom line is
+   * printed as a row EXCEPT, until now, the difference between those two — so
+   * the column came to £434,368 against a stated residual of £406,711 and a
+   * reader checking it found £27,656 unaccounted for.
+   */
+  it('leaves nothing between gross development value and the residual', () => {
+    const deductions =
+      R.saleCosts + R.build + R.fees + R.cont + R.otherTotal + R.finance + R.profit + R.acqCost;
+    expect(R.gdv - deductions).toBeCloseTo(R.residualNet, 6);
+  });
+
+  it('names the step as the acquisition cost it is', () => {
+    expect(R.acqCost).toBeCloseTo(R.landGross - R.residualNet, 6);
+    expect(R.acqCost).toBeCloseTo(R.residualNet * (referenceCase.site.acqPct / 100), 6);
+    // £27,656 on this scheme — not a rounding artefact, a line a reader needs
+    expect(R.acqCost).toBeGreaterThan(20_000);
+  });
+
+  it('holds for a fixed land price too, where the same rows are printed', () => {
+    const fixed = computeAppraisal(
+      { ...referenceCase, site: { ...referenceCase.site, mode: 'fixed' } },
+      { withCash: true },
+    );
+    expect(fixed.acqCost).toBeCloseTo(fixed.landGross - fixed.residualNet, 6);
+    const deductions =
+      fixed.saleCosts + fixed.build + fixed.fees + fixed.cont + fixed.otherTotal + fixed.finance + fixed.landGross;
+    expect(fixed.gdv - deductions).toBeCloseTo(fixed.profit, 6);
+  });
+
+  it('is zero when there is nothing to acquire', () => {
+    const free = computeAppraisal(
+      { ...referenceCase, site: { ...referenceCase.site, acqPct: 0 } },
+      { withCash: true },
+    );
+    expect(free.acqCost).toBe(0);
+    expect(free.landGross).toBeCloseTo(free.residualNet, 6);
+  });
+});
+
 describe('jvWaterfall — golden fixture', () => {
   const R = computeAppraisal(referenceCase);
   const jv = jvWaterfall(R.equity, R.profit, R.holdYears, referenceCase.jv!);

@@ -24,7 +24,7 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (254; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (258; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (625). See the container gotcha below before
   trusting a green run.

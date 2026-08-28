@@ -344,7 +344,13 @@ export default function DevelopmentAppraisal() {
     ['Other costs', -R.otherTotal],
     ['Finance', -R.finance],
     ...(isResidual
-      ? ([['Developer profit', -R.profit], ['Residual land value', R.residualNet, true]] as Array<[string, number, boolean?]>)
+      ? ([
+          ['Developer profit', -R.profit],
+          // the acquisition step as a line, so the column adds up — see AppraisalReport
+          ['Land budget before acquisition', R.landGross],
+          [`Less: acquisition costs (${input.site.acqPct}%)`, -R.acqCost],
+          ['Residual land value', R.residualNet, true],
+        ] as Array<[string, number, boolean?]>)
       : ([['Land (incl. acquisition)', -R.landGross], ['Developer profit', R.profit, true]] as Array<[string, number, boolean?]>)),
   ];
 
