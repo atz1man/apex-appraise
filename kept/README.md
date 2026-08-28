@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 208 unit tests over the decision logic
+npm test           # 227 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 15 end-to-end checks across every screen
+npm run smoke      # 17 end-to-end checks across every screen
 npm run contrast   # WCAG AA sweep over every rendered text node
 ```
 
@@ -55,6 +55,7 @@ src/lib/          the decision logic — pure, tested, no React
   alerts.ts       which deadlines are worth interrupting someone about
   contrast.ts     WCAG luminance and ratio, used to hold the palette to AA
   share.ts        reading an order email shared in from another app
+  policy-feed.ts  downloading policy changes, and what they mean for you
   legal.ts        Consumer Rights Act + distance-selling wording
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
@@ -116,6 +117,20 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **Policy updates arrive, and "re-calculates itself" was the wrong promise.**
+  The Watch feed was frozen into the bundle; it is now fetched from the app's
+  own origin, validated entry by entry, and merged by a stable id that names
+  the *change* rather than its date, so a correction replaces an entry instead
+  of appearing twice. The bundled copy stays as the offline fallback under the
+  same ids. But the claim beside it — that every deadline re-calculates itself
+  — was one the app should not keep: the terms a purchase was made under are
+  the terms that govern it, and silently rewriting a receipt's window because
+  a shop edited its page could tell someone they have less time than they
+  actually do. What it does instead is what the design's own Zara card already
+  said: *checks*. Each held receipt is compared against the change and told
+  plainly — "deadline unchanged, already checked", or "new purchases get 16
+  days less; yours keeps the 30 days it was bought under". The landing copy
+  was corrected to match.
 - **A warranty is a clock, not a sentence.** The landing page promises
   "warranty clocks added to your receipts automatically", and a warranty was a
   free-text string that could not answer the question that promise implies —

@@ -60,6 +60,12 @@ export interface PolicyUpdate {
   /** Only the receipts the user actually holds decide this at render time. */
   affectsStores: string[];
   affectNote: string;
+  /**
+   * The retailer's window AFTER the change, when the change moved it. Used to
+   * tell someone what a change would have meant — never to rewrite a receipt
+   * they already hold, which keeps the terms it was bought under.
+   */
+  newWindowDays?: number;
 }
 
 export type Screen = 'onboard' | 'home' | 'watch' | 'detail' | 'edit' | 'add' | 'settings' | 'celebrate';

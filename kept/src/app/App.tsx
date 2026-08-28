@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { color, paperGrain } from '../tokens';
 import { dueAlerts, supersededKeys } from '../lib/alerts';
+import { FEED_URL, mergeFeed, readFeed } from '../lib/policy-feed';
 import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
 import { exportBackup } from '../lib/storage';
@@ -41,6 +42,33 @@ export function App() {
         : `${affecting.length} shops changed their returns policies — your receipts are affected`;
 
   const recovered = sumPence(state.receipts.filter((r) => r.status === 'returned').map((r) => r.amount));
+
+  /**
+   * Policy updates arrive rather than being frozen into the bundle. Served
+   * from this app's own origin, and the download is of EVERY change — never a
+   * query naming the shops this person holds, because that query would be the
+   * leak the privacy notice rules out.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(FEED_URL, { cache: 'no-cache' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((doc) => {
+        const incoming = readFeed(doc);
+        if (cancelled || !incoming || incoming.length === 0) return;
+        dispatch({ type: 'feed', updates: mergeFeed(state.updates, incoming) });
+      })
+      .catch(() => {
+        // Offline is the normal case for this app, and the bundled feed is
+        // already on screen. A failed refresh is not worth telling anyone about.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Once per launch: the feed changes daily at most, and re-running it on
+    // every state change would refetch on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Deadline alerts, computed on open and whenever the app comes back to the

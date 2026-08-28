@@ -176,6 +176,17 @@ results['a shared order lands on Add, already read'] =
 // The payload must not linger in the address bar, or a reload re-adds it.
 results['the shared payload is stripped from the URL'] = !/[?&]text=/.test(page.url());
 
+// The policy feed must arrive from this app's own origin and replace the
+// bundled copy rather than piling a second copy on top of it.
+await page.getByRole('button', { name: /^Watch/ }).click();
+await page.waitForTimeout(600);
+const updateIds = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).updates.map((u) => u.id));
+results['the policy feed arrives and does not duplicate the bundled one'] =
+  updateIds.length === new Set(updateIds).size && updateIds.includes('u_uniqlo_online_refunds');
+results['a policy change is checked against the receipts held'] =
+  (await page.getByText('AFFECTS YOUR RECEIPTS').first().isVisible()) &&
+  (await page.getByText(/deadline unchanged, already checked/).first().isVisible());
+
 results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 

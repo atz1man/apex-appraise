@@ -133,7 +133,9 @@ export function Landing() {
         <Eyebrow>LIVE POLICY WATCH</Eyebrow>
         <SectionTitle>Shops rewrite the rules quietly. Your app hears about it first.</SectionTitle>
         <p style={{ fontSize: 16, color: color.muted, margin: '14px 0 0', maxWidth: 560, lineHeight: 1.6 }}>
-          Retailers change return windows all the time — and never send a memo. Kept ships verified policy updates the day they change, and every deadline on your receipts re-calculates itself.
+          Retailers change return windows all the time — and never send a memo. Kept ships verified policy updates
+          the day they change, and checks every receipt you hold against them. A purchase keeps the terms it was made
+          under; you just find out when the shop moves the goalposts for the next one.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18, margin: '38px 0 80px' }}>
           {UPDATES.map((u) => (

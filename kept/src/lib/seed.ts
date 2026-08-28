@@ -49,28 +49,35 @@ export function seedReceipts(today: Date): Receipt[] {
   ];
 }
 
+/**
+ * The offline fallback for the policy feed, so a first launch with no signal
+ * is not an empty Watch tab. Ids match public/policy-feed.json exactly: these
+ * are the same changes, and a merge must replace them rather than show each
+ * one twice. Dates are relative so a fresh install looks current until the
+ * real feed lands and supplies the true ones.
+ */
 export function seedUpdates(today: Date): PolicyUpdate[] {
   const ago = (n: number) => toISODate(addDays(today, -n));
   return [
     {
-      id: 'u_zara', store: 'Zara', changedOn: ago(2),
+      id: 'u_zara_postal_returns_fee', store: 'Zara', changedOn: ago(2),
       text: 'Free postal returns ended — £1.95 unless you drop off in store. Window still 30 days from dispatch.',
-      affectsStores: ['Zara'], affectNote: 'drop off in store to keep it free',
+      affectsStores: ['Zara'], affectNote: 'drop off in store to keep it free', newWindowDays: 30,
     },
     {
-      id: 'u_asos', store: 'ASOS', changedOn: ago(7),
+      id: 'u_asos_frequent_returners', store: 'ASOS', changedOn: ago(7),
       text: 'New 28-day window for “frequent returners” (was 45). Kept flags if that’s you before you buy.',
-      affectsStores: ['ASOS'], affectNote: 'your window is the shorter one',
+      affectsStores: ['ASOS'], affectNote: 'your window is the shorter one', newWindowDays: 28,
     },
     {
-      id: 'u_apple', store: 'Apple', changedOn: ago(21),
+      id: 'u_apple_iphone18_window', store: 'Apple', changedOn: ago(21),
       text: '14-day window confirmed for the iPhone 18 line. Warranty clocks added automatically.',
-      affectsStores: ['Apple'], affectNote: 'warranty clock added',
+      affectsStores: ['Apple'], affectNote: 'warranty clock added', newWindowDays: 14,
     },
     {
-      id: 'u_currys', store: 'Currys', changedOn: ago(30),
+      id: 'u_currys_price_match', store: 'Currys', changedOn: ago(30),
       text: 'Price-match refund window extended to 14 days — if it drops in price after you buy, claim the difference.',
-      affectsStores: ['Currys'], affectNote: 'you can claim the difference if the price drops',
+      affectsStores: ['Currys'], affectNote: 'you can claim the difference if the price drops', newWindowDays: 14,
     },
   ];
 }

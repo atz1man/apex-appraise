@@ -1,5 +1,6 @@
 import { color, radius } from '../../tokens';
 import { fromISODate, relativeAgo } from '../../lib/dates';
+import { assess } from '../../lib/policy-feed';
 import type { PolicyUpdate, Receipt } from '../../lib/types';
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
  * device knows which.
  */
 export function Watch({ updates, receipts, today }: Props) {
-  const heldStores = new Set(receipts.filter((r) => r.status === 'active').map((r) => r.store));
+  const assessed = assess(updates, receipts, today);
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -24,13 +25,12 @@ export function Watch({ updates, receipts, today }: Props) {
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Policy watch</h1>
       </div>
       <p style={{ fontSize: 13, color: color.muted, padding: '0 2px 14px', margin: 0 }}>
-        Shops rewrite the rules quietly. You hear about it first — deadlines re-calculate themselves.
+        Shops rewrite the rules quietly. You hear about it first — and every receipt you hold is checked against
+        the change.
       </p>
 
       <ul style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: 0, padding: 0 }}>
-        {updates.map((u) => {
-          const affected = u.affectsStores.filter((s) => heldStores.has(s));
-          const affectsYou = affected.length > 0;
+        {assessed.map(({ update: u, impacts, affectsYou }) => {
           return (
             <li
               key={u.id}
@@ -50,7 +50,13 @@ export function Watch({ updates, receipts, today }: Props) {
               {affectsYou && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1.5px dashed ${color.border}` }}>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', color: color.amber }}>AFFECTS YOUR RECEIPTS</div>
-                  <div style={{ fontSize: 12.5, color: color.muted, marginTop: 3 }}>{u.affectNote}</div>
+                  {/* Per receipt, not one line for the shop: what a change means
+                      depends on the terms each purchase was made under. */}
+                  {impacts.map((i) => (
+                    <div key={i.receipt.id} style={{ fontSize: 12.5, color: color.muted, marginTop: 4 }}>
+                      <span style={{ fontWeight: 700, color: color.bodyStrong }}>{i.receipt.item}</span> — {i.note}
+                    </div>
+                  ))}
                 </div>
               )}
             </li>

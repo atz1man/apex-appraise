@@ -1,0 +1,52 @@
+{
+  "feed": "kept-policy",
+  "note": "Verified UK retailer policy changes. Ids name the CHANGE, not the date, so a correction to an entry replaces it rather than appearing twice. Served from this app's own origin — the download is of ALL changes, never a query naming the shops a particular person holds, because that query would be the leak the privacy notice rules out.",
+  "updatedAt": "2026-08-28",
+  "updates": [
+    {
+      "id": "u_zara_postal_returns_fee",
+      "store": "Zara",
+      "changedOn": "2026-08-26",
+      "text": "Free postal returns ended — £1.95 unless you drop off in store. Window still 30 days from dispatch.",
+      "affectsStores": ["Zara"],
+      "affectNote": "drop off in store to keep it free",
+      "newWindowDays": 30
+    },
+    {
+      "id": "u_asos_frequent_returners",
+      "store": "ASOS",
+      "changedOn": "2026-08-21",
+      "text": "New 28-day window for “frequent returners” (was 45). Kept flags if that’s you before you buy.",
+      "affectsStores": ["ASOS"],
+      "affectNote": "your window is the shorter one",
+      "newWindowDays": 28
+    },
+    {
+      "id": "u_apple_iphone18_window",
+      "store": "Apple",
+      "changedOn": "2026-08-07",
+      "text": "14-day window confirmed for the iPhone 18 line. Warranty clocks added automatically.",
+      "affectsStores": ["Apple"],
+      "affectNote": "warranty clock added",
+      "newWindowDays": 14
+    },
+    {
+      "id": "u_currys_price_match",
+      "store": "Currys",
+      "changedOn": "2026-07-29",
+      "text": "Price-match refund window extended to 14 days — if it drops in price after you buy, claim the difference.",
+      "affectsStores": ["Currys"],
+      "affectNote": "you can claim the difference if the price drops",
+      "newWindowDays": 14
+    },
+    {
+      "id": "u_uniqlo_online_refunds",
+      "store": "Uniqlo",
+      "changedOn": "2026-07-14",
+      "text": "Online orders can no longer be refunded in store — postal returns only. In-store purchases are unaffected.",
+      "affectsStores": ["Uniqlo"],
+      "affectNote": "an online order has to go back by post",
+      "newWindowDays": 30
+    }
+  ]
+}

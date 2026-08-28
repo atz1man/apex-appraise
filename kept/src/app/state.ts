@@ -4,7 +4,7 @@ import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
 import { FREE_TIER_LIMIT, load, save, type KeptState, type Settings } from '../lib/storage';
-import type { Receipt, Screen } from '../lib/types';
+import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
 export interface AppState extends KeptState {
   screen: Screen;
@@ -29,6 +29,7 @@ export type Action =
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
   | { type: 'alerted'; keys: string[] }
+  | { type: 'feed'; updates: PolicyUpdate[] }
   | { type: 'settings'; patch: Partial<Settings> }
   | { type: 'shared' };
 
@@ -91,6 +92,8 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       };
     case 'settings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'feed':
+      return { ...state, updates: action.updates };
     case 'alerted':
       // Recorded only for what was actually shown (plus the gentler rungs it
       // superseded), so an alert that failed to display is tried again rather
