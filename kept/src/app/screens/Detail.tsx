@@ -19,12 +19,13 @@ interface Props {
   onBack: () => void;
   onEdit: () => void;
   onReturn: () => void;
+  onUnreturn: () => void;
   onDelete: () => void;
 }
 
 const cardLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '1.4px', color: color.muted } as const;
 
-export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, onDelete }: Props) {
+export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, onUnreturn, onDelete }: Props) {
   const [legalOpen, setLegalOpen] = useState(true);
   const d = derive(receipt, today);
   const u = urgency(d.daysLeft, urgentDays);
@@ -177,9 +178,26 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
       )}
 
       {receipt.status === 'returned' ? (
-        <div style={{ marginTop: 16, padding: 15, textAlign: 'center', background: color.yellowLight, border: `1.5px solid ${color.ink}`, borderRadius: 16, fontWeight: 700 }}>
-          Money back · {money(receipt.amount)} recovered ✓
-        </div>
+        <>
+          <div style={{ marginTop: 16, padding: 15, textAlign: 'center', background: color.yellowLight, border: `1.5px solid ${color.ink}`, borderRadius: 16, fontWeight: 700 }}>
+            Money back · {money(receipt.amount)} recovered ✓
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+            <Pressable
+              className="k-row-white"
+              onClick={onUnreturn}
+              style={{ flex: 1, padding: 15, textAlign: 'center', background: color.white, border: `1.5px solid ${color.borderSoft}`, borderRadius: 999, fontWeight: 700, fontSize: 14 }}
+            >
+              Not actually returned
+            </Pressable>
+            <Pressable
+              onClick={onDelete}
+              style={{ width: 'auto', padding: '15px 18px', textAlign: 'center', background: color.white, border: `1.5px solid ${color.borderSoft}`, color: color.danger, borderRadius: 999, fontWeight: 700, fontSize: 14 }}
+            >
+              Delete
+            </Pressable>
+          </div>
+        </>
       ) : (
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <Pressable

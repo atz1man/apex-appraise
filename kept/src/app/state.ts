@@ -28,6 +28,7 @@ export type Action =
   | { type: 'ob-skip' }
   | { type: 'return'; id: string }
   | { type: 'delete'; id: string }
+  | { type: 'unreturn'; id: string }
   | { type: 'add'; receipt: Receipt }
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
@@ -68,6 +69,16 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         selId: null,
       };
     }
+    case 'unreturn':
+      // The swipe is a one-finger gesture on a row you might have meant to
+      // open, so it is going to fire by accident. Putting the receipt back is
+      // the whole point of being able to reach it again.
+      return {
+        ...state,
+        receipts: state.receipts.map((r) =>
+          r.id === action.id ? { ...r, status: 'active' as const, returnedOn: undefined } : r,
+        ),
+      };
     case 'delete': {
       const receipts = state.receipts.filter((x) => x.id !== action.id);
       // Forget what we said about a receipt that no longer exists, so the

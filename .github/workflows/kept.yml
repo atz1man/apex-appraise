@@ -19,9 +19,13 @@ defaults:
     working-directory: kept
 
 jobs:
+  # Job names are prefixed because Apex's workflow already contributes a check
+  # called "browser"; two identically-named checks in one PR's list tell a
+  # reviewer nothing about which product just went red.
   # The fast half: pure logic, strict types, and a build. Nothing here needs a
   # browser, so it fails in seconds rather than minutes when it fails at all.
   unit:
+    name: kept · unit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +49,7 @@ jobs:
   # defects the day it was written, which is why they are gates and not
   # a manual ritual someone remembers to perform.
   browser:
+    name: kept · browser
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -161,15 +161,23 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
           <h2 style={sectionLabel(color.muted)}>MONEY BACK ✓</h2>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: 9, margin: 0, padding: 0 }}>
             {returned.map((r) => (
-              <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: 15, background: color.creamAlt, border: '1.5px solid rgba(23,20,16,0.06)', borderRadius: radius.card, listStyle: 'none' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: color.yellowLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Tick />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, textDecoration: 'line-through', color: color.muted }}>{r.store}</div>
-                  <div style={{ fontSize: 12, color: color.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.item}</div>
-                </div>
-                <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 15, fontWeight: 700, color: color.amber }}>{money(r.amount)}</div>
+              <li key={r.id} style={{ listStyle: 'none' }}>
+                {/* Reachable. These were inert, so a receipt marked returned by
+                    a stray swipe could never be opened, corrected or deleted. */}
+                <Pressable
+                  onClick={() => onOpen(r.id)}
+                  aria-label={`${r.store}, ${r.item}, ${money(r.amount)}, returned`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 13, padding: 15, background: color.creamAlt, border: '1.5px solid rgba(23,20,16,0.06)', borderRadius: radius.card }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: color.yellowLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Tick />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, textDecoration: 'line-through', color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.store}</div>
+                    <div style={{ fontSize: 12, color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.item}</div>
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 15, fontWeight: 700, color: color.amber, flexShrink: 0 }}>{money(r.amount)}</div>
+                </Pressable>
               </li>
             ))}
           </ul>

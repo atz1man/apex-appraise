@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 23 end-to-end checks, including offline with the network cut
+npm run smoke      # 25 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -130,6 +130,13 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **A return can be undone.** Returned receipts were rendered as inert list
+  items, and the detail screen's returned state — which existed in the code —
+  could not be reached from anywhere. So a receipt marked returned by a stray
+  swipe was permanent: not openable, not correctable, not even deletable. The
+  swipe is a one-finger gesture on a row you might have meant to open, so it
+  *will* fire by accident. Those rows open now, and offer "Not actually
+  returned".
 - **The marketing demo cannot touch your data.** The landing page embeds this
   same build at this same origin, so the "live demo" was reading and writing
   the real app's `localStorage` — swipe a receipt in the shop window and you

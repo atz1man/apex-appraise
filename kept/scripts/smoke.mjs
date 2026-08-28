@@ -98,6 +98,21 @@ await page.waitForTimeout(500);
 results['the return survives a reload'] = await page.getByText('MONEY BACK ✓').isVisible();
 // The sent list is on disk, so a reload must not re-announce anything.
 results['an alert is never repeated'] = (await page.evaluate(() => window.__notes)).length === 0;
+// A returned receipt has to stay reachable: the swipe is a one-finger gesture
+// on a row you might have meant to open, so it will fire by accident.
+await page.getByRole('button', { name: /Currys, JBL.*returned/ }).click();
+await page.waitForTimeout(400);
+results['a returned receipt can still be opened'] =
+  await page.getByText(/Money back · .* recovered/).isVisible();
+await page.getByRole('button', { name: 'Not actually returned' }).click();
+await page.waitForTimeout(400);
+results['a return can be undone'] =
+  (await page.getByRole('button', { name: 'Got my money back' }).isVisible()) &&
+  (await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('kept.v1')).receipts.find((r) => r.id === 'seed_currys').status)) === 'active';
+await page.getByRole('button', { name: 'Back', exact: true }).click();
+await page.waitForTimeout(300);
+
 results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })
   .isVisible()
