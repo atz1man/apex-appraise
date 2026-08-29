@@ -1503,6 +1503,18 @@ has just been told two clocks have expired is one sentence away from believing
 there is nothing left to do. Both branches are pinned now, including that they
 are not both said at once.
 
+**A note with no clock behind it.** `DerivedWarranty` says at the top that
+"zero means a note with no clock", and `readWarranty` is where zero comes from:
+warranties were free text before they were a clock, so a backup written by that
+version has a bare string, which becomes `{ months: 0, note }`. The screen
+already handles it — the chip and the "cover runs out on…" line are both
+guarded by `months > 0`, so a note shows as a note rather than as an expired
+warranty. What nothing held was the *object* branch accepting zero, and it
+matters a step further out than it looks: restore an old string-format backup,
+export it again, and the note is written back as `{ months: 0 }`. Rejecting
+zero there loses on the second restore exactly what the first was careful to
+keep.
+
 **A date shaped like a date that is not one.** `!shapeOK || notARealDate`
 flipped to `&&` was invisible, because every fixture used either a well-formed
 real date or obvious rubbish. The input that separates them is `2026-02-31`: it

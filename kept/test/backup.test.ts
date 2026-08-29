@@ -212,3 +212,34 @@ describe('the demo flag survives a backup', () => {
     expect(countedAgainstQuota(out.summary.receipts)).toBe(1);
   });
 });
+
+describe('a warranty that is only a note survives the round trip', () => {
+  /*
+   * `readWarranty` turns a bare STRING into `{ months: 0, note }` — warranties
+   * were free text before they were a clock, and a backup written by that
+   * version is still a real backup. `DerivedWarranty` says so at the top:
+   * "Zero means a note with no clock behind it."
+   *
+   * So zero is a value the app genuinely holds, and the object branch accepts
+   * it: `w.months < 0` rejects, not `<= 0`. Mutation found that nothing pinned
+   * the difference. It matters one step further out than it looks — restore an
+   * old string-format backup, export it again, and the note is written back as
+   * `{ months: 0 }`. Rejecting zero there loses on the SECOND restore what the
+   * first one was careful to keep.
+   */
+  it('keeps a string warranty as a note with no clock', () => {
+    const s = ok(file([{ ...good, warranty: 'Two-year manufacturer guarantee' }]));
+    expect(s.receipts[0].warranty).toEqual({ months: 0, note: 'Two-year manufacturer guarantee' });
+  });
+
+  it('accepts that same note back when it is written out as an object', () => {
+    const once = ok(file([{ ...good, warranty: 'Two-year manufacturer guarantee' }]));
+    const twice = ok(file([{ ...once.receipts[0] }]));
+    expect(twice.receipts[0].warranty).toEqual({ months: 0, note: 'Two-year manufacturer guarantee' });
+  });
+
+  it('still refuses a negative one', () => {
+    const s = ok(file([{ ...good, warranty: { months: -1, note: 'nonsense' } }]));
+    expect(s.receipts[0].warranty).toBeUndefined();
+  });
+});
