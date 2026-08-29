@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 394 unit tests over the decision logic
+npm test           # 405 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -29,7 +29,7 @@ npm run build && npx vite preview --port 5183 &
 npm run smoke      # 36 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
-npm run layout     # 320px and 402px, adversarial content, empty states
+npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
 npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 npm run freshness  # starts and stops its OWN server — see below, no preview needed
@@ -175,6 +175,13 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **The hero lowercased brand names.** "2 days left to return your jbl tune
+  770nc headphones" — a `toLowerCase()` that is right for "Wool-blend
+  overcoat" and wrong for every product name carrying a brand or a model
+  number, which is the part the person has to recognise. `midSentence` folds
+  only a first word that is plainly capitalised and otherwise lower case, so
+  "JBL", "iPhone", "No7" and "kMix" are left as written. Found by taking a
+  screenshot and reading it, which no sweep here does.
 - **A receipt's window and the sentence quoting it drifted apart.** Edit a
   Boots receipt from 35 days to 20 and the detail screen showed RETURN BY
   counting 20, above a STORE POLICY card still reading "Boots · 35 days".
@@ -504,7 +511,24 @@ Everything else here is driven at 402px with the seeded demo receipts — the
 width the design was drawn at, and the content it was drawn with. Real phones
 go down to 320px, and a real receipt can have a long shop name, a long item
 name and an amount in the thousands, because the edit form accepts whatever
-someone types. `npm run layout` sweeps both widths across every screen, with
+someone types. It also asks whether every button is the thing you actually hit when you tap
+it. The handoff shipped a Celebrate screen whose "Back to receipts" sat
+underneath the floating tab bar — fully visible, completely unclickable, and
+invisible to every other check here, because nothing overflows and nothing
+fails contrast when a control is merely covered. That was found by eye; this
+is the mechanical form of it.
+
+Getting it to mean anything took three goes, all the same mistake. It passed
+against the reintroduced defect because none of these screens overflows at the
+sweep's own viewport height, so it never put a button near the bar — so it now
+shortens the viewport to 560px first, which is a phone with the keyboard up
+and the state where a floating bar and the last button in a scroller actually
+meet. The vacuity guard that catches that was then satisfied by the Watch
+feed's inner region, which always has more content than it shows, so it
+measures the screen's own container instead. And the guard was written below
+the success path's `process.exit`, where it could never run at all.
+
+`npm run layout` sweeps both widths across every screen, with
 adversarial content and with the empty and all-returned states that never
 appear in the seed data, and fails on any sideways scroll.
 

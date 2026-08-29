@@ -4,6 +4,7 @@ import { addDays, fmtDate, fmtDateNear } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
 import { search, shouldOfferSearch } from '../../lib/search';
+import { midSentence } from '../../lib/words';
 import { heroCount, urgency } from '../../lib/urgency';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, Logo, LogoDashed, LogoWatermark, Tick, Wordmark } from '../components/Icons';
@@ -260,7 +261,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
           {count}
         </span>
         <span style={{ fontSize: 15, fontWeight: 600, color: color.onInkBody }}>
-          {word} {receipt.item.toLowerCase()}
+          {word} {midSentence(receipt.item)}
         </span>
       </div>
       <div style={{ fontSize: 13.5, color: color.faint, marginTop: 8 }}>

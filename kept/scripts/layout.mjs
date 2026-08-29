@@ -37,8 +37,80 @@ const ADVERSARIAL = [
 
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
 const failures = [];
+/**
+ * How much scrolling the covered-button check actually had to work with. A
+ * sweep over screens that all fit reports "no button is covered" without ever
+ * putting one near the bar, which is a pass for a question it never asked —
+ * exactly how the first version of that check behaved.
+ */
+let everScrolled = 0;
 
 /** Anything wider than the viewport makes the page scroll sideways. */
+/**
+ * Every button has to be the thing you actually hit when you tap it.
+ *
+ * The handoff shipped a Celebrate screen whose "Back to receipts" sat
+ * underneath the floating tab bar — fully visible, completely unclickable,
+ * and invisible to every check here, because nothing overflows and nothing
+ * fails contrast when a control is simply covered. Found by eye once; this is
+ * the mechanical form of it, run at the BOTTOM of each screen, which is where
+ * a floating bar and the last button in a scroller meet.
+ */
+/** Short enough that every screen here has something to scroll. */
+const SHORT_HEIGHT = 560;
+
+async function checkCovered(page, label, width) {
+  // Deliberately shortened first. At the sweep's own 844 none of these screens
+  // overflows, so the question was never being asked — the check reported a
+  // clean pass over content that never met the bar. A phone with the keyboard
+  // up is this short, and it is the state where a floating bar and the last
+  // button in a scroller actually meet.
+  await page.setViewportSize({ width, height: SHORT_HEIGHT });
+  await page.waitForTimeout(250);
+  const scrolled = await page
+    .evaluate(() => {
+      // The SCREEN's own container, not any scroller inside it. The Watch
+      // feed is a fixed-height region that always has more content than it
+      // shows, so a looser selector reported scrolling on every run and made
+      // the vacuity guard below unfalsifiable.
+      const scroller = document.querySelector('main > div[style*="overflow"]');
+      if (!scroller) return 0;
+      scroller.scrollTop = scroller.scrollHeight;
+      return scroller.scrollHeight - scroller.clientHeight;
+    })
+    .catch(() => 0);
+  await page.waitForTimeout(350);
+  const covered = await page.evaluate(() =>
+    [...document.querySelectorAll('button')]
+      .filter((b) => !b.disabled)
+      .map((b) => {
+        const r = b.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return null;
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        if (y < 0 || y > innerHeight || x < 0 || x > innerWidth) return null;
+        const hit = document.elementFromPoint(x, y);
+        if (!hit || b.contains(hit) || hit.contains(b)) return null;
+        return {
+          text: (b.textContent ?? '').trim().slice(0, 30),
+          covering: (hit.closest('button')?.textContent ?? hit.tagName).trim().slice(0, 30),
+        };
+      })
+      .filter(Boolean),
+  );
+  await page.setViewportSize({ width, height: 844 });
+  await page.waitForTimeout(200);
+  if (covered.length > 0) {
+    failures.push({
+      label,
+      width,
+      kind: 'a button cannot be tapped where it sits',
+      detail: covered.map((c) => `"${c.text}" covered by "${c.covering}"`).join('; '),
+    });
+  }
+  return scrolled;
+}
+
 async function checkOverflow(page, label, width) {
   const bad = await page.evaluate((w) => {
     const out = [];
@@ -86,6 +158,7 @@ async function sweep(width, seedState, label, steps) {
     await act(page).catch((e) => failures.push({ label, width, kind: 'step failed', detail: `${name}: ${e.message}` }));
     await page.waitForTimeout(400);
     await checkOverflow(page, `${label} · ${name}`, width);
+    everScrolled += await checkCovered(page, `${label} · ${name}`, width);
   }
   await ctx.close();
 }
@@ -142,11 +215,24 @@ for (const width of WIDTHS) {
 
 await browser.close();
 
+// Before the verdict, not after it: this guard was written below the success
+// path's process.exit and was therefore unreachable — a vacuity check that
+// could itself never run, which is the joke it exists to prevent.
+if (everScrolled === 0) {
+  failures.push({
+    label: 'the covered-button check',
+    width: 0,
+    kind: 'never had a scrolling screen to examine',
+    detail: 'every screen fitted at the short viewport, so "no button is covered" was a pass over nothing',
+  });
+}
+
 if (failures.length === 0) {
-  console.log(`✓ no sideways scroll or errors at ${WIDTHS.join('px, ')}px, on any screen or state`);
+  console.log(`✓ no sideways scroll, no covered buttons, at ${WIDTHS.join('px, ')}px, on any screen or state`);
   process.exit(0);
 }
 console.log(`✗ ${failures.length} layout problem(s):\n`);
+
 for (const f of failures) {
   console.log(`  [${f.width}px] ${f.label} — ${f.kind}: ${f.detail}`);
   for (const o of f.offenders ?? []) console.log(`      <${o.tag}> left ${o.left} right ${o.right} — ${JSON.stringify(o.text)}`);

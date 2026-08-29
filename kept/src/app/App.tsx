@@ -4,6 +4,7 @@ import { dueAlerts, supersededKeys } from '../lib/alerts';
 import { FEED_URL, mergeFeed, readFeed } from '../lib/policy-feed';
 import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
+import { midSentence } from '../lib/words';
 import { exportBackup, wipe } from '../lib/storage';
 import { SaveFailedBanner } from './components/SaveFailedBanner';
 import { TabBar } from './components/TabBar';
@@ -40,7 +41,7 @@ export function App() {
     changedReceipts.length === 0
       ? null
       : changedReceipts.length === 1
-        ? `${changedReceipts[0].store} changed its returns policy — your ${changedReceipts[0].item.toLowerCase()} is affected`
+        ? `${changedReceipts[0].store} changed its returns policy — your ${midSentence(changedReceipts[0].item)} is affected`
         : `${affecting.length} shops changed their returns policies — your receipts are affected`;
 
   const recovered = sumPence(state.receipts.filter((r) => r.status === 'returned').map((r) => r.amount));
