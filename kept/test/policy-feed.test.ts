@@ -313,6 +313,29 @@ describe('one question about a shop, asked in two places', () => {
     expect(assess([u], [currysReceipt], TODAY)[0].affectsYou).toBe(false);
     expect(windowInForceFor('Currys', ago(1), [u])).toBeUndefined();
   });
+
+  /*
+   * The table gives Currys the alias "pc world", M&S "marks and spencer", B&Q
+   * "b and q". `readFeed` takes `affectsStores` verbatim, so an entry written
+   * the way a person writes it matched no receipt and said nothing to anybody
+   * — the same silence the receipt edited to "boots" produced, from the same
+   * cause one step further out. A receipt's store is canonicalised at its own
+   * door; the feed had no such door.
+   */
+  it.each([['PC World'], ['pc world']])('reads %s as the shop the table calls Currys', (written) => {
+    const u = asWritten([written]);
+    expect(assess([u], [currysReceipt], TODAY)[0].affectsYou).toBe(true);
+    expect(windowInForceFor('Currys', ago(1), [u])?.days).toBe(7);
+  });
+
+  it('leaves a shop the table does not know exactly as written', () => {
+    // It can only ever join two spellings of a shop the table knows, never
+    // invent a match: an unknown name passes through `canonicalStoreName`
+    // untouched, so Vinted still means Vinted and nothing else.
+    const u = asWritten(['Vinted']);
+    expect(assess([u], [{ ...currysReceipt, store: 'Vinted' }], TODAY)[0].affectsYou).toBe(true);
+    expect(assess([u], [currysReceipt], TODAY)[0].affectsYou).toBe(false);
+  });
 });
 
 describe('two boundaries in the feed that nothing pinned', () => {

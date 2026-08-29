@@ -1735,6 +1735,36 @@ casing of a shop's name in a hand-authored feed is not a distinction anybody
 means. The test asserts the *agreement* rather than the two behaviours
 separately, since the agreement is what has to hold.
 
+### The same shop, spelled two ways
+
+Fixing the exact-versus-lenient disagreement above raised the next question one
+step out: `readFeed` takes `affectsStores` **verbatim**, and the retailer table
+gives Currys the alias `pc world`, M&S `marks and spencer`, B&Q `b and q`,
+Sports Direct `sportsdirect`.
+
+So a feed entry written `["PC World"]` — which is how a person writes it —
+matched no receipt at all. No banner on the Watch tab, no window in force for a
+new purchase, nothing to see. The same silence the receipt edited to "boots"
+produced, from the same cause: a shop compared as a string where the app
+already knows it is one shop. Receipts are canonicalised at their own door,
+which is why `canonicalStoreName` sits in `backup.ts`'s reader rather than at
+its two call sites. The feed had no such door.
+
+`updateNames` compares canonical names now. A name the table does not know
+passes through untouched, so this can only ever join two spellings of a shop it
+knows — Vinted still means Vinted and nothing else, which is asserted rather
+than assumed.
+
+That fixes the matching and cannot fix the **wording**: the Watch card prints
+`update.store` beside a receipt that says "Currys", so an alias in the feed puts
+two names for one shop on one screen. `feed-agreement.test.ts` now holds both
+the served feed and the bundled fallback to the table's own spelling — and
+leaves an unknown shop alone, because the feed may legitimately carry news
+about a retailer this build has never heard of. Confirmed able to fail by
+writing `["PC World"]` into `public/policy-feed.json`, with a vacuity guard
+first, since a check that iterates an empty list reports success for a question
+it never asked.
+
 ### The window a new purchase is given, and the line above it
 
 On the same card, four lines apart, the add screen stated two different

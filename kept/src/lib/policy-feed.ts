@@ -1,4 +1,5 @@
 import { derive } from './receipts';
+import { canonicalStoreName } from './stores';
 import { MAX_WINDOW_DAYS } from './draft';
 import type { PolicyUpdate, Receipt } from './types';
 
@@ -95,11 +96,21 @@ export interface WindowInForce {
  * every Boots change invisible to it was exactly that — and because the
  * casing of a shop's name in a hand-authored feed is not a distinction
  * anybody means.
+ *
+ * Through `canonicalStoreName` for the same reason one step further out. The
+ * table gives Currys the alias "pc world", M&S "marks and spencer", B&Q "b and
+ * q" — and `readFeed` takes `affectsStores` verbatim, so an entry written
+ * `["PC World"]`, which is how a person writes it, matched no receipt at all
+ * and said nothing to anybody. Silence again, from the same cause: a name
+ * compared as a string where the app already knows it is one shop. Receipts
+ * are canonicalised at their own door for exactly this; the feed had no such
+ * door. A name the table does not know passes through untouched, so this can
+ * only ever join two spellings of a shop, never invent a match.
  */
 function updateNames(update: PolicyUpdate, store: string): boolean {
-  const name = store.trim().toLowerCase();
+  const name = canonicalStoreName(store).toLowerCase();
   if (!name) return false;
-  return update.affectsStores.some((s) => s.trim().toLowerCase() === name);
+  return update.affectsStores.some((s) => canonicalStoreName(s).toLowerCase() === name);
 }
 
 export function windowInForceFor(
