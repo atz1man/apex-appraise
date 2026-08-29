@@ -1,4 +1,5 @@
 import { derive } from './receipts';
+import { MAX_WINDOW_DAYS } from './draft';
 import type { PolicyUpdate, Receipt } from './types';
 
 /**
@@ -202,7 +203,31 @@ export function mergeFeed(current: readonly PolicyUpdate[], incoming: readonly P
   return newestFirst([...byId.values()]);
 }
 
+/*
+ * How much of anything one downloaded entry may be.
+ *
+ * `readFeed` checked what each field WAS and never how much of it there was.
+ * That was survivable while the feed could only put words on a screen. It is
+ * not now: `newWindowDays` sets a real receipt's window, and the number the
+ * edit form refuses from a person — anything past ten years — was accepted
+ * from the network without a glance. A ceiling only one of the two paths
+ * respects is not a ceiling.
+ *
+ * The lengths are the same argument one level down. The receipts and the feed
+ * share one localStorage bucket, the feed is the half that arrives from
+ * outside, and this codebase has already had the version of this where it
+ * could only ever grow. A policy note is a sentence; a shop is a name.
+ *
+ * An entry that breaks a limit is DROPPED, not trimmed. The text is advice
+ * somebody may repeat at a counter — half of it is worse than none of it, and
+ * the file's existing rule for a malformed entry is already to drop it.
+ */
+const MAX_TEXT = 2000;
+const MAX_NAME = 120;
+const MAX_AFFECTED = 40;
+
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+const fits = (v: unknown, max: number): v is string => isStr(v) && v.length <= max;
 
 /**
  * Validate a downloaded feed. It arrives over the network, so nothing in it is
@@ -220,17 +245,25 @@ export function readFeed(doc: unknown): PolicyUpdate[] | null {
   for (const raw of d.updates) {
     if (typeof raw !== 'object' || raw === null) continue;
     const u = raw as Record<string, unknown>;
-    if (!isStr(u.id) || !isStr(u.store) || !isStr(u.text)) continue;
+    if (!fits(u.id, MAX_NAME) || !fits(u.store, MAX_NAME) || !fits(u.text, MAX_TEXT)) continue;
     if (!isStr(u.changedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(u.changedOn)) continue;
-    if (!Array.isArray(u.affectsStores) || !u.affectsStores.every(isStr)) continue;
-    if (u.newWindowDays !== undefined && (!Number.isInteger(u.newWindowDays) || (u.newWindowDays as number) < 1)) continue;
+    if (!Array.isArray(u.affectsStores) || u.affectsStores.length > MAX_AFFECTED) continue;
+    if (!u.affectsStores.every((x) => fits(x, MAX_NAME))) continue;
+    if (
+      u.newWindowDays !== undefined &&
+      (!Number.isInteger(u.newWindowDays) ||
+        (u.newWindowDays as number) < 1 ||
+        (u.newWindowDays as number) > MAX_WINDOW_DAYS)
+    ) {
+      continue;
+    }
     out.push({
       id: u.id,
       store: u.store,
       changedOn: u.changedOn,
       text: u.text,
       affectsStores: u.affectsStores as string[],
-      affectNote: isStr(u.affectNote) ? u.affectNote : '',
+      affectNote: fits(u.affectNote, MAX_TEXT) ? u.affectNote : '',
       ...(u.newWindowDays !== undefined ? { newWindowDays: u.newWindowDays as number } : {}),
     });
   }

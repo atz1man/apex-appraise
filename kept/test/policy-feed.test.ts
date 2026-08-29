@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_UPDATES, assess, mergeFeed, readFeed, windowInForceFor } from '../src/lib/policy-feed';
+import { MAX_WINDOW_DAYS } from '../src/lib/draft';
 import { toPence } from '../src/lib/money';
 import { addDays, toISODate } from '../src/lib/dates';
 import type { PolicyUpdate, Receipt } from '../src/lib/types';
@@ -288,5 +289,64 @@ describe('two boundaries in the feed that nothing pinned', () => {
     expect(windowInForceFor('Currys', '2026-08-20', [both])?.days).toBe(14);
     expect(windowInForceFor('Argos', '2026-08-20', [both])?.days).toBe(14);
     expect(windowInForceFor('Boots', '2026-08-20', [both])).toBeUndefined();
+  });
+});
+
+describe('how much of anything one downloaded entry may be', () => {
+  /*
+   * `readFeed` checked what each field WAS and never how much of it there was.
+   * Survivable while the feed could only put words on a screen; not now that
+   * `newWindowDays` sets a real receipt's window — the edit form refuses
+   * anything past ten years from a person, and the same number arrived from
+   * the network unexamined.
+   */
+  const doc = (over: Record<string, unknown>) => ({
+    feed: 'kept-policy',
+    updates: [{
+      id: 'u1', store: 'Currys', changedOn: '2026-08-01',
+      text: 'Currys changed something.', affectsStores: ['Currys'], affectNote: '', ...over,
+    }],
+  });
+
+  it('takes a window the edit form would also take', () => {
+    expect(readFeed(doc({ newWindowDays: 365 }))).toHaveLength(1);
+  });
+
+  it('refuses one the edit form would refuse', () => {
+    expect(readFeed(doc({ newWindowDays: 999999 }))).toEqual([]);
+    expect(readFeed(doc({ newWindowDays: MAX_WINDOW_DAYS + 1 }))).toEqual([]);
+    expect(readFeed(doc({ newWindowDays: MAX_WINDOW_DAYS }))).toHaveLength(1);
+  });
+
+  it('refuses a policy note longer than any policy note', () => {
+    expect(readFeed(doc({ text: 'x'.repeat(2001) }))).toEqual([]);
+    expect(readFeed(doc({ text: 'x'.repeat(2000) }))).toHaveLength(1);
+  });
+
+  it('drops the entry rather than trimming it', () => {
+    // Half a sentence somebody repeats at a counter is worse than none of it.
+    const kept = readFeed(doc({ text: 'x'.repeat(2000) }));
+    expect(kept?.[0].text).toHaveLength(2000);
+  });
+
+  it('refuses a shop name that is not a name', () => {
+    expect(readFeed(doc({ store: 'x'.repeat(121) }))).toEqual([]);
+    expect(readFeed(doc({ affectsStores: ['x'.repeat(121)] }))).toEqual([]);
+    expect(readFeed(doc({ id: 'x'.repeat(121) }))).toEqual([]);
+  });
+
+  it('refuses an update that claims to affect forty-one shops', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `Shop ${i}`);
+    expect(readFeed(doc({ affectsStores: many(41) }))).toEqual([]);
+    expect(readFeed(doc({ affectsStores: many(40) }))).toHaveLength(1);
+  });
+
+  it('keeps an oversized note out of the record without losing the update', () => {
+    // affectNote already falls back to '' when it is not a usable string; too
+    // long is one more way of not being usable, and the update itself is still
+    // news worth carrying.
+    const kept = readFeed(doc({ affectNote: 'x'.repeat(2001) }));
+    expect(kept).toHaveLength(1);
+    expect(kept?.[0].affectNote).toBe('');
   });
 });

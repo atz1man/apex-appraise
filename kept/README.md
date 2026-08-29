@@ -1523,6 +1523,35 @@ passes the shape check, and `fromISODate` does not reject it — `new Date(2026,
 silently become a different real one three days later, on the field that starts
 both statutory clocks. Now refused, on arrival and on dispatch.
 
+### What the feed is allowed to be
+
+Widening what the policy feed can do made its input worth a second look.
+`readFeed` checked what each field *was* and never how much of it there was.
+
+That was survivable while a feed entry could only put words on a screen. It is
+not now: `newWindowDays` sets a real receipt's window, and **the number the
+edit form refuses from a person — anything past ten years — arrived from the
+network unexamined**. A ceiling only one of the two paths respects is not a
+ceiling, so `MAX_WINDOW_DAYS` is exported and both paths use it.
+
+The lengths are the same argument one level down. The receipts and the feed
+share one localStorage bucket, the feed is the half that comes from outside,
+and this codebase has already had the version of this where the feed could only
+ever grow. A policy note is a sentence and a shop is a name, so they are capped
+at 2000 and 120 characters, and one update may name forty shops rather than ten
+thousand.
+
+An entry that breaks a limit is **dropped, not trimmed** — the text is advice
+somebody may repeat at a counter, half of it is worse than none of it, and this
+file's existing rule for a malformed entry is already to drop it. The one
+exception is `affectNote`, which already falls back to empty when it is not a
+usable string; too long is one more way of not being usable, and the update
+itself is still news worth carrying.
+
+Each limit was confirmed to fail when removed. There is no raw HTML anywhere in
+the app — nothing reaches `innerHTML`, so the feed's text is escaped by React
+and this is about size, not injection.
+
 ### The numbers that are facts, and the numbers that are judgements
 
 A third pass asked something different of the same suite: move every named

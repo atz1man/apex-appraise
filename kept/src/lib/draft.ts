@@ -53,7 +53,14 @@ export type DraftField = keyof ReceiptDraft;
 export type DraftErrors = Partial<Record<DraftField, string>>;
 
 /** Ten years. Longer than any real return window, including IKEA's 365 days. */
-const MAX_WINDOW_DAYS = 3650;
+/*
+ * Ten years, which is longer than any shop's window and shorter than a typo.
+ *
+ * Exported because there are two ways a receipt's window is now set — someone
+ * types it here, or the policy feed carries a change and `windowInForceFor`
+ * takes it — and a ceiling that only one of them respects is not a ceiling.
+ */
+export const MAX_WINDOW_DAYS = 3650;
 /** £1,000,000. Above this a typo is far likelier than a purchase. */
 const MAX_AMOUNT_PENCE = 100_000_000;
 /** A hundred years. Longer than any guarantee anyone will honour. */
