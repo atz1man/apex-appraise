@@ -131,6 +131,27 @@ deliberate departure, not an oversight:
   already been built to prefer a *labelled* total for exactly this reason;
   `pickDate` now does the same, with delivery, dispatch and return-by wording
   demoted beneath anything else, as a preference rather than a filter.
+- **The paste parser named shops that were not there.** `pickStore` matched a
+  bare substring, so "next day delivery" was a Next order, "walking boots" a
+  Boots one, and "pineapple print tea towel" an Apple purchase. Four were live
+  at once, and the first is on a large fraction of order emails ever sent. The
+  cost is not cosmetic: a named shop brings its window and the policy sentence
+  someone repeats at a counter, so a £12 tea towel from Etsy carried Apple's
+  14 days. Matching is on word boundaries now, and a name that is also an
+  ordinary word (`commonWord` in `stores.ts` — Apple, Boots, Next) has to sit
+  beside something that makes it the shop: the possessive an order email uses
+  about itself, or the shop's own domain. Failing that the parser names
+  nothing, which the add screen shows as "Not recognised" against a window it
+  says is assumed — an assumption someone can see and correct beats a
+  confident lie.
+- **Three retailers quoted a clock the app does not keep.** Apple, Amazon and
+  ASOS all say "from delivery" in their own policy wording while the app
+  counts from the order date, because it knows when nothing arrived. The
+  direction is safe — an earlier deadline than the real one — but silence
+  about it is how a receipt comes to look expired on a day it is not. Each now
+  carries a gotcha saying the date shown is the earliest it can be, and
+  `test/stores.test.ts` sweeps the real table for any other policy sentence
+  that names a start the app does not keep.
 - **The policy badge is derived, not stored.** A "POLICY CHANGED" flag on the
   row and a banner counting affected shops were two sources for one fact. Both
   now read the same derivation, so they cannot disagree.

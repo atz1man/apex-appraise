@@ -163,9 +163,47 @@ function pickDate(text: string, today: Date): Date | null {
   return newest(plain.length > 0 ? plain : past);
 }
 
+/**
+ * Words that make a mention of a shop a mention of THE SHOP.
+ *
+ * An order email says "your Boots order" or "boots.com". Something bought
+ * elsewhere says "walking boots". Only the ambiguous names need this — see
+ * `commonWord` in stores.ts.
+ */
+const STORE_CUE = '(?:your|from|at|orders?|receipt|purchased?)';
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Does this text name this shop?
+ *
+ * On word boundaries, not as a substring: "pineapple print tea towel" was
+ * being read as an Apple purchase, and a receipt for a £12 tea towel then
+ * carried Apple's 14-day window and Apple's policy sentence.
+ *
+ * A name that is also an ordinary word needs more than a boundary, because
+ * "walking boots" and "next day delivery" clear one comfortably. It has to sit
+ * beside something that makes it the shop — the possessive an order email uses
+ * about itself, or the shop's own domain. Failing that the parser names no
+ * shop at all, which the add screen shows as "Not recognised" against an
+ * assumed 28-day window: an assumption the person can see and correct, rather
+ * than a wrong retailer they have no reason to doubt.
+ */
+function mentions(text: string, alias: string, commonWord: boolean): boolean {
+  const a = escape(alias);
+  if (!commonWord) return new RegExp(`\\b${a}\\b`, 'i').test(text);
+  return new RegExp(
+    `(?:\\b${STORE_CUE}\\s+${a}\\b|\\b${a}\\s+${STORE_CUE}\\b|\\b${a}\\.(?:com|co\\.uk))`,
+    'i',
+  ).test(text);
+}
+
 function pickStore(text: string): StorePolicy | null {
-  const low = text.toLowerCase();
-  for (const { alias, store } of ALIASES_BY_LENGTH) if (low.includes(alias)) return store;
+  // Longest alias first, so a shop whose name contains another's still
+  // resolves to itself.
+  for (const { alias, store } of ALIASES_BY_LENGTH) {
+    if (mentions(text, alias, store.commonWord === true)) return store;
+  }
   return null;
 }
 

@@ -20,18 +20,32 @@ export interface StorePolicy {
   /** Where the return window starts counting. */
   clockStart: 'purchase' | 'dispatch';
   gotcha?: string;
+  /**
+   * True when this shop's name is also an ordinary word a receipt might use
+   * for something else — "next day delivery", "walking boots".
+   *
+   * Those three retailers are why the paste parser will not name a shop on a
+   * bare mention of their alias: a Vinted order for walking boots was reported
+   * as a Boots purchase, with Boots' 35-day window and Boots' policy wording
+   * quoted at the counter. Naming no shop is a flagged assumption on screen;
+   * naming the wrong one is a confident lie. See `pickStore` in parse.ts for
+   * what it takes to count instead.
+   */
+  commonWord?: boolean;
   /** Typical category, used to pick a row icon when nothing better is known. */
   cat?: Category;
 }
 
 export const STORE_POLICIES: readonly StorePolicy[] = [
   {
-    name: 'Apple', aliases: ['apple'], windowDays: 14, clockStart: 'purchase', cat: 'audio',
+    name: 'Apple', commonWord: true, aliases: ['apple'], windowDays: 14, clockStart: 'purchase', cat: 'audio',
     policy: 'Apple · 14 days from delivery, any reason, original condition and packaging. Refund to the original payment method.',
+    gotcha: 'Apple counts the 14 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be. If the parcel took three days, so does your deadline.',
   },
   {
     name: 'Amazon', aliases: ['amazon'], windowDays: 30, clockStart: 'purchase',
     policy: 'Amazon · 30 days from delivery for most items. Some categories (opened software, groceries) are excluded.',
+    gotcha: 'Amazon counts the 30 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be, never the latest.',
   },
   {
     name: 'Currys', aliases: ['currys', 'pc world'], windowDays: 14, clockStart: 'purchase', cat: 'audio',
@@ -52,7 +66,7 @@ export const STORE_POLICIES: readonly StorePolicy[] = [
     gotcha: 'Zara counts from the day the parcel is dispatched, not the day it arrives — the window is already running when it lands.',
   },
   {
-    name: 'Boots', aliases: ['boots'], windowDays: 35, clockStart: 'purchase', cat: 'beauty',
+    name: 'Boots', commonWord: true, aliases: ['boots'], windowDays: 35, clockStart: 'purchase', cat: 'beauty',
     policy: 'Boots · 35 days, unopened, with receipt. Advantage Card refunds go back as points.',
   },
   {
@@ -63,9 +77,10 @@ export const STORE_POLICIES: readonly StorePolicy[] = [
   {
     name: 'ASOS', aliases: ['asos'], windowDays: 28, clockStart: 'purchase', cat: 'clothing',
     policy: 'ASOS · 28 days from delivery for a refund, 45 for credit. Frequent returners get the shorter window.',
+    gotcha: 'ASOS counts the 28 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be. After 28 days it is credit, not a refund.',
   },
   {
-    name: 'Next', aliases: ['next'], windowDays: 28, clockStart: 'purchase', cat: 'clothing',
+    name: 'Next', commonWord: true, aliases: ['next'], windowDays: 28, clockStart: 'purchase', cat: 'clothing',
     policy: 'Next · 28 days, unworn with tags. Free returns to store or by courier collection.',
   },
   {
