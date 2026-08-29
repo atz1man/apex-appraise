@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeBackup, parseBackup } from '../src/lib/backup';
+import { mergeBackup, parseBackup, readReceipt } from '../src/lib/backup';
 import { MAX_AMOUNT_PENCE, MAX_WINDOW_DAYS } from '../src/lib/draft';
 import { toPence } from '../src/lib/money';
 import { seedReceipts } from '../src/lib/seed';
@@ -65,9 +65,33 @@ describe('validating rows', () => {
     ['a malformed dispatch date', { windowStartsOn: 'yesterday' }],
     ['a malformed arrival date', { arrivedOn: 'last Tuesday' }],
     ['an arrival date that only looks real', { arrivedOn: '2026-02-31' }],
+    // The refund date is the one the detail screen puts on the timeline and
+    // the home screen compares against the deadline with `daysBetween`. A
+    // malformed one renders as an invalid date and makes that comparison NaN,
+    // so it is treated like the other dates here. Found by mutation: nothing
+    // asked.
+    ['a malformed refund date', { status: 'returned', returnedOn: 'last Friday' }],
+    ['a refund date that only looks real', { status: 'returned', returnedOn: '2026-02-31' }],
   ])('drops a row with %s', (_label, patch) => {
     expect(parseBackup(file([{ ...good, ...patch }]))).toEqual({ ok: false, reason: 'nothing-usable' });
   });
+
+  /*
+   * A row that is not an object at all. `[null]` is valid JSON, and this
+   * reader is the one door BOTH an imported file and the device's own store
+   * come through — `hydrate` calls it per row, inside `load`'s try/catch,
+   * whose remedy is `freshState`. So without the guard on the first line, one
+   * null row on disk throws on `null.id` and takes every receipt with it, on
+   * an app whose receipts live in one place. Found by deleting that line and
+   * watching all 48 tests here pass.
+   */
+  it.each([['null', null], ['a string', 'a receipt'], ['a number', 7]])(
+    'drops a row that is %s, rather than throwing',
+    (_label, row) => {
+      expect(readReceipt(row)).toBeNull();
+      expect(parseBackup(file([row, good]))).toMatchObject({ ok: true });
+    },
+  );
 
   it('keeps an arrival date through a round trip', () => {
     expect(ok(file([{ ...good, distance: true, arrivedOn: '2026-08-19' }])).receipts[0].arrivedOn).toBe('2026-08-19');

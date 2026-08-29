@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraft, arrivalProblem, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { MAX_WINDOW_DAYS, applyDraft, arrivalProblem, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
 import { toISODate } from '../src/lib/dates';
 import { derive } from '../src/lib/receipts';
 import { money, toPence } from '../src/lib/money';
@@ -97,6 +97,28 @@ describe('required text and window', () => {
 
   it('accepts IKEA’s 365 days', () => {
     expect(valid({ windowDaysText: '365' }).windowDays).toBe(365);
+  });
+
+  /*
+   * The upper end, which nothing asked about.
+   *
+   * The five rejections above all land on the SAME branch — not an integer, or
+   * below one. Deleting the ceiling's error line left every one of them
+   * passing, so a typed window of 99999 days would have saved: a deadline
+   * two hundred and seventy years out, on the field the whole app counts down
+   * from.
+   *
+   * This is the ceiling `readFeed` borrowed on the argument that a limit only
+   * one path respects is not a limit — and the path it was borrowed from was
+   * not held either. Relational rather than literal, because ten years is a
+   * judgement and the test should stay true if it is re-judged.
+   */
+  it('accepts a window exactly at the ceiling', () => {
+    expect(valid({ windowDaysText: String(MAX_WINDOW_DAYS) }).windowDays).toBe(MAX_WINDOW_DAYS);
+  });
+
+  it('refuses a window one day past it', () => {
+    expect(errors({ windowDaysText: String(MAX_WINDOW_DAYS + 1) }).windowDaysText).toContain('longer than');
   });
 
   it('reports every problem at once, not one at a time', () => {

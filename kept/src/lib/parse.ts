@@ -68,6 +68,19 @@ interface DateHit {
 /** Candidate dates in the text, with their positions. */
 function datesIn(text: string, today: Date): DateHit[] {
   const found: DateHit[] = [];
+  /*
+   * Two gates, and the second subsumes the first. `new Date(y, 12, 1)` rolls
+   * into next January, so the round-trip check below rejects every value the
+   * range check would have — which is why deleting the range check changes no
+   * answer, and why deleting it survived the suite. It stays as the cheap
+   * pre-filter it was written to be, and as the sentence saying what a month
+   * and a day are allowed to be; the round trip is the thing that decides.
+   *
+   * The same applies to the `mon === undefined` guards in the two loops below:
+   * an unrecognised month reaches here as undefined, `new Date` returns an
+   * invalid date, and `getMonth()` is NaN, which equals nothing. Both are
+   * belt and braces over a check that already holds.
+   */
   const push = (y: number, m: number, d: number, index: number) => {
     if (m < 0 || m > 11 || d < 1 || d > 31) return;
     const dt = new Date(y, m, d);

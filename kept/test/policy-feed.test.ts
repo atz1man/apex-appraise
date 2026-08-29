@@ -127,6 +127,23 @@ describe('reading a downloaded feed', () => {
     expect(readFeed(feed([entry]))).toEqual([]);
   });
 
+  /*
+   * A row that is not an object at all — `[null]` is valid JSON, and this
+   * function reads both the downloaded feed and, through `hydrate`, whatever
+   * is on the device. Found by deleting the `typeof raw !== 'object'` line:
+   * every test still passed, and without it `null.id` throws. `hydrate` is
+   * called inside `load`'s try/catch, whose remedy is `freshState` — so one
+   * null in the updates array would have taken the RECEIPTS with it, on an app
+   * whose receipts live in one place. The guard is what makes this function
+   * total; nothing said so.
+   */
+  it.each([['null', null], ['a string', 'Zara'], ['a number', 7], ['an array', []]])(
+    'drops a row that is %s, rather than throwing',
+    (_label, entry) => {
+      expect(readFeed(feed([entry]))).toEqual([]);
+    },
+  );
+
   it('keeps the good entries alongside the bad', () => {
     const good = { id: 'u1', store: 'Zara', changedOn: '2026-08-26', text: 'x', affectsStores: ['Zara'] };
     expect(readFeed(feed([good, { nonsense: true }]))!.map((u) => u.id)).toEqual(['u1']);
@@ -248,7 +265,16 @@ describe('the window in force when it was bought', () => {
   });
 
   it('says nothing for a shop with no name', () => {
+    /*
+     * The update has to name a blank shop too, or this passes whether or not
+     * the guard exists: with an empty needle and "Currys" in the haystack,
+     * nothing matches either way. Found by deleting `if (!name) return false`
+     * and watching the old version of this test pass — a check that could not
+     * fail, of the kind this codebase keeps finding.
+     */
     expect(windowInForceFor('  ', '2026-08-20', [upd('a', 'Currys', '2026-08-01', 14)])).toBeUndefined();
+    const blank = { ...upd('b', 'Currys', '2026-08-01', 14), affectsStores: ['  '] };
+    expect(windowInForceFor('  ', '2026-08-20', [blank])).toBeUndefined();
   });
 });
 

@@ -1776,8 +1776,8 @@ each — a different question: not "is this comparison the right way round" but
 excluded on purpose, since a used one is a `ReferenceError` that says nothing
 and an unused one `noUnusedLocals` already refuses.
 
-Ninety-three deletions across the modules that decide money and time, and
-**three survived**. Two are equivalent — `matches` returning early on an empty
+Ninety-three deletions across the modules that decide money and time in the
+first run, and **three survived**. Two are equivalent — `matches` returning early on an empty
 query is what `.every` on an empty list does anyway, and `search` taking the
 same shortcut reaches the same array — and both are kept with the
 reason written where they sit, one for the sentence it states and one for the
@@ -1791,6 +1791,61 @@ reads it — and the detail screen checks `expired` first and prints the word,
 so the string is computed and rendered by nobody. Without the guard the field
 reads `-638 days` under a heading calling it remaining cover. The guard was
 right and nothing held it; it is held now.
+
+A second run took the same operator to the feed, the backup reader, the draft
+validator and the parser — a hundred and fifty-seven more deletions, twelve
+survivors, and **five of them real**.
+
+**Two rows that are not objects would have taken the receipts with them.**
+`readFeed` and `readReceipt` each open with `typeof raw !== 'object' || raw ===
+null`. Delete either and the next line reads `.id` off `null` and throws.
+`hydrate` calls both, inside `load`'s try/catch, whose remedy is `freshState` —
+so a single `null` in the stored updates or receipts array, which is valid JSON
+and arrives from the network as readily as from disk, would have replaced
+somebody's library with the demo set. Both guards are what make those functions
+total, and nothing said so. They are pinned from both directions now: the row
+is dropped, and the good row beside it still comes back.
+
+**A malformed refund date was dropped, silently and untested.** `returnedOn`
+goes on the detail screen's timeline and is compared against the deadline with
+`daysBetween` on the home screen, so an unreadable one renders as an invalid
+date and makes that comparison `NaN`. It is treated like the other dates on the
+row; now it is asserted to be.
+
+**The edit form's ten-year window ceiling had no test at all.** The five
+rejections it did have — `0`, `-5`, `14.5`, empty, `soon` — all land on the
+*lower* branch, so deleting the ceiling's error line left every one of them
+passing and a typed window of 99999 days would have saved: a deadline two
+hundred and seventy years out, on the field the whole app counts down from.
+This is the ceiling `readFeed` borrowed a few hours earlier on the argument
+that a limit only one path respects is not a limit — and the path it was
+borrowed *from* was not held either.
+
+**And the parser's month-first dates were implemented, commented, and unpinned.**
+Deleting the entire `push` in the `Aug 25` / `August 25, 2026` loop broke
+nothing. Only that loop handles the format — the day-first pattern needs digits
+before letters — and losing it does not fail loudly: the parser falls back to
+today and flags the date as assumed, so an order placed three weeks ago is
+quietly filed as bought this afternoon, with three weeks of the window given
+back.
+
+The other seven are the operator's own limits, and worth stating so the number
+is not read as coverage. Three are a trailing `return undefined`, which is what
+a function does anyway. Three are guards subsumed by a check below them —
+`new Date(y, 12, 1)` rolls into January, so the round-trip comparison rejects
+everything the range check would have, and an unrecognised month arrives as
+`undefined` and fails the same comparison. Those now say so where they sit. The
+last was a test of mine from earlier the same day: "says nothing for a shop with
+no name" passed with or without the guard it was named for, because the update
+it used named a real shop, so nothing matched either way. It names a blank shop
+too now.
+
+One limit of the harness is worth recording rather than working around: it runs
+`vitest` only, so for `state.ts` — where the interesting statements are inside
+`useEffect` — every deletion "survives" and the verdict means nothing. The run
+was stopped there rather than reported. A statement-deletion pass over the
+reducer's effects wants the smoke suite behind it, which is minutes per
+mutation rather than seconds.
 
 ## Not built yet
 

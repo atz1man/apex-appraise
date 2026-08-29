@@ -89,6 +89,34 @@ describe('purchase date', () => {
     expect(parse('Argos · £64.99 · 05/08/2026').purchasedOn).toBe('2026-08-05');
   });
 
+  /*
+   * Month first, which nothing here had ever asked for.
+   *
+   * Found by deleting the whole `push` in the month-first loop and watching
+   * every test pass. The format is implemented and explained in a comment, and
+   * only that loop handles it — the day-first pattern needs digits before
+   * letters, so "Aug 25" matches nothing else. Remove it and the paste yields
+   * no date at all, which does not fail loudly: the parser falls back to today
+   * and flags the date as assumed, so an order placed three weeks ago is
+   * quietly filed as bought this afternoon, with three weeks of the window
+   * given back. A US-formatted confirmation from a UK-facing retailer is the
+   * ordinary way in.
+   */
+  it('reads a month-first date with a year', () => {
+    expect(parse('Apple order · Total £129.00 · Aug 25, 2026').purchasedOn).toBe('2026-08-25');
+  });
+
+  it('reads a month-first date written out, with no year', () => {
+    expect(parse('Apple order · Total £129.00 · August 25').purchasedOn).toBe('2026-08-25');
+  });
+
+  it('says it read a month-first date rather than assuming today', () => {
+    // The half that discriminates. Without the month-first loop the date is
+    // today either way on a receipt bought today; `dateFound` is what tells
+    // the person whether the app read the email or gave up on it.
+    expect(parse('Apple order · Total £129.00 · Aug 25, 2026').dateFound).toBe(true);
+  });
+
   it('reads an explicit year', () => {
     expect(parse('IKEA · £199.00 · 14 February 2026').purchasedOn).toBe('2026-02-14');
   });
