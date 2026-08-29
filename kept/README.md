@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 463 unit tests over the decision logic
+npm test           # 465 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -833,6 +833,26 @@ exactly the phone with the least room to explain itself.
 The check carries the same vacuity guard as its neighbours — remove the
 `data-name` attribute it reads and it reports that it measured nothing,
 rather than reporting a pass.
+
+### The correction that stopped at one surface
+
+The onboarding used to say "you get pinged before either runs out". It was
+fixed, and the reasoning written down: a web app cannot wake itself,
+Notification Triggers never shipped, Periodic Background Sync is one engine's
+and at its discretion, so alerts are computed when kept is opened or brought
+back to the foreground — and `notify.ts` and the Settings screen both say so.
+
+The landing page went on making the claim word for word. Its hero said "pings
+you before either clock runs out" and its features grid offered "a heads-up
+when something must go back this week" — on the page someone reads *before*
+installing, which is the one place the promise is load bearing. The fix had
+been applied where it was noticed, not where it was true.
+
+Both now name the trigger, and `alert-claims.test.ts` states the rule for
+every screen and both entry points: copy may say the app tells you something,
+as long as it says when. It reads the files rather than a list of known
+strings, skips comment lines (they quote the banned copy to explain it), and
+fails if it cannot read what it means to read.
 
 ### A deploy reaches the app, and the app works without one
 

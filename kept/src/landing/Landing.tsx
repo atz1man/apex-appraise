@@ -71,7 +71,10 @@ const WHY = [
   { n: '03', title: 'Paste or scan, done', body: 'Paste an order email and Kept reads the store, total and date, and sets the deadline for you. Scanning a paper receipt lands in a later release.' },
   { n: '04', title: 'Warranties too', body: 'Put a warranty length on a receipt and Kept counts it down beside the return window, so you know whether the repair is still free before you pay for one.' },
   { n: '05', title: 'Private by design', body: 'Everything lives on your phone. No account, no server, no one reading your purchases. Export a backup anytime.' },
-  { n: '06', title: 'Deadline alerts', body: 'A clear countdown on every item, works offline, and a heads-up when something must go back this week.' },
+  // "a heads-up when something must go back this week" implied a background
+  // service. See notify.ts: a web app cannot wake itself, and the onboarding
+  // was corrected for this exact claim while these two lines kept making it.
+  { n: '06', title: 'Deadline alerts', body: 'A clear countdown on every item, works offline, and an alert the moment you open kept with something due this week. No background service, because a web app cannot wake itself — so it checks every time you come back.' },
 ];
 
 /**
@@ -118,7 +121,7 @@ export function Landing() {
             Stop <span style={{ background: `linear-gradient(transparent 62%, ${color.yellowLight} 62%)` }}>donating money</span> to shops.
           </h1>
           <p style={{ fontSize: 17.5, lineHeight: 1.6, color: color.body, maxWidth: 520, margin: '24px 0 0' }}>
-            Kept remembers every receipt, knows each shop’s real return policy and your legal rights — and pings you before either clock runs out.
+            Kept remembers every receipt, knows each shop’s real return policy and your legal rights — and shows you what is about to run out the moment you open it.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 32, flexWrap: 'wrap' }}>
             <OpenAppButton />
