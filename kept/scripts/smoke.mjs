@@ -92,6 +92,42 @@ const results = {
   'a fresh install does not ping you about the sample receipts': opening.length === 0,
 };
 
+/*
+ * Say what was learned, even when the run does not finish.
+ *
+ * Everything below records into `results` and the whole lot was printed at the
+ * end — so a step that threw printed NOTHING. Measured, on a real defect:
+ * breaking the returning-visitor screen brought onboarding back over the
+ * receipts list, the suite died on a row it could no longer see, and the
+ * output was `locator.click: Timeout 30000ms exceeded ... at smoke.mjs:250`.
+ * Forty checks had already run. One of them had already failed and said
+ * exactly what was wrong. None of that reached the screen.
+ *
+ * A crash is a failure of the run, not a reason to throw away its findings —
+ * so the report is a function, it is installed on the way out however the run
+ * ends, and the crash is printed after the checks rather than instead of them.
+ */
+let reported = false;
+function report(crash) {
+  if (reported) return;
+  reported = true;
+  let failed = Boolean(crash);
+  for (const [name, ok] of Object.entries(results)) {
+    console.log(`${ok ? '✓' : '✗'} ${name}`);
+    if (!ok) failed = true;
+  }
+  if (foreign.size) console.log('  third-party origins:', [...foreign].join(', '));
+  for (const p of problems) console.log('  ' + p);
+  if (crash) {
+    console.log(`\n✗ the run did not finish: ${String(crash && crash.message ? crash.message : crash).split('\n')[0]}`);
+    console.log('  (the checks above are what it managed to ask before it stopped)');
+  }
+  process.exit(failed ? 1 : 0);
+}
+for (const ev of ['uncaughtException', 'unhandledRejection']) {
+  process.on(ev, (e) => report(e ?? new Error(ev)));
+}
+
 await page.getByRole('button', { name: 'Skip' }).click();
 await page.waitForTimeout(300);
 
@@ -226,6 +262,22 @@ await page.waitForTimeout(400);
 
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
+/*
+ * Asked here, at the first launch that reads onboardingSeen off the disk,
+ * rather than two hundred lines further down where it used to sit.
+ *
+ * Down there it could only be reached in the world where it passed. Breaking
+ * it — `onboardingSeen || embedded` flipped to `&&`, so a returning visitor
+ * gets the welcome again every time — brought onboarding back over the
+ * receipts list, and the suite died eleven lines later on a row it could no
+ * longer see: `locator.click: Timeout 30000ms exceeded`. A Playwright timeout
+ * at line 234 is not a sentence anybody can act on, and the check written to
+ * say exactly what was wrong never ran at all.
+ */
+results['onboarding is not shown again'] = !(await page
+  .getByRole('button', { name: 'Skip' })
+  .isVisible()
+  .catch(() => false));
 results['the return survives a reload'] = await page.getByText('MONEY BACK ✓').isVisible();
 // The sent list is on disk, so a reload must not re-announce anything.
 results['an alert is never repeated'] = (await page.evaluate(() => window.__notes)).length === 0;
@@ -271,10 +323,6 @@ results['a deleted receipt can be undone'] =
   // the same trap that made the backup check pass for the wrong reason.
   (await page.getByRole('button', { name: /Argos, Kenwood/ }).isVisible());
 
-results['onboarding is not shown again'] = !(await page
-  .getByRole('button', { name: 'Skip' })
-  .isVisible()
-  .catch(() => false));
 /*
  * The year-long window, read as a screen rather than as source.
  *
@@ -1275,12 +1323,4 @@ results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 
 await browser.close();
-
-let failed = false;
-for (const [name, ok] of Object.entries(results)) {
-  console.log(`${ok ? '✓' : '✗'} ${name}`);
-  if (!ok) failed = true;
-}
-if (foreign.size) console.log('  third-party origins:', [...foreign].join(', '));
-for (const p of problems) console.log('  ' + p);
-process.exit(failed ? 1 : 0);
+report();

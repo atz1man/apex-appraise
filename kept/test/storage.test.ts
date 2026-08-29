@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { afterEach } from 'vitest';
-import { hydrate, rescueBackup, DEFAULT_SETTINGS } from '../src/lib/storage';
+import { hydrate, rescueBackup, DEFAULT_SETTINGS, URGENT_DAYS_MIN, URGENT_DAYS_MAX } from '../src/lib/storage';
 import { MAX_UPDATES } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
@@ -198,5 +198,30 @@ describe('the rescue, for when the app cannot render', () => {
   it('survives a storage that refuses to be read at all', () => {
     withStore({ getItem: () => { throw new Error('blocked'); } });
     expect(rescueBackup()).toBeNull();
+  });
+});
+
+describe('the ends of the range someone can actually choose', () => {
+  /*
+   * Found by mutation: the bounds are `>= MIN` and `<= MAX`, and flipping
+   * either to a strict comparison rejects the exact value at that end, which
+   * is then silently replaced by the default. The tests above cover values
+   * well outside the range and none on its edge — so the one setting in this
+   * app that changes when it warns you would have quietly refused two of its
+   * own choices.
+   */
+  const urgentOf = (settings: unknown) => hydrate(stored({ settings }), TODAY).settings.urgentDays;
+
+  it('keeps the shortest warning distance on offer', () => {
+    expect(urgentOf({ urgentDays: URGENT_DAYS_MIN })).toBe(URGENT_DAYS_MIN);
+  });
+
+  it('keeps the longest', () => {
+    expect(urgentOf({ urgentDays: URGENT_DAYS_MAX })).toBe(URGENT_DAYS_MAX);
+  });
+
+  it('still falls back just outside them', () => {
+    expect(urgentOf({ urgentDays: URGENT_DAYS_MIN - 1 })).toBe(DEFAULT_SETTINGS.urgentDays);
+    expect(urgentOf({ urgentDays: URGENT_DAYS_MAX + 1 })).toBe(DEFAULT_SETTINGS.urgentDays);
   });
 });

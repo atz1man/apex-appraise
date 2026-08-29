@@ -180,3 +180,48 @@ describe('the onboarding flow reaches its last slide', () => {
     expect(s.onboardingSeen).toBe(true);
   });
 });
+
+describe('the selection survives the trip to edit and back', () => {
+  /*
+   * Found by mutation: `screen === 'detail' || screen === 'edit'` flipped to
+   * `&&` is a condition no screen can satisfy, so `selId` would be cleared on
+   * every navigation — including the one from a receipt to its own edit form.
+   * The whole suite passed. The comment above the line says the selection
+   * survives in both directions; nothing checked that it does.
+   */
+  it('keeps the receipt when going from detail to edit', () => {
+    const s = reducer(base({ screen: 'detail', selId: 'a' }), { type: 'go', screen: 'edit' }, TODAY);
+    expect(s.selId).toBe('a');
+  });
+
+  it('keeps it coming back from edit to detail', () => {
+    const s = reducer(base({ screen: 'edit', selId: 'a' }), { type: 'go', screen: 'detail' }, TODAY);
+    expect(s.selId).toBe('a');
+  });
+
+  it('lets it go on the way to any other screen', () => {
+    const s = reducer(base({ screen: 'detail', selId: 'a' }), { type: 'go', screen: 'settings' }, TODAY);
+    expect(s.selId).toBeNull();
+  });
+});
+
+describe('a receipt cannot be returned twice', () => {
+  /*
+   * `if (!r || r.status === 'returned') return state;` flipped to `&&` is
+   * never true, so a second "returned" on the same receipt would go through:
+   * a fresh returnedOn overwriting the real one, and the celebration screen
+   * again for money that came back last week. A double tap on the swipe
+   * action is all it takes.
+   */
+  it('ignores a second return of the same receipt', () => {
+    const once = reducer(base(), { type: 'return', id: 'a' }, TODAY);
+    const twice = reducer(once, { type: 'return', id: 'a' }, addDays(TODAY, 3));
+    expect(twice).toBe(once);
+    expect(twice.receipts.find((r) => r.id === 'a')?.returnedOn).toBe(toISODate(TODAY));
+  });
+
+  it('ignores a return of a receipt that is not there', () => {
+    const s = base();
+    expect(reducer(s, { type: 'return', id: 'nope' }, TODAY)).toBe(s);
+  });
+});

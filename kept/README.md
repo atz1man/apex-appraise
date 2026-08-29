@@ -1523,6 +1523,48 @@ passes the shape check, and `fromISODate` does not reject it — `new Date(2026,
 silently become a different real one three days later, on the field that starts
 both statutory clocks. Now refused, on arrival and on dispatch.
 
+### A crash is a failure of the run, not of its findings
+
+The mutation passes were extended to the reducer and to storage, and two of
+the survivors turned out to be held by the browser suite rather than the unit
+one — so they were not gaps. Confirming that is what found something else.
+
+`smoke` collected every result into one object and printed the lot at the end.
+A step that *threw* therefore printed nothing at all. Measured on a real
+defect: breaking the returning-visitor screen — `onboardingSeen || embedded`
+flipped to `&&`, so the welcome comes back every launch — brought onboarding up
+over the receipts list, and the suite died eleven lines later on a row it could
+no longer see. The entire output was:
+
+```
+locator.click: Timeout 30000ms exceeded.
+  - waiting for getByRole('button', { name: /Currys, JBL.*returned/ })
+    at scripts/smoke.mjs:250
+```
+
+Forty checks had already run. One of them had already failed, and it said
+exactly what was wrong. None of it reached the screen — and the check written
+for that defect, `onboarding is not shown again`, sat two hundred lines further
+down, where it could only ever be reached in the world where it passed.
+
+The report is a function now, installed on the way out however the run ends,
+and the check has moved up to the first launch that reads `onboardingSeen` off
+the disk. The same mutation now prints:
+
+```
+✗ onboarding is not shown again
+✗ the return survives a reload
+✗ the run did not finish: locator.click: Timeout 30000ms exceeded.
+  (the checks above are what it managed to ask before it stopped)
+```
+
+Three real gaps came out of the same pass, in the reducer and in settings: the
+selection is dropped on the trip from a receipt to its own edit form; a receipt
+can be returned twice, overwriting the real date and celebrating again for
+money that came back last week — a double tap on the swipe is all it takes; and
+the two ends of the warning-distance range, which the settings screen offers,
+were each one comparison away from being silently replaced by the default.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active
