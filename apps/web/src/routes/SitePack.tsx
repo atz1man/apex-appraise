@@ -227,7 +227,7 @@ export default function SitePack() {
               <Panel
                 title="Sold prices — HM Land Registry"
                 right={
-                  <Button
+                  <Button writes
                     loading={apply.isPending}
                     disabled={selected.size === 0}
                     onClick={() =>

@@ -298,7 +298,7 @@ export default function DealOverview() {
                 <span className="label-mono text-ink-3">Next milestone</span>
                 <input className="min-w-[200px]" aria-label="Next milestone" value={draft.nextMilestone} onChange={(e) => setDraft({ ...draft, nextMilestone: e.target.value })} />
               </label>
-              <Button type="submit" loading={saveDetails.isPending} disabled={!draft.name.trim() || !draft.address.trim()}>
+              <Button writes type="submit" loading={saveDetails.isPending} disabled={!draft.name.trim() || !draft.address.trim()}>
                 Save details
               </Button>
               <Button type="button" variant="secondary" onClick={() => setEditing(false)}>

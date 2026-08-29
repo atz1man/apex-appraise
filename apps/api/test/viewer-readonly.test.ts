@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anonymous, callerFor, expectDenied, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { readFileSync } from 'node:fs';
 import jwt from 'jsonwebtoken';
 import { appRouter } from '../src/router.js';
 import { JWT_SECRET } from '../src/context.js';
@@ -233,5 +234,73 @@ describe('the upload routes, which are not tRPC', () => {
     const principal = await internalWriter(bearer(id), 'uploads.document', prisma);
     expect(principal.userId).toBe(id);
     expect(principal.orgId).toBe(T.orgId);
+  });
+});
+
+/**
+ * The browser's copy of the rule, checked against the real router.
+ *
+ * `apps/web/src/lib/read-only.ts` refuses a view-only member's mutations in the
+ * tRPC link chain, before the network — instant, same words, no half-submitted
+ * form against a doomed request. To do that it needs to know which mutations
+ * the server would NOT refuse, and that is a list: exactly the shape of defect
+ * this branch has spent its whole length on, a rule written down in two places
+ * that agree until one of them is edited.
+ *
+ * So the list is not trusted. It is read out of the web source and compared
+ * against what the server actually does, measured by calling every mutation as
+ * a view-only member. Add an `authedProcedure` mutation and forget the web file
+ * and this fails naming it; leave a stale entry behind and it fails naming that
+ * too. Reading another package's source from a test is the same move
+ * `trial.test.ts` makes on `uploads.ts` and `raw-route-sweep` makes on
+ * `main.ts` — a rule about two places agreeing cannot be enforced from inside
+ * one of them.
+ */
+describe("the browser's copy of the rule", () => {
+  const webList = (): string[] => {
+    const src = readFileSync(new URL('../../web/src/lib/read-only.ts', import.meta.url), 'utf8');
+    const block = /export const VIEWER_MAY_RUN = \[([\s\S]*?)\] as const;/.exec(src);
+    if (!block) throw new Error('VIEWER_MAY_RUN not found — has read-only.ts moved or been reshaped?');
+    /**
+     * Entries only — a line that is exactly a quoted procedure path and a comma.
+     * A looser `/'([^']+)'/g` also matched the apostrophe in a prose comment
+     * ("the member's own browser"), which produced a phantom entry and a
+     * baffling diff. The shape below cannot see inside a comment.
+     */
+    return [...block[1]!.matchAll(/^\s*'([\w.]+)',\s*$/gm)].map((m) => m[1]!).sort();
+  };
+
+  it('finds the list it is meant to be checking', () => {
+    // a regex that quietly matched nothing would make every comparison below
+    // pass against an empty set
+    const list = webList();
+    expect(list.length, 'the web allowlist read as empty').toBeGreaterThan(0);
+    expect(list).toContain('auth.changePassword');
+    // every entry must LOOK like a procedure path. The first version of this
+    // regex scraped an apostrophe out of a comment and produced an entry made
+    // of prose; the length and contains checks above both passed on it.
+    for (const entry of list) {
+      expect(entry, `not a procedure path: ${JSON.stringify(entry)}`).toMatch(/^[a-z][\w]*\.[a-zA-Z][\w]*$/);
+    }
+  });
+
+  it('matches exactly what the server lets a view-only member run', async () => {
+    const v = callerFor(viewer());
+    const at = (c: any, path: string) => path.split('.').reduce((o: any, k) => o?.[k], c);
+    const serverAllows: string[] = [];
+    for (const name of Object.entries((appRouter as any)._def.procedures as Record<string, any>)
+      .filter(([, p]) => p._def.type === 'mutation')
+      .map(([n]) => n)) {
+      try {
+        await at(v, name)({ __probe: true });
+        serverAllows.push(name);
+      } catch (e: any) {
+        if (e?.code !== 'FORBIDDEN') serverAllows.push(name);
+      }
+    }
+    expect(
+      webList(),
+      'apps/web/src/lib/read-only.ts disagrees with the router about what a view-only member may run. Left = the web file, right = what the server actually does.',
+    ).toEqual(serverAllows.sort());
   });
 });

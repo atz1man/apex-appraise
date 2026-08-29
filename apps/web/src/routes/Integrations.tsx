@@ -215,7 +215,7 @@ export default function Integrations() {
                         {status === 'CONNECTED' ? (
                           <div className="flex gap-1.5">
                             {SYNCABLE.has(item.provider) && effectiveDealId && (
-                              <Button
+                              <Button writes
                                 size="sm"
                                 className="min-h-10 sm:min-h-0"
                                 loading={sync.isPending && sync.variables?.provider === item.provider}
@@ -224,7 +224,7 @@ export default function Integrations() {
                                 Sync to deal
                               </Button>
                             )}
-                            <Button
+                            <Button writes
                               variant="secondary"
                               size="sm"
                               className="min-h-10 sm:min-h-0"
@@ -235,11 +235,11 @@ export default function Integrations() {
                             </Button>
                           </div>
                         ) : status === 'ATTENTION' ? (
-                          <Button size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                          <Button writes size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
                             Reconnect
                           </Button>
                         ) : (
-                          <Button
+                          <Button writes
                             size="sm"
                             className="min-h-10 sm:min-h-0"
                             loading={pending}
@@ -289,7 +289,7 @@ export default function Integrations() {
                 </div>
               ))}
               <div className="flex items-center gap-2">
-                <Button
+                <Button writes
                   loading={saveCreds.isPending}
                   disabled={!valid}
                   onClick={() => saveCreds.mutate({ provider: credProvider as 'EPC Register' | 'Companies House', fields: credFields })}
@@ -298,7 +298,7 @@ export default function Integrations() {
                 </Button>
                 <Button variant="ghost" onClick={() => { setCredProvider(null); setCredFields({}); }}>Cancel</Button>
                 {isConnected && (
-                  <Button
+                  <Button writes
                     variant="danger"
                     className="ml-auto"
                     loading={disconnect.isPending}

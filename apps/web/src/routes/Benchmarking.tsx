@@ -387,7 +387,7 @@ export default function Benchmarking() {
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
-        <Button
+        <Button writes
           loading={contribute.isPending}
           disabled={!effectiveContribId || !contribQ.data?.optedIn}
           onClick={() => contribute.mutate(effectiveContribId)}

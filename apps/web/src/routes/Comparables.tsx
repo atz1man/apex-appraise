@@ -366,7 +366,7 @@ export default function Comparables() {
                   </Button>
                 </div>
               ) : (
-                <Button
+                <Button writes
                   size="lg"
                   className="mt-3.5 w-full"
                   loading={apply.isPending}

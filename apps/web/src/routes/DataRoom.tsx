@@ -310,7 +310,7 @@ export default function DataRoom() {
                     <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
                 </select>
-                <Button onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
+                <Button writes onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
                   {!addDoc.isPending && 'List as expected'}
                 </Button>
                 <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
@@ -456,7 +456,7 @@ export default function DataRoom() {
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onAsk()}
             />
-            <Button onClick={onAsk} disabled={question.trim().length < 3} loading={ask.isPending}>
+            <Button writes onClick={onAsk} disabled={question.trim().length < 3} loading={ask.isPending}>
               {!ask.isPending && 'Ask'}
             </Button>
           </div>

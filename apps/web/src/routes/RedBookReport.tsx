@@ -246,7 +246,7 @@ export default function RedBookReport() {
       <span className="fig text-[11px] font-medium text-ink-3">{refCode}</span>
       <div className="ml-auto flex gap-2">
         {exportable && (
-          <Button
+          <Button writes
             variant="secondary"
             className="print:hidden"
             loading={draftNarrative.isPending}

@@ -659,10 +659,10 @@ export default function CostMonitoring() {
                 className="hidden"
                 onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
               />
-              <Button variant="secondary" size="sm" loading={photoUploading} disabled={!photoCap.trim()} onClick={() => photoFileRef.current?.click()}>
+              <Button writes variant="secondary" size="sm" loading={photoUploading} disabled={!photoCap.trim()} onClick={() => photoFileRef.current?.click()}>
                 📷 Attach photo
               </Button>
-              <Button size="sm" loading={addPhoto.isPending} disabled={!photoCap.trim()} onClick={submitPhoto}>+ Add entry</Button>
+              <Button writes size="sm" loading={addPhoto.isPending} disabled={!photoCap.trim()} onClick={submitPhoto}>+ Add entry</Button>
             </div>
           </div>
 

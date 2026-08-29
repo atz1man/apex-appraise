@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 
 import { Link, NavLink } from 'react-router-dom';
 import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
 import { getPrincipal, trpc } from '../lib/trpc';
+import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
 
 // ---------- Brand ----------
 
@@ -96,7 +97,7 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
    * mutations, and is NOT done here — it is a follow-up. What is not acceptable
    * is a member who cannot tell which of the two they are looking at.
    */
-  const viewOnly = internal && principal?.role === 'VIEWER';
+  const viewOnly = isViewOnly(principal);
   return (
     <header
       className="sticky top-0 z-40 h-14 flex items-center gap-3 px-5"
@@ -295,6 +296,7 @@ export function Button({
   size = 'md',
   type = 'button',
   disabled,
+  writes,
   loading,
   to,
   className = '',
@@ -305,12 +307,27 @@ export function Button({
   size?: ButtonSize;
   type?: 'button' | 'submit';
   disabled?: boolean;
+  /**
+   * This control changes something. A view-only member sees it greyed out with
+   * the reason on hover, rather than filling in the form behind it and being
+   * refused afterwards.
+   *
+   * Marking is per-site because nothing can infer it: `onClick` covers "Delete
+   * unit" and "Close drawer" alike, and this app has no shared input primitive
+   * to disable instead. What makes that safe is that marking is an AFFORDANCE,
+   * not the rule — the rule is the read-only tRPC link in `lib/trpc.ts`, which
+   * sees all ninety-eight mutations and refuses them whether or not anyone
+   * remembered this prop. An unmarked write button is a rough edge, not a hole.
+   */
+  writes?: boolean;
   /** Shows a spinner and disables the control — wire to mutation.isPending. */
   loading?: boolean;
   /** Renders a react-router Link with identical chrome (client-side nav CTA). */
   to?: string;
   className?: string;
 }) {
+  const blocked = !!writes && isViewOnly(getPrincipal());
+  disabled = disabled || blocked;
   const cls = `inline-flex items-center justify-center font-semibold select-none transition-[transform,filter,background-color,box-shadow] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100 ${BTN_SIZES[size]} ${BTN_STYLES[variant]} ${className}`;
   const inner = (
     <>
@@ -326,7 +343,14 @@ export function Button({
     );
   }
   return (
-    <button type={type} disabled={disabled || loading} onClick={onClick} className={cls} style={BTN_CHROME[variant]}>
+    <button
+      type={type}
+      disabled={disabled || loading}
+      onClick={onClick}
+      className={cls}
+      style={BTN_CHROME[variant]}
+      title={blocked ? READ_ONLY_MESSAGE : undefined}
+    >
       {inner}
     </button>
   );

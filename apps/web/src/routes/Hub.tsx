@@ -202,7 +202,7 @@ export default function Hub() {
                   words appear again as a button — made the user click "New deal
                   from documents" twice to reach one form. */}
               <Button to="/board?new=1">New deal from documents →</Button>
-              <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
+              <Button writes variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
                 {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
               </Button>
             </div>

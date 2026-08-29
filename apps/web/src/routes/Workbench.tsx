@@ -223,7 +223,7 @@ export default function Workbench() {
                 <Dot color="rgb(var(--status-green, 30 122 85))" /> Synced from field
               </span>
             )}
-            <Button onClick={onSave} loading={save.isPending} disabled={!dirty}>
+            <Button writes onClick={onSave} loading={save.isPending} disabled={!dirty}>
               {dirty ? 'Save valuation' : 'Saved'}
             </Button>
           </>

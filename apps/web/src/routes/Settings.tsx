@@ -128,7 +128,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
               value={ricsDraft}
               onChange={(e) => setRics(e.target.value)}
             />
-            <Button type="submit" loading={update.isPending} disabled={!ricsDirty}>
+            <Button writes type="submit" loading={update.isPending} disabled={!ricsDirty}>
               Save
             </Button>
           </form>
@@ -175,7 +175,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
               </span>
             </label>
             {org.logoUrl && (
-              <Button size="sm" variant="secondary" loading={clearLogo.isPending} onClick={() => clearLogo.mutate()}>
+              <Button writes size="sm" variant="secondary" loading={clearLogo.isPending} onClick={() => clearLogo.mutate()}>
                 Remove
               </Button>
             )}
@@ -198,7 +198,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
             }}
           >
             <input className="flex-1" aria-label="Workspace name" value={draft} onChange={(e) => setName(e.target.value)} />
-            <Button type="submit" loading={update.isPending} disabled={!dirty}>
+            <Button writes type="submit" loading={update.isPending} disabled={!dirty}>
               Save
             </Button>
           </form>
@@ -294,7 +294,7 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         </select>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" loading={invite.isPending} disabled={!valid}>
+        <Button writes type="submit" loading={invite.isPending} disabled={!valid}>
           Send invite
         </Button>
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
@@ -534,7 +534,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </label>
-          <Button type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
+          <Button writes type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
             Invite to portal
           </Button>
           {kind === 'buyer' && candidates && candidates.units.length === 0 && (
@@ -571,7 +571,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
                   (revoking === l.id ? (
                     <>
                       <span className="text-[11.5px] text-ink-2">Sign-in ends immediately.</span>
-                      <Button size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
+                      <Button writes size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
                         Revoke
                       </Button>
                       <Button size="sm" variant="secondary" onClick={() => setRevoking(null)}>
@@ -703,7 +703,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                       <td className="py-2.5 px-2 border-t border-border-faint text-right whitespace-nowrap">
                         {isSelf ? null : removing === m.id ? (
                           <span className="inline-flex items-center gap-2">
-                            <Button
+                            <Button writes
                               size="sm"
                               variant="danger"
                               loading={remove.isPending}
@@ -924,7 +924,7 @@ function DataPrivacyPanel() {
                   autoFocus
                 />
               </div>
-              <Button type="submit" variant="danger" loading={destroy.isPending} disabled={confirmName.trim() !== org?.name}>
+              <Button writes type="submit" variant="danger" loading={destroy.isPending} disabled={confirmName.trim() !== org?.name}>
                 Permanently delete
               </Button>
               <Button variant="ghost" onClick={() => { setArmed(false); setConfirmName(''); }}>
@@ -1064,7 +1064,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
       title="Valuation policy"
       right={
         isAdmin ? (
-          <Button
+          <Button writes
             size="sm"
             loading={save.isPending}
             onClick={() =>
@@ -1391,7 +1391,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                     ))}
                   </ul>
                   {isAdmin && !current && data.configured && (
-                    <Button
+                    <Button writes
                       className="mt-3 w-full"
                       variant={p.featured ? 'primary' : 'secondary'}
                       loading={checkout.isPending && checkout.variables?.plan === p.key}

@@ -254,7 +254,7 @@ export default function Board() {
             <p className="mt-1.5 text-[12.5px] text-ink-2">Add your first deal — it takes under a minute, and the AI appraisal does the heavy lifting.</p>
             <div className="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
               <Button onClick={() => setNewOpen(true)}>New deal from documents</Button>
-              <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
+              <Button writes variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
                 Explore with a sample deal
               </Button>
             </div>
@@ -372,7 +372,7 @@ export default function Board() {
           <label className="label-mono text-ink-3" htmlFor="new-deal-probability">Probability %</label>
           <input id="new-deal-probability" type="number" value={draft.probability} onChange={(e) => setDraft({ ...draft, probability: parseInt(e.target.value) || 0 })} />
           <div className="mt-2 flex gap-2">
-            <Button
+            <Button writes
               loading={createDeal.isPending}
               disabled={!draft.name || !draft.address}
               onClick={() =>

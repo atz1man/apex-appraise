@@ -770,7 +770,7 @@ export default function SalesCrm() {
               <Field label="Incentive"><input className="w-full" value={draft.incentive} onChange={(e) => setDraft({ ...draft, incentive: e.target.value })} /></Field>
             </div>
             <div className="flex gap-2.5 mt-1">
-              <Button className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
+              <Button writes className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
                 Save
               </Button>
               <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
@@ -807,11 +807,11 @@ export default function SalesCrm() {
                   List {isRent ? 'rent' : 'price'} {money(sel.appraised)}. {isRent ? 'Take an application to start referencing.' : 'Take a reservation to start the chain.'}
                 </div>
                 <div className="mt-4 flex gap-2.5">
-                  <Button className="flex-1" loading={advancing} onClick={() => advanceSel(sel.id)}>
+                  <Button writes className="flex-1" loading={advancing} onClick={() => advanceSel(sel.id)}>
                     {labels.availCta}
                   </Button>
                   <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                  <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
+                  <Button writes variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                 </div>
               </div>
             ) : (
@@ -885,11 +885,11 @@ export default function SalesCrm() {
                     })}
                   </div>
                   <div className="mt-1 flex gap-2.5">
-                    <Button className="flex-1" loading={advancing} disabled={sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
+                    <Button writes className="flex-1" loading={advancing} disabled={sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
                       {sel.progress >= maxProg ? labels.doneCta : 'Advance milestone'}
                     </Button>
                     <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                    <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
+                    <Button writes variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                   </div>
                 </div>
               </>

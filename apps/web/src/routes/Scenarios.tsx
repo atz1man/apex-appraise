@@ -293,7 +293,7 @@ export default function Scenarios() {
                   <Dot color={v.color} size={7} />
                   <span className="text-[11px] font-semibold" style={{ color: v.color }}>{v.label}</span>
                 </div>
-                <Button
+                <Button writes
                   variant={isBest ? 'primary' : 'secondary'}
                   className="w-full"
                   loading={upsert.isPending}
@@ -316,7 +316,7 @@ export default function Scenarios() {
                 Compares the options&apos; risk profiles — planning, cost, sales absorption and leverage — against the figures above.
               </div>
             </div>
-            <Button
+            <Button writes
               variant="secondary"
               loading={draftRisk.isPending}
               disabled={scenarios.length < 2}

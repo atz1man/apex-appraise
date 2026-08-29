@@ -1707,7 +1707,7 @@ export default function DevelopmentAppraisal() {
               if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
             }}
           />
-          <Button
+          <Button writes
             loading={saveVersion.isPending}
             disabled={!versionLabel.trim()}
             onClick={() =>
@@ -1841,7 +1841,7 @@ function ReviewRow({
 
       {r.status !== 'approved' && r.status !== 'in_review' && (
         <div>
-          <Button variant="secondary" size="sm" loading={submit.isPending} onClick={() => submit.mutate({ versionId: version.id })}>
+          <Button writes variant="secondary" size="sm" loading={submit.isPending} onClick={() => submit.mutate({ versionId: version.id })}>
             Submit for review
           </Button>
         </div>
@@ -1856,7 +1856,7 @@ function ReviewRow({
             onChange={(e) => setNote(e.target.value)}
           />
           <div className="flex gap-2">
-            <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ versionId: version.id, decision: 'approve', note: note.trim() || undefined })}>
+            <Button writes size="sm" loading={decide.isPending} onClick={() => decide.mutate({ versionId: version.id, decision: 'approve', note: note.trim() || undefined })}>
               Approve
             </Button>
             <Button

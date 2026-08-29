@@ -373,7 +373,7 @@ export default function Calendar() {
                     </button>
                   ))}
                 </div>
-                <Button className="ml-auto !h-[34px] !px-4" loading={createTask.isPending} disabled={!title.trim() || !dealSel} onClick={submit}>
+                <Button writes className="ml-auto !h-[34px] !px-4" loading={createTask.isPending} disabled={!title.trim() || !dealSel} onClick={submit}>
                   {!createTask.isPending && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
                   )}

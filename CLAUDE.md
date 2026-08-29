@@ -26,11 +26,11 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (653). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (655). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (82): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (90): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -85,6 +85,11 @@ the point, so read the failure rather than adding an exemption.
   by CALLING it as anonymous and as a buyer, never by a list, so procedure 88 is covered;
   and it classifies BEFORE asking the viewer, because the obvious order passes
   vacuously the moment the fix lands (measured: internal=0, leaked=0, green).
+  The browser has its own copy of the rule — `web/src/lib/read-only.ts`, wired into the
+  tRPC link chain so all 98 mutations refuse locally without 98 edits — and that copy is
+  NOT trusted: the same test reads it and asserts its allowlist equals what the real
+  router lets a viewer through. `Button writes` greys a control out beforehand; that part
+  IS per-site (62 marked), and an unmarked one degrades to the link, not to a hole.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

@@ -547,7 +547,7 @@ export default function AutoAppraisal() {
 
               <div className="mt-3.5 flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Run build at £" value={buildRate} onChange={setBuildRate} />
-                <Button
+                <Button writes
                   onClick={onGenerate}
                   size="lg"
                   className="flex-1"
@@ -919,7 +919,7 @@ export default function AutoAppraisal() {
 
               {/* actions */}
               <div className="flex gap-3">
-                <Button onClick={onOpenFull} size="lg" className="flex-1" loading={save.isPending}>
+                <Button writes onClick={onOpenFull} size="lg" className="flex-1" loading={save.isPending}>
                   {!save.isPending && (
                     <>
                       Open full appraisal
