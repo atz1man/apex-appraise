@@ -235,6 +235,13 @@ await page.getByRole('button', { name: /Currys, JBL.*returned/ }).click();
 await page.waitForTimeout(400);
 results['a returned receipt can still be opened'] =
   await page.getByText(/Money back · .* recovered/).isVisible();
+// And says WHEN. The date has been stored since this screen was written and
+// never shown: "£89.00 recovered ✓" reads the same whether the refund landed
+// last week or last year.
+results['a returned receipt says when the money came back'] = await page
+  .getByText(new RegExp(`recovered on ${new Date().toLocaleDateString('en-GB', { day: 'numeric' })} `))
+  .isVisible()
+  .catch(() => false);
 await page.getByRole('button', { name: 'Not actually returned' }).click();
 await page.waitForTimeout(400);
 results['a return can be undone'] =
@@ -436,6 +443,39 @@ results['the policy feed arrives and does not duplicate the bundled one'] =
 // accept: Zara's fee change left the window at 30 days, so the card said
 // "deadline unchanged" and stopped — dropping the one sentence in the update
 // worth acting on, which is the £1.95 the change is actually about.
+/*
+ * And the switch that claims to control that download has to control it.
+ *
+ * It was a stored boolean nothing read: the row said "Policy watch · Every
+ * launch · on", turning it off changed the word to "Off", and the feed
+ * downloaded on every launch regardless. Counted at the network, in its own
+ * context, because this is the app's only outbound request and the claim is
+ * about whether it happens at all.
+ */
+{
+  const watchCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(watchCtx);
+  const watchPage = await watchCtx.newPage();
+  let feedHits = 0;
+  watchPage.on('request', (r) => {
+    if (new URL(r.url()).pathname === '/policy-feed.json') feedHits += 1;
+  });
+  await watchPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await watchPage.waitForTimeout(900);
+  const hitsWhileOn = feedHits;
+  await watchPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    s.settings.policyWatch = false;
+    s.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  });
+  feedHits = 0;
+  await watchPage.reload({ waitUntil: 'networkidle' });
+  await watchPage.waitForTimeout(1200);
+  results['switching policy watch off actually stops the download'] = hitsWhileOn > 0 && feedHits === 0;
+  await watchCtx.close();
+}
+
 results['a policy change is checked against the receipts held'] =
   (await page.getByText('AFFECTS YOUR RECEIPTS').first().isVisible()) &&
   (await page.getByText(/deadline unchanged/).first().isVisible()) &&

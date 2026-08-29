@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 52 end-to-end checks, including a midnight rollover
+npm run smoke      # 54 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -416,6 +416,20 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **The policy-watch switch switched nothing.** `settings.policyWatch` was a
+  stored boolean read by the Settings row that draws it and by nothing else.
+  The row said "Policy watch · Every launch · on", turning it off changed the
+  word to "Off", and the feed downloaded on every launch regardless. On an app
+  whose privacy card promises nothing is uploaded, and whose only outbound
+  request this is, that is the worst switch to get wrong — the same defect the
+  "Deadline alerts" row had, in the row directly beneath it. The smoke check
+  counts the request at the network rather than reading the label.
+- **A returned receipt never said when.** `returnedOn` was written on every
+  return, persisted, and validated on import — and shown nowhere. "£89.00
+  recovered ✓" reads the same whether the refund landed last week or last
+  year, and it is the only fact a returned receipt carries that is not already
+  on the row. It goes through `fmtDatesTogether` with the other two dates on
+  that screen, so the three cannot end up a year apart in the same sentence.
 - **Three shops said in prose what the field denied.** Apple, Amazon and ASOS
   each carried a `gotcha` explaining that they count their window from the day
   the parcel arrives and that Kept counted from the order, while `clockStart`

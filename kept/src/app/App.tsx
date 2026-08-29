@@ -55,6 +55,16 @@ export function App() {
    * leak the privacy notice rules out.
    */
   useEffect(() => {
+    // The switch in Settings actually switches it.
+    //
+    // It was a stored boolean nothing read: the row said "Policy watch ·
+    // Every launch · on", turning it off changed the word to "Off", and the
+    // feed downloaded on every launch regardless. On an app whose privacy
+    // card promises nothing is uploaded and whose only outbound request this
+    // is, a control that claims to stop it and does not is the worst switch
+    // to get wrong. The same defect the "Deadline alerts" row had, in the row
+    // directly below it.
+    if (!settings.policyWatch) return;
     let cancelled = false;
     fetch(FEED_URL, { cache: 'no-cache' })
       .then((r) => (r.ok ? r.json() : null))
@@ -70,10 +80,13 @@ export function App() {
     return () => {
       cancelled = true;
     };
-    // Once per launch: the feed changes daily at most, and re-running it on
-    // every state change would refetch on every keystroke.
+    // Once per launch, and again if someone switches the watch back on —
+    // which is what a person who has just enabled it expects to happen.
+    // Deliberately not depending on `state.updates`: that changes when the
+    // fetch lands, and re-running it on every state change would refetch on
+    // every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settings.policyWatch]);
 
   /**
    * Deadline alerts, computed on open and whenever the app comes back to the

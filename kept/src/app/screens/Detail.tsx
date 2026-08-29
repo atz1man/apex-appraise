@@ -49,7 +49,10 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   // Rendered as a pair: a year on the deadline and none on the purchase is
   // what let "RETURN BY 15 Feb 2027" sit above "bought 15 Feb". See
   // fmtDatesTogether.
-  const [deadlineText, boughtText] = fmtDatesTogether([d.deadline, fromISODate(receipt.purchasedOn)], today);
+  const [deadlineText, boughtText, returnedText] = fmtDatesTogether(
+    [d.deadline, fromISODate(receipt.purchasedOn), ...(receipt.returnedOn ? [fromISODate(receipt.returnedOn)] : [])],
+    today,
+  );
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -223,8 +226,13 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
 
       {receipt.status === 'returned' ? (
         <>
+          {/* The date, which the receipt has been storing since the day this
+              screen was written and never showing. "£89.00 recovered ✓" is
+              the same sentence whether the refund landed last week or last
+              year, and it is the only fact a returned receipt carries that is
+              not already on the row. */}
           <div style={{ marginTop: 16, padding: 15, textAlign: 'center', background: color.yellowLight, border: `1.5px solid ${color.ink}`, borderRadius: 16, fontWeight: 700 }}>
-            Money back · {money(receipt.amount)} recovered ✓
+            Money back · {money(receipt.amount)} recovered{returnedText ? ` on ${returnedText}` : ''} ✓
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
             <Pressable
