@@ -15,6 +15,7 @@
  * appears in the seeded data.
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
@@ -37,6 +38,7 @@ const ADVERSARIAL = [
 
 const browser = await chromium.launch(EXEC ? { executablePath: EXEC } : {});
 const failures = [];
+reportOnCrash(report);
 /**
  * How much scrolling the covered-button check actually had to work with. A
  * sweep over screens that all fit reports "no button is covered" without ever
@@ -614,14 +616,19 @@ if (everScrolled === 0) {
   });
 }
 
-if (failures.length === 0) {
-  console.log(`✓ no sideways scroll, no covered buttons, no crushed names, no tab bar off the screen with the text turned up, at ${WIDTHS.join('px, ')}px, on any screen or state`);
-  process.exit(0);
+function report(crash) {
+  if (!crash && failures.length === 0) {
+    console.log(`✓ no sideways scroll, no covered buttons, no crushed names, no tab bar off the screen with the text turned up, at ${WIDTHS.join('px, ')}px, on any screen or state`);
+    process.exit(0);
+  }
+  if (failures.length > 0) {
+    console.log(`✗ ${failures.length} layout problem(s):\n`);
+    for (const f of failures) {
+      console.log(`  [${f.width}px] ${f.label} — ${f.kind}: ${f.detail}`);
+      for (const o of f.offenders ?? []) console.log(`      <${o.tag}> left ${o.left} right ${o.right} — ${JSON.stringify(o.text)}`);
+    }
+  }
+  if (crash) sayCrash(crash);
+  process.exit(1);
 }
-console.log(`✗ ${failures.length} layout problem(s):\n`);
-
-for (const f of failures) {
-  console.log(`  [${f.width}px] ${f.label} — ${f.kind}: ${f.detail}`);
-  for (const o of f.offenders ?? []) console.log(`      <${o.tag}> left ${o.left} right ${o.right} — ${JSON.stringify(o.text)}`);
-}
-process.exit(1);
+report();

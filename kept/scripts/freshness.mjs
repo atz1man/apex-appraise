@@ -26,6 +26,7 @@
  * Needs a build: npm run build && node scripts/freshness.mjs
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +55,7 @@ if (!existsSync(FEED_FILE)) {
 const original = readFileSync(FEED_FILE, 'utf8');
 const results = {};
 const problems = [];
+reportOnCrash(report);
 
 /*
  * The port has to be free FIRST. `--strictPort` makes a second server exit
@@ -232,16 +234,20 @@ try {
   await browser.close();
 }
 
-let failed = false;
-for (const [name, ok] of Object.entries(results)) {
-  if (ok === null) {
-    console.log(`? ${name} — not asked, the server never stopped`);
-    failed = true;
-    continue;
+function report(crash) {
+  let failed = Boolean(crash);
+  for (const [name, ok] of Object.entries(results)) {
+    if (ok === null) {
+      console.log(`? ${name} — not asked, the server never stopped`);
+      failed = true;
+      continue;
+    }
+    console.log(`${ok ? '✓' : '✗'} ${name}`);
+    if (!ok) failed = true;
   }
-  console.log(`${ok ? '✓' : '✗'} ${name}`);
-  if (!ok) failed = true;
+  for (const p of problems) console.log('  ' + p);
+  if (crash) sayCrash(crash);
+  else if (!failed) console.log('✓ a deploy reaches the app, and the app still works without one');
+  process.exit(failed ? 1 : 0);
 }
-for (const p of problems) console.log('  ' + p);
-if (!failed) console.log('✓ a deploy reaches the app, and the app still works without one');
-process.exit(failed ? 1 : 0);
+report();

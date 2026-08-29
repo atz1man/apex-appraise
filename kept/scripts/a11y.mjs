@@ -18,6 +18,7 @@
  * "incomplete" rather than pass or fail.
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
@@ -63,6 +64,7 @@ async function audit(page, label, findings) {
 }
 
 const findings = [];
+reportOnCrash(report);
 
 const ctx = await browser.newContext({ viewport: { width: 402, height: 874 } });
 const page = await ctx.newPage();
@@ -552,23 +554,29 @@ if (stillMoving.length > 0) {
   process.exit(1);
 }
 
-// One row per rule, listing the screens it fires on: the same mistake in nine
-// places is one thing to fix, not nine.
-const byRule = new Map();
-for (const f of findings) {
-  if (!byRule.has(f.id)) byRule.set(f.id, { ...f, screens: new Set([f.screen]) });
-  else byRule.get(f.id).screens.add(f.screen);
+function report(crash) {
+  // One row per rule, listing the screens it fires on: the same mistake in
+  // nine places is one thing to fix, not nine. Grouped here rather than above,
+  // so the reporter depends on nothing declared after the work.
+  const byRule = new Map();
+  for (const f of findings) {
+    if (!byRule.has(f.id)) byRule.set(f.id, { ...f, screens: new Set([f.screen]) });
+    else byRule.get(f.id).screens.add(f.screen);
+  }
+  if (!crash && byRule.size === 0) {
+    console.log('✓ no accessibility violations on any screen');
+    process.exit(0);
+  }
+  if (byRule.size > 0) {
+    console.log(`✗ ${byRule.size} rule(s) violated, across ${findings.length} occurrence(s):\n`);
+    for (const f of [...byRule.values()]) {
+      console.log(`  [${f.impact}] ${f.id} — ${f.help}`);
+      console.log(`    ${[...f.screens].join(', ')}`);
+      for (const n of f.nodes) console.log(`    ${n}`);
+      console.log('');
+    }
+  }
+  if (crash) sayCrash(crash);
+  process.exit(1);
 }
-
-if (byRule.size === 0) {
-  console.log('✓ no accessibility violations on any screen');
-  process.exit(0);
-}
-console.log(`✗ ${byRule.size} rule(s) violated, across ${findings.length} occurrence(s):\n`);
-for (const f of [...byRule.values()]) {
-  console.log(`  [${f.impact}] ${f.id} — ${f.help}`);
-  console.log(`    ${[...f.screens].join(', ')}`);
-  for (const n of f.nodes) console.log(`    ${n}`);
-  console.log('');
-}
-process.exit(1);
+report();

@@ -18,6 +18,7 @@
  * and mis-measured, or unreadable and mis-coloured.
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
@@ -107,6 +108,10 @@ const ctx = await browser.newContext({ viewport: { width: 402, height: 874 } });
 const page = await ctx.newPage();
 
 const failures = [];
+// Declared here rather than beside the dark-device sweep below, so the
+// reporter can reach it whenever the run stops.
+const deviceProblems = [];
+reportOnCrash(report);
 const sweep = async (label) => {
   const found = await page.evaluate(eval(SWEEP));
   for (const f of found) failures.push({ screen: label, ...f });
@@ -318,7 +323,6 @@ for (const f of await lp.evaluate(eval(SWEEP))) failures.push({ screen: 'landing
  * so the check is simply that a dark-mode device gets the same page, measured
  * rather than declared.
  */
-const deviceProblems = [];
 {
   const darkCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, colorScheme: 'dark' });
   const darkPage = await darkCtx.newPage();
@@ -345,30 +349,36 @@ const deviceProblems = [];
 
 await browser.close();
 
-// One row per distinct colour-on-colour pairing; the same token failing in
-// nine places is one decision to revisit, not nine.
-const seen = new Map();
-for (const f of failures) {
-  const key = `${f.color}|${f.background}|${f.required}`;
-  if (!seen.has(key)) seen.set(key, { ...f, screens: new Set([f.screen]), examples: [f.text] });
-  else {
-    const e = seen.get(key);
-    e.screens.add(f.screen);
-    if (e.examples.length < 3) e.examples.push(f.text);
+function report(crash) {
+  // One row per distinct colour-on-colour pairing; the same token failing in
+  // nine places is one decision to revisit, not nine. Grouped here rather than
+  // above, because it is presentation — and because a reporter that reads
+  // something declared after the work cannot run during the work.
+  const seen = new Map();
+  for (const f of failures) {
+    const key = `${f.color}|${f.background}|${f.required}`;
+    if (!seen.has(key)) seen.set(key, { ...f, screens: new Set([f.screen]), examples: [f.text] });
+    else {
+      const e = seen.get(key);
+      e.screens.add(f.screen);
+      if (e.examples.length < 3) e.examples.push(f.text);
+    }
   }
+  if (!crash && deviceProblems.length === 0 && seen.size === 0) {
+    console.log('✓ every text node meets WCAG AA on every screen, on a light device and a dark one');
+    process.exit(0);
+  }
+  for (const p of deviceProblems) console.log(`✗ on a dark-mode device: ${p}`);
+  if (deviceProblems.length > 0) console.log('');
+  if (seen.size > 0) {
+    console.log(`✗ ${seen.size} colour pairing(s) below WCAG AA, across ${failures.length} element(s):\n`);
+    for (const f of [...seen.values()].sort((a, b) => a.ratio - b.ratio)) {
+      console.log(`  ${f.ratio}:1 (needs ${f.required}:1)  ${f.color} on ${f.background}`);
+      console.log(`    ${f.size}px/${f.weight} · ${[...f.screens].join(', ')}`);
+      console.log(`    e.g. ${f.examples.map((t) => JSON.stringify(t)).join(', ')}\n`);
+    }
+  }
+  if (crash) sayCrash(crash);
+  process.exit(1);
 }
-
-if (deviceProblems.length === 0 && seen.size === 0) {
-  console.log('✓ every text node meets WCAG AA on every screen, on a light device and a dark one');
-  process.exit(0);
-}
-for (const p of deviceProblems) console.log(`✗ on a dark-mode device: ${p}`);
-if (deviceProblems.length > 0) console.log('');
-if (failures.length === 0) process.exit(1);
-console.log(`✗ ${seen.size} colour pairing(s) below WCAG AA, across ${failures.length} element(s):\n`);
-for (const f of [...seen.values()].sort((a, b) => a.ratio - b.ratio)) {
-  console.log(`  ${f.ratio}:1 (needs ${f.required}:1)  ${f.color} on ${f.background}`);
-  console.log(`    ${f.size}px/${f.weight} · ${[...f.screens].join(', ')}`);
-  console.log(`    e.g. ${f.examples.map((t) => JSON.stringify(t)).join(', ')}\n`);
-}
-process.exit(1);
+report();

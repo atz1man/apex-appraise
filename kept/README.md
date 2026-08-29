@@ -1547,9 +1547,14 @@ exactly what was wrong. None of it reached the screen — and the check written
 for that defect, `onboarding is not shown again`, sat two hundred lines further
 down, where it could only ever be reached in the world where it passed.
 
-The report is a function now, installed on the way out however the run ends,
+The report is a function now in **all six** sweeps — fixed where it is true,
+not only where it was noticed — installed on the way out however the run ends,
 and the check has moved up to the first launch that reads `onboardingSeen` off
-the disk. The same mutation now prints:
+the disk. Two of them needed a small rearrangement to get there: `contrast` and
+`a11y` grouped their findings into rows *after* the browser work, so a reporter
+that read those rows could not run during the work. The grouping is
+presentation and now lives inside the reporter, which leaves it depending on
+nothing declared later. The same mutation now prints:
 
 ```
 ✗ onboarding is not shown again

@@ -11,6 +11,7 @@
  * party, and that nothing throws on the way through.
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,19 +94,8 @@ const results = {
 };
 
 /*
- * Say what was learned, even when the run does not finish.
- *
- * Everything below records into `results` and the whole lot was printed at the
- * end — so a step that threw printed NOTHING. Measured, on a real defect:
- * breaking the returning-visitor screen brought onboarding back over the
- * receipts list, the suite died on a row it could no longer see, and the
- * output was `locator.click: Timeout 30000ms exceeded ... at smoke.mjs:250`.
- * Forty checks had already run. One of them had already failed and said
- * exactly what was wrong. None of that reached the screen.
- *
- * A crash is a failure of the run, not a reason to throw away its findings —
- * so the report is a function, it is installed on the way out however the run
- * ends, and the crash is printed after the checks rather than instead of them.
+ * Say what was learned, even when the run does not finish — see
+ * crash-report.mjs for what this is here to prevent.
  */
 let reported = false;
 function report(crash) {
@@ -118,15 +108,10 @@ function report(crash) {
   }
   if (foreign.size) console.log('  third-party origins:', [...foreign].join(', '));
   for (const p of problems) console.log('  ' + p);
-  if (crash) {
-    console.log(`\n✗ the run did not finish: ${String(crash && crash.message ? crash.message : crash).split('\n')[0]}`);
-    console.log('  (the checks above are what it managed to ask before it stopped)');
-  }
+  if (crash) sayCrash(crash);
   process.exit(failed ? 1 : 0);
 }
-for (const ev of ['uncaughtException', 'unhandledRejection']) {
-  process.on(ev, (e) => report(e ?? new Error(ev)));
-}
+reportOnCrash(report);
 
 await page.getByRole('button', { name: 'Skip' }).click();
 await page.waitForTimeout(300);

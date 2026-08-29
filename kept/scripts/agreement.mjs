@@ -16,6 +16,7 @@
  * this file's business.
  */
 import { chromium } from 'playwright';
+import { reportOnCrash, sayCrash } from './crash-report.mjs';
 import { readFileSync } from 'node:fs';
 
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
@@ -47,6 +48,7 @@ await page.addInitScript(() => {
 });
 
 const disagreements = [];
+reportOnCrash(report);
 const agree = (what, ...values) => {
   const unique = [...new Set(values.map((v) => String(v).trim()))];
   if (unique.length !== 1) disagreements.push({ what, saw: unique });
@@ -300,10 +302,16 @@ agree(
 
 await browser.close();
 
-if (disagreements.length === 0) {
-  console.log('✓ every fact that appears twice says the same thing');
-  process.exit(0);
+function report(crash) {
+  if (!crash && disagreements.length === 0) {
+    console.log('✓ every fact that appears twice says the same thing');
+    process.exit(0);
+  }
+  if (disagreements.length > 0) {
+    console.log(`✗ ${disagreements.length} disagreement(s):\n`);
+    for (const d of disagreements) console.log(`  ${d.what}\n    saw: ${d.saw.map((v) => JSON.stringify(v)).join(' vs ')}\n`);
+  }
+  if (crash) sayCrash(crash);
+  process.exit(1);
 }
-console.log(`✗ ${disagreements.length} disagreement(s):\n`);
-for (const d of disagreements) console.log(`  ${d.what}\n    saw: ${d.saw.map((v) => JSON.stringify(v)).join(' vs ')}\n`);
-process.exit(1);
+report();
