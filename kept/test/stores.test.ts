@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STORE_POLICIES, findStore } from '../src/lib/stores';
+import { STORE_POLICIES, findStore, type StorePolicy } from '../src/lib/stores';
 import { parseReceiptText } from '../src/lib/parse';
 
 /**
@@ -117,5 +117,45 @@ describe('naming a shop that is not there', () => {
 
   it('lets an unambiguous shop win over an ordinary word in the same email', () => {
     expect(store('Amazon order · next day delivery · Total £20.00 · 20 Aug 2026')).toBe('Amazon');
+  });
+});
+
+describe('where each entry says its clock starts', () => {
+  /**
+   * The field and the prose beside it have to agree.
+   *
+   * Apple, Amazon and ASOS each carried a gotcha explaining that they count
+   * from the day the parcel arrives, and a `clockStart` of 'purchase' two
+   * lines above it. Nothing held the two together, so the table stated a rule
+   * in a field the app reads and contradicted it in a sentence the app shows.
+   */
+  const saysDelivery = (p: StorePolicy) =>
+    /from delivery|from the day it arrives/i.test(`${p.policy} ${p.gotcha ?? ''}`);
+  const saysDispatch = (p: StorePolicy) => /from dispatch/i.test(`${p.policy} ${p.gotcha ?? ''}`);
+
+  it('finds entries of each kind to check', () => {
+    // A sweep over an empty set passes silently.
+    expect(STORE_POLICIES.filter((p) => p.clockStart === 'delivery').length).toBeGreaterThan(0);
+    expect(STORE_POLICIES.filter((p) => p.clockStart === 'dispatch').length).toBeGreaterThan(0);
+    expect(STORE_POLICIES.filter((p) => p.clockStart === 'purchase').length).toBeGreaterThan(0);
+  });
+
+  it('never says "from delivery" while counting from the till', () => {
+    const wrong = STORE_POLICIES.filter((p) => saysDelivery(p) && p.clockStart !== 'delivery').map((p) => p.name);
+    expect(wrong).toEqual([]);
+  });
+
+  it('never says "from dispatch" while counting from anywhere else', () => {
+    const wrong = STORE_POLICIES.filter((p) => saysDispatch(p) && p.clockStart !== 'dispatch').map((p) => p.name);
+    expect(wrong).toEqual([]);
+  });
+
+  it('never counts from delivery or dispatch without saying so', () => {
+    // The other direction: a clock the app runs and the wording never
+    // mentions is a deadline nobody can check at a counter.
+    const silent = STORE_POLICIES.filter(
+      (p) => (p.clockStart === 'delivery' && !saysDelivery(p)) || (p.clockStart === 'dispatch' && !saysDispatch(p)),
+    ).map((p) => p.name);
+    expect(silent).toEqual([]);
   });
 });

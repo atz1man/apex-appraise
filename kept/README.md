@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 496 unit tests over the decision logic
+npm test           # 500 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -429,7 +429,13 @@ deliberate departure, not an oversight:
   is a floor. A shop that counts from the till records the arrival without
   starting its window on it: the statutory clocks run from there and the
   retailer's does not, and conflating those two is the mistake `types.ts`
-  warns about at length.
+  warns about at length. `stores.test.ts` now holds the field and the prose
+  together in both directions — an entry that says "from delivery" must count
+  from delivery, and one that counts from delivery or dispatch must say so,
+  because a clock the app runs and the wording never mentions is a deadline
+  nobody can check at a counter. Proved four ways, including a vacuity guard
+  that fails when the table stops containing an entry of any of the three
+  kinds.
 - **`clockStart` was declared on all twenty shops and read by nothing.** The
   gotcha the marketing leads with — *"Zara's clock starts at dispatch"* — was
   data on one seeded receipt and nothing else. Add a Zara receipt yourself and
