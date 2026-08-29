@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { anonymous, callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
  * Two people drafting one instruction.
@@ -119,5 +119,77 @@ describe('a second person saving terms they loaded before the first save', () =>
       expectedUpdatedAt: (first as { updatedAt: Date }).updatedAt,
     } as never);
     expect((await row()).purpose).toBe('Secured lending');
+  });
+});
+
+
+/**
+ * Two signatures on one instruction.
+ *
+ * `sign` is a PUBLIC procedure reached by anyone holding the link, and it read
+ * the status, saw it was not ACCEPTED, and then wrote — the exact shape
+ * `a0acf31` found across the three payment paths and fixed with a
+ * compare-and-set. A double-click is the ordinary way in. Measured before the
+ * fix:
+ *
+ *   outcomes            fulfilled, fulfilled
+ *   signedName recorded Jane Marchmont
+ *   SIGNATURE EVENTS    2 — Somebody Else | Jane Marchmont
+ *
+ * Two people recorded as having signed one set of terms, both told they had,
+ * and the signature evidence — who agreed, when, from which address — left as
+ * whichever write happened to land last. This is the document `238d265`
+ * established a Red Book valuation's meaning is measured against.
+ */
+describe('two people signing the same terms at once', () => {
+  const SIGNED = 'signed the terms of engagement for';
+
+  it('records one signature, one signatory and one event', async () => {
+    const S = await makeTenant('Countersign');
+    await callerFor(S.principal).engagement.save({ dealId: S.dealId, terms: terms() } as never);
+    await callerFor(S.principal).engagement.issue({ dealId: S.dealId } as never);
+    const issued = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    const token = issued.signToken!;
+
+    const settled = await Promise.allSettled([
+      anonymous().engagement.sign({ token, name: 'Jane Marchmont', agreed: true } as never),
+      anonymous().engagement.sign({ token, name: 'Somebody Else', agreed: true } as never),
+    ]);
+    const won = settled.filter((r) => r.status === 'fulfilled');
+    expect(won, 'exactly one signature is accepted').toHaveLength(1);
+    for (const r of settled) {
+      if (r.status === 'rejected') expect(String((r.reason as Error).message)).toMatch(/already been signed/i);
+    }
+
+    const after = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    const events = await prisma.activityEvent.findMany({ where: { dealId: S.dealId, action: SIGNED } });
+    expect(events, 'one instruction, one signature in the trail').toHaveLength(1);
+
+    /**
+     * The trail and the document must name the SAME person. Counting events
+     * alone would pass a fix that recorded once while letting the loser
+     * overwrite the signature block.
+     */
+    expect(after.signedName).toBe(events[0]!.actor);
+    expect(after.acceptedBy).toBe(after.signedName);
+    expect(after.signedAt).not.toBeNull();
+    expect(after.signedIp).not.toBeNull();
+  });
+
+  it('still refuses a second signature arriving later, with the same sentence', async () => {
+    // the sequential path the pre-check answers — it must not have been lost
+    const S = await makeTenant('Countersign2');
+    await callerFor(S.principal).engagement.save({ dealId: S.dealId, terms: terms() } as never);
+    await callerFor(S.principal).engagement.issue({ dealId: S.dealId } as never);
+    const token = (await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } })).signToken!;
+
+    await anonymous().engagement.sign({ token, name: 'Jane Marchmont', agreed: true } as never);
+    await expect(
+      anonymous().engagement.sign({ token, name: 'Somebody Else', agreed: true } as never),
+    ).rejects.toThrow(/already been signed/i);
+
+    const after = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    expect(after.signedName, 'the later caller overwrote the signature block').toBe('Jane Marchmont');
+    expect(await prisma.activityEvent.count({ where: { dealId: S.dealId, action: SIGNED } })).toBe(1);
   });
 });

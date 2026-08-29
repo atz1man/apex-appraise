@@ -403,8 +403,31 @@ export const engagementRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'These terms have already been signed.' });
       }
       const signedAt = new Date();
-      await ctx.prisma.engagementTerms.update({
-        where: { id: row.id },
+      /**
+       * Compare-and-set, not the read above followed by a write.
+       *
+       * That check is worth keeping — it answers a second visit cheaply and
+       * with the right sentence — but it cannot be the guard. This is a PUBLIC
+       * procedure reached by anyone holding the link, and a double-click is the
+       * ordinary case: two calls both read ISSUED, both passed the check, and
+       * both wrote. Measured before the fix:
+       *
+       *   outcomes            fulfilled, fulfilled
+       *   signedName recorded Jane Marchmont
+       *   SIGNATURE EVENTS    2 — Somebody Else | Jane Marchmont
+       *
+       * Two people recorded as having signed one instruction, both told they
+       * had, and `signedName`/`signedAt`/`signedIp`/`signedUserAgent` — the
+       * evidence of WHO agreed and from where — left as whichever write landed
+       * last. `238d265` established what this document is: the record a Red
+       * Book valuation's meaning is measured against.
+       *
+       * Exactly the shape `a0acf31` found across the three payment paths, and
+       * the same fix `settlePayment` uses: the row moves out of the signable
+       * state as part of the write, and only the caller who moved it records.
+       */
+      const { count } = await ctx.prisma.engagementTerms.updateMany({
+        where: { id: row.id, status: { not: 'ACCEPTED' } },
         data: {
           status: 'ACCEPTED',
           acceptedAt: signedAt,
@@ -415,6 +438,11 @@ export const engagementRouter = router({
           signedUserAgent: ctx.userAgent,
         },
       });
+      // somebody else signed it first — the same sentence a second visit gets,
+      // and no second signature in the trail
+      if (count !== 1) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'These terms have already been signed.' });
+      }
       const deal = await ctx.prisma.deal.findUnique({ where: { id: row.dealId } });
       await ctx.prisma.activityEvent.create({
         data: {
