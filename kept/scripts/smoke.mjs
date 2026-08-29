@@ -439,6 +439,35 @@ if (demoBox) {
   await landing.waitForTimeout(700);
 }
 results['the landing demo works'] = await demo.getByText('MONEY BACK').isVisible().catch(() => false);
+/*
+ * The marketing page has to be able to reach the product.
+ *
+ * Its call to action was an App Store badge with `href="#"` — a promise of an
+ * iOS app that does not exist, pointing at nothing — and the nav button beside
+ * it went to the pricing section. The page's only mention of /app/ was the
+ * demo iframe's src, so someone who read the whole thing and wanted to use
+ * kept had nowhere to click. A funnel with no exit is not something any other
+ * check here would notice: nothing overflows, nothing fails contrast, and a
+ * dead link is a perfectly valid one.
+ */
+// EVERY link that offers to open the app, not the first one that happens to.
+// Checking one of them passes while the others are dead — which it did: the
+// nav button satisfied this while the hero's still pointed at "#".
+const ctas = await landing.evaluate(() =>
+  [...document.querySelectorAll('a')]
+    .filter((a) => /open kept/i.test(a.textContent ?? ''))
+    .map((a) => a.getAttribute('href')),
+);
+results['the landing page has a way into the app'] =
+  ctas.length >= 2 && ctas.every((h) => h === '/app/');
+
+// And one of them is followed, because an href is not a working link.
+await landing.getByRole('link', { name: /Open kept/ }).last().click();
+await landing.waitForTimeout(900);
+results['and its call to action actually opens it'] = new URL(landing.url()).pathname === '/app/';
+await landing.goBack({ waitUntil: 'networkidle' }).catch(() => {});
+await landing.waitForTimeout(400);
+
 results['the landing demo cannot touch the real app’s data'] =
   (await page.evaluate(() => localStorage.getItem('kept.v1'))) === storedBefore;
 await landing.close();

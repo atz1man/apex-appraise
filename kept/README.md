@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 36 end-to-end checks, including a midnight rollover
+npm run smoke      # 38 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -380,6 +380,15 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **The landing page had no way into the app.** Its call to action was an App
+  Store badge with `href="#"` — promising an iOS app that does not exist, and
+  pointing at nothing — while the nav button beside it went to the pricing
+  section. The page's only mention of `/app/` was the demo iframe's `src`, so
+  a visitor who read the whole thing and wanted to use kept had nowhere to
+  click. No other check here would notice: nothing overflows, nothing fails
+  contrast, and a dead link is a perfectly valid one. Both now open the app,
+  which is an installable PWA on the same origin — better than the promise
+  they replaced, since there is nothing to download.
 - **"Verified" was a process the app does not have, in five places.** The
   worst was the Watch tab's footer: "Policies verified daily by kept · last
   check today 06:00" — nothing verifies daily, nothing records a check time,

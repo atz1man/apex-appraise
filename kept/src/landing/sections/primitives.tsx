@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { color } from '../../tokens';
-import { AppleGlyph } from '../../app/components/Icons';
+import { LogoMark } from '../../app/components/Icons';
 
 export const WRAP: CSSProperties = { maxWidth: 1160, margin: '0 auto', padding: '0 28px' };
 
@@ -25,20 +25,36 @@ export function SectionTitle({ children, maxWidth = 620 }: { children: ReactNode
  * conversion path, and a control that cannot be opened in a new tab or
  * reached by keyboard is not one.
  */
-export function AppStoreButton({ href = '#', large }: { href?: string; large?: boolean }) {
+/**
+ * The page's way into the product.
+ *
+ * It was an App Store badge with `href="#"`. Two things wrong with that, and
+ * the second is worse than the first: it promised an iOS app that does not
+ * exist, and it went NOWHERE — so did the nav button beside it, which pointed
+ * at the pricing section. The landing page's only mention of `/app/` was the
+ * demo iframe's `src`. A visitor who read the whole page and wanted to use
+ * kept had no way to reach it.
+ *
+ * The product is an installable PWA served from this same origin, which is
+ * both true and better than the promise it replaces: nothing to download, and
+ * it works offline once opened.
+ */
+export function OpenAppButton({ large }: { large?: boolean }) {
   return (
     <a
       className="k-ink"
-      href={href}
+      href="/app/"
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 10, background: color.ink, color: color.cream,
+        display: 'inline-flex', alignItems: 'center', gap: 12, background: color.ink, color: color.cream,
         padding: large ? '15px 30px' : '14px 26px', borderRadius: 16, boxShadow: `4px 4px 0 ${color.yellow}`,
       }}
     >
-      <AppleGlyph width={20} />
+      <LogoMark size={22} />
       <span>
-        <span style={{ display: 'block', fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', opacity: 0.8 }}>DOWNLOAD ON THE</span>
-        <span style={{ display: 'block', fontSize: 17, fontWeight: 700, lineHeight: 1.1 }}>App Store</span>
+        <span style={{ display: 'block', fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', opacity: 0.8 }}>
+          NOTHING TO INSTALL
+        </span>
+        <span style={{ display: 'block', fontSize: 17, fontWeight: 700, lineHeight: 1.1 }}>Open kept</span>
       </span>
     </a>
   );

@@ -5,7 +5,7 @@ import { FREE_TIER_LIMIT } from '../lib/quota';
 import { STORE_COUNT, findStore } from '../lib/stores';
 import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
-import { AppStoreButton, Card, Eyebrow, SectionTitle, WRAP } from './sections/primitives';
+import { Card, Eyebrow, OpenAppButton, SectionTitle, WRAP } from './sections/primitives';
 
 /*
  * Every grid below uses `minmax(min(Npx, 100%), 1fr)` rather than a bare
@@ -74,8 +74,8 @@ export function Landing() {
           <a href="#how">How it works</a>
           <a href="#reviews">Reviews</a>
           <a href="#pricing">Pricing</a>
-          <a className="k-ink" href="#pricing" style={{ display: 'flex', alignItems: 'center', gap: 8, background: color.ink, color: color.cream, padding: '10px 20px', borderRadius: 999, fontWeight: 700, fontSize: 14 }}>
-            App Store
+          <a className="k-ink" href="/app/" style={{ display: 'flex', alignItems: 'center', gap: 8, background: color.ink, color: color.cream, padding: '10px 20px', borderRadius: 999, fontWeight: 700, fontSize: 14 }}>
+            Open kept
           </a>
         </nav>
       </header>
@@ -95,7 +95,7 @@ export function Landing() {
             Kept remembers every receipt, knows each shop’s real return policy and your legal rights — and pings you before either clock runs out.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 32, flexWrap: 'wrap' }}>
-            <AppStoreButton />
+            <OpenAppButton />
             <div style={{ fontSize: 13.5, color: color.muted, lineHeight: 1.5 }}>
               Free for your first {FREE_TIER_LIMIT} receipts.
               <br />
@@ -289,7 +289,7 @@ export function Landing() {
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 52 }}>
-          <AppStoreButton large />
+          <OpenAppButton large />
         </div>
       </section>
 
