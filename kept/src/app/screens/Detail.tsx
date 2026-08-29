@@ -71,7 +71,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
       <div style={{ background: color.ink, color: color.cream, borderRadius: radius.hero, padding: '22px 20px', boxShadow: shadow.lift }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>{receipt.store}</h1>
+            <h1 tabIndex={-1} style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>{receipt.store}</h1>
             <div style={{ fontSize: 13, color: color.faint, marginTop: 3 }}>{receipt.item}</div>
           </div>
           <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 26, fontWeight: 700, color: color.yellow }}>

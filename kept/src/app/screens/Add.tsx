@@ -120,7 +120,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, padding: '10px 2px 4px', margin: 0 }}>Add a receipt</h1>
+      <h1 tabIndex={-1} style={{ fontSize: 24, fontWeight: 700, padding: '10px 2px 4px', margin: 0 }}>Add a receipt</h1>
       <p style={{ fontSize: 13, color: color.muted, padding: '0 2px 14px', margin: 0 }}>
         Paste an order email — kept reads the store, total and date.
       </p>

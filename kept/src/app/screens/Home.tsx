@@ -50,7 +50,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
       <header className="k-fade" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px 16px' }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: 0, fontWeight: 400, minWidth: 0 }}>
+        <h1 tabIndex={-1} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: 0, fontWeight: 400, minWidth: 0 }}>
           <Logo size={28} />
           <span>
             <Wordmark />

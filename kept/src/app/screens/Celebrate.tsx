@@ -22,7 +22,7 @@ export function Celebrate({ amount, store, recovered, shared, onShare, onDone }:
         <div style={{ background: color.ink, color: color.cream, borderRadius: radius.heroLg, padding: '30px 26px', boxShadow: shadow.yellowXl, position: 'relative', overflow: 'hidden' }}>
           <LogoWatermark style={{ position: 'absolute', top: -28, right: -34, transform: 'rotate(12deg)', opacity: 0.14 }} />
           <LogoChecked />
-          <h1 style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, letterSpacing: '2px', color: color.faint, fontWeight: 600, margin: '14px 0 0' }}>
+          <h1 tabIndex={-1} style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, letterSpacing: '2px', color: color.faint, fontWeight: 600, margin: '14px 0 0' }}>
             MONEY BACK
           </h1>
           <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 56, fontWeight: 700, letterSpacing: '-2.5px', color: color.yellow, marginTop: 4 }}>

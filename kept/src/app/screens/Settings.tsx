@@ -86,7 +86,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, padding: '10px 2px 14px', margin: 0 }}>Settings</h1>
+      <h1 tabIndex={-1} style={{ fontSize: 24, fontWeight: 700, padding: '10px 2px 14px', margin: 0 }}>Settings</h1>
 
       <section style={{ background: color.white, border: `1.5px solid ${color.border}`, borderRadius: radius.cardLg, padding: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

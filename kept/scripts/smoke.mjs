@@ -235,7 +235,12 @@ const junkPath = join(tmpdir(), 'kept-smoke-junk.json');
 writeFileSync(junkPath, '{"app":"not-kept"}');
 await page.setInputFiles('input[type=file]', junkPath);
 await page.waitForTimeout(500);
-const refused = ((await page.getByRole('status').first().textContent()) ?? '').includes('not a kept backup');
+// Every live region, not `.first()`. The question is whether the person is
+// TOLD, and the app grew a second status region — the one that announces a
+// screen change — which is earlier in the DOM and made this read the wrong
+// element the day it was added.
+const spoken = await page.getByRole('status').allTextContents();
+const refused = spoken.some((t) => (t ?? '').includes('not a kept backup'));
 await page.getByRole('button', { name: 'Receipts', exact: true }).click();
 await page.waitForTimeout(300);
 results['a file that is not a backup is refused, and nothing is lost'] =

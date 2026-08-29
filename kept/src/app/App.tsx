@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { color, paperGrain } from '../tokens';
 import { dueAlerts, supersededKeys } from '../lib/alerts';
 import { FEED_URL, mergeFeed, readFeed } from '../lib/policy-feed';
@@ -110,6 +110,56 @@ export function App() {
   }, [state.receipts, state.alertsSent, settings.deadlineAlerts, settings.urgentDays, today, dispatch]);
   const onboarding = screen === 'onboard';
 
+  /**
+   * Where focus goes when the screen changes.
+   *
+   * It went to `document.body`. Every screen here is a swap inside one page,
+   * so the control that was clicked — a receipt row, Edit, Skip — unmounts as
+   * the new screen arrives, and the browser has nowhere to put focus but the
+   * document. Measured on four transitions: three lost it outright. What that
+   * costs is not theoretical. A keyboard user's next Tab restarts at the top
+   * of the document rather than continuing in the screen they just opened, and
+   * a screen reader announces nothing at all — the app silently becomes a
+   * different app, which is the SPA failure axe cannot see, because nothing
+   * about the markup is wrong.
+   *
+   * The heading is the target rather than the container: it is what the new
+   * screen IS, so announcing it says where you have arrived, and it puts the
+   * tab order at the top of the new content. `tabIndex={-1}` in each screen
+   * makes it focusable without adding a stop to the tab order.
+   *
+   * Not on first paint — landing on a fresh page with focus already moved is
+   * its own kind of disorienting, and there has been no transition to report.
+   */
+  const firstPaint = useRef(true);
+  const [announced, setAnnounced] = useState('');
+  useEffect(() => {
+    if (firstPaint.current) {
+      firstPaint.current = false;
+      return;
+    }
+    const h1 = document.querySelector<HTMLElement>('main h1');
+    const heading = h1?.textContent?.trim() ?? '';
+
+    // Focus is RESTORED where it was lost, never taken from a control the
+    // person is still on. Tapping a row unmounts the row, so focus falls to
+    // the document and has to be put somewhere; tapping a tab-bar button does
+    // not, and moving focus off the tab bar there would make the app's primary
+    // navigation the hardest thing on the page to reach — it sits after
+    // </main>, so getting back to it means tabbing through the whole screen.
+    if (document.activeElement === document.body || document.activeElement === null) {
+      // preventScroll: the new screen is already at its top, and scrolling to
+      // a heading that is already in view is a jump with no cause.
+      h1?.focus({ preventScroll: true });
+      setAnnounced('');
+      return;
+    }
+    // Focus stayed put, so nothing has said the screen changed. The heading is
+    // what the new screen IS, and it is the same words the focus move would
+    // have read out — so the two paths tell the person the same thing.
+    setAnnounced(heading);
+  }, [screen, state.selId]);
+
   const exportNow = () => {
     // A backup that leaves the device only if the user says so — it goes to
     // their own file system through the browser's download, not to us.
@@ -157,6 +207,12 @@ export function App() {
           it is a standing condition, and it must be visible wherever the person
           happens to be when it starts. */}
       {saveFailed && !onboarding && <SaveFailedBanner onExport={exportNow} />}
+
+      {/* Announces a screen change that did not move focus — see the effect
+          above. Rendered always so the region exists before it has anything to
+          say: a live region added to the page at the same moment as its text
+          is not reliably announced. */}
+      <div className="k-sr" role="status" aria-live="polite">{announced}</div>
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {onboarding && (

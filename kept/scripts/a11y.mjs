@@ -217,6 +217,53 @@ await audit(lp, 'landing', findings);
  * on, nothing may still be running an endless animation, and no transition may
  * be long enough to be motion.
  */
+/*
+ * Where focus goes when the screen changes — the other question axe cannot
+ * ask, because nothing about the markup is wrong.
+ *
+ * Every screen here is a swap inside one page, so the control that was clicked
+ * unmounts as the new screen arrives and the browser has nowhere to put focus
+ * but `document.body`. Measured: three of four transitions lost it. A keyboard
+ * user's next Tab then restarts at the top of the document instead of
+ * continuing in the screen they just opened, and a screen reader announces
+ * nothing at all — the app silently becomes a different app.
+ *
+ * The requirement is not "focus always moves to the heading", which would take
+ * focus off the tab bar and leave the app's primary navigation reachable only
+ * by tabbing through an entire screen. It is: focus never falls to the
+ * document, and the change is always discoverable — by landing on the new
+ * heading, or by a live region saying which screen this now is.
+ */
+const focusCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+const focusPage = await focusCtx.newPage();
+const lostFocus = [];
+await focusPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+for (const [label, go] of [
+  ['onboarding → home', async () => focusPage.getByRole('button', { name: 'Skip' }).click()],
+  ['home → a receipt', async () => focusPage.getByRole('button', { name: /Currys, JBL/ }).click()],
+  ['receipt → edit', async () => focusPage.getByRole('button', { name: 'Edit', exact: true }).click()],
+  ['edit → back', async () => focusPage.getByRole('button', { name: 'Cancel' }).click()],
+  ['receipt → watch tab', async () => focusPage.getByRole('button', { name: /^Watch/ }).click()],
+  ['watch → settings', async () => focusPage.getByRole('button', { name: 'Settings', exact: true }).click()],
+]) {
+  await go();
+  await focusPage.waitForTimeout(400);
+  const landed = await focusPage.evaluate(() => {
+    const el = document.activeElement;
+    const heading = document.querySelector('main h1')?.textContent?.trim() ?? '';
+    const spoken = [...document.querySelectorAll('[aria-live],[role="status"]')]
+      .map((n) => (n.textContent ?? '').trim())
+      .filter(Boolean);
+    if (!el || el === document.body) return { lost: true, heading, spoken };
+    return { lost: false, tag: el.tagName, onHeading: el.tagName === 'H1' && !!el.closest('main'), heading, spoken };
+  });
+  if (landed.lost) lostFocus.push([label, 'focus fell to the document']);
+  else if (!landed.onHeading && !landed.spoken.includes(landed.heading)) {
+    lostFocus.push([label, `focus stayed on ${landed.tag} and nothing announced "${landed.heading}"`]);
+  }
+}
+await focusCtx.close();
+
 const motionCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, reducedMotion: 'reduce' });
 const motionPage = await motionCtx.newPage();
 function stillMovingIn() {
@@ -265,6 +312,13 @@ if (ticker !== 'none') stillMoving.push(['landing', 'the marquee is not stopped'
 await motionCtx.close();
 
 await browser.close();
+
+if (lostFocus.length > 0) {
+  console.log(`✗ focus is not managed across ${lostFocus.length} screen change(s):\n`);
+  for (const [label, why] of lostFocus) console.log(`  ${label} — ${why}`);
+  console.log('');
+  process.exit(1);
+}
 
 if (stillMoving.length > 0) {
   console.log(`✗ ${stillMoving.length} thing(s) still moving with reduced motion on:\n`);

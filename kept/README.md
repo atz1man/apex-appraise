@@ -387,6 +387,20 @@ Three passes, because they catch different things:
 - `npm run contrast` re-measures what is actually rendered, compositing
   through translucent layers, catching a component that reached for the wrong
   token.
+- `npm run a11y` also asks where focus goes when the screen changes, which
+  axe cannot: nothing about the markup is wrong. Every screen here is a swap
+  inside one page, so the control that was clicked — a row, Edit, Skip —
+  unmounts as the new screen arrives and the browser has nowhere to put focus
+  but the document. Three of four transitions lost it. A keyboard user's next
+  Tab then restarts at the top of the document rather than continuing where
+  they just arrived, and a screen reader announces nothing at all.
+
+  The rule is not "always move focus to the heading". That would take focus
+  off the tab bar, which sits after `</main>`, and make the app's primary
+  navigation reachable only by tabbing through a whole screen. Focus is
+  *restored* where it was lost and left alone where it was not; a change that
+  did not move focus is announced instead, in the same words the focus move
+  would have read out. Both halves fail independently when removed.
 - `npm run a11y` also asks the one motion question axe does not. The
   stylesheet has honoured `prefers-reduced-motion` since it was written — for
   the three animation *classes* it names. Five of this app's transitions are

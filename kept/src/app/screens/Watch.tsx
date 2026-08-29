@@ -34,7 +34,7 @@ export function Watch({ updates, receipts, today }: Props) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 4px' }}>
         <span className="k-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: color.yellow }} />
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Policy watch</h1>
+        <h1 tabIndex={-1} style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Policy watch</h1>
       </div>
       <p style={{ fontSize: 13, color: color.muted, padding: '0 2px 14px', margin: 0 }}>
         Shops rewrite the rules quietly. You hear about it first — and every receipt you hold is checked against

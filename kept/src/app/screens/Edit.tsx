@@ -77,7 +77,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
         Cancel
       </Pressable>
 
-      <h1 style={{ fontSize: 24, fontWeight: 700, padding: '0 2px 4px', margin: 0 }}>Edit receipt</h1>
+      <h1 tabIndex={-1} style={{ fontSize: 24, fontWeight: 700, padding: '0 2px 4px', margin: 0 }}>Edit receipt</h1>
       <p style={{ fontSize: 13, color: color.muted, padding: '0 2px 6px', margin: 0 }}>
         Fix anything the paste got wrong — or give it a name you will recognise later.
       </p>
