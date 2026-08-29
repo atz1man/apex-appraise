@@ -62,7 +62,12 @@ export type DraftErrors = Partial<Record<DraftField, string>>;
  */
 export const MAX_WINDOW_DAYS = 3650;
 /** £1,000,000. Above this a typo is far likelier than a purchase. */
-const MAX_AMOUNT_PENCE = 100_000_000;
+/*
+ * A million pounds. Exported for the same reason as the window above: a
+ * receipt's amount can arrive by being typed here or by being restored from a
+ * backup file, and a ceiling only the typing respects is not a ceiling.
+ */
+export const MAX_AMOUNT_PENCE = 100_000_000;
 /** A hundred years. Longer than any guarantee anyone will honour. */
 const MAX_WARRANTY_MONTHS = 1200;
 

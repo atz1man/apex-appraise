@@ -1,4 +1,5 @@
 import { fromISODate, toISODate } from './dates';
+import { MAX_AMOUNT_PENCE, MAX_WINDOW_DAYS } from './draft';
 import { canonicalStoreName } from './stores';
 import type { Category, Receipt, ReceiptStatus, Warranty } from './types';
 
@@ -32,6 +33,27 @@ export type ImportOutcome =
   | { ok: false; reason: 'not-json' | 'not-a-kept-backup' | 'nothing-usable' };
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+
+/*
+ * How much of a receipt a file may claim, and what to do when it claims more.
+ *
+ * The policy feed was held to the app's own limits first; this is the other
+ * door into the same localStorage bucket, and it had the same gap. A typed
+ * amount is refused past a million pounds and a typed window past ten years —
+ * an imported one was bounded only from below.
+ *
+ * The two kinds of excess get opposite treatment, and the file already argues
+ * for both. A NUMBER that is out of range gets the receipt dropped, because
+ * this is the money the app tells someone they are owed and it may not show a
+ * false figure or quietly change a real one — the same reason a float amount
+ * is already dropped rather than rounded. TEXT gets trimmed and the receipt
+ * kept, because dropping a row loses a purchase and "saying less" is the
+ * choice this file already makes about a warranty it cannot read.
+ */
+const MAX_STORE = 120;
+const MAX_ITEM = 200;
+const MAX_NOTE = 2000;
+const trim = (v: string, max: number) => (v.length <= max ? v : v.slice(0, max));
 
 function isISODate(v: unknown): v is string {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -86,11 +108,25 @@ export function readReceipt(raw: unknown): Receipt | null {
   if (!isISODate(r.purchasedOn)) return null;
   if (r.windowStartsOn !== undefined && !isISODate(r.windowStartsOn)) return null;
   if (r.arrivedOn !== undefined && !isISODate(r.arrivedOn)) return null;
-  if (typeof r.windowDays !== 'number' || !Number.isInteger(r.windowDays) || r.windowDays < 1) return null;
+  if (
+    typeof r.windowDays !== 'number' ||
+    !Number.isInteger(r.windowDays) ||
+    r.windowDays < 1 ||
+    r.windowDays > MAX_WINDOW_DAYS
+  ) {
+    return null;
+  }
   // Amounts are integer pence everywhere; a float here means a file written by
   // something that did not understand that, and rounding it silently would
   // change what the app tells someone they are owed.
-  if (typeof r.amount !== 'number' || !Number.isInteger(r.amount) || r.amount < 0) return null;
+  if (
+    typeof r.amount !== 'number' ||
+    !Number.isInteger(r.amount) ||
+    r.amount < 0 ||
+    r.amount > MAX_AMOUNT_PENCE
+  ) {
+    return null;
+  }
   const distance = readDistance(r);
   if (distance === null) return null;
   if (!STATUSES.includes(r.status as ReceiptStatus)) return null;
@@ -105,8 +141,8 @@ export function readReceipt(raw: unknown): Receipt | null {
     // and rows saved before the add and edit screens agreed about this are
     // already sitting on people's devices. It only ever changes case and
     // spacing: a shop the table does not know is kept exactly as written.
-    store: canonicalStoreName(r.store),
-    item: r.item,
+    store: canonicalStoreName(trim(r.store, MAX_STORE)),
+    item: trim(r.item, MAX_ITEM),
     // An unknown category is cosmetic — it picks a row icon — so it falls back
     // rather than costing the user a receipt.
     cat: CATEGORIES.includes(r.cat as Category) ? (r.cat as Category) : 'other',
@@ -121,7 +157,7 @@ export function readReceipt(raw: unknown): Receipt | null {
       const warranty = readWarranty(r.warranty);
       return warranty ? { warranty } : {};
     })(),
-    ...(isStr(r.gotcha) ? { gotcha: r.gotcha } : {}),
+    ...(isStr(r.gotcha) ? { gotcha: trim(r.gotcha, MAX_NOTE) } : {}),
     status: r.status as ReceiptStatus,
     ...(r.returnedOn !== undefined ? { returnedOn: r.returnedOn as string } : {}),
     // Carried through the round trip, because it decides whether the receipt

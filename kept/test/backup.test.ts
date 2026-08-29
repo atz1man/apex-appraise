@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeBackup, parseBackup } from '../src/lib/backup';
+import { MAX_AMOUNT_PENCE, MAX_WINDOW_DAYS } from '../src/lib/draft';
 import { toPence } from '../src/lib/money';
 import { seedReceipts } from '../src/lib/seed';
 import { countedAgainstQuota } from '../src/lib/quota';
@@ -241,5 +242,56 @@ describe('a warranty that is only a note survives the round trip', () => {
   it('still refuses a negative one', () => {
     const s = ok(file([{ ...good, warranty: { months: -1, note: 'nonsense' } }]));
     expect(s.receipts[0].warranty).toBeUndefined();
+  });
+});
+
+describe('what a file may claim about a receipt', () => {
+  /*
+   * The policy feed was held to the app's own limits first; this is the other
+   * door into the same store, and it had the same gap. A typed amount is
+   * refused past a million pounds and a typed window past ten years — an
+   * imported one was bounded only from below.
+   *
+   * The two kinds of excess get opposite treatment on purpose. A number out of
+   * range drops the receipt, because this is the money the app tells someone
+   * they are owed: it may not show a false figure, and it may not quietly
+   * change a real one — the same reason a float amount is already dropped
+   * rather than rounded. Text is trimmed and the receipt kept, because
+   * dropping a row loses a purchase.
+   */
+  // Paired with a receipt that is fine, because a file whose every row is
+  // refused is not a usable backup at all and parseBackup says so first. What
+  // this needs to show is the bad row going without taking the good one.
+  const alongside = (bad: Record<string, unknown>) =>
+    ok(file([{ ...good, id: 'keeper' }, { ...good, id: 'dropped', ...bad }])).receipts;
+
+  it('refuses an amount the add screen would refuse', () => {
+    expect(alongside({ amount: MAX_AMOUNT_PENCE + 1 }).map((r) => r.id)).toEqual(['keeper']);
+    expect(alongside({ amount: MAX_AMOUNT_PENCE }).map((r) => r.id)).toEqual(['keeper', 'dropped']);
+  });
+
+  it('refuses a window the add screen would refuse', () => {
+    expect(alongside({ windowDays: MAX_WINDOW_DAYS + 1 }).map((r) => r.id)).toEqual(['keeper']);
+    expect(alongside({ windowDays: MAX_WINDOW_DAYS }).map((r) => r.id)).toEqual(['keeper', 'dropped']);
+  });
+
+  it('keeps the receipt when the item name is absurd, and shortens the name', () => {
+    const s = ok(file([{ ...good, item: 'x'.repeat(5000) }]));
+    expect(s.receipts).toHaveLength(1);
+    expect(s.receipts[0].item).toHaveLength(200);
+  });
+
+  it('does the same for a shop name and a gotcha', () => {
+    const s = ok(file([{ ...good, store: 'y'.repeat(500), gotcha: 'z'.repeat(5000) }]));
+    expect(s.receipts).toHaveLength(1);
+    expect(s.receipts[0].store.length).toBeLessThanOrEqual(120);
+    expect(s.receipts[0].gotcha).toHaveLength(2000);
+  });
+
+  it('leaves an ordinary receipt exactly as it was', () => {
+    // The trimming must be invisible to every real file, or it is a change to
+    // people's data rather than a bound on it.
+    const s = ok(file([good]));
+    expect(s.receipts[0]).toEqual(expect.objectContaining({ item: good.item, store: good.store, amount: good.amount }));
   });
 });

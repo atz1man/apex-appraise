@@ -1552,6 +1552,24 @@ Each limit was confirmed to fail when removed. There is no raw HTML anywhere in
 the app — nothing reaches `innerHTML`, so the feed's text is escaped by React
 and this is about size, not injection.
 
+**Then the same question of the other door.** A backup file lands in the same
+localStorage bucket, and `readReceipt` had the same gap: a *typed* amount is
+refused past a million pounds and a *typed* window past ten years, and an
+imported one was bounded only from below. Both ceilings are shared now, from
+the one place that defines them.
+
+The two kinds of excess get opposite treatment there, and the file already
+argues for both. A **number** out of range drops the receipt, because this is
+the money the app tells someone they are owed: it may not show a false figure
+and it may not quietly change a real one — which is the reason a float amount
+was already dropped rather than rounded. **Text** is trimmed and the receipt
+kept, because dropping a row loses a purchase, and "saying less" is the choice
+this file already makes about a warranty it cannot read.
+
+Tested paired with a receipt that is fine, because a file whose every row is
+refused is not a usable backup at all and `parseBackup` says so first — what
+needed showing is the bad row going without taking the good one.
+
 ### The numbers that are facts, and the numbers that are judgements
 
 A third pass asked something different of the same suite: move every named
