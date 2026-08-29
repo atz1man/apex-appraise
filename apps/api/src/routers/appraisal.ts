@@ -685,10 +685,42 @@ export const appraisalRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Say what needs changing.' });
       }
       const status = input.decision === 'approve' ? 'approved' : 'changes_requested';
-      const row = await ctx.prisma.appraisal.update({
-        where: { id: v.id },
+      /**
+       * Compare-and-set. The check above answers a stale screen cheaply; it
+       * cannot be the guard, because it is a read followed by a write.
+       *
+       * Two admins deciding at once both read `in_review`, both passed, and both
+       * wrote. Measured, one approving while the other asked for changes:
+       *
+       *   FINAL STATUS      changes_requested
+       *   DECISION EVENTS   approved an appraisal version |
+       *                     requested changes to an appraisal version
+       *   WEBHOOKS QUEUED   1 appraisal.approved
+       *
+       * So the trail carried two contradictory decisions with nothing saying
+       * which stood, and — worse — `appraisal.approved` was queued to the
+       * subscriber for a version that ended up NOT approved. The comment below
+       * says who is listening: a lender's system watching for the firm's
+       * committed position. Telling it a valuation was signed off when it was
+       * sent back is the one outcome this event must never produce.
+       *
+       * Same shape and same fix as `a0acf31` (three payment paths) and the
+       * public `engagement.sign`: the row leaves the decidable state as part of
+       * the write, and only the caller who moved it records and emits.
+       */
+      const { count } = await ctx.prisma.appraisal.updateMany({
+        where: { id: v.id, reviewStatus: 'in_review' },
         data: { reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt: new Date(), reviewNote: input.note?.trim() || null },
       });
+      if (count !== 1) {
+        // somebody else decided first — the same sentence a stale screen gets
+        const now = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id }, select: { reviewStatus: true } });
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
+        });
+      }
+      const row = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
