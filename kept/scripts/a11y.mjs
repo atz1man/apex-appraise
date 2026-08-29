@@ -84,6 +84,20 @@ await page.getByRole('button', { name: /Currys, JBL/ }).click();
 await page.waitForTimeout(400);
 await audit(page, 'receipt detail', findings);
 
+// A distance purchase renders a second statutory right — a second chip in the
+// disclosure's header and a second body under it. The seeded Currys receipt
+// was bought in a shop and carries only one, so this state needs opening by
+// name to be audited at all.
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
+await page.waitForTimeout(400);
+await audit(page, 'receipt detail · distance purchase', findings);
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Currys, JBL/ }).click();
+await page.waitForTimeout(400);
+
 await page.getByRole('button', { name: 'Edit', exact: true }).click();
 await page.waitForTimeout(400);
 await audit(page, 'edit', findings);

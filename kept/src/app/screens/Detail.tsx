@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
 import { fmtDateLong, fmtDateNear, fromISODate } from '../../lib/dates';
-import { legalRight } from '../../lib/legal';
+import { legalRights } from '../../lib/legal';
 import { money } from '../../lib/money';
 import { derive } from '../../lib/receipts';
 import type { Receipt } from '../../lib/types';
@@ -29,7 +29,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   const [legalOpen, setLegalOpen] = useState(true);
   const d = derive(receipt, today);
   const u = urgency(d.daysLeft, urgentDays);
-  const legal = legalRight(receipt, today, !d.expired);
+  const rights = legalRights(receipt, today, !d.expired);
 
   // The ring shows time REMAINING, so it empties as the window closes — the
   // arc a glance reads as "how much is left". Clamped at both ends: a receipt
@@ -124,15 +124,32 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
           <Pressable
             onClick={() => setLegalOpen((v) => !v)}
             aria-expanded={legalOpen}
-            style={{ display: 'flex', alignItems: 'center', gap: 7 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', minWidth: 0 }}
           >
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.4px', color: color.amber }}>YOUR LEGAL RIGHT</span>
-            <span style={{ fontSize: 10, fontWeight: 700, background: color.yellowLight, padding: '2px 8px', borderRadius: 999 }}>{legal.chip}</span>
-            <svg width="10" height="7" viewBox="0 0 10 7" style={{ marginLeft: 'auto', transform: `rotate(${legalOpen ? 180 : 0}deg)`, transition: 'transform .2s' }} aria-hidden="true">
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.4px', color: color.amber }}>
+              {rights.length > 1 ? 'YOUR LEGAL RIGHTS' : 'YOUR LEGAL RIGHT'}
+            </span>
+            {/* One chip per right. A distance purchase carries two, and which
+                statute each comes from is the part someone repeats at a
+                counter — see legal.ts for why they are not alternatives. */}
+            {rights.map((right) => (
+              <span
+                key={right.chip}
+                style={{ fontSize: 10, fontWeight: 700, background: color.yellowLight, padding: '2px 8px', borderRadius: 999 }}
+              >
+                {right.chip}
+              </span>
+            ))}
+            <svg width="10" height="7" viewBox="0 0 10 7" style={{ marginLeft: 'auto', flexShrink: 0, transform: `rotate(${legalOpen ? 180 : 0}deg)`, transition: 'transform .2s' }} aria-hidden="true">
               <path d="M1 1.5l4 4 4-4" fill="none" stroke={color.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </Pressable>
-          {legalOpen && <div style={{ fontSize: 14, marginTop: 8, lineHeight: 1.5, color: color.bodyStrong }}>{legal.body}</div>}
+          {legalOpen &&
+            rights.map((right) => (
+              <div key={right.chip} style={{ fontSize: 14, marginTop: 8, lineHeight: 1.5, color: color.bodyStrong }}>
+                {right.body}
+              </div>
+            ))}
         </div>
 
         {receipt.warranty && (

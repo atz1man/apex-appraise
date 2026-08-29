@@ -8,7 +8,7 @@ const TODAY = new Date(2026, 7, 28);
 
 const receipt = (id: string): Receipt => ({
   id, store: 'Argos', item: 'Mixer', cat: 'kitchen', amount: toPence(64.99),
-  purchasedOn: '2026-08-07', windowDays: 30, policy: 'p', legalDays: 30, status: 'active',
+  purchasedOn: '2026-08-07', windowDays: 30, policy: 'p', distance: false, status: 'active',
 });
 
 const base = (over: Partial<AppState> = {}): AppState => ({

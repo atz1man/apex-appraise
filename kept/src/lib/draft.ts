@@ -23,6 +23,14 @@ export interface ReceiptDraft {
   windowDaysText: string;
   /** Blank means no warranty at all — not a warranty of zero months. */
   warrantyMonthsText: string;
+  /**
+   * Ordered online, by phone, or away from the shop. Editable because it
+   * decides whether the app states a 14-day right to cancel for any reason,
+   * and that right does not exist for something bought over a counter — see
+   * legal.ts. It is not a free-text field and cannot fail validation, but it
+   * belongs in the draft so the edit screen can change it.
+   */
+  distance: boolean;
 }
 
 export type DraftField = keyof ReceiptDraft;
@@ -44,6 +52,7 @@ export interface ValidDraft {
   windowDays: number;
   /** Absent when the receipt should carry no warranty clock. */
   warrantyMonths?: number;
+  distance: boolean;
 }
 
 export type DraftOutcome = { ok: true; value: ValidDraft } | { ok: false; errors: DraftErrors };
@@ -100,7 +109,10 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {
     ok: true,
-    value: { store, item, cat: draft.cat, amount, purchasedOn, windowDays, ...(warrantyMonths ? { warrantyMonths } : {}) },
+    value: {
+      store, item, cat: draft.cat, amount, purchasedOn, windowDays, distance: draft.distance,
+      ...(warrantyMonths ? { warrantyMonths } : {}),
+    },
   };
 }
 
@@ -115,6 +127,7 @@ export function draftFrom(r: Receipt): ReceiptDraft {
     purchasedOn: r.purchasedOn,
     windowDaysText: String(r.windowDays),
     warrantyMonthsText: r.warranty && r.warranty.months > 0 ? String(r.warranty.months) : '',
+    distance: r.distance,
   };
 }
 
@@ -153,6 +166,7 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     amount: valid.amount,
     purchasedOn: valid.purchasedOn,
     windowDays: valid.windowDays,
+    distance: valid.distance,
     // Clearing the field clears the clock. The note, if any, came from the
     // manufacturer's own wording and is kept only while a clock is there to
     // caption.

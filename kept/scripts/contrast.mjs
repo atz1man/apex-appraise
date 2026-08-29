@@ -133,6 +133,21 @@ await sweep('home');
 await page.getByRole('button', { name: /Currys, JBL/ }).click();
 await page.waitForTimeout(400);
 await sweep('receipt detail');
+
+// A DISTANCE purchase carries two statutory rights rather than one, so its
+// legal card renders a second chip and a second body — the seeded Currys
+// receipt above was bought in a shop and shows neither. Zara's is the only
+// seeded online one, which is why it is opened by name.
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
+await page.waitForTimeout(400);
+await sweep('receipt detail · distance purchase');
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Currys, JBL/ }).click();
+await page.waitForTimeout(400);
+
 await page.getByRole('button', { name: 'Edit', exact: true }).click();
 await page.waitForTimeout(400);
 await sweep('edit');

@@ -27,7 +27,9 @@ const ADVERSARIAL = [
     item: 'Extra-long-staple Egyptian cotton oxford shirt, slim fit, 16.5" collar',
     cat: 'clothing', amount: 129999999, purchasedOn: null, windowDays: 35,
     policy: 'A policy sentence that runs on and on, the way a real retailer writes one, with clauses about condition, packaging, proof of purchase and exclusions that never seem to end.',
-    legalDays: 30, status: 'active',
+    // Bought online, so the legal card carries TWO chips beside its label
+    // and a chevron — the row most likely to widen a 320px screen.
+    distance: true, status: 'active',
     warranty: { months: 120, note: 'A guarantee note that is also considerably longer than anyone would expect it to be' },
     gotcha: 'A gotcha that is long enough to wrap onto several lines on the narrowest phone anyone still uses.',
   },

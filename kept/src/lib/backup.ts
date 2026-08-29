@@ -61,6 +61,22 @@ function readWarranty(raw: unknown): Warranty | undefined {
  * interrupted save, a future migration, a hand-edit — and a single unreadable
  * row used to take the whole app down with it.
  */
+/**
+ * Was this bought at a distance?
+ *
+ * Rows written before the rights were separated carry `legalDays: 14 | 30`
+ * instead, which conflated "which single right to show" with "how it was
+ * bought". 14 was only ever set on a purchase the app treated as distance, so
+ * that is the honest reading of it — and this has to keep working, because a
+ * backup someone exported last week is a file they can still import today.
+ */
+function readDistance(r: Record<string, unknown>): boolean | null {
+  if (typeof r.distance === 'boolean') return r.distance;
+  if (r.legalDays === 14) return true;
+  if (r.legalDays === 30) return false;
+  return null;
+}
+
 export function readReceipt(raw: unknown): Receipt | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
@@ -73,7 +89,8 @@ export function readReceipt(raw: unknown): Receipt | null {
   // something that did not understand that, and rounding it silently would
   // change what the app tells someone they are owed.
   if (typeof r.amount !== 'number' || !Number.isInteger(r.amount) || r.amount < 0) return null;
-  if (r.legalDays !== 14 && r.legalDays !== 30) return null;
+  const distance = readDistance(r);
+  if (distance === null) return null;
   if (!STATUSES.includes(r.status as ReceiptStatus)) return null;
   if (r.returnedOn !== undefined && !isISODate(r.returnedOn)) return null;
 
@@ -89,7 +106,7 @@ export function readReceipt(raw: unknown): Receipt | null {
     ...(r.windowStartsOn !== undefined ? { windowStartsOn: r.windowStartsOn as string } : {}),
     windowDays: r.windowDays,
     policy: r.policy,
-    legalDays: r.legalDays,
+    distance,
     ...(() => {
       const warranty = readWarranty(r.warranty);
       return warranty ? { warranty } : {};

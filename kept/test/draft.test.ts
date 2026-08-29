@@ -8,6 +8,7 @@ const TODAY = new Date(2026, 7, 28);
 const base: ReceiptDraft = {
   store: 'Currys', item: 'Headphones', cat: 'audio',
   amountText: '89.00', purchasedOn: '2026-08-16', windowDaysText: '14', warrantyMonthsText: '',
+  distance: false,
 };
 
 function valid(patch: Partial<ReceiptDraft> = {}) {
@@ -120,7 +121,7 @@ describe('the warranty field', () => {
   it('clearing the field clears the clock', () => {
     const receipt: Receipt = {
       id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
-      purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status: 'active',
+      purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status: 'active',
       warranty: { months: 24, note: 'Manufacturer cover' },
     };
     const out = validateDraft({ ...draftFrom(receipt), warrantyMonthsText: '' }, TODAY);
@@ -131,7 +132,7 @@ describe('the warranty field', () => {
   it('keeps the manufacturer’s own wording when the length changes', () => {
     const receipt: Receipt = {
       id: 'r1', store: 'IKEA', item: 'MALM', cat: 'furniture', amount: toPence(199),
-      purchasedOn: '2026-08-16', windowDays: 365, policy: 'p', legalDays: 30, status: 'active',
+      purchasedOn: '2026-08-16', windowDays: 365, policy: 'p', distance: false, status: 'active',
       warranty: { months: 120, note: '10-year guarantee on MALM frames' },
     };
     const out = validateDraft({ ...draftFrom(receipt), warrantyMonthsText: '60' }, TODAY);
@@ -143,7 +144,7 @@ describe('the warranty field', () => {
 describe('round-tripping an existing receipt', () => {
   const receipt: Receipt = {
     id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
-    purchasedOn: '2026-08-16', windowDays: 14, policy: 'Currys · 14 days', legalDays: 30, status: 'active',
+    purchasedOn: '2026-08-16', windowDays: 14, policy: 'Currys · 14 days', distance: false, status: 'active',
   };
 
   it('loads into the form and back out unchanged', () => {
@@ -169,11 +170,26 @@ describe('round-tripping an existing receipt', () => {
   });
 });
 
+describe('how it was bought', () => {
+  // It decides whether the app states a 14-day right to cancel for any
+  // reason, and that right does not exist over a counter — so it has to be
+  // correctable on a receipt, not fixed at the moment one is created.
+  const online: Receipt = {
+    id: 'r', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),
+    purchasedOn: '2026-08-16', windowDays: 30, policy: 'p', distance: true, status: 'active',
+  };
+
+  it('round-trips out of a receipt and back into one', () => {
+    expect(draftFrom(online).distance).toBe(true);
+    expect(applyDraft(online, valid({ distance: false })).distance).toBe(false);
+  });
+});
+
 describe('where the window will actually start', () => {
   const zara: Receipt = {
     id: 'r1', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),
     purchasedOn: '2026-08-13', windowStartsOn: '2026-08-15', windowDays: 30,
-    policy: 'p', legalDays: 14, status: 'active',
+    policy: 'p', distance: true, status: 'active',
   };
 
   it('is the dispatch date when the shop uses one', () => {
@@ -211,7 +227,7 @@ describe('changing the shop', () => {
   const zara: Receipt = {
     id: 'r1', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),
     purchasedOn: '2026-08-13', windowStartsOn: '2026-08-15', windowDays: 30,
-    policy: 'Zara · 30 days from dispatch', gotcha: 'dispatch, not delivery', legalDays: 14, status: 'active',
+    policy: 'Zara · 30 days from dispatch', gotcha: 'dispatch, not delivery', distance: true, status: 'active',
   };
 
   it('brings the new shop’s policy with it', () => {

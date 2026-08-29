@@ -6,6 +6,7 @@ import { STORE_POLICIES } from '../../lib/stores';
 import type { Category, Receipt } from '../../lib/types';
 import { CatIcon, ChevronLeft } from '../components/Icons';
 import { Field, inputStyle } from '../components/Field';
+import { HowBought } from '../components/HowBought';
 import { Pressable } from '../components/Pressable';
 
 const CATEGORIES: { cat: Category; label: string }[] = [
@@ -164,6 +165,11 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
             />
           )}
         </Field>
+
+        {/* Correctable here as well as at the point of adding, because a
+            receipt saved from a pasted email defaults to a distance purchase
+            and someone who pasted a shop receipt has to be able to say so. */}
+        <HowBought id="e-how" value={draft.distance} onChange={(v) => set('distance', v)} />
 
         <Field
           id="e-window"

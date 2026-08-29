@@ -5,7 +5,7 @@ import type { Receipt } from '../src/lib/types';
 
 const receipt = (id: string, status: Receipt['status'] = 'active'): Receipt => ({
   id, store: 'Currys', item: 'Thing', cat: 'other', amount: toPence(10),
-  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status,
+  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status,
 });
 
 const active = (n: number) => Array.from({ length: n }, (_, i) => receipt(`a${i}`));

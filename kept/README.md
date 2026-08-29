@@ -72,7 +72,7 @@ src/lib/          the decision logic — pure, tested, no React
   share.ts        reading an order email shared in from another app
   policy-feed.ts  downloading policy changes, and what they mean for you
   quota.ts        what the free tier counts, and when it is full
-  legal.ts        Consumer Rights Act + distance-selling wording
+  legal.ts        Consumer Rights Act + distance-selling rights, cumulative
   parse.ts        the paste parser (on-device, rule-based)
   stores.ts       the verified UK retailer policy table
   storage.ts      localStorage persistence + backup export
@@ -97,6 +97,24 @@ deliberate departure, not an oversight:
   cooling-off period that was still running as "ended". Telling someone a
   right they still hold has expired is the one thing this screen must not do,
   and it has a test of its own.
+- **The two statutory rights are cumulative, and were modelled as
+  alternatives.** A `legalDays: 14 | 30` field made the screen pick one, and
+  it is a property of how the thing was bought, not a number of days. The
+  30-day right to reject faulty goods for a full refund (Consumer Rights Act
+  2015, s.22) applies to every purchase. The 14-day right to cancel for any
+  reason (Consumer Contracts Regulations 2013) applies *on top of it*, and only
+  to a distance or off-premises purchase — not to something bought over a
+  counter. So the app was wrong in both directions, and wrong for money: a
+  receipt showing the cooling-off period never mentioned the 30-day refund it
+  also had, and the add screen hardcoded 14 on everything, telling a shop
+  purchase it could be cancelled for any reason within a fortnight. Someone
+  acting on that is turned away at the counter; someone on day 20 of a faulty
+  online order was told they had only a repair coming, when a full refund was
+  still theirs. A receipt now records `distance`, both screens ask for it in
+  one shared control so they cannot word it differently, and the detail screen
+  states every right the purchase carries. Backups written before the split
+  still import — `legalDays: 14` was only ever set where the app was treating
+  the purchase as distance, so that is what it migrates to.
 - **The countdown ring shows time remaining**, so it empties as the window
   closes.
 - **Every control is a real `<button>`.** The design drew them as `<div

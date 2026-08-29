@@ -11,7 +11,7 @@ function receipt(over: Partial<Receipt> = {}): Receipt {
   return {
     id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio',
     amount: toPence(89), purchasedOn: ago(12), windowDays: 14,
-    policy: 'p', legalDays: 30, status: 'active',
+    policy: 'p', distance: false, status: 'active',
     ...over,
   };
 }

@@ -37,8 +37,19 @@ export interface Receipt {
   windowStartsOn?: string;
   windowDays: number;
   policy: string;
-  /** Which statutory clock this purchase carries: 30-day reject, or 14-day online cooling-off. */
-  legalDays: 14 | 30;
+  /**
+   * Whether this was a DISTANCE purchase — ordered online, by phone, or away
+   * from the trader's premises.
+   *
+   * It is a property of how the thing was bought, not a number of days,
+   * because the two statutory rights are not alternatives. The 30-day right to
+   * reject faulty goods (Consumer Rights Act 2015 s.22) applies to every
+   * purchase; the 14-day right to cancel for any reason (Consumer Contracts
+   * Regulations 2013) applies ONLY on top of it, and only to a distance or
+   * off-premises contract. The field this replaced was `legalDays: 14 | 30`,
+   * which made them exclusive and so could only ever state one — see legal.ts.
+   */
+  distance: boolean;
   /**
    * A tracked clock, not a sentence. "Warranty clocks added to your receipts
    * automatically" was the claim; a free-text string could not answer the

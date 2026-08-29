@@ -5,7 +5,7 @@ import type { Receipt } from '../src/lib/types';
 
 const make = (store: string, item: string, id = store + item): Receipt => ({
   id, store, item, cat: 'other', amount: toPence(10),
-  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status: 'active',
+  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status: 'active',
 });
 
 const set = [

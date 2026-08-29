@@ -7,6 +7,7 @@ import { makeReceiptId } from '../../lib/receipts';
 import { FREE_TIER_LIMIT } from '../../lib/quota';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, CameraGlyph, LogoMark, MailGlyph, ShareGlyph, Warning } from '../components/Icons';
+import { HowBought } from '../components/HowBought';
 import { Pressable } from '../components/Pressable';
 
 interface Props {
@@ -31,6 +32,14 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
   // reliably says what the thing WAS. Asking here is why the list stops
   // filling up with rows called "From pasted email".
   const [item, setItem] = useState('');
+  /**
+   * This screen's input is a pasted order email, so a distance purchase is the
+   * likelier answer and is offered first — but it is ASKED rather than assumed.
+   * It used to be hardcoded true, which told every receipt anyone added by hand
+   * that they had a 14-day right to cancel for any reason. Someone who bought
+   * it over a counter has no such right, and finds that out at the counter.
+   */
+  const [distance, setDistance] = useState(true);
   // Read once, on arrival. A later keystroke must not re-trigger it.
   const [readShare, setReadShare] = useState(false);
 
@@ -44,6 +53,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     setParsed(outcome.value);
     setError(false);
     setItem('');
+    setDistance(true);
   };
 
   const read = () => readText(text);
@@ -75,7 +85,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
       // that does not promise days the shop will not honour.
       windowDays: parsed.windowDays,
       policy: parsed.policy?.policy ?? `${store} · ${parsed.windowDays}-day return window assumed — check the receipt.`,
-      legalDays: 14,
+      distance,
       gotcha: parsed.policy?.gotcha,
       status: 'active',
     });
@@ -164,6 +174,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               }}
             />
           </div>
+          <HowBought id="add-how" value={distance} onChange={setDistance} />
           <Row label="Store" value={parsed.store ?? 'Not recognised'} mono={false} />
           <Row label="Total" value={parsed.amount === null ? 'Not found' : money(parsed.amount)} mono />
           <Row label="Bought" value={`${fmtDate(fromISODate(parsed.purchasedOn))}${parsed.dateFound ? '' : ' (assumed today)'}`} mono />

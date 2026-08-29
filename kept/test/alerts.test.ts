@@ -13,7 +13,7 @@ function closingIn(daysLeft: number, over: Partial<Receipt> = {}): Receipt {
   return {
     id: 'r1', store: 'Zara', item: 'Wool coat', cat: 'clothing', amount: toPence(34.99),
     purchasedOn: toISODate(addDays(TODAY, -(windowDays - daysLeft))),
-    windowDays, policy: 'p', legalDays: 14, status: 'active',
+    windowDays, policy: 'p', distance: true, status: 'active',
     ...over,
   };
 }

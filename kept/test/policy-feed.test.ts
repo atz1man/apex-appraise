@@ -9,7 +9,7 @@ const ago = (n: number) => toISODate(addDays(TODAY, -n));
 
 const zaraReceipt: Receipt = {
   id: 'r1', store: 'Zara', item: 'Wool coat', cat: 'clothing', amount: toPence(34.99),
-  purchasedOn: ago(13), windowDays: 30, policy: 'p', legalDays: 14, status: 'active',
+  purchasedOn: ago(13), windowDays: 30, policy: 'p', distance: true, status: 'active',
 };
 
 const update = (over: Partial<PolicyUpdate> = {}): PolicyUpdate => ({

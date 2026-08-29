@@ -8,7 +8,7 @@ const TODAY = new Date(2026, 7, 28);
 
 const good: Receipt = {
   id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
-  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status: 'active',
+  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status: 'active',
 };
 
 const stored = (over: Record<string, unknown> = {}) => ({

@@ -5,7 +5,7 @@ import type { Receipt } from '../src/lib/types';
 
 const good: Receipt = {
   id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
-  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', legalDays: 30, status: 'active',
+  purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status: 'active',
 };
 
 const file = (receipts: unknown[]) => JSON.stringify({ app: 'kept', version: 1, receipts });
@@ -56,11 +56,24 @@ describe('validating rows', () => {
     ['a date that only looks real', { purchasedOn: '2026-02-31' }],
     ['a zero-day window', { windowDays: 0 }],
     ['a fractional window', { windowDays: 14.5 }],
-    ['an unknown legal clock', { legalDays: 21 }],
+    ['no idea how it was bought', { distance: undefined, legalDays: undefined }],
+    ['an unreadable how-it-was-bought', { distance: 'online' }],
     ['an unknown status', { status: 'pending' }],
     ['a malformed dispatch date', { windowStartsOn: 'yesterday' }],
   ])('drops a row with %s', (_label, patch) => {
     expect(parseBackup(file([{ ...good, ...patch }]))).toEqual({ ok: false, reason: 'nothing-usable' });
+  });
+
+  it('reads a row written before the two rights were separated', () => {
+    // Backups already exported carry `legalDays: 14 | 30`. 14 was only ever
+    // set where the app was treating the purchase as a distance one, so that
+    // is what it migrates to — a file someone exported last week is a file
+    // they can still import today.
+    const { receipts } = ok(file([
+      { ...good, distance: undefined, legalDays: 14 },
+      { ...good, id: 'r2', distance: undefined, legalDays: 30 },
+    ]));
+    expect(receipts.map((r) => r.distance)).toEqual([true, false]);
   });
 
   it('falls back rather than dropping a row over a cosmetic category', () => {

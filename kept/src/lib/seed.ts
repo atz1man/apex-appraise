@@ -14,14 +14,14 @@ export function seedReceipts(today: Date): Receipt[] {
       id: 'seed_currys', store: 'Currys', item: 'JBL Tune 770NC headphones', cat: 'audio',
       amount: toPence(89.0), purchasedOn: ago(12), windowDays: 14,
       policy: 'Currys · 14 days change of mind, unopened or unwanted. Refund to original payment method.',
-      legalDays: 30, warranty: { months: 24, note: 'Manufacturer warranty — repairs free within it' },
+      distance: false, warranty: { months: 24, note: 'Manufacturer warranty — repairs free within it' },
       status: 'active',
     },
     {
       id: 'seed_argos', store: 'Argos', item: 'Kenwood kMix stand mixer', cat: 'kitchen',
       amount: toPence(64.99), purchasedOn: ago(21), windowDays: 30,
       policy: 'Argos · 30 days with proof of purchase. Return to any store or arrange collection.',
-      legalDays: 30, warranty: { months: 12, note: 'Kenwood guarantee' }, status: 'active',
+      distance: false, warranty: { months: 12, note: 'Kenwood guarantee' }, status: 'active',
     },
     {
       // The dispatch gotcha as data, not prose: the order was placed two days
@@ -30,7 +30,10 @@ export function seedReceipts(today: Date): Receipt[] {
       id: 'seed_zara', store: 'Zara', item: 'Wool-blend overcoat', cat: 'clothing',
       amount: toPence(34.99), purchasedOn: ago(15), windowStartsOn: ago(13), windowDays: 30,
       policy: 'Zara · 30 days from dispatch, not delivery. Postal returns now £1.95 — in-store drop-off still free.',
-      legalDays: 14,
+      // Ordered online and dispatched, so this one carries BOTH rights —
+      // the only seeded receipt that does, which is what makes the detail
+      // screen's two-right case reachable from a fresh install.
+      distance: true,
       gotcha: 'Zara counts the 30 days from dispatch, not from the day the parcel landed on your mat — the clock had already been running when it arrived.',
       status: 'active',
     },
@@ -38,13 +41,13 @@ export function seedReceipts(today: Date): Receipt[] {
       id: 'seed_boots', store: 'Boots', item: 'No7 skincare set', cat: 'beauty',
       amount: toPence(24.98), purchasedOn: ago(14), windowDays: 35,
       policy: 'Boots · 35 days, unopened, with receipt. Advantage Card refunds go back as points.',
-      legalDays: 14, status: 'active',
+      distance: false, status: 'active',
     },
     {
       id: 'seed_ikea', store: 'IKEA', item: 'MALM chest of 6 drawers', cat: 'furniture',
       amount: toPence(199.0), purchasedOn: ago(195), windowDays: 365,
       policy: 'IKEA · 365 days, even assembled, with proof of purchase. 14 days for cut fabric.',
-      legalDays: 30, warranty: { months: 120, note: '10-year guarantee on MALM frames' }, status: 'active',
+      distance: false, warranty: { months: 120, note: '10-year guarantee on MALM frames' }, status: 'active',
     },
   ];
 }
