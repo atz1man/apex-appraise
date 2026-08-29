@@ -993,6 +993,38 @@ than the content box it sat in. Every grid there now uses
 exists. It also turned up a receipt row whose untruncated shop name wrapped to
 five lines while the item beneath it was still being clipped to one.
 
+### Who reads this?
+
+The question that has found more here than any other, asked by hand every
+time. `npm test` asks it mechanically now, for the part of it that can be:
+`test/reachable.test.ts` walks the real source with the TypeScript parser and
+requires every export to be mentioned somewhere that is not its own
+declaration.
+
+The parser rather than a regex, because `export const a = 1, b = 2` and
+`export { x as y }` are the forms a regex gets wrong, and a sweep that quietly
+misses a form reports success for a question it never asked. All four shapes
+were confirmed to fail it — a dead const, a dead function, a dead type, and the
+aliased re-export — along with both of its own vacuity guards: a file list that
+came back empty, and a namespace import, which would let a dead export hide
+behind `import * as`.
+
+The first draft of it asked for every export to be *imported*, and reported
+thirty-six things when none was wrong: a type naming the return of an exported
+function must itself be exported or a caller cannot write the type down, and a
+helper used inside its own module and exported for a test is a shape this
+codebase uses on purpose. A check that names thirty-six innocents gets an
+exemption list and then gets ignored. The rule it settled on — nothing anywhere
+reads it, not even its own file — has no honest exceptions, which is why it
+carries none.
+
+And it is worth exactly what it checks. It sees exports. It does not see a dead
+*field* (`clockStart` sat on twenty shops unread and is a property), a switch
+consulted only by the row that draws it (`settings.policyWatch`), or a constant
+duplicated rather than imported (`ONBOARDING_STEPS`). Those still need the
+question asked by hand, and the test says so where someone would otherwise
+assume otherwise.
+
 ### It does not contradict itself
 
 Unit tests check each calculation. Smoke checks each flow. Neither catches the
