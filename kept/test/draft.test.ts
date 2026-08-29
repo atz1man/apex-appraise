@@ -185,6 +185,48 @@ describe('how it was bought', () => {
   });
 });
 
+describe('the shop a receipt says it is from', () => {
+  /*
+   * `store` is not only a label: `assess` matches a policy update's
+   * affectsStores against it exactly. A receipt saved as "boots" carries
+   * Boots' verified 35-day policy — findStore is case-insensitive — and is
+   * missed by every change Boots publishes, with no banner and no flag on the
+   * Watch tab. The add screen already resolved the name; the edit screen did
+   * not, so the two ways into the same field disagreed.
+   */
+  const currys: Receipt = {
+    id: 'r1', store: 'Currys', item: 'Headphones', cat: 'audio', amount: toPence(89),
+    purchasedOn: '2026-08-16', windowDays: 14, policy: 'p', distance: false, status: 'active',
+  };
+
+  it.each([['Boots'], ['boots'], ['  BOOTS ']])('records "%s" as the shop\'s own name', (typed) => {
+    expect(applyDraft(currys, valid({ store: typed })).store).toBe('Boots');
+  });
+
+  it('keeps a shop it does not know, as typed', () => {
+    expect(applyDraft(currys, valid({ store: '  Vinted ' })).store).toBe('Vinted');
+  });
+
+  it('does not treat a change of casing as a change of shop', () => {
+    // It would otherwise discard the dispatch clock and re-fetch the policy
+    // for a shop that is the same shop.
+    const zara: Receipt = { ...currys, store: 'Zara', windowStartsOn: '2026-08-18', policy: 'Zara · original wording' };
+    const out = applyDraft(zara, valid({ store: 'zara' }));
+    expect(out.windowStartsOn).toBe('2026-08-18');
+    expect(out.policy).toBe('Zara · original wording');
+  });
+
+  it('and the preview agrees with the save about that', () => {
+    // The two used to compare differently — one on the raw text, one on the
+    // canonical name — which is precisely the preview/save disagreement
+    // effectiveWindowStart exists to prevent.
+    const zara: Receipt = { ...currys, store: 'Zara', windowStartsOn: '2026-08-18' };
+    const draft = { ...draftFrom(zara), store: 'zara' };
+    expect(effectiveWindowStart(zara, draft)).toBe('2026-08-18');
+    expect(applyDraft(zara, valid({ store: 'zara', purchasedOn: zara.purchasedOn })).windowStartsOn).toBe('2026-08-18');
+  });
+});
+
 describe('where the window will actually start', () => {
   const zara: Receipt = {
     id: 'r1', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),

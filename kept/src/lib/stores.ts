@@ -132,6 +132,20 @@ export const VERIFIED_STORE_COUNT = STORE_POLICIES.length;
 const BY_ALIAS = new Map<string, StorePolicy>();
 for (const s of STORE_POLICIES) for (const a of s.aliases) BY_ALIAS.set(a, s);
 
+/**
+ * The shop's own name for whatever someone typed.
+ *
+ * A receipt's `store` is not only a label: `assess` matches a policy update's
+ * `affectsStores` against it exactly, so a receipt saved as "boots" is a
+ * receipt every change Boots publishes silently misses — no banner, no flag on
+ * the Watch tab — while the same receipt happily carries Boots' verified
+ * 35-day policy text, because `findStore` is case-insensitive and the rest of
+ * the app was not.
+ */
+export function canonicalStoreName(typed: string): string {
+  return findStore(typed)?.name ?? typed.trim();
+}
+
 export function findStore(name: string): StorePolicy | undefined {
   return BY_ALIAS.get(name.trim().toLowerCase());
 }

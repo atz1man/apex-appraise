@@ -1,6 +1,6 @@
 import { daysBetween, fromISODate, toISODate } from './dates';
 import { toPence, type Pence } from './money';
-import { findStore } from './stores';
+import { canonicalStoreName, findStore } from './stores';
 import type { Category, Receipt } from './types';
 
 /**
@@ -144,7 +144,11 @@ export function draftFrom(r: Receipt): ReceiptDraft {
  * discards it — the same condition applyDraft uses.
  */
 export function effectiveWindowStart(original: Receipt, draft: ReceiptDraft): string {
-  const storeChanged = original.store !== draft.store.trim();
+  // Compared on the canonical name, like applyDraft below. Retyping "Boots" as
+  // "boots" is not a change of shop, and if these two disagreed about that the
+  // preview would drop a dispatch clock the save keeps — which is the exact
+  // disagreement this function exists to prevent.
+  const storeChanged = original.store !== canonicalStoreName(draft.store);
   return !storeChanged && original.windowStartsOn ? original.windowStartsOn : draft.purchasedOn;
 }
 
@@ -155,12 +159,18 @@ export function effectiveWindowStart(original: Receipt, draft: ReceiptDraft): st
  * this app exists to prevent.
  */
 export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
-  const storeChanged = original.store !== valid.store;
-  const policy = storeChanged ? findStore(valid.store) : undefined;
+  // The shop's own name, not the casing someone happened to type. A receipt
+  // saved as "boots" carries Boots' verified policy and is missed by every
+  // change Boots publishes, because `assess` matches the name exactly — the
+  // add screen already resolved this and the edit screen did not, so the two
+  // ways into the same field disagreed.
+  const store = canonicalStoreName(valid.store);
+  const storeChanged = original.store !== store;
+  const policy = storeChanged ? findStore(store) : undefined;
 
   return {
     ...original,
-    store: valid.store,
+    store,
     item: valid.item,
     cat: valid.cat,
     amount: valid.amount,
