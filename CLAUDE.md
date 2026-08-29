@@ -24,7 +24,7 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (262; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (642). See the container gotcha below before
   trusting a green run.
@@ -104,6 +104,18 @@ the point, so read the failure rather than adding an exemption.
   derived figures that have a house rule and print on more than one surface
   (`reportedMarketValue`, `analysedPsf`), not "money maths" in general. Add to its RULES
   when a fourth is found rather than widening the matchers.
+- `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
+  is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
+  (`rocAtAsking` is null when nobody named an asking price; `projIrr` when the cashflows
+  never change sign), and a null must be carried to the point of DISPLAY and shown as
+  "N/A" or an em dash, not folded into a figure on its way there. It reads the field list
+  out of `types.ts` at run time, so a ninth nullable figure is covered the day it is
+  declared — proven by planting one plus a consumer that defaults it. Run against the
+  commit before `ad243b2`/`6e164e2` it finds all six lines those two fixed, unaided.
+  Narrow on purpose: `<field> ?? <number>` only. It does NOT reach `8b51be4`, where the
+  same defect wore a filter (`h.irr > 0` dropping recorded losses), because no static
+  matcher separates that from an honest sign test — give a third shape its own rule
+  rather than loosening this one.
 
 Several of these carry a "finds what it is meant to be sweeping" case, and any new sweep must:
 a sweep over an empty file list passes silently, reporting success for a question it never
