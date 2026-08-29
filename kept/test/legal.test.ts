@@ -84,6 +84,46 @@ describe('the cooling-off clock', () => {
   });
 });
 
+describe('what the clocks are counted from', () => {
+  // Both rights legally start the day the goods arrive, not the day they are
+  // paid for. On a counter purchase that is the same day. On a delivered one
+  // the app does not know it, so what it computes is the EARLIEST the right
+  // could end — and it has to say so rather than assert a date it cannot know.
+  const bodies = (r: Receipt, storeOpen = true) => legalRights(r, TODAY, storeOpen).map((x) => x.body).join(' ');
+
+  it('is exact for a counter purchase, and does not hedge about a parcel', () => {
+    const text = bodies(inStore);
+    expect(text).toContain('ends ');
+    expect(text).not.toMatch(/arrived|at least/);
+  });
+
+  it('gives a delivered purchase the earliest date, not a definite one', () => {
+    const text = bodies(online);
+    expect(text).toContain('at least until');
+    expect(text).toContain('starts the day it arrived');
+  });
+
+  it.each(['Consumer Rights Act', 'Consumer Contracts Regs'])(
+    'never flatly says a lapsed %s right has expired on a date it cannot know',
+    (chip) => {
+      // The same failure as the inverted cooling-off wording, one step along:
+      // counted from the order, both clocks read as run out on a day the
+      // parcel may not even have arrived. Asserted per right, because the two
+      // strings are built separately and one satisfying it says nothing about
+      // the other.
+      const body = find(legalRights({ ...online, purchasedOn: ago(40) }, TODAY, true), chip).body;
+      expect(body).toContain('Counting from your order');
+      expect(body).toContain('check that date');
+    },
+  );
+
+  it('still says so plainly for a counter purchase, where the date is known', () => {
+    const lapsed = bodies({ ...inStore, purchasedOn: ago(40) });
+    expect(lapsed).toContain('has passed');
+    expect(lapsed).not.toContain('Counting from your order');
+  });
+});
+
 describe('the 30-day right to reject faulty goods', () => {
   const reject = (r: Receipt) => find(legalRights(r, TODAY, true), 'Consumer Rights Act');
 

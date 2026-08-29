@@ -477,6 +477,16 @@ that check was actually proving.
   Settings says exactly that instead of implying a service that does not
   exist. A native shell or a push path replaces `notify.ts` alone; the
   decision engine does not change.
+- **The date a parcel actually arrived.** Both statutory clocks legally start
+  the day the goods come into your hands, and for a delivered order that is
+  not the day you paid. The app knows the order date, so what it computes for
+  a distance purchase is the *earliest* either right could end — the wording
+  says exactly that rather than asserting a date it cannot know, and a lapsed
+  one points at the arrival date rather than declaring the right gone. Making
+  it exact means recording when the parcel landed, which is a third date
+  beside the purchase and the retailer's own dispatch clock
+  (`Receipt.windowStartsOn`), and a field on two screens. Worth doing; not
+  worth guessing at.
 - **Payments.** The pricing tiers set the local plan flag. No billing.
 - **Signing the policy feed.** The feed is fetched from the app's own origin,
   validated entry by entry and merged (`lib/policy-feed.ts`), and the download

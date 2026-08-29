@@ -28,6 +28,16 @@ import type { Receipt } from './types';
  * The prototype's wording had a third fault, kept fixed here: a live 14-day
  * cooling-off period rendered as "ended". Telling someone a right they still
  * hold has expired is the one failure mode this screen must not have.
+ *
+ * Which is also why the DATE these clocks run from is stated rather than
+ * quietly assumed. Both of them legally start the day the goods came into the
+ * buyer's hands, not the day they were paid for. On a counter purchase those
+ * are the same day and the arithmetic below is exact. On a distance purchase
+ * they are not, and the app does not know when the parcel landed — so what it
+ * computes from the order date is the EARLIEST the right could end, and it
+ * says so. The old comment here claimed "counted from delivery" while the code
+ * counted from purchase, which is how a screen ends up asserting a right has
+ * expired on a day it may well still be live.
  */
 export interface LegalRight {
   /** Which statute, for the chip. */
@@ -44,31 +54,43 @@ const COOLING_OFF_DAYS = 14;
 
 const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
-function shortTermRejectRight(bought: Date, today: Date): LegalRight {
+/** What a computed end date is worth when the arrival date is unknown. */
+const AFTER_ARRIVAL = 'The clock starts the day it arrived, so a parcel that came later runs later.';
+const CHECK_ARRIVAL = 'but it starts the day the parcel arrived, so check that date';
+
+function shortTermRejectRight(bought: Date, today: Date, delivered: boolean): LegalRight {
   const ends = addDays(bought, REJECT_DAYS);
   const left = daysBetween(today, ends);
+  const repair =
+    'you can still ask for a free repair or replacement if a fault appears, for up to six years in England and Wales.';
   return {
     chip: 'Consumer Rights Act',
     live: left >= 0,
     body:
       left >= 0
-        ? `30-day right to reject faulty goods for a full refund — ends ${fmtDate(ends)} (${days(left)} left). This one applies wherever you bought it.`
-        : 'The 30-day window to reject faulty goods has passed — you can still ask for a free repair or replacement if a fault appears, for up to six years in England and Wales.',
+        ? delivered
+          ? `30-day right to reject faulty goods for a full refund — at least until ${fmtDate(ends)} (${days(left)} left). ${AFTER_ARRIVAL}`
+          : `30-day right to reject faulty goods for a full refund — ends ${fmtDate(ends)} (${days(left)} left). This one applies wherever you bought it.`
+        : delivered
+          ? `Counting from your order, the 30-day window to reject faulty goods has run out — ${CHECK_ARRIVAL}. Once it has, ${repair}`
+          : `The 30-day window to reject faulty goods has passed — ${repair}`,
   };
 }
 
 function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean): LegalRight {
   const ends = addDays(bought, COOLING_OFF_DAYS);
   const left = daysBetween(today, ends);
+  // Only a distance purchase has this right at all, so the arrival caveat
+  // applies to every string here.
   return {
     chip: 'Consumer Contracts Regs',
     live: left >= 0,
     body:
       left >= 0
-        ? `14-day cooling-off on distance purchases — you can cancel for any reason until ${fmtDate(ends)} (${days(left)} left), then 14 more days to send it back.`
+        ? `14-day cooling-off on distance purchases — you can cancel for any reason until at least ${fmtDate(ends)} (${days(left)} left), then 14 more days to send it back. ${AFTER_ARRIVAL}`
         : storeWindowOpen
-          ? 'The 14-day cooling-off period has passed — the shop’s own window above is still open, so use that.'
-          : 'The 14-day cooling-off period has passed. You keep the rights above for anything that turns out to be faulty.',
+          ? `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}. The shop’s own window above is still open either way.`
+          : `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}. You keep the rights above for anything that turns out to be faulty.`,
   };
 }
 
@@ -82,7 +104,9 @@ function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean): L
  */
 export function legalRights(r: Receipt, today: Date, storeWindowOpen: boolean): LegalRight[] {
   const bought = fromISODate(r.purchasedOn);
-  const reject = shortTermRejectRight(bought, today);
+  // A counter purchase is handed over on the day it is paid for, so its dates
+  // are exact; a delivered one is not, and every string has to admit it.
+  const reject = shortTermRejectRight(bought, today, r.distance);
   if (!r.distance) return [reject];
 
   const coolingOff = coolingOffRight(bought, today, storeWindowOpen);
