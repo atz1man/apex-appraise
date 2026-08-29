@@ -32,17 +32,27 @@ const FILES = [
   // people than either.
   'index.html',
   join('app', 'index.html'),
+  // The manifest's description, which is what an install prompt shows — the
+  // fourth place this same claim was living, and the one nobody scrolls past.
+  join('public', 'manifest.webmanifest'),
 ];
 
-/** "pings you", "we'll remind you", "notifies you" — a delivery, unqualified. */
-const PROMISE = /\b(?:pings?|notif(?:y|ies)|remind(?:s)?|alerts?|wakes?|tells?|warns?|nudges?)\s+you\b/i;
+/**
+ * "pings you", "we'll remind you", "notifies you" — a delivery, unqualified.
+ *
+ * Both voices. The manifest said "get pinged before either clock runs out",
+ * which the active pattern alone walks straight past — the promise does not
+ * stop being a promise for being made in the passive.
+ */
+const PROMISE =
+  /\b(?:pings?|notif(?:y|ies)|remind(?:s)?|alerts?|wakes?|tells?|warns?|nudges?)\s+you\b|\b(?:get|gets|be|being|are|is)\s+(?:pinged|notified|reminded|alerted|told|warned|nudged)\b/i;
 /** What makes it true: the moment it happens is named. */
 const QUALIFIED = /\bopen\b|\bcome back\b|\breturn to\b|\blaunch\b|\bforeground\b/i;
 
 function copyLines(): { file: string; line: number; text: string }[] {
   const out: { file: string; line: number; text: string }[] = [];
   for (const rel of FILES) {
-    if (!/\.(ts|tsx|html)$/.test(rel)) continue;
+    if (!/\.(ts|tsx|html|webmanifest)$/.test(rel)) continue;
     // Tolerant of a renamed file, so the count check below reports "I cannot
     // read what I mean to read" rather than the whole suite dying on ENOENT.
     let src: string;

@@ -914,11 +914,18 @@ as long as it says when. It reads the files rather than a list of known
 strings, skips comment lines (they quote the banned copy to explain it), and
 fails if it cannot read what it means to read.
 
-Which then found the same correction stopping one layer short a second time.
+Which then found the same correction stopping one layer short twice more.
 Both `<meta name="description">` lines still said "pings you before either
 clock runs out" — the copy a search result and a link preview show, read by
-more people than either page. The guard covers the two `index.html` files
-now, and each was proved by putting its old sentence back.
+more people than either page. And the manifest, which is what an install
+prompt shows, said *"get pinged before either clock runs out"*: the same
+promise in the passive, which the active pattern walked straight past. The
+guard reads all four files now and both voices, and each was proved by
+putting its old sentence back.
+
+The lesson is the one worth keeping: a correction gets applied where it was
+noticed rather than where it is true. When a claim changes, grep for it —
+every screen, both entry points' HTML, the manifest, and this file.
 
 ### A deploy reaches the app, and the app works without one
 

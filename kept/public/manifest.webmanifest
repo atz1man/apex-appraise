@@ -1,7 +1,7 @@
 {
   "name": "kept. \u2014 return deadlines, watched",
   "short_name": "kept",
-  "description": "Track every receipt, know each shop's real return window and your legal rights, and get pinged before either clock runs out. Nothing leaves your device.",
+  "description": "Track every receipt, know each shop's real return window and your legal rights, and see what is about to run out the moment you open it. Nothing leaves your device.",
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
