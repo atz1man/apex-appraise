@@ -10,7 +10,18 @@
  * is the one it was served from.
  */
 
-const CACHE = 'kept-v1';
+/*
+ * Stamped at build time — see the stampServiceWorker plugin in vite.config.ts.
+ * The name has to change when the assets do: `activate` below evicts every
+ * cache that is not the current one, and with a fixed name that is nothing at
+ * all. Each deploy's hashed bundles would then accumulate forever, competing
+ * for the same storage quota the app keeps the user's receipts in — and this
+ * app shows a standing warning when that quota runs out.
+ *
+ * Left as a literal so this file is still valid, servable JavaScript when
+ * read straight out of public/.
+ */
+const CACHE = 'kept-__BUILD_ID__';
 
 /**
  * The shell, precached at install so a first offline launch works. Hashed

@@ -132,6 +132,16 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The offline cache could never be evicted.** The service worker's cache name
+  was a fixed `kept-v1`, and `activate` deletes every cache *except* the
+  current one — so with a name that never changed, it deleted nothing. Each
+  deploy's hashed bundles accumulated forever, competing for the same storage
+  quota the app keeps receipts in, which is the quota whose exhaustion raises
+  the banner above. The name is stamped at build time from a hash of the
+  emitted assets: it changes when they do and stays put when they do not, so an
+  identical rebuild does not make anyone re-download a byte-identical app. The
+  build fails loudly if the placeholder ever goes missing, because a worker
+  that silently stops evicting looks exactly like one that works.
 - **A failed save was completely silent.** `save()` caught the quota error and
   returned, on the reasoning that not throwing inside a render beats throwing.
   The first half of that is right and the second half was missing: with no
