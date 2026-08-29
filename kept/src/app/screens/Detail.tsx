@@ -91,8 +91,25 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
       </div>
 
       <div style={{ background: color.ink, color: color.cream, borderRadius: radius.hero, padding: '22px 20px', boxShadow: shadow.lift }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
+        {/*
+          * The amount gets its own line rather than the name getting none.
+          *
+          * A price is one unbreakable token, so its min-content width is the
+          * whole of "£1,299,999.99" — and the name column beside it carries
+          * `minWidth: 0`, which is what lets a flex child be squeezed below
+          * the width of its own longest word. Rendered at 320px with a browser
+          * minimum font size of 20px, that is exactly what happened: the item
+          * name came out one word per line, eleven lines of it, beside a price
+          * at its full width.
+          *
+          * Wrapping the row is the whole fix. Where both fit they sit side by
+          * side as before; where they do not, the price drops below instead of
+          * taking the room out of the name. `60%` is the basis rather than a
+          * pixel floor because the pressure here is the ratio between two
+          * pieces of text, not the size of the screen.
+          */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0, flex: '1 1 60%' }}>
             <h1 tabIndex={-1} style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>{receipt.store}</h1>
             <div style={{ fontSize: 13, color: color.faint, marginTop: 3 }}>{receipt.item}</div>
           </div>

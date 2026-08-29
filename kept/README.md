@@ -1376,6 +1376,63 @@ receipt to be worth something, because if it were worth nothing the two totals
 would be equal and the comparison would pass over a difference that was never
 there. Both mutations fail it.
 
+### Three states the layout sweep never rendered
+
+`npm run layout` sweeps five state dimensions: the seeded library, long
+content, no receipts, all returned, and the webfont blocked. Three of them had
+never rendered their own data.
+
+Each seeded with `page.evaluate(seed)` and then reloaded, and the write did not
+survive the same tick — the app is already running, its persistence effect
+fires, and the hydrated demo state goes back over the seed before the reload
+reads it. Measured by reading storage straight back after the evaluate: it
+already held `seed_currys … seed_ikea` again. So "long content", "no receipts"
+and "all returned" each swept the same five demo receipts under a different
+label, and passed. Every check inside them was real; the *state* was not, which
+is the version of this that is hardest to see, because nothing about the output
+looks wrong.
+
+Found by accident, and worth saying how: a new check had a mutation that should
+have failed it and did not. Chasing that — rather than adjusting the check —
+led to the seeding.
+
+An init script runs before the page's own scripts on the next navigation, so
+the app now boots *from* the seeded state instead of racing it. Registered
+after the first load rather than before it, because the transforms read what is
+already there: `all returned` marks the demo receipts returned, and on a
+context that had never booted there would be nothing to mark.
+
+**And the guard for it was itself the same mistake, first time round.** It had
+the seed record what it wrote and compared that against the state after boot —
+which, with the seed removed, recorded the state that was already there and
+agreed with itself about the wrong library. A guard derived from the thing it
+guards is not a guard. What replaced it states each dimension's expectation in
+the words of what the dimension is *for* — one receipt with a very long shop
+name; no receipts at all; every receipt returned — so nothing the seeding does
+can satisfy one by accident. Putting the race back now names all six seeded
+passes and prints the demo library it found instead.
+
+### A block of text narrower than its own longest word
+
+What turned the above up. Big text and long words are two pressures and this
+defect lived only in the combination: at 320px with a browser minimum font size
+of 20px, the detail screen's item name rendered **one word per line**, eleven
+lines of it. No sideways scroll, nothing past an edge, nothing clipped — every
+existing check passed.
+
+A price is one unbreakable token, so the min-content width of
+`£1,299,999.99` is the whole string, and the name column beside it carries
+`minWidth: 0` — which is exactly what permits a flex child to be squeezed
+narrower than its own longest word. Wrapping the row is the whole fix: where
+both fit they sit side by side as before, and where they do not the price drops
+below instead of taking the room out of the name.
+
+The rule is stated directly rather than by proxy — a block of text may wrap as
+much as it likes, but may not be narrower than the longest word it has to
+render — and it is measured against the real font, by rendering each word in a
+hidden span with the element's computed type. Reintroducing the crush names it
+with the numbers: *"has 57px to render 'Bournemouth', which needs 140px"*.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active

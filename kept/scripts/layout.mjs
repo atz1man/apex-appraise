@@ -185,7 +185,7 @@ async function checkOverflow(page, label, width) {
   }
 }
 
-async function sweep(width, seedState, label, steps, { blockFonts = false } = {}) {
+async function sweep(width, seedState, label, steps, { blockFonts = false, expectKind = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height: 844 } });
   /*
    * The state a cold cache paints.
@@ -201,8 +201,7 @@ async function sweep(width, seedState, label, steps, { blockFonts = false } = {}
   page.on('pageerror', (e) => failures.push({ label, width, kind: 'pageerror', detail: e.message }));
   await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
   if (seedState) {
-    await page.evaluate(seedState);
-    await page.reload({ waitUntil: 'networkidle' });
+    await seedBeforeBoot(ctx, page, seedState, expectKind, `${label} · seeding`, width);
   }
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Skip' }).click().catch(() => {});
@@ -215,6 +214,65 @@ async function sweep(width, seedState, label, steps, { blockFonts = false } = {}
     everScrolled += await checkCovered(page, `${label} · ${name}`, width);
   }
   await ctx.close();
+}
+
+/*
+ * Seeding, done where the app cannot undo it.
+ *
+ * This used to be `page.evaluate(seed)` followed by a reload, and the write
+ * did not survive the same tick: the app is already running, its persistence
+ * effect fires, and the hydrated demo state goes back over the seed before the
+ * reload reads it. Measured directly — read straight back after the evaluate,
+ * localStorage already held `seed_currys … seed_ikea` again.
+ *
+ * So three of this file's five state dimensions were never rendering their own
+ * data. "long content", "no receipts" and "all returned" each swept the same
+ * five demo receipts under a different label, and passed. Every check in them
+ * was real; the STATE was not, which is the version of this that is hardest to
+ * see, because nothing about the output looks wrong.
+ *
+ * An init script runs before the page's own scripts on the next navigation, so
+ * the app boots from the seeded state instead of racing it. Registered after
+ * the first load rather than before it, because the transforms read what is
+ * already there — `wipeTo('returned')` marks the demo receipts returned, and
+ * on a context that had never booted there would be nothing to mark.
+ */
+/*
+ * What each seeded dimension has to be true of, said independently.
+ *
+ * The first attempt at this check had the seed record what it wrote and
+ * compared that with the state after boot. It could not fail: with the seed
+ * removed, the recording ran anyway and recorded the state that was already
+ * there, so the check agreed with itself about the wrong library. A guard
+ * derived from the thing it is guarding is not a guard.
+ *
+ * These are stated here instead, in the words of what the dimension is FOR,
+ * and nothing the seeding does can satisfy one by accident.
+ */
+const EXPECTED = {
+  adversarial: ['one receipt with a very long shop name', (rs) => rs.length === 1 && /Bournemouth/.test(rs[0].store)],
+  none: ['no receipts at all', (rs) => rs.length === 0],
+  returned: ['every receipt returned', (rs) => rs.length > 0 && rs.every((r) => r.status === 'returned')],
+};
+
+async function seedBeforeBoot(ctx, page, seedState, expectKind, label, width) {
+  await ctx.addInitScript({ content: `(${seedState})();` });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+
+  const [what] = EXPECTED[expectKind];
+  const receipts = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1') ?? '{}');
+    return (s.receipts ?? []).map((r) => ({ store: r.store, status: r.status }));
+  });
+  if (!EXPECTED[expectKind][1](receipts)) {
+    failures.push({
+      label,
+      width,
+      kind: 'the app did not come up in the state being swept',
+      detail: `expected ${what}, and got ${receipts.length === 0 ? 'none' : receipts.map((r) => `${r.store}:${r.status}`).join(', ')}`,
+    });
+  }
 }
 
 const seedAdversarial = (rows) => `() => {
@@ -255,9 +313,9 @@ const screens = [
 
 for (const width of WIDTHS) {
   await sweep(width, null, 'seeded', screens);
-  await sweep(width, seedAdversarial(ADVERSARIAL), 'long content', screens);
-  await sweep(width, wipeTo('none'), 'no receipts', [['home', async () => {}], ['add', async (p) => { await p.getByRole('button', { name: 'Add a receipt' }).click(); }]]);
-  await sweep(width, wipeTo('returned'), 'all returned', [['home', async () => {}]]);
+  await sweep(width, seedAdversarial(ADVERSARIAL), 'long content', screens, { expectKind: 'adversarial' });
+  await sweep(width, wipeTo('none'), 'no receipts', [['home', async () => {}], ['add', async (p) => { await p.getByRole('button', { name: 'Add a receipt' }).click(); }]], { expectKind: 'none' });
+  await sweep(width, wipeTo('returned'), 'all returned', [['home', async () => {}]], { expectKind: 'returned' });
   await sweep(width, null, 'webfont blocked', screens, { blockFonts: true });
 }
 
@@ -302,6 +360,7 @@ const bigTextFailures = [];
     args: ['--blink-settings=minimumFontSize=20,minimumLogicalFontSize=20'],
   });
   let smallestLabel = 0;
+  let everSqueezeChecked = 0;
   for (const width of WIDTHS) {
     const ctx = await big.newContext({ viewport: { width, height: 780 } });
     const page = await ctx.newPage();
@@ -370,11 +429,111 @@ const bigTextFailures = [];
         });
       }
     }
+
     await ctx.close();
+
+    /*
+     * And the same screen with long content in it, in a context of its own.
+     *
+     * Seeded on a FRESH page rather than the one above, and that is not
+     * tidiness. Writing localStorage under a running app races the app's own
+     * persistence: measured, the write landed and the live React state wrote
+     * five demo receipts back over it before the reload, so the check examined
+     * the seeded library and passed. It reported a clean sweep of a screen it
+     * never rendered — which is the failure this file exists to prevent, found
+     * because the mutation that should have failed it did not.
+     *
+     * Big text and long words are two pressures and the defect was in the
+     * combination; neither alone showed it. A price is one unbreakable token,
+     * so its min-content width is the whole of "£1,299,999.99", and the name
+     * column beside it carries `minWidth: 0` — which is exactly what permits a
+     * flex child to be squeezed narrower than its own longest word. At 320px
+     * with the text at 20px the item name came out ONE WORD PER LINE, eleven
+     * lines of it. No sideways scroll, nothing past an edge, nothing clipped:
+     * every check here passed.
+     *
+     * So the rule is stated directly. A block of text may wrap as much as it
+     * likes; it may not be narrower than the longest word it has to render.
+     */
+    const longCtx = await big.newContext({ viewport: { width, height: 780 } });
+    const longPage = await longCtx.newPage();
+    await longPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+    await seedBeforeBoot(longCtx, longPage, seedAdversarial(ADVERSARIAL), 'adversarial', 'long content with the text turned up · seeding', width);
+    await longPage.waitForTimeout(500);
+    await longPage.getByRole('button', { name: 'Skip' }).click({ timeout: 2000 }).catch(() => {});
+    await longPage.waitForTimeout(400);
+    await longPage.locator('li button').first().click({ timeout: 2000 }).catch(() => {});
+    await longPage.waitForTimeout(500);
+
+    // The seed has to be the one on screen, or everything below is measured on
+    // the demo library — which is how this check first passed a defect.
+    const onScreen = await longPage.evaluate(() => (document.querySelector('main')?.textContent ?? ''));
+    if (!onScreen.includes('Egyptian cotton')) {
+      bigTextFailures.push({
+        label: 'the long-content check',
+        width,
+        kind: 'the adversarial receipt was never on screen',
+        detail: 'the detail screen did not show the seeded row, so nothing long was measured',
+      });
+    }
+
+    const squeezed = await longPage.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0';
+      document.body.appendChild(probe);
+      const out = [];
+      for (const el of document.querySelectorAll('main *')) {
+        // Only a block rendering text of its own, and only where there are
+        // words to compare — a single unbreakable token is allowed to be wider
+        // than its box, which is what an ellipsis is for.
+        const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim();
+        const words = own.split(/\s+/).filter(Boolean);
+        if (words.length < 2) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if (cs.textOverflow === 'ellipsis') continue;
+        probe.style.font = cs.font;
+        probe.style.fontFamily = cs.fontFamily;
+        probe.style.fontSize = cs.fontSize;
+        probe.style.fontWeight = cs.fontWeight;
+        probe.style.letterSpacing = cs.letterSpacing;
+        let widest = 0;
+        let word = '';
+        for (const w of words) {
+          probe.textContent = w;
+          const px = probe.getBoundingClientRect().width;
+          if (px > widest) { widest = px; word = w; }
+        }
+        if (el.clientWidth + 0.5 < widest) {
+          out.push({ text: own.slice(0, 30), box: Math.round(el.clientWidth), needs: Math.round(widest), word });
+        }
+      }
+      probe.remove();
+      return out;
+    });
+    for (const sq of squeezed) {
+      bigTextFailures.push({
+        label: 'a block of text with the text turned up',
+        width,
+        kind: 'squeezed narrower than its own longest word',
+        detail: `"${sq.text}…" has ${sq.box}px to render "${sq.word}", which needs ${sq.needs}px`,
+      });
+    }
+    everSqueezeChecked += 1;
+    await longCtx.close();
   }
   // A pass here means nothing if the setting never applied — the labels are
   // 10px by design, so anything at or below that is the ordinary render and
   // this whole section measured the state it was written to escape.
+  if (everSqueezeChecked < WIDTHS.length) {
+    bigTextFailures.push({
+      label: 'the squeezed-text check',
+      width: 0,
+      kind: 'never ran on every width',
+      detail: `it examined ${everSqueezeChecked} of ${WIDTHS.length} widths, so a clean pass is a pass over what it did not look at`,
+    });
+  }
+
   if (smallestLabel <= 10) {
     bigTextFailures.push({
       label: 'the large-text check',
