@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 469 unit tests over the decision logic
+npm test           # 472 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -416,6 +416,17 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **Fixing a typo took five days off a return window.** The seeded Zara coat
+  carries a dispatch date, because Zara counts its 30 days from dispatch
+  rather than from the order. Correct "bought on" from the 13th to the 20th
+  and `windowStartsOn` stayed at the 15th — a parcel dispatched five days
+  before it was ordered, and a deadline still counted from the 15th, so the
+  screen said 14 September when the receipt now said 19 September. `applyDraft`
+  never set the field at all; the spread carried the stale one straight past
+  the preview, which is the same preview-versus-save split that produced the
+  two-day disagreement above. One `keptWindowStart` now answers it for both: a
+  dispatch date belongs to the shop that dispatched it, and it cannot be
+  earlier than the purchase.
 - **An expired cooling-off is not always expired, and Scotland is not England.**
   Two things the record supports that the screen was not saying. Regulation 31
   of the 2013 Regulations: where the trader never gave the consumer the

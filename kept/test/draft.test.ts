@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { applyDraft, draftFrom, effectiveWindowStart, keptWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { toISODate } from '../src/lib/dates';
+import { derive } from '../src/lib/receipts';
 import { money, toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
 
@@ -334,15 +336,42 @@ describe('where the window will actually start', () => {
     expect(effectiveWindowStart(zara, { ...draftFrom(zara), store: '  Zara  ' })).toBe('2026-08-15');
   });
 
+  it('drops a dispatch clock the corrected purchase date has overtaken', () => {
+    // Correcting "bought on" from the 13th to the 20th left windowStartsOn at
+    // the 15th: a parcel dispatched five days before it was ordered, and a
+    // deadline still counted from the 15th — five days removed from a return
+    // window by fixing a typo.
+    const draft = { ...draftFrom(zara), purchasedOn: '2026-08-20' };
+    expect(effectiveWindowStart(zara, draft)).toBe('2026-08-20');
+    expect(keptWindowStart(zara, 'Zara', '2026-08-20')).toBeUndefined();
+  });
+
+  it('keeps it when the purchase date moves earlier instead', () => {
+    // Still dispatched after it was ordered, so it is still the shop's clock.
+    expect(effectiveWindowStart(zara, { ...draftFrom(zara), purchasedOn: '2026-08-10' })).toBe('2026-08-15');
+  });
+
   it('agrees with what applyDraft actually saves', () => {
-    // The two must not be able to drift: this is the pairing that broke.
-    for (const store of ['Zara', 'Argos']) {
-      const draft = { ...draftFrom(zara), store };
+    // The two must not be able to drift: this is the pairing that broke, and
+    // the purchase-date case below is the one it broke on a second time —
+    // applyDraft was not setting the field at all, so the spread carried a
+    // stale one straight past the preview.
+    for (const patch of [{ store: 'Zara' }, { store: 'Argos' }, { purchasedOn: '2026-08-20' }, { purchasedOn: '2026-08-10' }]) {
+      const draft = { ...draftFrom(zara), ...patch };
       const out = validateDraft(draft, TODAY);
       if (!out.ok) throw new Error('expected valid');
       const saved = applyDraft(zara, out.value);
-      expect(saved.windowStartsOn ?? saved.purchasedOn).toBe(effectiveWindowStart(zara, draft));
+      expect(saved.windowStartsOn ?? saved.purchasedOn, JSON.stringify(patch)).toBe(effectiveWindowStart(zara, draft));
     }
+  });
+
+  it('does not shorten the window by correcting a typo', () => {
+    // The whole point, in days: what the screen would say afterwards.
+    const draft = { ...draftFrom(zara), purchasedOn: '2026-08-20' };
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    const saved = applyDraft(zara, out.value);
+    expect(toISODate(derive(saved, TODAY).deadline)).toBe('2026-09-19');
   });
 });
 

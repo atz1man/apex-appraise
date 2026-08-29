@@ -185,12 +185,39 @@ export function draftFrom(r: Receipt): ReceiptDraft {
  * discards it — the same condition applyDraft uses.
  */
 export function effectiveWindowStart(original: Receipt, draft: ReceiptDraft): string {
-  // Compared on the canonical name, like applyDraft below. Retyping "Boots" as
-  // "boots" is not a change of shop, and if these two disagreed about that the
-  // preview would drop a dispatch clock the save keeps — which is the exact
-  // disagreement this function exists to prevent.
-  const storeChanged = original.store !== canonicalStoreName(draft.store);
-  return !storeChanged && original.windowStartsOn ? original.windowStartsOn : draft.purchasedOn;
+  return keptWindowStart(original, draft.store, draft.purchasedOn) ?? draft.purchasedOn;
+}
+
+/**
+ * The dispatch date this edit leaves standing, or nothing.
+ *
+ * A dispatch date belongs to the shop that dispatched it, so changing the shop
+ * discards it — and it cannot be earlier than the purchase, so correcting the
+ * purchase date past it discards it too. That second condition was missing,
+ * and it cost days. Correcting the seeded Zara coat's "bought on" from 13 to
+ * 20 August left `windowStartsOn` at the 15th: a parcel dispatched five days
+ * before it was ordered, and a deadline still counted from the 15th, so the
+ * screen said 14 September when the receipt now says 19 September. Five days
+ * removed from a return window by fixing a typo — the retailer-clock version
+ * of the thing legal.ts calls the one failure this app must not have.
+ *
+ * One function because the preview and the save must not disagree about it;
+ * `applyDraft` used to leave the field untouched, so the two answers came from
+ * different code and only one of them was ever going to be right.
+ *
+ * Compared on the canonical name: retyping "Boots" as "boots" is not a change
+ * of shop.
+ *
+ * `>=` rather than `>` on the day the two dates meet is a readability choice,
+ * not a behavioural one: either way the window starts that day, and the detail
+ * screen shows a dispatch note only when the two differ. There is deliberately
+ * no test pinning that boundary — it would pass whichever way the comparison
+ * went, which is the shape of a test that reads as coverage and is not.
+ */
+export function keptWindowStart(original: Receipt, store: string, purchasedOn: string): string | undefined {
+  if (!original.windowStartsOn) return undefined;
+  if (original.store !== canonicalStoreName(store)) return undefined;
+  return original.windowStartsOn >= purchasedOn ? original.windowStartsOn : undefined;
 }
 
 /**
@@ -216,6 +243,9 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     cat: valid.cat,
     amount: valid.amount,
     purchasedOn: valid.purchasedOn,
+    // Set explicitly rather than carried by the spread: see keptWindowStart
+    // for the five days a stale one silently removed.
+    windowStartsOn: keptWindowStart(original, valid.store, valid.purchasedOn),
     windowDays: valid.windowDays,
     distance: valid.distance,
     // Clearing the field clears the date, and so does saying it was bought in
