@@ -1843,9 +1843,18 @@ too now.
 One limit of the harness is worth recording rather than working around: it runs
 `vitest` only, so for `state.ts` — where the interesting statements are inside
 `useEffect` — every deletion "survives" and the verdict means nothing. The run
-was stopped there rather than reported. A statement-deletion pass over the
-reducer's effects wants the smoke suite behind it, which is minutes per
-mutation rather than seconds.
+was stopped there rather than reported.
+
+That is a statement about the harness, not about the reducer, and the
+difference was measured rather than assumed. The reducer has four effects and
+each has a named check in `smoke`: the day-rollover ticker ("the day count
+follows the clock past midnight"), the share-parameter cleanup ("the shared
+payload is stripped from the URL"), the save ("a failed save is not silent"),
+and the cross-tab adoption ("a second tab does not destroy the first tab's
+receipt"). The last is the one the vitest-only harness had reported as
+surviving; deleted, rebuilt and run against `smoke`, it fails and is named
+exactly. So the seam is thin rather than open — which is worth knowing before
+spending minutes a mutation on it.
 
 ## Not built yet
 
