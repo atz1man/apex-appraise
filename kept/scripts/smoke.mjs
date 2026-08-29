@@ -83,15 +83,67 @@ page.on('console', (m) => {
 await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(800);
 
-// One alert for the receipt that is actually urgent, and only one — the
-// gentler rung it passed on the way is recorded silently.
+// A fresh install interrupts nobody. The demo set looks urgent — the home
+// screen leads with "2 days left" — and a notification is not a
+// demonstration: on a lock screen it is indistinguishable from a real one,
+// and it carries £89 nobody spent.
 const opening = await page.evaluate(() => window.__notes);
 const results = {
-  'a due deadline raises exactly one alert': opening.length === 1 && opening[0].tag === 'seed_currys:soon',
+  'a fresh install does not ping you about the sample receipts': opening.length === 0,
 };
 
 await page.getByRole('button', { name: 'Skip' }).click();
 await page.waitForTimeout(300);
+
+/*
+ * And one alert for a receipt the person actually added — only one, because
+ * the gentler rung it passed on the way is recorded silently.
+ *
+ * Its own context: the alert fires on load, so it needs a launch with the
+ * receipt already on disk, and this page's own state is about to be swiped
+ * and edited by everything below.
+ */
+{
+  const alertCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, permissions: ['notifications'] });
+  watchOrigins(alertCtx);
+  const alertPage = await alertCtx.newPage();
+  // Both delivery paths, like the main harness above: with a worker
+  // registered, deliver() goes through registration.showNotification and the
+  // constructor is only the fallback — a stub for one of them records nothing
+  // and reads as "no alert was raised".
+  await alertPage.addInitScript(() => {
+    window.__notes = [];
+    const record = (title, opts) => window.__notes.push({ title, body: opts?.body, tag: opts?.tag });
+    class StubNotification {
+      static permission = 'granted';
+      static requestPermission() { return Promise.resolve('granted'); }
+      constructor(title, opts) { record(title, opts); }
+    }
+    window.Notification = StubNotification;
+    navigator.serviceWorker?.ready.then((reg) => {
+      const original = reg.showNotification?.bind(reg);
+      reg.showNotification = (title, opts) => {
+        record(title, opts);
+        return original ? original(title, opts).catch(() => {}) : Promise.resolve();
+      };
+    }).catch(() => {});
+  });
+  await alertPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await alertPage.waitForTimeout(500);
+  await alertPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    const { demo, ...urgent } = s.receipts.find((r) => r.id === 'seed_currys');
+    s.receipts = [...s.receipts, { ...urgent, id: 'mine_urgent', item: 'My own headphones' }];
+    s.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  });
+  await alertPage.reload({ waitUntil: 'networkidle' });
+  await alertPage.waitForTimeout(900);
+  const raised = await alertPage.evaluate(() => window.__notes);
+  results['a due deadline on your own receipt raises exactly one alert'] =
+    raised.length === 1 && raised[0].tag === 'mine_urgent:soon';
+  await alertCtx.close();
+}
 
 // Swipe the urgent row left past the commit threshold.
 const row = page.getByRole('button', { name: /Currys, JBL/ });

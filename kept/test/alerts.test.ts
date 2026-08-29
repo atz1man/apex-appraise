@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { alertKey, dueAlerts, pruneSent, supersededKeys } from '../src/lib/alerts';
 import { addDays, toISODate } from '../src/lib/dates';
 import { toPence } from '../src/lib/money';
+import { seedReceipts } from '../src/lib/seed';
+import { derive } from '../src/lib/receipts';
 import type { Receipt } from '../src/lib/types';
 
 const TODAY = new Date(2026, 7, 28);
@@ -129,5 +131,28 @@ describe('the sent list does not grow forever', () => {
   it('does not trip over an id containing a colon', () => {
     const odd = closingIn(2, { id: 'r:1:2' });
     expect(pruneSent([alertKey('r:1:2', 'soon')], [odd])).toEqual(['r:1:2:soon']);
+  });
+});
+
+describe('the demo set never interrupts', () => {
+  it('raises no alert, however urgent it looks', () => {
+    // A notification is not a demonstration. Grant permission on a fresh
+    // install and the phone said "Go now or lose it — Currys · JBL Tune 770NC
+    // headphones — 2 days left. £89.00 back if it goes back", on a lock
+    // screen, about £89 nobody spent.
+    const seeded = seedReceipts(TODAY);
+    const due = seeded.filter((r) => {
+      const { daysLeft } = derive(r, TODAY);
+      return daysLeft >= 0 && daysLeft <= 7;
+    });
+    expect(due.length, 'the seed has nothing urgent to be silent about').toBeGreaterThan(0);
+    expect(dueAlerts(seeded, TODAY, 7, new Set())).toEqual([]);
+  });
+
+  it('still alerts about the receipts beside them', () => {
+    const seeded = seedReceipts(TODAY);
+    const mine = { ...seeded[0], id: 'mine', demo: undefined };
+    const alerts = dueAlerts([...seeded, mine], TODAY, 7, new Set());
+    expect(alerts.map((a) => a.receiptId)).toEqual(['mine']);
   });
 });

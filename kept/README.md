@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 472 unit tests over the decision logic
+npm test           # 474 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 46 end-to-end checks, including a midnight rollover
+npm run smoke      # 47 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -416,6 +416,16 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **A notification is not a demonstration.** The sample receipts are labelled
+  on the list and cost nothing against the free tier, and this was the last
+  place they still behaved as real: grant permission on a fresh install and
+  the phone said *"Go now or lose it — Currys · JBL Tune 770NC headphones — 2
+  days left. £89.00 back if it goes back"*, on a lock screen, indistinguishable
+  from a real alert, about £89 nobody spent. `dueAlerts` skips them. The
+  urgency is still demonstrated where it can be seen for what it is — the home
+  screen leads with that same receipt and its two days. The smoke check that
+  covered this used to assert the sample alert; it now requires silence on a
+  fresh install and exactly one alert on a receipt the person added.
 - **Fixing a typo took five days off a return window.** The seeded Zara coat
   carries a dispatch date, because Zara counts its 30 days from dispatch
   rather than from the order. Correct "bought on" from the 13th to the 20th

@@ -80,6 +80,21 @@ export function dueAlerts(
   const out: DeadlineAlert[] = [];
   for (const r of receipts) {
     if (r.status !== 'active') continue;
+    /*
+     * Never about the demo set.
+     *
+     * A notification is not a demonstration. The five receipts a fresh install
+     * arrives with are labelled "sample" on the list and cost nothing against
+     * the free tier, and this was the one place they still behaved as real:
+     * grant permission and the phone says "Go now or lose it — Currys · JBL
+     * Tune 770NC headphones — 2 days left. £89.00 back if it goes back", on a
+     * lock screen, indistinguishable from a real one, about £89 nobody spent.
+     *
+     * The urgency is already demonstrated where it can be seen for what it is:
+     * the home screen leads with that same receipt and its two days. An
+     * interruption carrying a money figure is a different thing from a card.
+     */
+    if (r.demo) continue;
     const { daysLeft, deadline } = derive(r, today);
     const rung = rungFor(daysLeft, urgentDays);
     if (!rung) continue;
