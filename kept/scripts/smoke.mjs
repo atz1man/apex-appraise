@@ -293,6 +293,65 @@ const named = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1
 results['naming a shop by hand brings its verified window'] =
   named.store === 'Boots' && named.windowDays === 35 && named.policy.startsWith('Boots ·');
 
+/*
+ * What is on screen when the app cannot render.
+ *
+ * A throw anywhere below the root unmounts the whole tree — measured before
+ * the boundary existed: a blank page, no text, not one button, while the
+ * receipts sat intact in localStorage with no server holding a copy. A reload
+ * recovers only when the fault is on a screen you had to navigate to; a fault
+ * on the first screen, or one a particular stored receipt causes, lands back
+ * in the blank state on every launch.
+ *
+ * Driven by making a platform call the render depends on throw, which is a
+ * real class of failure (an old engine, a locale bug) and does not need a
+ * test-only hook in the app. Its own context, because a page that cannot
+ * render is not a page the rest of this script can carry on using.
+ */
+{
+  const brokenCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, acceptDownloads: true });
+  watchOrigins(brokenCtx);
+  const broken = await brokenCtx.newPage();
+  await broken.addInitScript(() => {
+    // money() formats every amount on every screen through this.
+    // eslint-disable-next-line no-extend-native
+    Number.prototype.toLocaleString = function toLocaleString() {
+      throw new Error('simulated platform failure');
+    };
+  });
+  // The first load lands on onboarding, which formats no money and so renders
+  // fine. Get past it, then reload into the screen that does.
+  await broken.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
+  await broken.waitForTimeout(500);
+  await broken.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('kept.v1') ?? '{}');
+    stored.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(stored));
+  });
+  await broken.reload({ waitUntil: 'domcontentloaded' });
+  await broken.waitForTimeout(900);
+
+  results['a render failure is not a blank page'] =
+    (await broken.getByRole('heading', { name: 'Something in kept broke' }).isVisible().catch(() => false)) &&
+    (await broken.getByRole('button', { name: 'Save my receipts to a file' }).isVisible().catch(() => false));
+
+  // The rescue must produce the receipts, without going through the loader or
+  // the reader that may be what failed.
+  const rescue = broken.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+  await broken.getByRole('button', { name: 'Save my receipts to a file' }).click().catch(() => {});
+  const download = await rescue;
+  let rescued = null;
+  if (download) {
+    const path = join(tmpdir(), 'kept-smoke-rescue.json');
+    await download.saveAs(path);
+    rescued = JSON.parse(readFileSync(path, 'utf8'));
+  }
+  results['the rescue hands back the receipts that were on the device'] =
+    !!rescued && rescued.app === 'kept' && Array.isArray(rescued.receipts) && rescued.receipts.length > 0;
+
+  await brokenCtx.close();
+}
+
 // The free tier is claimed on the pricing page, in Settings and on the Add
 // screen. Fill it and the Save must actually refuse.
 await page.evaluate(() => {

@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import { App } from './App';
+import { Recovery } from './components/Recovery';
 import { color } from '../tokens';
 
 /**
@@ -32,7 +33,9 @@ function Shell() {
           boxShadow: '0 0 0 1px rgba(23,20,16,0.08)',
         }}
       >
-        <App />
+        <Recovery>
+          <App />
+        </Recovery>
       </div>
     </div>
   );

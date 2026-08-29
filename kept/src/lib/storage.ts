@@ -193,6 +193,50 @@ export function wipe(): void {
   }
 }
 
+/**
+ * A backup built from whatever is on disk, without hydrating any of it.
+ *
+ * For the one moment when the app cannot render: the receipts are still in
+ * localStorage and there is no server holding a copy, so the only thing that
+ * matters is getting them off the device. That rescue must not run through the
+ * code that just failed — not `load`, not `hydrate`, not a receipt reader —
+ * because any of those may be exactly what threw. So it parses and copies,
+ * validating nothing, and hands back the same shape the importer accepts.
+ *
+ * Returns null only when there is genuinely nothing to save. Unparseable JSON
+ * is still handed back verbatim: it is the person's data, it is what is
+ * actually stored, and a file they can keep beats a file they cannot have.
+ */
+export function rescueBackup(): { text: string; readable: boolean } | null {
+  const store = storage();
+  let raw: string | null = null;
+  try {
+    raw = store?.getItem(KEY) ?? null;
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<KeptState>;
+    return {
+      readable: true,
+      text: JSON.stringify(
+        {
+          app: 'kept',
+          exportedAt: new Date().toISOString(),
+          version: typeof parsed.version === 'number' ? parsed.version : SCHEMA_VERSION,
+          receipts: Array.isArray(parsed.receipts) ? parsed.receipts : [],
+          settings: parsed.settings ?? { ...DEFAULT_SETTINGS },
+        },
+        null,
+        2,
+      ),
+    };
+  } catch {
+    return { text: raw, readable: false };
+  }
+}
+
 /** The Settings screen's "Export a backup" — the user's data, in their hands. */
 export function exportBackup(state: KeptState): string {
   return JSON.stringify(

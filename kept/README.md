@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 33 end-to-end checks, including a midnight rollover
+npm run smoke      # 35 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -175,6 +175,18 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **A render error blanked the whole app.** Measured before the fix: a throw
+  on one screen unmounted the tree and left a page with no text and not one
+  button, while the receipts sat intact in localStorage with no server holding
+  a copy. A reload recovers only when the fault is on a screen you had to
+  navigate to; a fault on the first screen, or one a particular stored receipt
+  causes, lands back in the blank state on every launch — which is the exact
+  shape of a bug this app has already had once and fixed at the data layer.
+  `Recovery` is the same fix at the render layer, and its rescue deliberately
+  does not run through the app's state, its loader or its receipt reader,
+  since any of those may be what threw: it reads the store, copies it, and
+  offers a file, keeping even the row that broke everything because that row
+  is the one most worth having.
 - **The policy badge is derived, not stored.** A "POLICY CHANGED" flag on the
   row and a banner counting affected shops were two sources for one fact. Both
   now read the same derivation, so they cannot disagree.

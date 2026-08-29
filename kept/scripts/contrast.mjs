@@ -255,6 +255,40 @@ for (const y of [0, 900, 1800, 2700, 3600, 4500]) {
 }
 for (const f of await lp.evaluate(eval(SWEEP))) failures.push({ screen: 'landing', ...f });
 
+
+/*
+ * The screen shown when the app cannot render. It is a state, not a route, so
+ * nothing here would ever have opened it — and it introduces a full-page
+ * palette of its own. Reached the way the smoke suite reaches it: by making a
+ * platform call the render depends on throw, which needs no test-only hook in
+ * the app.
+ */
+{
+  const brokenCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const brokenPage = await brokenCtx.newPage();
+  await brokenPage.addInitScript(() => {
+    // money() formats every amount on every screen through this.
+    Number.prototype.toLocaleString = function toLocaleString() {
+      throw new Error('simulated platform failure');
+    };
+  });
+  // The first load is onboarding, which formats no money and renders fine.
+  await brokenPage.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
+  await brokenPage.waitForTimeout(500);
+  await brokenPage.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('kept.v1') ?? '{}');
+    stored.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(stored));
+  });
+  await brokenPage.reload({ waitUntil: 'domcontentloaded' });
+  await brokenPage.waitForTimeout(700);
+  for (const f of await brokenPage.evaluate(eval(SWEEP))) failures.push({ screen: 'render failure', ...f });
+  await brokenPage.getByRole('button', { name: 'Save my receipts to a file' }).click().catch(() => {});
+  await brokenPage.waitForTimeout(300);
+  for (const f of await brokenPage.evaluate(eval(SWEEP))) failures.push({ screen: 'render failure · saved', ...f });
+  await brokenCtx.close();
+}
+
 await browser.close();
 
 // One row per distinct colour-on-colour pairing; the same token failing in

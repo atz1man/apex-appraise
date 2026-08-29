@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hydrate, DEFAULT_SETTINGS } from '../src/lib/storage';
+import { afterEach } from 'vitest';
+import { hydrate, rescueBackup, DEFAULT_SETTINGS } from '../src/lib/storage';
 import { MAX_UPDATES } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
@@ -82,5 +83,54 @@ describe('surviving whatever is on disk', () => {
 
   it('ignores junk in the alert list rather than choking on it', () => {
     expect(hydrate(stored({ alertsSent: ['r1:soon', 42, null] }), TODAY).alertsSent).toEqual(['r1:soon']);
+  });
+});
+
+describe('the rescue, for when the app cannot render', () => {
+  /*
+   * The one moment where getting the receipts OFF the device is the only thing
+   * that matters. It must not run through `load`, `hydrate` or the receipt
+   * reader, because any of those may be exactly what threw — so it validates
+   * nothing, and these tests are mostly about what it declines to do.
+   */
+  const withStore = (impl: Partial<Storage>) => {
+    (globalThis as { window?: unknown }).window = { localStorage: impl };
+  };
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  it('has nothing to offer when nothing is stored', () => {
+    withStore({ getItem: () => null });
+    expect(rescueBackup()).toBeNull();
+  });
+
+  it('gives back a file the importer accepts', () => {
+    withStore({ getItem: () => JSON.stringify({ version: 1, receipts: [good], settings: DEFAULT_SETTINGS }) });
+    const out = rescueBackup()!;
+    expect(out.readable).toBe(true);
+    const doc = JSON.parse(out.text);
+    expect(doc.app).toBe('kept');
+    expect(doc.receipts).toEqual([good]);
+    expect(typeof doc.exportedAt).toBe('string');
+  });
+
+  it('keeps a row the reader would have thrown away', () => {
+    // The row that broke the app is the row most worth rescuing: it is the
+    // person's receipt, and a human can repair it in a text editor.
+    withStore({ getItem: () => JSON.stringify({ receipts: [{ id: 'r9', store: 'Boots' }] }) });
+    expect(JSON.parse(rescueBackup()!.text).receipts).toEqual([{ id: 'r9', store: 'Boots' }]);
+  });
+
+  it('hands back unparseable storage verbatim rather than nothing', () => {
+    withStore({ getItem: () => '{"receipts": [tru' });
+    const out = rescueBackup()!;
+    expect(out.readable).toBe(false);
+    expect(out.text).toBe('{"receipts": [tru');
+  });
+
+  it('survives a storage that refuses to be read at all', () => {
+    withStore({ getItem: () => { throw new Error('blocked'); } });
+    expect(rescueBackup()).toBeNull();
   });
 });

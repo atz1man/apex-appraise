@@ -217,6 +217,40 @@ await audit(lp, 'landing', findings);
  * on, nothing may still be running an endless animation, and no transition may
  * be long enough to be motion.
  */
+
+/*
+ * The screen shown when the app cannot render. It is a state, not a route, so
+ * nothing here would ever have opened it — and it introduces a full-page
+ * palette of its own. Reached the way the smoke suite reaches it: by making a
+ * platform call the render depends on throw, which needs no test-only hook in
+ * the app.
+ */
+{
+  const brokenCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const brokenPage = await brokenCtx.newPage();
+  await brokenPage.addInitScript(() => {
+    // money() formats every amount on every screen through this.
+    Number.prototype.toLocaleString = function toLocaleString() {
+      throw new Error('simulated platform failure');
+    };
+  });
+  // The first load is onboarding, which formats no money and renders fine.
+  await brokenPage.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' });
+  await brokenPage.waitForTimeout(500);
+  await brokenPage.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('kept.v1') ?? '{}');
+    stored.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(stored));
+  });
+  await brokenPage.reload({ waitUntil: 'domcontentloaded' });
+  await brokenPage.waitForTimeout(700);
+  await audit(brokenPage, 'render failure', findings);
+  await brokenPage.getByRole('button', { name: 'Save my receipts to a file' }).click().catch(() => {});
+  await brokenPage.waitForTimeout(300);
+  await audit(brokenPage, 'render failure · saved', findings);
+  await brokenCtx.close();
+}
+
 /*
  * Where focus goes when the screen changes — the other question axe cannot
  * ask, because nothing about the markup is wrong.
