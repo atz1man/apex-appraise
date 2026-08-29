@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 import { color, radius } from '../../tokens';
+import { fmtDateLong, fromISODate } from '../../lib/dates';
 import { mergeBackup, parseBackup } from '../../lib/backup';
 import { notifyState, requestNotifyPermission, type NotifyState } from '../notify';
 import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
-import { VERIFIED_STORE_COUNT } from '../../lib/stores';
+import { TABLE_CHECKED_ON, VERIFIED_STORE_COUNT } from '../../lib/stores';
 import { URGENT_DAYS_MAX, URGENT_DAYS_MIN, type Settings as SettingsShape } from '../../lib/storage';
 import { TIERS } from '../../lib/pricing';
 import { countedAgainstQuota, FREE_TIER_LIMIT } from '../../lib/quota';
@@ -187,18 +188,35 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
           <div style={{ padding: '0 18px 14px', fontSize: 12, color: color.muted, lineHeight: 1.5 }}>
             {permission === 'denied'
               ? 'Your browser is blocking notifications for kept. Turn them back on in site settings.'
-              : 'Checked each time you open kept. Alerts that arrive while the app is closed need the App Store version.'}
+              : 'Checked each time you open kept. Nothing arrives while kept is closed — a web app cannot wake itself.'}
           </div>
         </div>
+        {/* "Daily · on" was a cadence nothing kept. The feed is fetched once
+            per launch — see the effect in App.tsx — which is what this says. */}
         <Toggle
           label="Policy watch"
           value={settings.policyWatch}
-          detail={settings.policyWatch ? 'Daily · on' : 'Off'}
+          detail={settings.policyWatch ? 'Every launch · on' : 'Off'}
           onChange={(v) => onChange({ policyWatch: v })}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '15px 18px' }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Retailer policies</span>
-          <span style={{ fontSize: 14, color: color.muted }}>{VERIFIED_STORE_COUNT} verified today</span>
+        <div style={{ padding: '15px 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Retailer policies</span>
+            <span style={{ fontSize: 14, color: color.muted }}>
+              {VERIFIED_STORE_COUNT} shops
+              {TABLE_CHECKED_ON ? ` · checked ${fmtDateLong(fromISODate(TABLE_CHECKED_ON))}` : ''}
+            </span>
+          </div>
+          {/* It said "20 verified today", which nothing recorded — the table is
+              maintained by hand. Until someone has checked it, the screen says
+              that, the way the landing page says its social proof is
+              illustrative. See TABLE_CHECKED_ON in stores.ts. */}
+          {!TABLE_CHECKED_ON && (
+            <div style={{ fontSize: 12, color: color.muted, lineHeight: 1.5, marginTop: 6 }}>
+              Kept’s own list, not yet checked against each retailer’s published terms. Always trust your receipt over
+              this.
+            </div>
+          )}
         </div>
       </section>
 

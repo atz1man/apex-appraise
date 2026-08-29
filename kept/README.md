@@ -380,6 +380,19 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **Three more on the Settings screen, found the same way.** "Retailer
+  policies — 20 verified today", where nothing records or could record a
+  verification date and the README's own pre-ship task is to check every
+  entry; claiming freshness for the data the product rests on, on the screen
+  where someone goes to ask about it, is the worst place to be vague. It reads
+  "20 shops" now, with a caption saying the list is Kept's own and not yet
+  checked against published terms — the same shape as
+  `SOCIAL_PROOF_IS_PLACEHOLDER`, driven by a `TABLE_CHECKED_ON` that is `null`
+  until someone does it. "Alerts that arrive while the app is closed need the
+  App Store version" implied an App Store version exists; nothing arrives
+  while kept is closed, because a web app cannot wake itself, which is what
+  `notify.ts` has always said in its own comment. And "Policy watch — Daily"
+  was a cadence nothing kept: the feed is fetched once per launch.
 - **Two claims in the shipped copy that nothing behind them kept.** The Watch
   tab said "Warranty clocks added automatically" — and nothing sets a
   warranty: not the parser, not the store table, not the add flow. The clock

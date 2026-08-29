@@ -129,6 +129,22 @@ export const STORE_POLICIES: readonly StorePolicy[] = [
 /** How many retailers the marketing copy may honestly claim. */
 export const VERIFIED_STORE_COUNT = STORE_POLICIES.length;
 
+/**
+ * The day someone last checked all of these against the retailers' own
+ * published terms — not the day the file was last edited.
+ *
+ * `null` until that has actually happened, and the Settings screen says so
+ * rather than implying otherwise. It said "20 verified today", which nothing
+ * anywhere recorded or could have recorded: this table is maintained by hand
+ * and the README's own pre-ship task is to check every entry. Claiming
+ * freshness for the data the whole product rests on, on the screen where
+ * someone would go to ask about it, is the worst place to be vague.
+ *
+ * Same shape as `SOCIAL_PROOF_IS_PLACEHOLDER` on the landing page, for the
+ * same reason: content that is not yet true says so, visibly, until it is.
+ */
+export const TABLE_CHECKED_ON: string | null = null;
+
 const BY_ALIAS = new Map<string, StorePolicy>();
 for (const s of STORE_POLICIES) for (const a of s.aliases) BY_ALIAS.set(a, s);
 
