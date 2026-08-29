@@ -14,6 +14,7 @@ import {
   sensitivityGrid,
   weightedComparables,
   type AppraisalResult,
+  type AutoAppraisalResult,
 } from '@apex/appraisal-engine';
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
@@ -1473,6 +1474,53 @@ const zAutoInputs = z.object({
   buildPerSqft: z.number().positive(),
 });
 
+/**
+ * The screening verdict — and, when there is no asking price, what it can honestly say.
+ *
+ * `rocAtAsking` is the return on cost if you paid the asking price, so the
+ * engine returns null for it whenever no asking price was given: there is no
+ * price to divide by. That null used to be read as `?? 0.2` — twenty per cent,
+ * comfortably over the 0.17 Proceed threshold — and the clause beside it,
+ * `asking === 0`, was satisfied by the very same absence. BOTH halves of the
+ * Proceed test therefore passed because a price was missing, and no unpriced
+ * screen could return anything but Proceed, for any scheme, ever. Measured
+ * before this change, on twelve flats at a £500/ft² build against £200/ft²
+ * values: residual land value minus £4,896,040 — a site you would have to be
+ * PAID nearly five million to take on — came back "Proceed", in green, beside a
+ * Profit on cost of 25.0%. That 25.0% was `targetProfit / (gdv - targetProfit)`,
+ * i.e. 0.20/0.80, a restatement of the target profit percentage and identical
+ * for every unpriced scheme regardless of its economics. The one tool whose
+ * whole job is to say "walk away" structurally could not.
+ *
+ * This is the live path, not a corner: the extraction tool declares `asking` as
+ * nullable, the prompt says "anything the documents do not state: null", and
+ * `numOr(0)` turns that null into zero — so any planning pack that does not
+ * quote a price screened Proceed.
+ *
+ * An unpriced screen is not, however, ungradeable. The residual IS the answer to
+ * "what can I pay for this?", and its SIGN is a conclusion needing neither a
+ * price nor a threshold: at or below zero the scheme does not work at any land
+ * price at all, free land included, so it is a Decline. Above zero the scheme
+ * supports some land price and is worth pursuing at least as far as asking what
+ * they want for it — Proceed, as before. No middle band is invented here: "how
+ * thin is too thin" is a judgement about a particular site, and this function
+ * does not have one to make.
+ *
+ * The priced branch is unchanged, and is now the only branch that reads
+ * `rocAtAsking` and `headroom` — both non-null exactly when a price was given.
+ */
+export function screeningVerdict(
+  r: Pick<AutoAppraisalResult, 'rocAtAsking' | 'headroom' | 'residualNet'>,
+  asking: number,
+): 'Proceed' | 'Caution' | 'Decline' {
+  if (asking <= 0 || r.rocAtAsking === null || r.headroom === null) {
+    return r.residualNet > 0 ? 'Proceed' : 'Decline';
+  }
+  if (r.rocAtAsking >= 0.17 && r.headroom >= 0) return 'Proceed';
+  if (r.rocAtAsking < 0.1 || r.headroom < -asking * 0.1) return 'Decline';
+  return 'Caution';
+}
+
 /** extraction + build rate → engine indicative result (deterministic code, never the LLM) */
 function indicative(extraction: Extraction, buildPerSqft: number) {
   const r = autoAppraise({
@@ -1494,12 +1542,9 @@ function indicative(extraction: Extraction, buildPerSqft: number) {
     acqPct: extraction.acq,
     asking: extraction.asking,
   });
-  const roc = r.rocAtAsking ?? (r.totalCostAtAsking == null && r.gdv > 0 ? r.targetProfit / Math.max(r.gdv - r.targetProfit, 1) : 0);
-  const headroom = r.headroom ?? 0;
-  let verdict: 'Proceed' | 'Caution' | 'Decline' = 'Caution';
-  if ((r.rocAtAsking ?? 0.2) >= 0.17 && (extraction.asking === 0 || headroom >= 0)) verdict = 'Proceed';
-  else if ((r.rocAtAsking ?? 0.2) < 0.1 || (extraction.asking > 0 && headroom < -extraction.asking * 0.1)) verdict = 'Decline';
-  return { ...r, roc, verdict };
+  // `rocAtAsking` is null exactly when no asking price was given, and the screen
+  // renders that null as "—" rather than inventing a return. See screeningVerdict.
+  return { ...r, roc: r.rocAtAsking, verdict: screeningVerdict(r, extraction.asking) };
 }
 
 export const autoAppraisalRouter = router({

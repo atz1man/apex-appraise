@@ -10,7 +10,8 @@ import { DealNav } from '../components/DealNav';
 // ---------- types ----------
 
 type Verdict = 'Proceed' | 'Caution' | 'Decline';
-type Indicative = AutoAppraisalResult & { roc: number; verdict: Verdict };
+/** `roc` is null when no asking price was given — there is no cost to return on. */
+type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict };
 
 interface RunState {
   extraction: Extraction;
@@ -756,7 +757,7 @@ export default function AutoAppraisal() {
                 </div>
                 <div className="relative mt-4 flex gap-2.5">
                   <HeadlineStat label="Residual land value" value={formatSigned(ind.residualNet)} />
-                  <HeadlineStat label="Profit on cost" value={formatPct(ind.roc, 0)} />
+                  <HeadlineStat label="Profit on cost" value={ind.roc != null ? formatPct(ind.roc, 0) : '—'} />
                   <HeadlineStat label="GDV" value={fM(ind.gdv)} />
                 </div>
               </section>
@@ -816,7 +817,26 @@ export default function AutoAppraisal() {
                     value={ind.headroom != null ? formatDelta(ind.headroom) : '—'}
                     tone={ind.headroom != null && ind.headroom < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--status-green, 30 122 85))'}
                   />
-                  <Well label="Profit at asking" value={fM(ind.profitAtAsking ?? ind.targetProfit)} tone="rgb(var(--status-green, 30 122 85))" />
+                  {/*
+                    Three figures in this row are only knowable once someone has
+                    named a price. Asking land and Land headroom already said so
+                    with an em dash; this one did not — it fell back to the
+                    TARGET profit, the figure the appraisal was solved to hit,
+                    and printed it as though it were the profit you would make at
+                    a price nobody had quoted. Its tone was also a green literal
+                    rather than a test, so a genuinely priced site whose asking
+                    was far over the residual showed its LOSS in green, with the
+                    headroom immediately to its left correctly in red.
+                  */}
+                  <Well
+                    label="Profit at asking"
+                    value={ind.profitAtAsking != null ? formatSigned(ind.profitAtAsking) : '—'}
+                    tone={
+                      ind.profitAtAsking != null && ind.profitAtAsking < 0
+                        ? 'rgb(var(--status-red, 178 58 46))'
+                        : 'rgb(var(--status-green, 30 122 85))'
+                    }
+                  />
                 </div>
               </Panel>
 
