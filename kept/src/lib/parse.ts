@@ -51,13 +51,20 @@ function pickAmount(text: string): Pence | null {
   return Math.max(...all);
 }
 
-/** Candidate dates in the text, in the order they appear. */
-function datesIn(text: string, today: Date): Date[] {
-  const found: Date[] = [];
-  const push = (y: number, m: number, d: number) => {
+/** A date found in the paste, and where it sat — the position is what lets a
+ *  label beside it be read. */
+interface DateHit {
+  date: Date;
+  index: number;
+}
+
+/** Candidate dates in the text, with their positions. */
+function datesIn(text: string, today: Date): DateHit[] {
+  const found: DateHit[] = [];
+  const push = (y: number, m: number, d: number, index: number) => {
     if (m < 0 || m > 11 || d < 1 || d > 31) return;
     const dt = new Date(y, m, d);
-    if (dt.getMonth() === m && dt.getDate() === d) found.push(dt);
+    if (dt.getMonth() === m && dt.getDate() === d) found.push({ date: dt, index });
   };
 
   // "25 Aug", "25 August 2026", "25th Aug"
@@ -65,23 +72,23 @@ function datesIn(text: string, today: Date): Date[] {
   for (const m of text.matchAll(dmy)) {
     const mon = MONTHS[m[2].slice(0, 3).toLowerCase()];
     if (mon === undefined) continue;
-    push(resolveYear(m[3], mon, Number(m[1]), today), mon, Number(m[1]));
+    push(resolveYear(m[3], mon, Number(m[1]), today), mon, Number(m[1]), m.index ?? 0);
   }
   // "Aug 25", "August 25, 2026"
   const mdy = /\b([a-z]{3,9})\.?[ .\-/]+(\d{1,2})(?:st|nd|rd|th)?,?(?:[ .\-/]+(\d{2,4}))?\b/gi;
   for (const m of text.matchAll(mdy)) {
     const mon = MONTHS[m[1].slice(0, 3).toLowerCase()];
     if (mon === undefined) continue;
-    push(resolveYear(m[3], mon, Number(m[2]), today), mon, Number(m[2]));
+    push(resolveYear(m[3], mon, Number(m[2]), today), mon, Number(m[2]), m.index ?? 0);
   }
   // "25/08/2026" — day first. This is a UK app; 05/08 is 5 August, never 8 May.
   for (const m of text.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/g)) {
     const y = Number(m[3]);
-    push(y < 100 ? 2000 + y : y, Number(m[2]) - 1, Number(m[1]));
+    push(y < 100 ? 2000 + y : y, Number(m[2]) - 1, Number(m[1]), m.index ?? 0);
   }
   // ISO
   for (const m of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
-    push(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    push(Number(m[1]), Number(m[2]) - 1, Number(m[3]), m.index ?? 0);
   }
   return found;
 }
@@ -98,11 +105,62 @@ function resolveYear(raw: string | undefined, month: number, day: number, today:
   return daysBetween(today, thisYear) > 0 ? today.getFullYear() - 1 : today.getFullYear();
 }
 
-/** The purchase date: the most recent candidate that is not in the future. */
+/**
+ * Phrases that name the day the order was PLACED.
+ *
+ * Deliberately whole phrases rather than the word "order" alone: an order
+ * email is full of dates that sit near that word and mean something else —
+ * "return your order by 5 Sept" most dangerously of all.
+ */
+const ORDER_DATE_LABEL =
+  /\b(?:order(?:ed)?\s*date|date\s+order(?:ed)?|date\s+of\s+order|order(?:ed)?\s+(?:on|placed)|order\s+placed(?:\s+on)?|purchase(?:d)?\s*(?:date|on)|bought\s+on)\b/gi;
+
+/** How far after its label a date may sit and still belong to it. */
+const LABEL_REACH = 40;
+
+/**
+ * Words that introduce a date which is NOT the day of purchase — when the
+ * parcel is coming, when it left, by when it has to go back.
+ *
+ * Applied as a preference rather than a filter: a date introduced by one of
+ * these is the LAST thing to fall back on, never something to discard. A
+ * delivery date is still evidence about when the order happened, and the
+ * alternative fallback — assuming today — is further from the truth and in the
+ * same dangerous direction.
+ */
+const NOT_A_PURCHASE = /\b(?:deliver\w*|arriv\w*|dispatch\w*|ship\w*|expect\w*|estimat\w*|return\w*|collect\w*|due)\b[^\n]{0,24}$/i;
+
+/**
+ * The purchase date.
+ *
+ * A labelled order date wins, exactly as a labelled total does above, and for
+ * the same reason: an order confirmation carries several dates and only one of
+ * them is the day the thing was bought. Without this the rule was "the most
+ * recent date that is not in the future", which on a real Currys email quietly
+ * read the ESTIMATED DELIVERY line — six days after the order — and started
+ * the return clock there. That is the dangerous direction: the app then
+ * promises days the shop will not honour, on the one number it exists to get
+ * right.
+ *
+ * Failing a label, the most recent past date is still the best guess — but not
+ * one announced as a delivery, a dispatch or a return-by, which is the same
+ * mistake one step quieter: "ordered 10 Aug, dispatched 12 Aug" used to yield
+ * the 12th. A future date cannot be a purchase that has already happened, so
+ * those are out first whatever introduces them.
+ */
 function pickDate(text: string, today: Date): Date | null {
-  const past = datesIn(text, today).filter((d) => daysBetween(today, d) <= 0);
+  const past = datesIn(text, today)
+    .filter((hit) => daysBetween(today, hit.date) <= 0)
+    .sort((a, b) => a.index - b.index);
   if (past.length === 0) return null;
-  return past.reduce((best, d) => (d > best ? d : best));
+
+  const labels = [...text.matchAll(ORDER_DATE_LABEL)].map((m) => (m.index ?? 0) + m[0].length);
+  const labelled = past.find((hit) => labels.some((end) => hit.index >= end && hit.index - end <= LABEL_REACH));
+  if (labelled) return labelled.date;
+
+  const newest = (hits: DateHit[]) => hits.reduce((best, hit) => (hit.date > best ? hit.date : best), hits[0].date);
+  const plain = past.filter((hit) => !NOT_A_PURCHASE.test(text.slice(Math.max(0, hit.index - 40), hit.index)));
+  return newest(plain.length > 0 ? plain : past);
 }
 
 function pickStore(text: string): StorePolicy | null {

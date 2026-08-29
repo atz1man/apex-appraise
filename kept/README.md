@@ -121,6 +121,16 @@ deliberate departure, not an oversight:
   onClick>`, which looks the same and is unreachable by keyboard or screen
   reader. Swipe-to-return keeps its gesture; *Got my money back* on the detail
   screen is the same action for anyone not using a pointer.
+- **The paste parser read the estimated delivery date as the purchase date.**
+  It picked "the most recent date that is not in the future", and an order
+  confirmation is full of dates: the order, the dispatch, the estimated
+  delivery, the return-by, a promotional footer. On an ordinary Currys email
+  that rule landed on the delivery estimate six days after the order, and the
+  app then promised six days the shop would not honour — the dangerous
+  direction, on the one number it exists to get right. `pickAmount` had
+  already been built to prefer a *labelled* total for exactly this reason;
+  `pickDate` now does the same, with delivery, dispatch and return-by wording
+  demoted beneath anything else, as a preference rather than a filter.
 - **The policy badge is derived, not stored.** A "POLICY CHANGED" flag on the
   row and a banner counting affected shops were two sources for one fact. Both
   now read the same derivation, so they cannot disagree.

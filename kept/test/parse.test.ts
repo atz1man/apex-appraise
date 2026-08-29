@@ -108,9 +108,79 @@ describe('purchase date', () => {
     expect(p.dateFound).toBe(false);
   });
 
-  it('takes the most recent past date when several appear', () => {
-    const p = parse('Apple · £129.00 · ordered 10 Aug, dispatched 12 Aug');
+  it('takes the most recent past date when several appear and none is announced', () => {
+    const p = parse('Apple · £129.00 · 10 Aug, then 12 Aug');
     expect(p.purchasedOn).toBe('2026-08-12');
+  });
+});
+
+describe('which of an order email’s several dates is the purchase', () => {
+  /*
+   * An order confirmation carries the order date, an estimated delivery, a
+   * dispatch note and a return-by, and only one of them starts the clock this
+   * app exists to count. "The most recent past date" read the WRONG one on a
+   * perfectly ordinary Currys email — six days late, so the app promised days
+   * the shop would not honour, on the single number it has to get right.
+   */
+  it('prefers a labelled order date over a later estimated delivery', () => {
+    const p = parse(`Order date: 18 Aug 2026
+      Currys · JBL headphones £89.00
+      Order total £92.99
+      Estimated delivery: 24 Aug 2026`);
+    expect(p.purchasedOn).toBe('2026-08-18');
+  });
+
+  it('prefers a labelled order date over a later date with no cue at all', () => {
+    /*
+     * This is the case the LABEL rule exists for, and the only kind that
+     * proves it: deprioritising delivery and dispatch wording is a blocklist,
+     * so it can only ever catch phrasings someone thought of. A promotional
+     * footer is not one of them, and it is on half the order emails ever sent.
+     * Without the label this reads 26 Aug and starts the clock eight days late.
+     */
+    const p = parse(`Order date: 18 Aug 2026
+      Currys · JBL headphones £89.00
+      Order total £92.99
+      20% off your next one — offer ends 26 Aug 2026`);
+    expect(p.purchasedOn).toBe('2026-08-18');
+  });
+
+  it.each([
+    ['Order date: 18 Aug 2026'],
+    ['Ordered on 18 Aug 2026'],
+    ['Order placed on 18 Aug 2026'],
+    ['Date of order — 18 Aug 2026'],
+    ['Purchase date 18 Aug 2026'],
+    ['Purchased on 18 Aug 2026'],
+  ])('reads the order date from "%s"', (line) => {
+    expect(parse(`Currys £89.00\n${line}\nDelivered 24 Aug 2026`).purchasedOn).toBe('2026-08-18');
+  });
+
+  it('is not fooled by a return-by date that sits beside the word "order"', () => {
+    // The near-miss that rules out matching the bare word: a return deadline
+    // read as the purchase date would move the real deadline weeks out.
+    const p = parse('Currys £89.00 · bought 18 Aug 2026 · return your order by 26 Aug 2026');
+    expect(p.purchasedOn).toBe('2026-08-18');
+  });
+
+  it('takes the order over a dispatch date, with neither labelled', () => {
+    const p = parse('Apple · £129.00 · 10 Aug, dispatched 12 Aug');
+    expect(p.purchasedOn).toBe('2026-08-10');
+  });
+
+  it('still uses a delivery date rather than assuming today, when it is all there is', () => {
+    // Preference, not a filter. Assuming today would be further from the truth
+    // and in the same direction — later than the purchase.
+    const p = parse('Currys £89.00 · delivered 24 Aug 2026');
+    expect(p.purchasedOn).toBe('2026-08-24');
+    expect(p.dateFound).toBe(true);
+  });
+
+  it('ignores a labelled order date that is in the future', () => {
+    // A purchase that has already happened cannot be dated next month; the
+    // label does not make a future date credible.
+    const p = parse('Currys £89.00 · 20 Aug 2026 · Order date: 20 Sep 2026');
+    expect(p.purchasedOn).toBe('2026-08-20');
   });
 });
 
