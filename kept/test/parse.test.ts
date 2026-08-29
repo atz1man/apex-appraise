@@ -257,3 +257,52 @@ describe('the day it arrived — read, never guessed', () => {
     expect(p.arrivedOn).toBe('2026-08-18');
   });
 });
+
+describe('the day it was dispatched — a third clock, kept apart', () => {
+  it('reads a labelled dispatch date', () => {
+    const p = parse('Zara · Order placed 13 Aug 2026 · £34.99 · Dispatched 15 Aug 2026');
+    expect(p.purchasedOn).toBe('2026-08-13');
+    expect(p.dispatchedOn).toBe('2026-08-15');
+  });
+
+  it.each([
+    ['dispatched on', 'Zara order 13 Aug 2026 · £34.99 · Dispatched on 15 Aug 2026'],
+    ['despatched', 'Zara order 13 Aug 2026 · £34.99 · Despatched 15 Aug 2026'],
+    ['shipped', 'Zara order 13 Aug 2026 · £34.99 · Shipped 15 Aug 2026'],
+    ['left our warehouse', 'Zara order 13 Aug 2026 · £34.99 · Left our warehouse 15 Aug 2026'],
+  ])('recognises "%s"', (_label, text) => {
+    expect(parse(text).dispatchedOn).toBe('2026-08-15');
+  });
+
+  it('says nothing when the paste says nothing', () => {
+    expect(parse('Zara · Total £34.99 · 13 Aug 2026').dispatchedOn).toBeNull();
+  });
+
+  it('refuses a promise of dispatch rather than a dispatch', () => {
+    expect(parse('Zara order 5 Aug 2026 · £34.99 · Estimated dispatch 12 Aug 2026').dispatchedOn).toBeNull();
+  });
+
+  it('refuses one that has not happened yet', () => {
+    expect(parse('Zara order 20 Aug 2026 · £34.99 · Dispatched 20 Sept 2026').dispatchedOn).toBeNull();
+  });
+
+  it('refuses one before the order it belongs to', () => {
+    expect(parse('Zara order placed 20 Aug 2026 · £34.99 · Dispatched 12 Aug 2026').dispatchedOn).toBeNull();
+  });
+
+  it('takes the EARLIEST of two, where an arrival takes the latest', () => {
+    // A second dispatch is a second parcel or a replacement; the clock the
+    // shop is running started when the first one left.
+    const p = parse('Zara order 1 Aug 2026 · £34.99 · Dispatched 5 Aug 2026 · dispatched again 9 Aug 2026');
+    expect(p.dispatchedOn).toBe('2026-08-05');
+  });
+
+  it('keeps the three dates apart', () => {
+    // Order, dispatch, delivery: three clocks, three sources, and conflating
+    // any two of them is how the app came to state one when it meant another.
+    const p = parse('Zara · Order placed 13 Aug 2026 · £34.99 · Dispatched 15 Aug 2026 · Delivered 18 Aug 2026');
+    expect(p.purchasedOn).toBe('2026-08-13');
+    expect(p.dispatchedOn).toBe('2026-08-15');
+    expect(p.arrivedOn).toBe('2026-08-18');
+  });
+});

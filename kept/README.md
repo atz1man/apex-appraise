@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 477 unit tests over the decision logic
+npm test           # 488 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 48 end-to-end checks, including a midnight rollover
+npm run smoke      # 49 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -416,6 +416,21 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **`clockStart` was declared on all twenty shops and read by nothing.** The
+  gotcha the marketing leads with — *"Zara's clock starts at dispatch"* — was
+  data on one seeded receipt and nothing else. Add a Zara receipt yourself and
+  the app counted its 30 days from the order. That is the safe direction, since
+  dispatch is later than the order and the earlier deadline is the cautious
+  one, but it is not the right one: it can say "window closed" on a day Zara
+  would still take the coat back, which is the failure `legal.ts` calls the one
+  this app must not have. Dispatch confirmations state the date, so
+  `pickDispatch` reads it under the same three conditions as the delivery date
+  — labelled, already happened, not before the order — and takes the
+  *earliest* where an arrival takes the latest, because a second dispatch is a
+  second parcel and the clock the shop is running started when the first one
+  left. Set only for a shop whose entry says it counts from dispatch: an Argos
+  receipt carrying Zara's clock would be worse than one carrying none, and the
+  smoke check adds both to say so.
 - **"No server" was the loose word in the privacy claim.** Settings and the
   landing page both said "No account, no server, no one reading your
   purchases" — on an app that is served from a server and downloads the

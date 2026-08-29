@@ -506,6 +506,34 @@ results['a delivery date in the paste is read, not asked for'] =
   prefilled === '2026-08-27' && delivered.arrivedOn === '2026-08-27' && delivered.purchasedOn === '2026-08-24';
 
 /*
+ * The retailer's own clock, for the one shop in the table that does not start
+ * it at the till.
+ *
+ * `clockStart` was declared on all twenty entries and read by nothing, so a
+ * Zara receipt anyone ADDED counted its 30 days from the order — the safe
+ * direction, since dispatch is later, but it can say "window closed" on a day
+ * Zara would still take the coat back. Two receipts, because the rule is not
+ * "set it when the email mentions dispatch": Argos counts from the purchase
+ * and a receipt carrying Zara's clock would be worse than one carrying none.
+ */
+const addPaste = async (paste, item) => {
+  await page.getByRole('button', { name: 'Add a receipt' }).click();
+  await page.waitForTimeout(300);
+  await page.fill('#paste', paste);
+  await page.getByRole('button', { name: 'Read it' }).click();
+  await page.waitForTimeout(400);
+  await page.fill('#add-item', item);
+  await page.getByRole('button', { name: /^Save/ }).click();
+  await page.waitForTimeout(600);
+  return page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.at(-1));
+};
+const zaraAdded = await addPaste('Zara · Order placed 13 August 2026 · Wool coat · Total £34.99 · Dispatched 15 August 2026', 'Wool coat');
+const argosAdded = await addPaste('Argos · Order placed 13 August 2026 · Kettle · Total £29.00 · Dispatched 15 August 2026', 'Kettle');
+results['a dispatch-clocked shop counts from dispatch, and only that shop'] =
+  zaraAdded.store === 'Zara' && zaraAdded.windowStartsOn === '2026-08-15' &&
+  argosAdded.store === 'Argos' && argosAdded.windowStartsOn === undefined;
+
+/*
  * What is on screen when the app cannot render.
  *
  * A throw anywhere below the root unmounts the whole tree — measured before

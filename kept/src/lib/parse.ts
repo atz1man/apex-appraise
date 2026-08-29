@@ -19,6 +19,11 @@ export interface ParsedReceipt {
   dateFound: boolean;
   /** ISO date the paste said it was delivered, or null when it did not say. */
   arrivedOn: string | null;
+  /**
+   * ISO date the paste said it was dispatched, or null. Meaningful only for a
+   * shop that counts its window from dispatch — see `clockStart` in stores.ts.
+   */
+  dispatchedOn: string | null;
   windowDays: number;
 }
 
@@ -216,6 +221,46 @@ function pickArrival(text: string, today: Date, purchased: Date | null): Date | 
 }
 
 /**
+ * Phrases that name the day the parcel left the warehouse.
+ *
+ * A third date, kept apart from the other two for the same reason they are
+ * kept apart from each other: it answers a different question and belongs to
+ * a different clock. `arrivedOn` starts the two STATUTORY clocks;
+ * `windowStartsOn` starts the RETAILER's, and Zara's starts at dispatch.
+ *
+ * Only the retailer's clock uses it, and only for a shop whose table entry
+ * says `clockStart: 'dispatch'` — see the add screen. An Argos email that
+ * mentions a dispatch date must not get one, because Argos counts from the
+ * purchase and a receipt carrying the wrong clock is worse than one carrying
+ * none.
+ */
+const DISPATCH_DATE_LABEL =
+  /\b(?:dispatch(?:ed)?(?:\s+(?:on|date))?|despatch(?:ed)?(?:\s+(?:on|date))?|shipped(?:\s+on)?|sent(?:\s+on)?|left\s+(?:our|the)\s+warehouse)\b/gi;
+
+/**
+ * The day it was dispatched, and only when the paste actually says so.
+ *
+ * Same three conditions as `pickArrival`, for the same reasons: labelled,
+ * already happened, and not before the order — a parcel cannot leave before
+ * it is bought. An estimate is excluded too, since "dispatching by Friday" is
+ * a promise rather than an event.
+ */
+function pickDispatch(text: string, today: Date, purchased: Date | null): Date | null {
+  const labels = [...text.matchAll(DISPATCH_DATE_LABEL)].map((m) => ({ end: (m.index ?? 0) + m[0].length, start: m.index ?? 0 }));
+  if (labels.length === 0) return null;
+  const candidates = datesIn(text, today)
+    .filter((hit) => daysBetween(today, hit.date) <= 0)
+    .filter((hit) => labels.some((l) => hit.index >= l.end && hit.index - l.end <= LABEL_REACH
+      && !NOT_AN_ARRIVAL.test(text.slice(Math.max(0, l.start - 30), l.start))))
+    .filter((hit) => !purchased || daysBetween(purchased, hit.date) >= 0);
+  if (candidates.length === 0) return null;
+  // The EARLIEST, where `pickArrival` takes the latest. A second dispatch is a
+  // second parcel or a replacement, and the clock the shop is running started
+  // when the first one left.
+  return candidates.reduce((best, hit) => (hit.date < best ? hit.date : best), candidates[0].date);
+}
+
+/**
  * Words that make a mention of a shop a mention of THE SHOP.
  *
  * An order email says "your Boots order" or "boots.com". Something bought
@@ -273,6 +318,7 @@ export function parseReceiptText(text: string, today: Date = new Date()): ParseO
 
   const date = pickDate(text, today);
   const arrived = pickArrival(text, today, date);
+  const dispatched = pickDispatch(text, today, date);
   return {
     ok: true,
     value: {
@@ -282,6 +328,7 @@ export function parseReceiptText(text: string, today: Date = new Date()): ParseO
       purchasedOn: toISODate(date ?? startOfDay(today)),
       dateFound: date !== null,
       arrivedOn: arrived ? toISODate(arrived) : null,
+      dispatchedOn: dispatched ? toISODate(dispatched) : null,
       windowDays: policy?.windowDays ?? UNKNOWN_STORE_WINDOW_DAYS,
     },
   };

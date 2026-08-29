@@ -124,10 +124,24 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
       cat: policy?.cat ?? 'other',
       amount: parsed.amount ?? 0,
       purchasedOn: parsed.purchasedOn,
-      // A dispatch-clocked retailer starts counting when the parcel leaves,
-      // and a pasted order confirmation cannot know that date. Leaving it
-      // unset counts from the order — the conservative reading is the one
-      // that does not promise days the shop will not honour.
+      /*
+       * A dispatch-clocked retailer starts counting when the parcel leaves,
+       * and until now nothing here could know that date — so every Zara
+       * receipt anyone added counted from the order instead. That is the safe
+       * direction (dispatch is later, so the order gives the earlier
+       * deadline) but it is not the right one: it can say "window closed" on
+       * a day the shop would still take the thing back, which is the failure
+       * legal.ts calls the one this app must not have.
+       *
+       * Dispatch confirmations say the date outright, and `pickDispatch` now
+       * reads it. Only for a shop whose entry says it counts from dispatch —
+       * `clockStart` had been declared on all twenty and read by nothing, and
+       * an Argos receipt carrying Zara's clock would be worse than one
+       * carrying none.
+       */
+      ...(policy?.clockStart === 'dispatch' && parsed.dispatchedOn
+        ? { windowStartsOn: parsed.dispatchedOn }
+        : {}),
       windowDays: effectiveWindow,
       ...(distance && arrivedOn ? { arrivedOn } : {}),
       policy: policyFor(store, effectiveWindow),
