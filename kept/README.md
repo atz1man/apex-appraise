@@ -30,6 +30,7 @@ npm run smoke      # 29 end-to-end checks, including offline with the network cu
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
+npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 ```
 
@@ -285,6 +286,28 @@ than the content box it sat in. Every grid there now uses
 `minmax(min(Npx, 100%), 1fr)`, which lets the floor collapse to the space that
 exists. It also turned up a receipt row whose untruncated shop name wrapped to
 five lines while the item beneath it was still being clipped to one.
+
+### It does not contradict itself
+
+Unit tests check each calculation. Smoke checks each flow. Neither catches the
+failure where two surfaces are each internally consistent and say different
+things about the same fact — which is how the edit screen came to preview a
+deadline two days from the one on the receipt it was editing. Both halves were
+"correct"; they counted from different dates.
+
+`npm run agreement` asks one question repeatedly: a fact that appears twice has
+to match. Days left, across the hero, the row's chip, the countdown ring and
+the alert that was sent. The deadline date, across the hero, the receipt and
+its edit form. Money still returnable and money kept back, against the sum of
+the rows. The free-tier meter, against the list it is counting.
+
+Two things about it are deliberate. It reads named elements rather than
+regexing `textContent`: the first version did the latter and reported three
+disagreements that were all its own, because "£89.00" followed by "2 days"
+reads as "89.002 days" and a greedy `\d+` takes `002`. And the edit-form check
+runs against the *dispatch-clocked* receipt, because on any other one the two
+ways of computing the date agree by coincidence — aimed at the first row, it
+would have missed the very bug it was written for.
 
 ### It stays usable as the library grows
 

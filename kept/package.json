@@ -15,7 +15,8 @@
     "contrast": "node scripts/contrast.mjs",
     "a11y": "node scripts/a11y.mjs",
     "layout": "node scripts/layout.mjs",
-    "perf": "node scripts/perf.mjs"
+    "perf": "node scripts/perf.mjs",
+    "agreement": "node scripts/agreement.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

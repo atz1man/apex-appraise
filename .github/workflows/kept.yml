@@ -75,3 +75,5 @@ jobs:
         run: npm run a11y
       - name: Narrow screens, adversarial content, empty states
         run: npm run layout
+      - name: The same fact, stated in more than one place, agrees
+        run: npm run agreement
