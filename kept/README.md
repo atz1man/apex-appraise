@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 506 unit tests over the decision logic
+npm test           # 508 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -417,6 +417,17 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **A link's hover colour was the shade the palette rejected.** `color.amber`
+  was darkened from the handoff's `#B98A00` to `#896600` because the original
+  measured 3.00:1 on cream — below AA wherever it was used. The stylesheet
+  went on using `#B98A00` for `a:hover`, and the contrast sweep cannot see it:
+  that state only exists under a pointer. Fixed, and `tokens.test.ts` now
+  refuses any colour the palette does not contain, across the components *and*
+  `styles.css` — which cannot import the tokens, which is exactly why it
+  drifts. The rule is on the RGB, not the string: a dozen `rgba()` literals
+  are one-off opacities of ink, danger and cream, and naming every step would
+  be a token per shadow, but a colour nobody chose is refused. It strips
+  comments first, so a rule can be explained by naming what it rejected.
 - **Nothing used the typeface tokens, and the fallback was three different
   fonts.** `font` was exported from `tokens.ts` and used by no component:
   forty-eight `font-family` literals were spelled out across fourteen files

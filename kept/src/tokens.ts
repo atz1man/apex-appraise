@@ -10,6 +10,8 @@ export const color = {
   cream: '#FDFAF1',
   creamAlt: '#F3EFE3',
   creamWarm: '#FFFBEE',
+  /** The deeper cream: the hero gradient's outer stop, and the soft hover. */
+  creamDeep: '#EDE8D8',
   white: '#ffffff',
 
   yellow: '#F2B90D',

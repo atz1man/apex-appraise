@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { font } from '../src/tokens';
+import { color, font } from '../src/tokens';
 
 /**
  * One place decides what the app is set in.
@@ -54,5 +54,73 @@ describe('type is set from the tokens', () => {
       expect(stack, role).toMatch(/(?:sans-serif|serif|monospace)$/);
       expect(stack.split(',').length, role).toBeGreaterThan(1);
     }
+  });
+});
+
+/**
+ * Every colour in the app is one of the tokens.
+ *
+ * The header of `tokens.ts` says so — "no raw hex literals live in a
+ * component file" — and two had escaped it. The stylesheet's `a:hover` was
+ * still `#B98A00`, which is the exact value `color.amber` was darkened away
+ * from for measuring 3.00:1 on cream: below AA, on a state the contrast sweep
+ * cannot see because it only exists under the pointer. And a `#EDE8D8` sat in
+ * the hero gradient beside a token, and again in a hover rule, belonging to
+ * nothing.
+ *
+ * The stylesheet is included deliberately. It cannot import the tokens, which
+ * is exactly why it drifts, and comparing the two files is the only thing
+ * that holds it.
+ */
+describe('colour is set from the tokens', () => {
+  const expand = (c: string) =>
+    /^#[0-9a-f]{3}$/.test(c) ? `#${c.slice(1).split('').map((d) => d + d).join('')}` : c;
+
+  /** The RGB triple behind a token or a literal, ignoring any alpha. */
+  const rgbOf = (value: string): string | null => {
+    const v = expand(value.toLowerCase().replace(/\s+/g, ''));
+    const hex = /^#([0-9a-f]{6})/.exec(v);
+    if (hex) return hex[1];
+    const fn = /^rgba?\((\d+),(\d+),(\d+)/.exec(v);
+    if (fn) return [1, 2, 3].map((i) => Number(fn[i]).toString(16).padStart(2, '0')).join('');
+    return null;
+  };
+
+  const PALETTE = new Set(Object.values(color).map(rgbOf).filter(Boolean) as string[]);
+
+  // Comments first: the rule below is explained by naming the colours it
+  // rejected, and a guard that cannot survive its own explanation is a guard
+  // nobody will write the explanation for.
+  const stripComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  const coloursIn = (text: string) =>
+    [...stripComments(text).matchAll(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g)].map((m) => m[0]);
+
+  const files = sourceFiles(SRC).concat(join(SRC, 'styles.css'));
+
+  it('finds colours to check', () => {
+    expect(files.flatMap((f) => coloursIn(readFileSync(f, 'utf8'))).length).toBeGreaterThan(5);
+    expect(PALETTE.size).toBeGreaterThan(10);
+  });
+
+  it('mixes no colour the palette does not already contain', () => {
+    /*
+     * The RGB must be a token's; only the ALPHA may vary at the call site.
+     *
+     * Twelve rgba() literals are one-off opacities of ink, danger, yellow,
+     * cream and white — a scrim at 0.55, a hairline at 0.06 — and naming each
+     * step in the palette would be a token per shadow. What must not appear
+     * is a colour nobody chose: a hand-mixed grey, or the #B98A00 that
+     * `color.amber` was darkened away from for measuring 3.00:1 on cream and
+     * which the stylesheet went on using for `a:hover`, a state the contrast
+     * sweep cannot see because it only exists under the pointer.
+     */
+    const strays = files
+      .flatMap((f) =>
+        coloursIn(readFileSync(f, 'utf8')).map((c) => ({ where: f.slice(SRC.length + 1), c, rgb: rgbOf(c) })),
+      )
+      .filter((x) => !x.rgb || !PALETTE.has(x.rgb))
+      .map((x) => `${x.where} ${x.c}`);
+    expect([...new Set(strays)]).toEqual([]);
   });
 });

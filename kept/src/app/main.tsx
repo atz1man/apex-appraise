@@ -18,7 +18,7 @@ function Shell() {
     <div
       style={{
         minHeight: '100dvh',
-        background: `radial-gradient(900px 700px at 50% -10%, ${color.creamWarm}, #EDE8D8 70%)`,
+        background: `radial-gradient(900px 700px at 50% -10%, ${color.creamWarm}, ${color.creamDeep} 70%)`,
         display: 'flex',
         justifyContent: 'center',
       }}

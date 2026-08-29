@@ -32,7 +32,10 @@ body {
 svg { display: block; flex-shrink: 0; }
 
 a { color: #171410; text-decoration: none; }
-a:hover { color: #B98A00; }
+/* #896600, not the handoff's #B98A00: that measured 3.00:1 on cream, below
+   AA, and is the exact value `color.amber` was darkened away from. The
+   stylesheet kept it, on a state the contrast sweep cannot see. */
+a:hover { color: #896600; }
 
 /*
  * Every tappable thing in the design is a styled <div>. Here they are real
