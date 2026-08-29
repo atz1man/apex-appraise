@@ -60,8 +60,14 @@ describe('validating rows', () => {
     ['an unreadable how-it-was-bought', { distance: 'online' }],
     ['an unknown status', { status: 'pending' }],
     ['a malformed dispatch date', { windowStartsOn: 'yesterday' }],
+    ['a malformed arrival date', { arrivedOn: 'last Tuesday' }],
+    ['an arrival date that only looks real', { arrivedOn: '2026-02-31' }],
   ])('drops a row with %s', (_label, patch) => {
     expect(parseBackup(file([{ ...good, ...patch }]))).toEqual({ ok: false, reason: 'nothing-usable' });
+  });
+
+  it('keeps an arrival date through a round trip', () => {
+    expect(ok(file([{ ...good, distance: true, arrivedOn: '2026-08-19' }])).receipts[0].arrivedOn).toBe('2026-08-19');
   });
 
   it('reads a row written before the two rights were separated', () => {

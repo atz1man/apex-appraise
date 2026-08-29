@@ -31,6 +31,11 @@ export interface ReceiptDraft {
    * belongs in the draft so the edit screen can change it.
    */
   distance: boolean;
+  /**
+   * The day it arrived, blank when unknown or when it has not. Only asked for
+   * on a distance purchase — a counter purchase arrives when it is bought.
+   */
+  arrivedOnText: string;
 }
 
 export type DraftField = keyof ReceiptDraft;
@@ -53,6 +58,8 @@ export interface ValidDraft {
   /** Absent when the receipt should carry no warranty clock. */
   warrantyMonths?: number;
   distance: boolean;
+  /** Absent when unknown; both statutory clocks then fall back to the order. */
+  arrivedOn?: string;
 }
 
 export type DraftOutcome = { ok: true; value: ValidDraft } | { ok: false; errors: DraftErrors };
@@ -97,6 +104,22 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     errors.windowDaysText = 'That is longer than any real return window';
   }
 
+  // Optional, but a date that is there has to be real and has to make sense:
+  // nothing arrives before it is ordered, and nothing has arrived tomorrow.
+  const arrivedRaw = draft.arrivedOnText.trim();
+  let arrivedOn: string | undefined;
+  if (arrivedRaw && draft.distance) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(arrivedRaw) || toISODate(fromISODate(arrivedRaw)) !== arrivedRaw) {
+      errors.arrivedOnText = 'Pick the day it arrived, or leave it blank';
+    } else if (daysBetween(today, fromISODate(arrivedRaw)) > 0) {
+      errors.arrivedOnText = 'That date is in the future';
+    } else if (!errors.purchasedOn && daysBetween(fromISODate(purchasedOn), fromISODate(arrivedRaw)) < 0) {
+      errors.arrivedOnText = 'It cannot have arrived before you ordered it';
+    } else {
+      arrivedOn = arrivedRaw;
+    }
+  }
+
   const warrantyRaw = draft.warrantyMonthsText.trim();
   let warrantyMonths: number | undefined;
   if (warrantyRaw) {
@@ -111,6 +134,7 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     ok: true,
     value: {
       store, item, cat: draft.cat, amount, purchasedOn, windowDays, distance: draft.distance,
+      ...(arrivedOn ? { arrivedOn } : {}),
       ...(warrantyMonths ? { warrantyMonths } : {}),
     },
   };
@@ -128,6 +152,7 @@ export function draftFrom(r: Receipt): ReceiptDraft {
     windowDaysText: String(r.windowDays),
     warrantyMonthsText: r.warranty && r.warranty.months > 0 ? String(r.warranty.months) : '',
     distance: r.distance,
+    arrivedOnText: r.arrivedOn ?? '',
   };
 }
 
@@ -177,6 +202,9 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     purchasedOn: valid.purchasedOn,
     windowDays: valid.windowDays,
     distance: valid.distance,
+    // Clearing the field clears the date, and so does saying it was bought in
+    // a shop — a counter purchase has no separate arrival.
+    arrivedOn: valid.distance ? valid.arrivedOn : undefined,
     // Clearing the field clears the clock. The note, if any, came from the
     // manufacturer's own wording and is kept only while a clock is there to
     // caption.

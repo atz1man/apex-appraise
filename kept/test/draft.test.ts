@@ -9,6 +9,7 @@ const base: ReceiptDraft = {
   store: 'Currys', item: 'Headphones', cat: 'audio',
   amountText: '89.00', purchasedOn: '2026-08-16', windowDaysText: '14', warrantyMonthsText: '',
   distance: false,
+  arrivedOnText: '',
 };
 
 function valid(patch: Partial<ReceiptDraft> = {}) {
@@ -221,6 +222,47 @@ describe('the window a receipt says it has', () => {
     // deadline.
     const stale: Receipt = { ...boots, policy: 'Boots · 35 days, as worded when this was bought.' };
     expect(applyDraft(stale, valid({ ...draftFrom(stale), item: 'Renamed' })).policy).toBe(stale.policy);
+  });
+});
+
+describe('the day it arrived', () => {
+  const online: Receipt = {
+    id: 'r', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),
+    purchasedOn: '2026-08-16', windowDays: 30, policy: 'p', distance: true, status: 'active',
+  };
+  const draft = (patch: Partial<ReceiptDraft>) => ({ ...draftFrom(online), ...patch });
+
+  it('is optional', () => {
+    expect(applyDraft(online, valid(draft({ arrivedOnText: '' }))).arrivedOn).toBeUndefined();
+  });
+
+  it('round-trips', () => {
+    const out = applyDraft(online, valid(draft({ arrivedOnText: '2026-08-19' })));
+    expect(out.arrivedOn).toBe('2026-08-19');
+    expect(draftFrom(out).arrivedOnText).toBe('2026-08-19');
+  });
+
+  it('cannot be before the order', () => {
+    const out = validateDraft(draft({ arrivedOnText: '2026-08-15' }), TODAY);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.arrivedOnText).toContain('before you ordered');
+  });
+
+  it('cannot be in the future', () => {
+    const out = validateDraft(draft({ arrivedOnText: '2026-09-01' }), TODAY);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.arrivedOnText).toContain('future');
+  });
+
+  it('rejects a date that only looks real', () => {
+    expect(validateDraft(draft({ arrivedOnText: '2026-02-31' }), TODAY).ok).toBe(false);
+  });
+
+  it('is dropped when the receipt becomes a counter purchase', () => {
+    // A shop purchase arrives when it is bought, so a separate arrival date is
+    // not merely unused — it would be wrong.
+    const delivered = applyDraft(online, valid(draft({ arrivedOnText: '2026-08-19' })));
+    expect(applyDraft(delivered, valid({ ...draftFrom(delivered), distance: false })).arrivedOn).toBeUndefined();
   });
 });
 

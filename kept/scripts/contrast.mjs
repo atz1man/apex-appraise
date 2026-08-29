@@ -143,6 +143,15 @@ await page.waitForTimeout(300);
 await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
 await page.waitForTimeout(400);
 await sweep('receipt detail · distance purchase');
+
+// Its edit form, which is where the "Arrived on" field lives — only a
+// delivered order has one, and the seeded receipt these sweeps open by default
+// was bought over a counter, so nothing would ever have rendered it.
+await page.getByRole('button', { name: 'Edit', exact: true }).click();
+await page.waitForTimeout(400);
+await sweep('edit · delivered order');
+await page.getByRole('button', { name: 'Cancel' }).click().catch(() => {});
+await page.waitForTimeout(300);
 await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
 await page.waitForTimeout(300);
 await page.getByRole('button', { name: /Currys, JBL/ }).click();

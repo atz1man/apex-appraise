@@ -124,6 +124,56 @@ describe('what the clocks are counted from', () => {
   });
 });
 
+describe('once the day it arrived is known', () => {
+  /*
+   * Both clocks legally start when the goods reach you. Without that date the
+   * app computes from the order and says so — "at least until", and a lapsed
+   * right points at the arrival date rather than declaring itself gone.
+   * Given it, the dates are simply right, and the hedging goes away.
+   */
+  const arrived = (n: number) => ({ ...online, arrivedOn: ago(n) });
+
+  it('states the dates plainly instead of as a floor', () => {
+    const text = legalRights(arrived(3), TODAY, true).map((r) => r.body).join(' ');
+    expect(text).not.toContain('at least until');
+    expect(text).not.toContain('Counting from your order');
+    expect(text).toContain('the day it arrived');
+  });
+
+  it('counts the cooling-off from arrival, not from the order', () => {
+    // Ordered 5 days ago, landed 3 days ago: 11 days of cooling-off left, not 9.
+    const r = find(legalRights(arrived(3), TODAY, true), 'Consumer Contracts Regs');
+    expect(r.body).toContain('11 days left');
+    expect(r.live).toBe(true);
+  });
+
+  it('counts the 30-day right from arrival too', () => {
+    expect(find(legalRights(arrived(3), TODAY, true), 'Consumer Rights Act').body).toContain('27 days left');
+  });
+
+  it('can keep a right alive that the order date said had gone', () => {
+    // Ordered 20 days ago — the cooling-off reads as run out. It arrived 8
+    // days ago, so there are 6 days of it left, and the app was telling this
+    // person to stop trying.
+    const late = { ...online, purchasedOn: ago(20), arrivedOn: ago(8) };
+    const r = find(legalRights(late, TODAY, true), 'Consumer Contracts Regs');
+    expect(r.live).toBe(true);
+    expect(r.body).toContain('6 days left');
+  });
+
+  it('says a lapsed right has lapsed, once it can be sure', () => {
+    const r = find(legalRights({ ...online, purchasedOn: ago(30), arrivedOn: ago(20) }, TODAY, false), 'Consumer Contracts Regs');
+    expect(r.live).toBe(false);
+    expect(r.body).toContain('counting from the day it arrived');
+    expect(r.body).not.toContain('check that date');
+  });
+
+  it('is not asked of a counter purchase, which arrives when it is bought', () => {
+    const text = legalRights(inStore, TODAY, true).map((r) => r.body).join(' ');
+    expect(text).not.toMatch(/arrived|at least/);
+  });
+});
+
 describe('the 30-day right to reject faulty goods', () => {
   const reject = (r: Receipt) => find(legalRights(r, TODAY, true), 'Consumer Rights Act');
 

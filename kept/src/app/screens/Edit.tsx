@@ -171,6 +171,30 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
             and someone who pasted a shop receipt has to be able to say so. */}
         <HowBought id="e-how" value={draft.distance} onChange={(v) => set('distance', v)} />
 
+        {/* Only for a delivered order. A counter purchase arrives when it is
+            bought, and both statutory clocks start when the goods reach you —
+            so without this the app can only say "at least until". */}
+        {draft.distance && (
+          <Field
+            id="e-arrived"
+            label="Arrived on"
+            error={errors.arrivedOnText}
+            hint={draft.arrivedOnText ? undefined : 'Optional. Leave blank if it has not arrived, or you cannot remember.'}
+          >
+            {(p) => (
+              <input
+                {...p}
+                type="date"
+                value={draft.arrivedOnText}
+                min={draft.purchasedOn}
+                max={toISODate(today)}
+                onChange={(e) => set('arrivedOnText', e.target.value)}
+                style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              />
+            )}
+          </Field>
+        )}
+
         <Field
           id="e-window"
           label="Return window (days)"

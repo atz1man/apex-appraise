@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { addDays, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
+import { addDays, fmtDate, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
@@ -52,6 +52,13 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
    * leaves the assumed window it already shows.
    */
   const [storeName, setStoreName] = useState('');
+  /**
+   * The day it arrived, when the person knows it. Both statutory clocks start
+   * there, and without it the receipt can only say "at least until" — so it is
+   * worth one optional field, and stays optional: an order that has not landed
+   * yet genuinely has no such date.
+   */
+  const [arrivedOn, setArrivedOn] = useState('');
   // Read once, on arrival. A later keystroke must not re-trigger it.
   const [readShare, setReadShare] = useState(false);
 
@@ -67,6 +74,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     setItem('');
     setDistance(true);
     setStoreName('');
+    setArrivedOn('');
   };
 
   const read = () => readText(text);
@@ -109,6 +117,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
       // unset counts from the order — the conservative reading is the one
       // that does not promise days the shop will not honour.
       windowDays: effectiveWindow,
+      ...(distance && arrivedOn ? { arrivedOn } : {}),
       policy: policyFor(store, effectiveWindow),
       distance,
       gotcha: policy?.gotcha,
@@ -223,6 +232,30 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
             </div>
           )}
           <HowBought id="add-how" value={distance} onChange={setDistance} />
+          {distance && (
+            <div style={{ marginTop: 12 }}>
+              <label htmlFor="add-arrived" style={{ display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '0.6px', color: color.muted, marginBottom: 6 }}>
+                ARRIVED ON
+              </label>
+              <input
+                id="add-arrived"
+                type="date"
+                value={arrivedOn}
+                min={parsed.purchasedOn}
+                max={toISODate(today)}
+                onChange={(e) => setArrivedOn(e.target.value)}
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
+                  border: `1.5px solid ${color.border}`, background: color.white,
+                  fontFamily: "'Space Grotesk', monospace", fontSize: 14.5, color: color.ink,
+                }}
+              />
+              <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
+                Optional. Your legal rights start the day it lands, so this makes those dates exact instead of the
+                earliest they could be.
+              </div>
+            </div>
+          )}
           <Row label="Store" value={effectiveStore || 'Not recognised'} mono={false} />
           <Row label="Total" value={parsed.amount === null ? 'Not found' : money(parsed.amount)} mono />
           <Row label="Bought" value={`${fmtDate(fromISODate(parsed.purchasedOn))}${parsed.dateFound ? '' : ' (assumed today)'}`} mono />

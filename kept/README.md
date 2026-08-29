@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 412 unit tests over the decision logic
+npm test           # 427 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -380,6 +380,17 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **The statutory clocks are exact now, not a floor.** They legally start the
+  day the goods reach you, which for a delivered order is not the day you
+  paid — so without that date the app could only compute from the order and
+  say "at least until". `Receipt.arrivedOn` is optional and asked for only on
+  a delivered order, and the difference it makes is the app's central failure
+  mode: the seeded Zara coat read "the 14-day cooling-off has run out" from
+  its order date, and with the arrival date it reads "3 days left". Telling
+  someone they are out of time when they are not is the one thing this app
+  must never do. A counter purchase is not asked, because it arrives when it
+  is bought — and changing a receipt to a shop purchase drops the date rather
+  than leaving one that would then be wrong.
 - **The first screen of a new install promised a feature that is not built.**
   Onboarding said "Paste an order email or snap the paper slip" — scanning is
   deferred, the add screen shows it as a visibly disabled SOON button, and the
@@ -719,16 +730,6 @@ that check was actually proving.
   Settings says exactly that instead of implying a service that does not
   exist. A native shell or a push path replaces `notify.ts` alone; the
   decision engine does not change.
-- **The date a parcel actually arrived.** Both statutory clocks legally start
-  the day the goods come into your hands, and for a delivered order that is
-  not the day you paid. The app knows the order date, so what it computes for
-  a distance purchase is the *earliest* either right could end — the wording
-  says exactly that rather than asserting a date it cannot know, and a lapsed
-  one points at the arrival date rather than declaring the right gone. Making
-  it exact means recording when the parcel landed, which is a third date
-  beside the purchase and the retailer's own dispatch clock
-  (`Receipt.windowStartsOn`), and a field on two screens. Worth doing; not
-  worth guessing at.
 - **Payments.** The pricing tiers set the local plan flag. No billing.
 - **Signing the policy feed.** The feed is fetched from the app's own origin,
   validated entry by entry and merged (`lib/policy-feed.ts`), and the download

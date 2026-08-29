@@ -85,6 +85,7 @@ export function readReceipt(raw: unknown): Receipt | null {
   if (!isStr(r.id) || !isStr(r.store) || !isStr(r.item) || !isStr(r.policy)) return null;
   if (!isISODate(r.purchasedOn)) return null;
   if (r.windowStartsOn !== undefined && !isISODate(r.windowStartsOn)) return null;
+  if (r.arrivedOn !== undefined && !isISODate(r.arrivedOn)) return null;
   if (typeof r.windowDays !== 'number' || !Number.isInteger(r.windowDays) || r.windowDays < 1) return null;
   // Amounts are integer pence everywhere; a float here means a file written by
   // something that did not understand that, and rounding it silently would
@@ -112,6 +113,7 @@ export function readReceipt(raw: unknown): Receipt | null {
     amount: r.amount,
     purchasedOn: r.purchasedOn,
     ...(r.windowStartsOn !== undefined ? { windowStartsOn: r.windowStartsOn as string } : {}),
+    ...(r.arrivedOn !== undefined ? { arrivedOn: r.arrivedOn as string } : {}),
     windowDays: r.windowDays,
     policy: r.policy,
     distance,

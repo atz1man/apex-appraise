@@ -58,7 +58,8 @@ const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const AFTER_ARRIVAL = 'The clock starts the day it arrived, so a parcel that came later runs later.';
 const CHECK_ARRIVAL = 'but it starts the day the parcel arrived, so check that date';
 
-function shortTermRejectRight(bought: Date, today: Date, delivered: boolean): LegalRight {
+/** @param hedged True when the arrival date is unknown, so the end is a floor. */
+function shortTermRejectRight(bought: Date, today: Date, hedged: boolean): LegalRight {
   const ends = addDays(bought, REJECT_DAYS);
   const left = daysBetween(today, ends);
   const repair =
@@ -68,29 +69,30 @@ function shortTermRejectRight(bought: Date, today: Date, delivered: boolean): Le
     live: left >= 0,
     body:
       left >= 0
-        ? delivered
+        ? hedged
           ? `30-day right to reject faulty goods for a full refund — at least until ${fmtDate(ends)} (${days(left)} left). ${AFTER_ARRIVAL}`
           : `30-day right to reject faulty goods for a full refund — ends ${fmtDate(ends)} (${days(left)} left). This one applies wherever you bought it.`
-        : delivered
+        : hedged
           ? `Counting from your order, the 30-day window to reject faulty goods has run out — ${CHECK_ARRIVAL}. Once it has, ${repair}`
           : `The 30-day window to reject faulty goods has passed — ${repair}`,
   };
 }
 
-function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean): LegalRight {
+function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean, hedged: boolean): LegalRight {
   const ends = addDays(bought, COOLING_OFF_DAYS);
   const left = daysBetween(today, ends);
-  // Only a distance purchase has this right at all, so the arrival caveat
-  // applies to every string here.
+  const shopStillOpen = storeWindowOpen ? ' The shop’s own window above is still open either way.' : '';
   return {
     chip: 'Consumer Contracts Regs',
     live: left >= 0,
     body:
       left >= 0
-        ? `14-day cooling-off on distance purchases — you can cancel for any reason until at least ${fmtDate(ends)} (${days(left)} left), then 14 more days to send it back. ${AFTER_ARRIVAL}`
-        : storeWindowOpen
-          ? `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}. The shop’s own window above is still open either way.`
-          : `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}. You keep the rights above for anything that turns out to be faulty.`,
+        ? hedged
+          ? `14-day cooling-off on distance purchases — you can cancel for any reason until at least ${fmtDate(ends)} (${days(left)} left), then 14 more days to send it back. ${AFTER_ARRIVAL}`
+          : `14-day cooling-off on distance purchases — you can cancel for any reason until ${fmtDate(ends)} (${days(left)} left), counting from the day it arrived, then 14 more days to send it back.`
+        : hedged
+          ? `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'}`
+          : `The 14-day cooling-off has passed, counting from the day it arrived.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'}`,
   };
 }
 
@@ -103,13 +105,17 @@ function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean): L
  * live and follows the always-applicable one once it has run out.
  */
 export function legalRights(r: Receipt, today: Date, storeWindowOpen: boolean): LegalRight[] {
-  const bought = fromISODate(r.purchasedOn);
-  // A counter purchase is handed over on the day it is paid for, so its dates
-  // are exact; a delivered one is not, and every string has to admit it.
-  const reject = shortTermRejectRight(bought, today, r.distance);
+  // The day the goods came into the buyer's hands, which is where both clocks
+  // legally start. A counter purchase is handed over when it is paid for; a
+  // delivered one is only known once someone says so, and until then the
+  // dates are the earliest they could be and say so.
+  const known = !r.distance || r.arrivedOn !== undefined;
+  const from = fromISODate(r.arrivedOn ?? r.purchasedOn);
+
+  const reject = shortTermRejectRight(from, today, !known);
   if (!r.distance) return [reject];
 
-  const coolingOff = coolingOffRight(bought, today, storeWindowOpen);
+  const coolingOff = coolingOffRight(from, today, storeWindowOpen, !known);
   return coolingOff.live ? [coolingOff, reject] : [reject, coolingOff];
 }
 

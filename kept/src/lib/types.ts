@@ -36,6 +36,24 @@ export interface Receipt {
    */
   windowStartsOn?: string;
   windowDays: number;
+  /**
+   * ISO date the goods came into the buyer's hands, when that is known and is
+   * not the purchase date.
+   *
+   * Both statutory clocks legally start here — the 30-day right to reject and
+   * the 14-day right to cancel — and for a delivered order that is not the day
+   * it was paid for. Without it the app can only say "at least until", because
+   * what it computes from the order date is the EARLIEST either right could
+   * end; with it the dates are exact.
+   *
+   * Optional and stays optional. Nobody should have to fill in a field to use
+   * a receipt, an order that has not arrived yet genuinely has no such date,
+   * and a counter purchase arrives when it is bought. Distinct from
+   * `windowStartsOn`, which is the RETAILER's clock (Zara counts from
+   * dispatch); these are different rules from different sources and conflating
+   * them is how the app came to state one when it meant the other.
+   */
+  arrivedOn?: string;
   policy: string;
   /**
    * Whether this was a DISTANCE purchase — ordered online, by phone, or away
