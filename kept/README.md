@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 517 unit tests over the decision logic
+npm test           # 519 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 54 end-to-end checks, including a midnight rollover
+npm run smoke      # 55 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node, and the same page on a dark device
 npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
@@ -417,6 +417,21 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **The hero contradicted itself twice on a library with a backlog.** `bucket`
+  keeps an expired-but-unreturned receipt at the very top, deliberately: the
+  money may still be recoverable under the statutory rights, and demoting the
+  row would hide the one a person most needs to see. So on any list with one,
+  the hero shows it — and the headline knew. It said *"Gone — the window
+  closed on your Towels"* under a label reading NEXT WINDOW TO CLOSE, above a
+  line reading *"£193.25 back if it goes back by 21 Mar"*, a date five months
+  past. Three statements on one card, two of them false. The label and the
+  line follow the state now.
+
+  The rows had the same fault one level up: expired receipts sat inside
+  `urgent`, under the heading "GO NOW OR LOSE IT" — the one thing that cannot
+  be done about something already lost, leading a screen of rows all reading
+  "window closed". They have their own section, in the same position, named
+  for what they are and what is left to try.
 - **Nothing said which palette the app is.** `color-scheme` was undeclared, so
   the native controls this app leans on — the date pickers, the scrollbars,
   the area a rubber-band scroll reveals — followed the operating system.

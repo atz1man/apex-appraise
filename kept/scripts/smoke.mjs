@@ -546,6 +546,50 @@ results['a delivery date in the paste is read, not asked for'] =
   prefilled === '2026-08-27' && delivered.arrivedOn === '2026-08-27' && delivered.purchasedOn === '2026-08-24';
 
 /*
+ * A library with a backlog: the hero must not contradict itself.
+ *
+ * `bucket` keeps an expired-but-unreturned receipt at the top, deliberately —
+ * the money may still be recoverable and demoting it would hide the row a
+ * person most needs to see. So on any list with one, the hero shows it. Its
+ * headline said "Gone — the window closed on your Towels" while the label
+ * above said NEXT WINDOW TO CLOSE and the line below said "£193.25 back if it
+ * goes back by 21 Mar", a date five months past. Three statements, one card,
+ * two of them false.
+ */
+{
+  const backlogCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(backlogCtx);
+  const backlogPage = await backlogCtx.newPage();
+  await backlogPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await backlogPage.waitForTimeout(400);
+  await backlogPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    const old = new Date();
+    old.setDate(old.getDate() - 200);
+    s.receipts = [
+      { id: 'gone', store: 'M&S', item: 'Towels', cat: 'other', amount: 19325,
+        purchasedOn: old.toISOString().slice(0, 10), windowDays: 35, policy: 'M&S · 35 days',
+        distance: false, status: 'active' },
+      ...s.receipts,
+    ];
+    s.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  });
+  await backlogPage.reload({ waitUntil: 'networkidle' });
+  await backlogPage.waitForTimeout(700);
+  const shown = await backlogPage.locator('main').innerText();
+  results['an expired receipt is not sold as a window still to close'] =
+    /the window closed on your Towels/.test(shown) &&
+    /WINDOW ALREADY CLOSED/.test(shown) &&
+    !/NEXT WINDOW TO CLOSE/.test(shown) &&
+    // And no promise of money back by a date five months gone.
+    !/£193\.25 back if it goes back/.test(shown) &&
+    // Nor filed under the one thing that cannot be done about it.
+    /WINDOW CLOSED · CHECK YOUR RIGHTS/.test(shown);
+  await backlogCtx.close();
+}
+
+/*
  * The retailer's own clock, for the one shop in the table that does not start
  * it at the till.
  *

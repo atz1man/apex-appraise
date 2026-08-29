@@ -71,11 +71,26 @@ describe('bucketing', () => {
   it('keeps an expired receipt in view instead of hiding it', () => {
     // The money may still be recoverable under the statutory rights; silently
     // demoting the row would hide the one the user most needs to act on.
-    expect(bucket(set, TODAY, 7).urgent.map((r) => r.id)).toContain('expired');
+    expect(bucket(set, TODAY, 7).closed.map((r) => r.id)).toEqual(['expired']);
   });
 
-  it('sorts soonest deadline first, expired at the very top', () => {
-    expect(bucket(set, TODAY, 7).urgent.map((r) => r.id)).toEqual(['expired', 'urgent']);
+  it('does not file an expired receipt under "go now or lose it"', () => {
+    // It used to sit inside `urgent`, under a heading that names the one
+    // thing that cannot be done about something already lost — and on a
+    // library with a backlog that heading led a screen of rows all reading
+    // "window closed".
+    expect(bucket(set, TODAY, 7).urgent.map((r) => r.id)).not.toContain('expired');
+  });
+
+  it('sorts soonest deadline first', () => {
+    expect(bucket(set, TODAY, 7).urgent.map((r) => r.id)).toEqual(['urgent']);
+  });
+
+  it('puts the closed ones above everything still running', () => {
+    // Same position as before, different name: the sections render in this
+    // order and the row a person most needs to see is still the first one.
+    const b = bucket(set, TODAY, 7);
+    expect([...b.closed, ...b.urgent, ...b.later].map((r) => r.id)).toEqual(['expired', 'urgent', 'later']);
   });
 
   it('moves the threshold when the user widens it', () => {

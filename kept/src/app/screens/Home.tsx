@@ -38,8 +38,8 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   // and it is still the question while you are looking for something.
   const visible = searching ? search(receipts, query) : receipts;
 
-  const { urgent, later, returned } = bucket(visible, today, urgentDays);
-  const active = [...urgent, ...later];
+  const { closed, urgent, later, returned } = bucket(visible, today, urgentDays);
+  const active = [...closed, ...urgent, ...later];
   const next = searching ? undefined : active[0];
   const stillReturnable = sumPence(active.map((r) => r.amount));
   const keptBack = sumPence(returned.map((r) => r.amount));
@@ -161,6 +161,29 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
         </div>
       )}
 
+      {/* Above "go now or lose it", because these are already lost and the
+          heading below cannot be done about them — but still at the top,
+          because the money may be recoverable under the statutory rights and
+          this is the row a person most needs to see. */}
+      {closed.length > 0 && (
+        <>
+          <h2 style={sectionLabel(color.danger)}>WINDOW CLOSED · CHECK YOUR RIGHTS</h2>
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: 9, margin: 0, padding: 0 }}>
+            {closed.map((r) => (
+              <ReceiptRow
+                key={r.id}
+                receipt={r}
+                urgency={urgency(derive(r, today).daysLeft, urgentDays)}
+                emphasised
+                policyChanged={changedStores.has(r.store)}
+                onOpen={() => onOpen(r.id)}
+                onReturn={() => onReturn(r.id)}
+              />
+            ))}
+          </ul>
+        </>
+      )}
+
       {urgent.length > 0 && (
         <>
           <h2 style={sectionLabel(color.danger)}>GO NOW OR LOSE IT</h2>
@@ -236,6 +259,18 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
   const d = derive(receipt, today);
   const { count, word } = heroCount(d.daysLeft);
   const accent = d.daysLeft <= 3 ? color.onInkDanger : color.yellow;
+  /*
+   * The two lines around the headline used to contradict it.
+   *
+   * On a library with a backlog, the most urgent active receipt is an EXPIRED
+   * one — deliberately, because `bucket` keeps it at the top rather than
+   * hiding the row a person most needs to see. The headline knew: "Gone — the
+   * window closed on your Towels". The label above it still said NEXT WINDOW
+   * TO CLOSE, and the line below it still said "£193.25 back if it goes back
+   * by 21 Mar", a date five months past. Three statements, one screen, and
+   * two of them false.
+   */
+  const closed = d.daysLeft < 0;
 
   return (
     <Pressable
@@ -250,7 +285,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="k-pulse" style={{ width: 7, height: 7, borderRadius: 999, background: accent }} />
         <span style={{ fontFamily: font.figures, fontSize: 11, letterSpacing: '2px', color: color.faint, fontWeight: 600 }}>
-          NEXT WINDOW TO CLOSE
+          {closed ? 'WINDOW ALREADY CLOSED' : 'NEXT WINDOW TO CLOSE'}
         </span>
       </div>
       {/* No wrap: the count and the sentence share a baseline, and the
@@ -265,7 +300,9 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
         </span>
       </div>
       <div style={{ fontSize: 13.5, color: color.faint, marginTop: 8 }}>
-        {receipt.store} · {money(receipt.amount)} back if it goes back by {fmtDateNear(d.deadline, today)}
+        {closed
+          ? `${receipt.store} · the shop’s window shut on ${fmtDateNear(d.deadline, today)} — your legal rights may not have`
+          : `${receipt.store} · ${money(receipt.amount)} back if it goes back by ${fmtDateNear(d.deadline, today)}`}
       </div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '11px 20px', background: color.yellow, color: color.ink, borderRadius: 999, fontWeight: 700, fontSize: 13.5 }}>
         See what to do <ArrowRight />

@@ -106,21 +106,31 @@ export interface DerivedPair {
 }
 
 export interface Buckets {
+  /** The shop's window has already shut. Still the top of the list. */
+  closed: Receipt[];
   urgent: Receipt[];
   later: Receipt[];
   returned: Receipt[];
 }
 
 /**
- * The three home-screen sections. An expired-but-unreturned receipt stays in
- * `urgent`, at the top: the money may still be recoverable under the
- * statutory rights, and silently demoting it would hide the one row the user
- * most needs to see.
+ * The four home-screen sections.
+ *
+ * An expired-but-unreturned receipt stays at the top — the money may still be
+ * recoverable under the statutory rights, and demoting it would hide the row
+ * a person most needs to see. It used to sit inside `urgent`, under the
+ * heading "GO NOW OR LOSE IT", which is the one thing that cannot be done
+ * about something already lost. On a library with a backlog that heading led
+ * a screen of rows all reading "window closed".
+ *
+ * Its own section instead: same position, and a name that says what the row
+ * actually is and what is left to try.
  */
 export function bucket(receipts: readonly Receipt[], today: Date, urgentDays: number): Buckets {
   const active = sortByDeadline(receipts.filter((r) => r.status === 'active'), today);
   return {
-    urgent: active.filter((x) => x.derived.daysLeft <= urgentDays).map((x) => x.receipt),
+    closed: active.filter((x) => x.derived.daysLeft < 0).map((x) => x.receipt),
+    urgent: active.filter((x) => x.derived.daysLeft >= 0 && x.derived.daysLeft <= urgentDays).map((x) => x.receipt),
     later: active.filter((x) => x.derived.daysLeft > urgentDays).map((x) => x.receipt),
     returned: receipts.filter((r) => r.status === 'returned'),
   };
