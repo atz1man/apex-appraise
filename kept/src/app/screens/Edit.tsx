@@ -258,10 +258,13 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
         </Field>
       </div>
 
+      {/* The date itself is in the field above now, so this says only what the
+          field cannot: which of the two dates the deadline is counted from,
+          and the one rule about it that is not obvious. */}
       {windowStart !== draft.purchasedOn && (
         <p style={{ fontSize: 12.5, color: color.muted, lineHeight: 1.55, margin: '12px 4px 0' }}>
-          This shop counts from dispatch ({fmtDateNear(fromISODate(windowStart), today)}), so the deadline above is measured
-          from that date rather than the day you ordered. Changing the shop drops it.
+          The deadline above is counted from the dispatch date, not from the day you ordered. Changing the shop to one
+          that counts from the till drops it.
         </p>
       )}
 
