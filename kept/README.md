@@ -1606,13 +1606,22 @@ the paid tier two years in. On this container:
 
 | receipts | to first row | to filter |
 |---:|---:|---:|
-| 25 | 644ms | 73ms |
-| 60 | 650ms | 74ms |
-| 150 | 693ms | 80ms |
-| 500 | 851ms | 114ms |
+| 25 | 625ms | 23ms |
+| 60 | 647ms | 19ms |
+| 150 | 708ms | 31ms |
+| 500 | 904ms | 57ms |
 
-Boot is about 640ms of that regardless; the list costs roughly 0.4ms per
-receipt. The shape is linear and nothing needs virtualising. It is deliberately
+Boot is about 620ms of that regardless; the list costs roughly 0.6ms per
+receipt. The shape is linear and nothing needs virtualising.
+
+Re-measured after a day of changes to the home and detail screens, which is
+what this script is for. Time to first row is unchanged within the noise; the
+filter times came in at roughly half the figures recorded before, consistently
+across all four sizes. **No cause is claimed for that** — nothing in the day's
+changes plausibly halves filtering, the four runs here share a machine and a
+moment while the earlier four did not, and a number nobody can attribute is not
+a result. It is written down as what was measured, which is all this table has
+ever been. The shape is linear and nothing needs virtualising. It is deliberately
 not a CI gate — wall-clock on a shared runner measures the runner as much as
 the app, and a threshold drawn from it would fail for reasons nobody could act
 on.

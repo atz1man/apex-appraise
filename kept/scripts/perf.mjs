@@ -15,14 +15,16 @@
  *
  * Measured on this container, for comparison rather than as a promise:
  *
- *     25 receipts   644ms to first row   73ms to filter
- *     60 receipts   650ms                74ms
- *    150 receipts   693ms                80ms
- *    500 receipts   851ms               114ms
+ *     25 receipts   625ms to first row   23ms to filter
+ *     60 receipts   647ms                19ms
+ *    150 receipts   708ms                31ms
+ *    500 receipts   904ms                57ms
  *
- * Boot is about 640ms of that regardless; the list costs roughly 0.4ms per
+ * Boot is about 620ms of that regardless; the list costs roughly 0.6ms per
  * receipt. Nothing here needs virtualising — and the reading that matters is
- * the SHAPE, which is linear, not the absolute numbers.
+ * the SHAPE, which is linear, not the absolute numbers, which is why the
+ * filter column moving by half between two sets of runs is recorded and not
+ * explained: it was measured, and nothing in the app plausibly did it.
  */
 import { chromium } from 'playwright';
 
