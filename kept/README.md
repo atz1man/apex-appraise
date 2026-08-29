@@ -26,12 +26,13 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 33 end-to-end checks, including offline and a midnight rollover
+npm run smoke      # 31 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
 npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
+npm run freshness  # starts and stops its OWN server — see below, no preview needed
 ```
 
 In a sandbox whose Chromium is not the build Playwright expects, point it at
@@ -368,6 +369,39 @@ reads as "89.002 days" and a greedy `\d+` takes `002`. And the edit-form check
 runs against the *dispatch-clocked* receipt, because on any other one the two
 ways of computing the date agree by coincidence — aimed at the first row, it
 would have missed the very bug it was written for.
+
+### A deploy reaches the app, and the app works without one
+
+Two promises pull against each other. "Verified policy updates the day they
+change" needs the network to win; "check a deadline on the train, with no
+signal" needs the cache to. The service worker is where they meet, and where
+either can stop being true without anything appearing on screen — a frozen feed
+looks exactly like a quiet week.
+
+Both had stopped being true, in different ways.
+
+A service worker is consulted BEFORE the HTTP cache, so the app's
+`fetch(FEED_URL, { cache: 'no-cache' })` was not the defence it read as, and the
+worker's cache-first rule — written for hashed bundles, which really are
+immutable per URL — swallowed the one file whose entire purpose is to change. An
+installed app saw the feed that shipped on the day its worker installed and
+never another. The Watch tab, and the product's central claim, quietly dead.
+
+And the offline half was guarded by two checks that could not fail for the
+reason they named. `setOffline` governs the PAGE's network; a service worker's
+own fetches go on reaching the live server regardless. Measured after the fact:
+both passed against a worker that intercepted every request and cached
+**nothing at all** — an app that dies the instant it is really on a train. They
+proved a worker was installed and read as proof of the app's headline feature.
+
+So `npm run freshness` starts its own preview server on its own port, and then
+stops it. That is the only way to cut a worker's network, and a script cannot
+stop a server it did not start. With the server genuinely gone, the app has to
+launch, render the library in its self-hosted typeface, navigate to a receipt,
+and serve the feed from the copy it kept. Each check was confirmed to
+discriminate by putting the defect back: cache-first for the feed, network-only
+with no fallback, a network-only navigation, and the never-caching worker that
+the old checks had passed.
 
 ### It stays usable as the library grows
 

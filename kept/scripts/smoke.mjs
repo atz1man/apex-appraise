@@ -310,28 +310,20 @@ results['the manifest is installable and declares the share target'] =
   manifest.share_target?.method === 'GET';
 
 /*
- * Offline, for real. "Works offline" is the app's central claim — a deadline
- * you can check on the train, in the shop, with no signal — and it is the one
- * claim that cannot be verified by reading the code. The network is cut
- * completely, then the app has to launch, render receipts, load its
- * self-hosted fonts, and still navigate.
+ * Offline is deliberately NOT tested here, and this note is the reason.
+ *
+ * It was, for a while, under a comment claiming "the network is cut
+ * completely". It was not: `setOffline` governs the PAGE's network and leaves
+ * a service worker's own fetches alone, so every request the worker answered
+ * went on reaching the live server. Measured afterwards — both checks passed
+ * against a worker that intercepted everything and cached NOTHING, which is an
+ * app that dies the moment it is actually on a train. They proved a worker was
+ * installed, and read as proof of the app's central claim.
+ *
+ * The only way to cut a worker's network is to stop the server, and a script
+ * cannot stop a server it did not start. So offline belongs to
+ * scripts/freshness.mjs, which starts its own.
  */
-await page.reload({ waitUntil: 'networkidle' });
-await page.waitForTimeout(600);
-await ctx.setOffline(true);
-await page.goto(`${ORIGIN}/app/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-await page.waitForTimeout(1200);
-results['the app launches with the network cut'] =
-  (await page.getByText('RETURN DEADLINES, WATCHED').isVisible().catch(() => false)) &&
-  (await page.evaluate(() => document.fonts.check('700 16px "Space Grotesk"')));
-// Whichever row happens to be first — earlier steps in this script rewrite
-// the receipt list, so naming a specific shop here would be testing the
-// fixture rather than the app.
-await page.locator('li button').first().click().catch(() => {});
-await page.waitForTimeout(600);
-results['it is still usable offline, not just painted'] =
-  await page.getByText('STORE POLICY').isVisible().catch(() => false);
-await ctx.setOffline(false);
 
 /*
  * Two tabs. Both hold the whole library in memory and both write all of it, so

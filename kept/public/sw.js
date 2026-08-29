@@ -53,6 +53,38 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+/**
+ * Same-origin content that changes at a FIXED url, and so must never be served
+ * cache-first.
+ *
+ * The rule below — "everything else is immutable per URL" — is true of hashed
+ * bundles, fonts and icons, and false of exactly this one file. Kept's claim
+ * is that it ships a verified policy change the day it happens; cache-first
+ * froze the feed at whatever shipped the day this worker installed, and the
+ * app's own `cache: 'no-cache'` on that fetch bought nothing, because a
+ * service worker is consulted before the HTTP cache it addresses. An installed
+ * app therefore never saw another policy update until the next deploy changed
+ * the cache name. Measured in a real browser before this list existed.
+ */
+const FRESH = ['/policy-feed.json'];
+
+/**
+ * Network first, with the cache behind it. Used for the things a deploy is
+ * supposed to reach: the app shell, and the feed. Offline still works — the
+ * fallback is the last copy successfully fetched.
+ */
+function networkFirst(req, cacheKey) {
+  return fetch(req)
+    .then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(cacheKey, copy));
+      }
+      return res;
+    })
+    .catch(() => caches.match(cacheKey).then((hit) => hit ?? Response.error()));
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -66,15 +98,13 @@ self.addEventListener('fetch', (event) => {
   // Navigations: network first, so a deployed update is picked up on the
   // next online launch, with the cached shell behind it for offline.
   if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/app/', copy));
-          return res;
-        })
-        .catch(() => caches.match('/app/').then((hit) => hit ?? Response.error())),
-    );
+    event.respondWith(networkFirst(req, '/app/'));
+    return;
+  }
+
+  // The feed, for the same reason and by the same route.
+  if (FRESH.includes(url.pathname)) {
+    event.respondWith(networkFirst(req, url.pathname));
     return;
   }
 

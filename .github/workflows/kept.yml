@@ -45,9 +45,9 @@ jobs:
       - name: Build
         run: npx vite build
 
-  # The half that needs a real browser. Each of these three found genuine
-  # defects the day it was written, which is why they are gates and not
-  # a manual ritual someone remembers to perform.
+  # The half that needs a real browser. Each of these found genuine defects the
+  # day it was written, which is why they are gates and not a manual ritual
+  # someone remembers to perform.
   browser:
     name: kept · browser
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
         run: |
           npx vite preview --port 5183 --strictPort &
           npx wait-on http://localhost:5183/app/ --timeout 60000
-      - name: End to end, including offline
+      - name: End to end
         run: npm run smoke
       - name: WCAG AA contrast over every rendered text node
         run: npm run contrast
@@ -77,3 +77,9 @@ jobs:
         run: npm run layout
       - name: The same fact, stated in more than one place, agrees
         run: npm run agreement
+      # Last, and on its own port: it starts and then STOPS its own server,
+      # because that is the only way to cut a service worker's network — the
+      # page-level offline switch the other sweeps have leaves the worker's own
+      # fetches reaching the live server. Nothing above it is disturbed.
+      - name: A deploy reaches the app, and the app works without one
+        run: npm run freshness
