@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraft, draftFrom, effectiveWindowStart, keptWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
 import { toISODate } from '../src/lib/dates';
 import { derive } from '../src/lib/receipts';
 import { money, toPence } from '../src/lib/money';
@@ -12,6 +12,7 @@ const base: ReceiptDraft = {
   amountText: '89.00', purchasedOn: '2026-08-16', windowDaysText: '14', warrantyMonthsText: '',
   distance: false,
   arrivedOnText: '',
+  dispatchedOnText: '',
 };
 
 function valid(patch: Partial<ReceiptDraft> = {}) {
@@ -294,7 +295,9 @@ describe('the shop a receipt says it is from', () => {
     // It would otherwise discard the dispatch clock and re-fetch the policy
     // for a shop that is the same shop.
     const zara: Receipt = { ...currys, store: 'Zara', windowStartsOn: '2026-08-18', policy: 'Zara · original wording' };
-    const out = applyDraft(zara, valid({ store: 'zara' }));
+    const edited = validateDraft({ ...draftFrom(zara), store: 'zara' }, TODAY);
+    if (!edited.ok) throw new Error('expected valid');
+    const out = applyDraft(zara, edited.value);
     expect(out.windowStartsOn).toBe('2026-08-18');
     expect(out.policy).toBe('Zara · original wording');
   });
@@ -305,8 +308,10 @@ describe('the shop a receipt says it is from', () => {
     // effectiveWindowStart exists to prevent.
     const zara: Receipt = { ...currys, store: 'Zara', windowStartsOn: '2026-08-18' };
     const draft = { ...draftFrom(zara), store: 'zara' };
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
     expect(effectiveWindowStart(zara, draft)).toBe('2026-08-18');
-    expect(applyDraft(zara, valid({ store: 'zara', purchasedOn: zara.purchasedOn })).windowStartsOn).toBe('2026-08-18');
+    expect(applyDraft(zara, out.value).windowStartsOn).toBe('2026-08-18');
   });
 });
 
@@ -343,7 +348,40 @@ describe('where the window will actually start', () => {
     // window by fixing a typo.
     const draft = { ...draftFrom(zara), purchasedOn: '2026-08-20' };
     expect(effectiveWindowStart(zara, draft)).toBe('2026-08-20');
-    expect(keptWindowStart(zara, 'Zara', '2026-08-20')).toBeUndefined();
+  });
+
+  it('says which date to fix, rather than dropping one silently', () => {
+    // The field is on screen for a shop that counts from dispatch, so a
+    // person looking at both dates should be told which of them is wrong.
+    const out = validateDraft({ ...draftFrom(zara), purchasedOn: '2026-08-20' }, TODAY);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.errors.dispatchedOnText).toBe('It cannot have been dispatched before you ordered it');
+  });
+
+  it('takes a dispatch date the person supplies', () => {
+    // The whole point of the field: the paste usually cannot know this, and
+    // the detail screen says so — "this receipt does not say when that was".
+    const draft = { ...draftFrom(zara), dispatchedOnText: '2026-08-16' };
+    expect(effectiveWindowStart(zara, draft)).toBe('2026-08-16');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(zara, out.value).windowStartsOn).toBe('2026-08-16');
+  });
+
+  it('discards one typed against a shop that counts from the till', () => {
+    const draft = { ...draftFrom(zara), store: 'Argos', dispatchedOnText: '2026-08-15' };
+    expect(effectiveWindowStart(zara, draft)).toBe('2026-08-13');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(zara, out.value).windowStartsOn).toBeUndefined();
+  });
+
+  it('clears it when the field is emptied', () => {
+    const draft = { ...draftFrom(zara), dispatchedOnText: '' };
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(zara, out.value).windowStartsOn).toBeUndefined();
   });
 
   it('keeps it when the purchase date moves earlier instead', () => {
@@ -356,7 +394,7 @@ describe('where the window will actually start', () => {
     // the purchase-date case below is the one it broke on a second time —
     // applyDraft was not setting the field at all, so the spread carried a
     // stale one straight past the preview.
-    for (const patch of [{ store: 'Zara' }, { store: 'Argos' }, { purchasedOn: '2026-08-20' }, { purchasedOn: '2026-08-10' }]) {
+    for (const patch of [{ store: 'Zara' }, { store: 'Argos' }, { purchasedOn: '2026-08-10' }, { dispatchedOnText: '2026-08-16' }, { dispatchedOnText: '' }]) {
       const draft = { ...draftFrom(zara), ...patch };
       const out = validateDraft(draft, TODAY);
       if (!out.ok) throw new Error('expected valid');
@@ -365,13 +403,17 @@ describe('where the window will actually start', () => {
     }
   });
 
-  it('does not shorten the window by correcting a typo', () => {
-    // The whole point, in days: what the screen would say afterwards.
-    const draft = { ...draftFrom(zara), purchasedOn: '2026-08-20' };
+  it('does not shorten the window when both dates are corrected', () => {
+    // The whole point, in days. Correcting only the purchase date used to
+    // leave the 15th standing and count from it — 14 September on a receipt
+    // that now said 19. Correcting both says 22 September, which is what a
+    // parcel dispatched on the 23rd of a 30-day window actually earns.
+    const draft = { ...draftFrom(zara), purchasedOn: '2026-08-20', dispatchedOnText: '2026-08-23' };
     const out = validateDraft(draft, TODAY);
-    if (!out.ok) throw new Error('expected valid');
+    if (!out.ok) throw new Error(`expected valid, got ${JSON.stringify(out.errors)}`);
     const saved = applyDraft(zara, out.value);
-    expect(toISODate(derive(saved, TODAY).deadline)).toBe('2026-09-19');
+    expect(saved.windowStartsOn).toBe('2026-08-23');
+    expect(toISODate(derive(saved, TODAY).deadline)).toBe('2026-09-22');
   });
 });
 

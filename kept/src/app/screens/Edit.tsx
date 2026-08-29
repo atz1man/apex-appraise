@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
+import { applyDraft, countsFromDispatch, draftFrom, effectiveWindowStart, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
 import { addDays, addMonths, fmtDateLong, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { STORE_POLICIES } from '../../lib/stores';
 import type { Category, Receipt } from '../../lib/types';
@@ -188,6 +188,34 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
                 value={draft.arrivedOnText}
                 max={toISODate(today)}
                 onChange={(e) => set('arrivedOnText', e.target.value)}
+                style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              />
+            )}
+          </Field>
+        )}
+
+        {/* Only for a shop that starts its own window at the warehouse — one
+            of the twenty does. The detail screen otherwise tells the person
+            that "this receipt does not say when that was" and offers no way
+            to say it, which is an instruction to do something impossible. */}
+        {countsFromDispatch(draft.store) && (
+          <Field
+            id="e-dispatched"
+            label="Dispatched on"
+            error={errors.dispatchedOnText}
+            hint={
+              draft.dispatchedOnText
+                ? undefined
+                : `${draft.store.trim() || 'This shop'} counts its window from dispatch. Without this the deadline is the earliest it can be.`
+            }
+          >
+            {(p) => (
+              <input
+                {...p}
+                type="date"
+                value={draft.dispatchedOnText}
+                max={toISODate(today)}
+                onChange={(e) => set('dispatchedOnText', e.target.value)}
                 style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
               />
             )}

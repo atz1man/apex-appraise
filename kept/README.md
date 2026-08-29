@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 488 unit tests over the decision logic
+npm test           # 492 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 50 end-to-end checks, including a midnight rollover
+npm run smoke      # 51 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -441,6 +441,16 @@ deliberate departure, not an oversight:
   rather than the receipt, deliberately: unlike the window, it is not a term
   that changes under a purchase — a shop either counts from dispatch or it
   does not.
+
+  And then a way to say it, because a screen that tells you what it does not
+  know and offers no way to tell it is an instruction to do the impossible.
+  The edit form asks for the dispatch date, on a shop that counts from
+  dispatch and nowhere else. The date now comes from the DRAFT rather than
+  being carried forward from the receipt, which also settles the earlier
+  five-day bug at its root: correcting the purchase date past the dispatch
+  date is a stated error on the one screen showing both, rather than a silent
+  drop; retyping the shop as one that counts from the till discards it
+  silently, because there the field is not even shown.
 - **"No server" was the loose word in the privacy claim.** Settings and the
   landing page both said "No account, no server, no one reading your
   purchases" — on an app that is served from a server and downloads the

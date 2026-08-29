@@ -36,6 +36,17 @@ export interface ReceiptDraft {
    * on a distance purchase — a counter purchase arrives when it is bought.
    */
   arrivedOnText: string;
+  /**
+   * The day it was DISPATCHED, blank when unknown. A different date from the
+   * one above and a different clock: this is the RETAILER's, and only one shop
+   * in the table runs it — Zara counts its 30 days from the warehouse, not
+   * from your order and not from your doormat.
+   *
+   * Asked for only on such a shop. Everywhere else the field is meaningless
+   * and a stale value is discarded rather than saved, because a receipt
+   * carrying the wrong clock is worse than one carrying none.
+   */
+  dispatchedOnText: string;
 }
 
 export type DraftField = keyof ReceiptDraft;
@@ -60,6 +71,12 @@ export interface ValidDraft {
   distance: boolean;
   /** Absent when unknown; both statutory clocks then fall back to the order. */
   arrivedOn?: string;
+  /**
+   * Absent when unknown, or when this shop does not count from dispatch. The
+   * retailer's window then falls back to the order date, which is earlier —
+   * the cautious reading, and the detail screen says it is a floor.
+   */
+  dispatchedOn?: string;
 }
 
 export type DraftOutcome = { ok: true; value: ValidDraft } | { ok: false; errors: DraftErrors };
@@ -84,6 +101,30 @@ export function arrivalProblem(arrivedOn: string, purchasedOn: string, today: Da
   if (daysBetween(today, fromISODate(arrivedOn)) > 0) return 'That date is in the future';
   if (daysBetween(fromISODate(purchasedOn), fromISODate(arrivedOn)) < 0) {
     return 'It cannot have arrived before you ordered it';
+  }
+  return undefined;
+}
+
+/** True when this shop starts its own window at the warehouse, not the till. */
+export function countsFromDispatch(store: string): boolean {
+  return findStore(canonicalStoreName(store))?.clockStart === 'dispatch';
+}
+
+/**
+ * What is wrong with a stated dispatch date, or nothing.
+ *
+ * The same three conditions as an arrival — a real date, not in the future,
+ * not before the order — because a parcel cannot leave the warehouse before
+ * it is bought either. Separate from `arrivalProblem` only so the messages can
+ * name the right event: a person correcting one of these needs to know which.
+ */
+export function dispatchProblem(dispatchedOn: string, purchasedOn: string, today: Date): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dispatchedOn) || toISODate(fromISODate(dispatchedOn)) !== dispatchedOn) {
+    return 'Pick the day it was dispatched, or leave it blank';
+  }
+  if (daysBetween(today, fromISODate(dispatchedOn)) > 0) return 'That date is in the future';
+  if (daysBetween(fromISODate(purchasedOn), fromISODate(dispatchedOn)) < 0) {
+    return 'It cannot have been dispatched before you ordered it';
   }
   return undefined;
 }
@@ -136,6 +177,14 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     else arrivedOn = arrivedRaw;
   }
 
+  const dispatchRaw = draft.dispatchedOnText.trim();
+  let dispatchedOn: string | undefined;
+  if (dispatchRaw && countsFromDispatch(draft.store)) {
+    const problem = errors.purchasedOn ? undefined : dispatchProblem(dispatchRaw, purchasedOn, today);
+    if (problem) errors.dispatchedOnText = problem;
+    else dispatchedOn = dispatchRaw;
+  }
+
   const warrantyRaw = draft.warrantyMonthsText.trim();
   let warrantyMonths: number | undefined;
   if (warrantyRaw) {
@@ -151,6 +200,7 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     value: {
       store, item, cat: draft.cat, amount, purchasedOn, windowDays, distance: draft.distance,
       ...(arrivedOn ? { arrivedOn } : {}),
+      ...(dispatchedOn ? { dispatchedOn } : {}),
       ...(warrantyMonths ? { warrantyMonths } : {}),
     },
   };
@@ -169,6 +219,7 @@ export function draftFrom(r: Receipt): ReceiptDraft {
     warrantyMonthsText: r.warranty && r.warranty.months > 0 ? String(r.warranty.months) : '',
     distance: r.distance,
     arrivedOnText: r.arrivedOn ?? '',
+    dispatchedOnText: r.windowStartsOn ?? '',
   };
 }
 
@@ -184,40 +235,29 @@ export function draftFrom(r: Receipt): ReceiptDraft {
  * A dispatch date belongs to the shop that dispatched it, so changing the shop
  * discards it — the same condition applyDraft uses.
  */
-export function effectiveWindowStart(original: Receipt, draft: ReceiptDraft): string {
-  return keptWindowStart(original, draft.store, draft.purchasedOn) ?? draft.purchasedOn;
+export function effectiveWindowStart(_original: Receipt, draft: ReceiptDraft): string {
+  return draftWindowStart(draft) ?? draft.purchasedOn;
 }
 
 /**
- * The dispatch date this edit leaves standing, or nothing.
+ * The dispatch date this draft will actually save, or nothing.
  *
- * A dispatch date belongs to the shop that dispatched it, so changing the shop
- * discards it — and it cannot be earlier than the purchase, so correcting the
- * purchase date past it discards it too. That second condition was missing,
- * and it cost days. Correcting the seeded Zara coat's "bought on" from 13 to
- * 20 August left `windowStartsOn` at the 15th: a parcel dispatched five days
- * before it was ordered, and a deadline still counted from the 15th, so the
- * screen said 14 September when the receipt now says 19 September. Five days
- * removed from a return window by fixing a typo — the retailer-clock version
- * of the thing legal.ts calls the one failure this app must not have.
+ * Reads the DRAFT rather than the receipt behind it, because the edit screen
+ * now offers the field: the person can supply the date the paste never had,
+ * which is what the detail screen's "this receipt does not say when that was"
+ * was otherwise inviting them to do with no way to do it.
  *
- * One function because the preview and the save must not disagree about it;
- * `applyDraft` used to leave the field untouched, so the two answers came from
- * different code and only one of them was ever going to be right.
- *
- * Compared on the canonical name: retyping "Boots" as "boots" is not a change
- * of shop.
- *
- * `>=` rather than `>` on the day the two dates meet is a readability choice,
- * not a behavioural one: either way the window starts that day, and the detail
- * screen shows a dispatch note only when the two differ. There is deliberately
- * no test pinning that boundary — it would pass whichever way the comparison
- * went, which is the shape of a test that reads as coverage and is not.
+ * Two conditions, and both used to be somewhere else. A dispatch date belongs
+ * to a shop that counts from dispatch, so retyping the shop as Argos discards
+ * it — silently, because on that shop the field is not even shown. And it
+ * cannot precede the purchase; that one is an ERROR rather than a silent drop,
+ * because on a dispatch shop the field IS shown and a person who can see both
+ * dates should be told which of them to fix.
  */
-export function keptWindowStart(original: Receipt, store: string, purchasedOn: string): string | undefined {
-  if (!original.windowStartsOn) return undefined;
-  if (original.store !== canonicalStoreName(store)) return undefined;
-  return original.windowStartsOn >= purchasedOn ? original.windowStartsOn : undefined;
+function draftWindowStart(draft: ReceiptDraft): string | undefined {
+  const raw = draft.dispatchedOnText.trim();
+  if (!raw || !countsFromDispatch(draft.store)) return undefined;
+  return raw >= draft.purchasedOn ? raw : undefined;
 }
 
 /**
@@ -243,9 +283,14 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     cat: valid.cat,
     amount: valid.amount,
     purchasedOn: valid.purchasedOn,
-    // Set explicitly rather than carried by the spread: see keptWindowStart
-    // for the five days a stale one silently removed.
-    windowStartsOn: keptWindowStart(original, valid.store, valid.purchasedOn),
+    // Set explicitly rather than carried by the spread. A stale one silently
+    // removed five days from a Zara window: correcting "bought on" from the
+    // 13th to the 20th left windowStartsOn at the 15th, a parcel dispatched
+    // before it was ordered, and a deadline still counted from the 15th. It
+    // comes from the DRAFT now, which the edit screen can set — same value
+    // the preview above computed, from the same function, because those two
+    // disagreeing is the failure this file keeps having.
+    windowStartsOn: valid.dispatchedOn,
     windowDays: valid.windowDays,
     distance: valid.distance,
     // Clearing the field clears the date, and so does saying it was bought in

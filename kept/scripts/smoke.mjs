@@ -557,6 +557,39 @@ results['an unknown dispatch date is shown as a floor, not a deadline'] =
   !/earliest it can be/.test(argosDetail);
 
 /*
+ * And the person can then supply it, which is the half that makes the hedge
+ * something other than an instruction to do the impossible. The field is
+ * offered only on a shop that counts from dispatch: Argos does not, and a
+ * receipt carrying the wrong clock is worse than one carrying none.
+ */
+await page.getByRole('button', { name: /Zara, Linen shirt/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Edit', exact: true }).click();
+await page.waitForTimeout(400);
+const dispatchFieldOnZara = await page.locator('#e-dispatched').count();
+// Guarded: the failure this exists to catch removes the field, and an
+// unguarded fill would kill the harness before it printed a verdict.
+await page.fill('#e-dispatched', '2026-08-16').catch(() => {});
+await page.getByRole('button', { name: 'Save changes' }).click().catch(() => {});
+await page.waitForTimeout(600);
+const zaraFixed = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('kept.v1')).receipts.find((r) => r.item === 'Linen shirt'));
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Argos, Kettle/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Edit', exact: true }).click();
+await page.waitForTimeout(400);
+const dispatchFieldOnArgos = await page.locator('#e-dispatched').count();
+await page.getByRole('button', { name: 'Cancel' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Back', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+results['the dispatch date can be supplied, on the shop it belongs to'] =
+  dispatchFieldOnZara === 1 && dispatchFieldOnArgos === 0 && zaraFixed.windowStartsOn === '2026-08-16';
+
+
+/*
  * What is on screen when the app cannot render.
  *
  * A throw anywhere below the root unmounts the whole tree — measured before
