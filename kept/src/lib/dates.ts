@@ -48,6 +48,26 @@ export function fmtDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+/**
+ * A group of dates shown together, rendered so they cannot be read as the same
+ * year.
+ *
+ * `fmtDateNear` decides per date — carry the year only when it is not this one
+ * — which is right for a date on its own and wrong for a pair. A 365-day
+ * window puts the deadline on the same day and month as the purchase, so the
+ * detail screen read "RETURN BY 15 Feb 2027" six lines above "bought 15 Feb":
+ * the same string twice, a year apart, on the screen whose entire job is
+ * dates. Not a coincidence of the seed either — it is true of every receipt
+ * from a shop with a year-long window.
+ *
+ * All or none, because a year on one and not the other is exactly what invites
+ * reading them as the same.
+ */
+export function fmtDatesTogether(dates: readonly Date[], today: Date): string[] {
+  const withYear = dates.some((d) => d.getFullYear() !== today.getFullYear());
+  return dates.map((d) => (withYear ? `${fmtDate(d)} ${d.getFullYear()}` : fmtDate(d)));
+}
+
 /** en-GB long form for legal copy: "5 September 2026". */
 export function fmtDateLong(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });

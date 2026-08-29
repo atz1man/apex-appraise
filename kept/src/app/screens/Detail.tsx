@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { fmtDateLong, fmtDateNear, fromISODate } from '../../lib/dates';
+import { fmtDateLong, fmtDatesTogether, fromISODate } from '../../lib/dates';
 import { legalRights } from '../../lib/legal';
 import { money } from '../../lib/money';
 import { derive } from '../../lib/receipts';
@@ -39,6 +39,11 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   const ringColor = d.expired ? color.onInkDanger : u.level === 'critical' ? color.onInkDanger : u.level === 'soon' ? color.yellow : color.cream;
 
   const dispatchDiffers = receipt.windowStartsOn && receipt.windowStartsOn !== receipt.purchasedOn;
+
+  // Rendered as a pair: a year on the deadline and none on the purchase is
+  // what let "RETURN BY 15 Feb 2027" sit above "bought 15 Feb". See
+  // fmtDatesTogether.
+  const [deadlineText, boughtText] = fmtDatesTogether([d.deadline, fromISODate(receipt.purchasedOn)], today);
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -100,10 +105,10 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
               {d.expired ? 'WINDOW CLOSED' : 'RETURN BY'}
             </div>
             <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-              {fmtDateNear(d.deadline, today)}
+              {deadlineText}
             </div>
             <div style={{ fontSize: 12, color: color.faint, marginTop: 6 }}>
-              {d.daysUsed} of {receipt.windowDays} days used · bought {fmtDateNear(fromISODate(receipt.purchasedOn), today)}
+              {d.daysUsed} of {receipt.windowDays} days used · bought {boughtText}
             </div>
           </div>
         </div>

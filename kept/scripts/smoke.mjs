@@ -199,6 +199,30 @@ results['onboarding is not shown again'] = !(await page
   .getByRole('button', { name: 'Skip' })
   .isVisible()
   .catch(() => false));
+/*
+ * The year-long window, read as a screen rather than as source.
+ *
+ * IKEA's 365 days put the deadline on the same day and month as the purchase,
+ * and deciding the year per date rendered "RETURN BY 15 Feb 2027" six lines
+ * above "bought 15 Feb" — the same string twice, a year apart, on the screen
+ * whose whole job is dates. So: the two dates the detail screen shows together
+ * must not read as the same day, and the pair carries the year or neither does.
+ */
+await page.getByRole('button', { name: /IKEA, MALM/ }).click();
+await page.waitForTimeout(300);
+const ikea = await page.evaluate(() => {
+  const label = [...document.querySelectorAll('div')].find((d) => d.textContent.trim() === 'RETURN BY');
+  const deadline = label?.nextElementSibling?.textContent?.trim() ?? null;
+  const bought = document.body.innerText.match(/bought ([^\n·]+)/)?.[1]?.trim() ?? null;
+  return { deadline, bought };
+});
+const hasYear = (t) => /\b(19|20)\d{2}\b/.test(t);
+results['a year-long window does not print the same date twice'] =
+  !!ikea.deadline && !!ikea.bought && ikea.deadline !== ikea.bought &&
+  hasYear(ikea.deadline) === hasYear(ikea.bought);
+await page.getByRole('button', { name: 'Back', exact: true }).click();
+await page.waitForTimeout(300);
+
 // An edit must reach the screen, and the disk.
 await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
 await page.waitForTimeout(300);

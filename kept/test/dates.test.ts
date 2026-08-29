@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, daysBetween, fmtDate, fmtDateNear, fromISODate, relativeAgo, startOfDay, toISODate } from '../src/lib/dates';
+import { addDays, addMonths, daysBetween, fmtDate, fmtDateNear, fmtDatesTogether, fromISODate, relativeAgo, startOfDay, toISODate } from '../src/lib/dates';
 
 /**
  * This suite runs under TZ=America/New_York on purpose (see package.json).
@@ -114,5 +114,38 @@ describe('fmtDateNear — the year, only when it earns its space', () => {
 
   it('adds the year for a date in the past too', () => {
     expect(fmtDateNear(new Date(2025, 11, 3), today)).toBe('3 Dec 2025');
+  });
+});
+
+describe('fmtDatesTogether — a pair that cannot be read as the same year', () => {
+  const today = new Date(2026, 7, 28);
+
+  it('leaves the year off when every date is this year', () => {
+    const out = fmtDatesTogether([new Date(2026, 1, 14), new Date(2026, 8, 5)], today);
+    expect(out).toEqual(['14 Feb', expect.stringMatching(/^5 Sep/)]);
+  });
+
+  it('carries the year on BOTH when one of them is not this year', () => {
+    // The IKEA case: a 365-day window puts the deadline on the same day and
+    // month as the purchase. Deciding per date gives "15 Feb 2027" beside
+    // "15 Feb" — a year on one and not the other is exactly what invites
+    // reading them as the same day.
+    expect(fmtDatesTogether([new Date(2027, 1, 15), new Date(2026, 1, 15)], today)).toEqual([
+      '15 Feb 2027',
+      '15 Feb 2026',
+    ]);
+  });
+
+  it('carries the year when the odd one out is in the past', () => {
+    expect(fmtDatesTogether([new Date(2026, 0, 8), new Date(2025, 11, 25)], today)).toEqual([
+      '8 Jan 2026',
+      '25 Dec 2025',
+    ]);
+  });
+
+  it('keeps the order it was given, so a caller can destructure it', () => {
+    const a = new Date(2026, 2, 1);
+    const b = new Date(2026, 4, 9);
+    expect(fmtDatesTogether([a, b], today)).toEqual([fmtDate(a), fmtDate(b)]);
   });
 });

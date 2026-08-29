@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 430 unit tests over the decision logic
+npm test           # 434 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 40 end-to-end checks, including a midnight rollover
+npm run smoke      # 41 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -667,6 +667,27 @@ the policy-watch card, which is the same self-inflicted disagreement again. A
 selector that matched nothing would let both halves "agree" over empty
 strings, so the suite also requires that it found a pricing section and three
 prices in each place.
+
+### The same date, twice, a year apart
+
+Read as source, `fmtDateNear` is right: carry the year only when the date is
+not in this one. Read as a screen, the IKEA receipt said
+
+    RETURN BY
+    15 Feb 2027
+    195 of 365 days used · bought 15 Feb
+
+— the same day and month twice, six lines apart, on the screen whose whole job
+is dates. The year on one and not the other is what invites reading them as the
+same day, and it is not a quirk of the seed: a 365-day window always lands the
+deadline on the purchase's day and month, so every receipt from a shop with a
+year-long return window read this way.
+
+The fix is `fmtDatesTogether`, which decides for a *group*: if any date in it
+falls outside the current year, all of them carry theirs. `dates.test.ts` pins
+the rule, and the smoke suite opens the IKEA receipt and requires the two dates
+the detail screen prints together to differ and to agree about the year. Both
+were proved by putting `fmtDateNear` back and watching each name the defect.
 
 ### A deploy reaches the app, and the app works without one
 
