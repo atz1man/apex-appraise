@@ -37,6 +37,14 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FEED_FILE = `${ROOT}dist/policy-feed.json`;
 const FEED_URL = '/policy-feed.json';
 const NEW_ID = 'freshness-probe-change';
+const VITE_BIN = `${ROOT}node_modules/vite/bin/vite.js`;
+
+/** The three the offline half is for — named, so they can be marked unasked. */
+const OFFLINE_CHECKS = [
+  'the app launches with the network gone',
+  'and is still usable, not just painted',
+  'and the feed falls back to the copy already held',
+];
 
 if (!existsSync(FEED_FILE)) {
   console.log('✗ no build to serve — run `npm run build` first');
@@ -47,24 +55,60 @@ const original = readFileSync(FEED_FILE, 'utf8');
 const results = {};
 const problems = [];
 
-/** Its own preview server, in its own process group, so it can be stopped. */
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
+/*
+ * The port has to be free FIRST. `--strictPort` makes a second server exit
+ * rather than slide to 4200, so a stray one left by an earlier run would be
+ * the thing `waitForServer` found, the thing every check ran against, and the
+ * thing `stopServer` could not kill because it never started it. The sweep has
+ * to own the server it stops, and this is the only moment it can say so.
+ */
+if (await fetch(`${ORIGIN}/app/`).then(() => true, () => false)) {
+  console.log(`✗ something is already serving ${ORIGIN} — this sweep must own the server it stops`);
+  process.exit(1);
+}
+
+/*
+ * Its own preview server, in its own process group, so it can be stopped.
+ *
+ * Node running vite's own entry, not `npx vite` — and that is the whole of it
+ * working. npm exec puts each child in a NEW process group: measured here, the
+ * `npm exec` at pgid 22995, the `sh` it ran at 23011, and the node actually
+ * holding the port at 23012. So `kill(-pid)` on what spawn handed back reached
+ * npm and nothing else, and the server this sweep believed it had stopped went
+ * on serving. The offline half then asked its questions of a machine that was
+ * still online, and every one of them passed.
+ *
+ * Spawned directly, the pid IS the process holding the port, and `detached`
+ * makes it the leader of its own group.
+ */
+const server = spawn(process.execPath, [VITE_BIN, 'preview', '--port', String(PORT), '--strictPort'], {
   cwd: ROOT,
   detached: true,
   stdio: 'ignore',
 });
 let serverUp = true;
-const stopServer = () => {
-  if (!serverUp) return;
+/**
+ * Stops it, and does not take the caller's word for it: returns only once the
+ * port has actually stopped answering. A kill that silently missed is exactly
+ * the failure above, and it is invisible from the signal alone.
+ */
+async function stopServer() {
+  if (!serverUp) return true;
   serverUp = false;
-  // The negative pid kills the group — npx and the vite it spawned — and
-  // nothing else. `pkill -f vite` would take this script's own shell with it.
+  // The negative pid kills the group — the server and anything it spawned —
+  // and nothing else. `pkill -f vite` would take this script's own shell with it.
   try {
     process.kill(-server.pid, 'SIGKILL');
   } catch {
     /* already gone */
   }
-};
+  for (let i = 0; i < 50; i += 1) {
+    const answering = await fetch(`${ORIGIN}/app/`).then(() => true, () => false);
+    if (!answering) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
 
 async function waitForServer() {
   for (let i = 0; i < 100; i += 1) {
@@ -138,12 +182,16 @@ try {
   results['and is still there on the next launch'] = next.ok && next.ids.includes(NEW_ID);
 
   // Now the other promise, with the server genuinely gone.
-  stopServer();
-  await new Promise((r) => setTimeout(r, 300));
-  results['the server really is unreachable'] = await fetch(`${ORIGIN}/app/`).then(
-    () => false,
-    () => true,
-  );
+  const reallyGone = await stopServer();
+  results['the server really is unreachable'] = reallyGone;
+
+  if (!reallyGone) {
+    // Nothing below can mean anything while the port still answers: the app
+    // would "work offline" by fetching, and the feed would "fall back" to the
+    // live copy. Recorded as not asked, which is the honest word for it — the
+    // version of this file that let them read ✓ is why the check above exists.
+    for (const name of OFFLINE_CHECKS) results[name] = null;
+  } else {
 
   // A worker that does not answer the navigation makes this reload fail
   // outright, which is a failing check and not a crashed sweep.
@@ -175,15 +223,22 @@ try {
   results['and the feed falls back to the copy already held'] = offline.ok && offline.ids.includes(NEW_ID);
   if (!offline.ok) problems.push(`offline feed: ${offline.why}`);
 
+  }
+
   results['no page errors'] = problems.length === 0;
 } finally {
   writeFileSync(FEED_FILE, original);
-  stopServer();
+  await stopServer();
   await browser.close();
 }
 
 let failed = false;
 for (const [name, ok] of Object.entries(results)) {
+  if (ok === null) {
+    console.log(`? ${name} — not asked, the server never stopped`);
+    failed = true;
+    continue;
+  }
   console.log(`${ok ? '✓' : '✗'} ${name}`);
   if (!ok) failed = true;
 }

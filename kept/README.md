@@ -881,6 +881,31 @@ every landmark a screen reader navigates between; and Home and Celebrate had
 no level-one heading at all. All fixed. axe-core is a devDependency injected
 at audit time — the app never imports it and it never reaches a bundle.
 
+### Which tab you are on
+
+The active tab was a pale yellow fill and nothing else. `yellowLight` against
+the bar's near-cream measures **1.28:1**, where WCAG 2.1 SC 1.4.11 asks 3:1 of
+a state indicator — so the one thing telling you where you are in the app,
+in the app's only navigation, had under half the contrast required of it.
+Nothing here could have said so: axe does not check non-text contrast, and the
+contrast sweep measures TEXT against its background, which on that tab is fine.
+
+It failed worse in a state nothing had rendered. Windows high contrast replaces
+backgrounds with the user's own palette and leaves borders alone, so the fill
+stopped existing altogether and all four tabs became identical. The Watch tab's
+alert dot — the only sign that a policy change touches a receipt you hold —
+went with it.
+
+Both are carried by something forced colours cannot erase now: an ink border on
+the active tab (17.6:1) and a border on the dot, with the fill kept, because two
+signals is the point. The first attempt gave the inactive tabs a TRANSPARENT
+border so the geometry would not shift, which is the trap this now guards — a
+transparent border is forced like any other, so all four came back outlined and
+the state was *less* visible than before it was fixed. The 1.5px is paid back in
+padding instead. `npm run a11y` renders the app with `forcedColors: 'active'`
+and requires exactly the current tab to be outlined; both mutations, no border
+and a transparent one, were confirmed to fail it by name.
+
 ### Narrow screens and untidy data
 
 Everything else here is driven at 402px with the seeded demo receipts — the
@@ -1147,6 +1172,21 @@ and serve the feed from the copy it kept. Each check was confirmed to
 discriminate by putting the defect back: cache-first for the feed, network-only
 with no fallback, a network-only navigation, and the never-caching worker that
 the old checks had passed.
+
+And once more, a layer below that. The sweep stops the server by killing its
+process group — and it started that server through `npx`. npm exec puts each
+child in a NEW process group: measured, the `npm exec` at pgid 22995, the `sh`
+it ran at 23011, and the node actually holding the port at 23012. The
+negative-pid kill reached npm and nothing else. The offline half was putting
+its questions to a machine that was still online, and every one of them passed.
+
+What said so was the one check written to say so — `the server really is
+unreachable` — which exists because nothing else can tell an app that works
+offline apart from an app that was never offline. The server is now node
+running vite's own entry, so the pid is the process holding the port, and the
+stop does not return until the port has stopped answering. When it has not, the
+three offline results are recorded as *not asked* rather than passed, because
+that is what they are.
 
 ### It stays usable as the library grows
 

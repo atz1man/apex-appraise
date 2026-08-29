@@ -171,3 +171,27 @@ describe('the focus ring is visible on every ground', () => {
     }
   });
 });
+
+describe('the current tab is visible as a state, not just a tint', () => {
+  /*
+   * Which tab you are on was the pale fill alone: `yellowLight` against the
+   * bar's near-cream measures 1.28:1, where WCAG 2.1 SC 1.4.11 asks 3:1 of a
+   * state indicator — and this is the app's only navigation. The border
+   * carries it now; the fill stays, because two signals are the point.
+   */
+  const BAR = color.cream; // the tab bar is cream at 0.88 over the page's cream
+
+  it('is not carried by the fill, which never cleared the bar', () => {
+    // Stated rather than assumed: if the fill were enough there would be no
+    // reason for the border, and this file should not claim there is.
+    expect(contrast(color.yellowLight, BAR)).toBeLessThan(AA_LARGE);
+  });
+
+  it('is carried by the border', () => {
+    expect(contrast(color.ink, BAR)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  it('shows the watch alert in something that clears the bar too', () => {
+    expect(contrast(color.danger, BAR)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+});

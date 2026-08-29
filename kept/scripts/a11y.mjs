@@ -361,6 +361,53 @@ for (let i = 0; i < 40; i += 1) {
 if (ringsSeen < 3) ringless.push(['the focus-ring check', `only ${ringsSeen} focusable element(s) were reached`]);
 lostFocus.push(...ringless);
 
+/*
+ * Forced colours: the state that erases every colour the app chose.
+ *
+ * Windows high contrast replaces backgrounds and fills with the user's own
+ * palette and leaves BORDERS alone, so anything signalled by a fill simply
+ * stops existing. Which tab you are on was exactly that — and it was already
+ * only 1.28:1 against the bar on an ordinary screen, well under the 3:1 SC
+ * 1.4.11 asks of a state indicator.
+ *
+ * The trap this check exists for: the first fix gave the inactive tabs a
+ * TRANSPARENT border to keep the geometry, and a transparent border is forced
+ * like any other — so all four came back outlined and the state was less
+ * visible than before. The border is absent on the inactive ones now and the
+ * 1.5px is paid back in padding.
+ */
+const forcedColourProblems = [];
+{
+  const forcedCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, forcedColors: 'active' });
+  const forcedPage = await forcedCtx.newPage();
+  await forcedPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await forcedPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await forcedPage.waitForTimeout(600);
+  const tabs = await forcedPage.evaluate(() => {
+    const nav = document.querySelector('nav[aria-label="Main"]');
+    return [...(nav?.querySelectorAll('button') ?? [])].map((b) => ({
+      name: (b.textContent ?? '').trim() || 'add',
+      current: b.getAttribute('aria-current') === 'page',
+      // The "+" is a circle by design and is not a tab state; it is excluded
+      // by name below rather than by guessing from its border.
+      bordered: parseFloat(getComputedStyle(b).borderTopWidth) > 0,
+    }));
+  });
+  const states = tabs.filter((t) => t.name !== 'add');
+  if (states.length < 3) {
+    forcedColourProblems.push(['the forced-colours tab check', `found ${states.length} tabs, expected the bar's three`]);
+  }
+  for (const t of states) {
+    if (t.current !== t.bordered) {
+      forcedColourProblems.push([
+        `the "${t.name}" tab under forced colours`,
+        t.current ? 'is the current tab and has no outline' : 'is not the current tab and is outlined anyway',
+      ]);
+    }
+  }
+  await forcedCtx.close();
+}
+
 await focusCtx.close();
 
 const motionCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, reducedMotion: 'reduce' });
@@ -411,6 +458,13 @@ if (ticker !== 'none') stillMoving.push(['landing', 'the marquee is not stopped'
 await motionCtx.close();
 
 await browser.close();
+
+if (forcedColourProblems.length > 0) {
+  console.log(`✗ ${forcedColourProblems.length} thing(s) a forced-colours user cannot see:\n`);
+  for (const [label, why] of forcedColourProblems) console.log(`  ${label} — ${why}`);
+  console.log('');
+  process.exit(1);
+}
 
 if (lostFocus.length > 0) {
   console.log(`✗ focus is not managed across ${lostFocus.length} screen change(s):\n`);
