@@ -1,4 +1,5 @@
 import { fromISODate, toISODate } from './dates';
+import { canonicalStoreName } from './stores';
 import type { Category, Receipt, ReceiptStatus, Warranty } from './types';
 
 /**
@@ -96,7 +97,14 @@ export function readReceipt(raw: unknown): Receipt | null {
 
   return {
     id: r.id,
-    store: r.store,
+    // Resolved to the shop's own name, here rather than at either call site,
+    // because this is the one door both the app's own store and an imported
+    // backup come through. `assess` matches a policy update's affectsStores
+    // exactly, so a receipt reading "boots" is one every Boots change misses —
+    // and rows saved before the add and edit screens agreed about this are
+    // already sitting on people's devices. It only ever changes case and
+    // spacing: a shop the table does not know is kept exactly as written.
+    store: canonicalStoreName(r.store),
     item: r.item,
     // An unknown category is cosmetic — it picks a row icon — so it falls back
     // rather than costing the user a receipt.

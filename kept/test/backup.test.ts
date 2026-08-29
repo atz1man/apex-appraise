@@ -76,6 +76,17 @@ describe('validating rows', () => {
     expect(receipts.map((r) => r.distance)).toEqual([true, false]);
   });
 
+  it.each([['boots', 'Boots'], ['  ZARA ', 'Zara'], ['Vinted', 'Vinted'], ['  Vinted ', 'Vinted']])(
+    'reads a shop written "%s" as "%s"',
+    (written, expected) => {
+      // One door for the app's own store and an imported file alike, because
+      // rows saved before the two screens agreed about this are already on
+      // people's devices — and a receipt reading "boots" is one every Boots
+      // policy change silently misses.
+      expect(ok(file([{ ...good, store: written }])).receipts[0].store).toBe(expected);
+    },
+  );
+
   it('falls back rather than dropping a row over a cosmetic category', () => {
     // The category only picks a row icon; losing a receipt over it would cost
     // the user real money to save a glyph.

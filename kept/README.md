@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 387 unit tests over the decision logic
+npm test           # 391 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -184,7 +184,10 @@ deliberate departure, not an oversight:
   screen did not, so the two ways into one field disagreed. Both use
   `canonicalStoreName` now, and so does the deadline preview, because a
   preview comparing raw text against a save comparing canonical names is the
-  exact disagreement `effectiveWindowStart` exists to prevent.
+  exact disagreement `effectiveWindowStart` exists to prevent. `readReceipt`
+  resolves it too — one door for the app's own store and an imported backup
+  alike — so a row saved before any of that agreed is repaired on the next
+  launch rather than staying quietly unwatched forever.
 - **A duplicated receipt id doubled the money.** The row reader validates one
   row at a time, so it cannot see a second row wearing the same id — and
   nothing else looked. One duplicate turns £89 still returnable into £178,
