@@ -1,9 +1,13 @@
 # CI for kept/ — a separate product sharing this repository.
 #
-# Scoped by paths so it never runs for Apex Appraise changes, and Apex's own
-# workflow never runs for these: kept/ sits outside the pnpm-workspace globs
-# and shares no dependencies, so the two suites have nothing to say to each
-# other. See kept/README.md.
+# Scoped by paths so it never runs for Apex Appraise changes; Apex's ci.yml
+# carries the matching paths-ignore so it never runs for these. kept/ sits
+# outside the pnpm-workspace globs and shares no dependencies, so the two
+# suites have nothing to say to each other. See kept/README.md.
+#
+# That second half was asserted here long before it was true: ci.yml had no
+# path filter at all, so every commit to kept also ran Apex's full suite —
+# green every time, on a diff that could not reach any of it.
 name: kept
 
 on:

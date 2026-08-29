@@ -1,10 +1,21 @@
 name: CI
 
+# kept/ is excluded on both events. It is a separate product in this
+# repository — its own npm project, outside the pnpm-workspace globs, sharing
+# no dependency with Apex Appraise — and it has its own workflow
+# (.github/workflows/kept.yml), which is scoped to kept/** for the mirror
+# reason. Without this, every commit to kept ran a full pnpm install, a Prisma
+# generate, a Postgres service and a Playwright browser job to prove nothing:
+# green every time, on a diff that could not reach any of it. kept.yml's own
+# header claimed this separation already existed in both directions; it did
+# not, and this is the half that was missing.
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths-ignore: ['kept/**']
   pull_request:
+    paths-ignore: ['kept/**']
 
 jobs:
   test:
