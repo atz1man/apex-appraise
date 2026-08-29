@@ -566,6 +566,60 @@ results['a delivery date in the paste is read, not asked for'] =
   prefilled === '2026-08-27' && delivered.arrivedOn === '2026-08-27' && delivered.purchasedOn === '2026-08-24';
 
 /*
+ * The last day, which is the day the ring matters most and drew nothing.
+ *
+ * `daysLeft` is 0 on the last day a thing can go back, and the arc was
+ * `daysLeft / windowDays` — so the screen read "0 days left · RETURN BY 29
+ * Aug" beside an empty grey track, with no red anywhere on it. Counted
+ * inclusive of today now, and the number is coloured like the count on the
+ * home hero, which had always done this.
+ */
+{
+  const lastCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(lastCtx);
+  const lastPage = await lastCtx.newPage();
+  await lastPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await lastPage.waitForTimeout(400);
+  await lastPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    s.receipts = [
+      { id: 'lastday', store: 'ASOS', item: 'Running shoes', cat: 'clothing', amount: 6500,
+        purchasedOn: ago(28), windowDays: 28, policy: 'ASOS · 28 days', distance: false, status: 'active' },
+      { id: 'gonelong', store: 'Argos', item: 'Toaster', cat: 'kitchen', amount: 2999,
+        purchasedOn: ago(400), windowDays: 30, policy: 'Argos · 30 days', distance: false, status: 'active' },
+    ];
+    s.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  });
+  await lastPage.reload({ waitUntil: 'networkidle' });
+  await lastPage.waitForTimeout(700);
+  const ring = async (name) => {
+    await lastPage.getByRole('button', { name }).click();
+    await lastPage.waitForTimeout(400);
+    const seen = await lastPage.evaluate(() => {
+      const arc = document.querySelectorAll('svg circle')[1];
+      const num = [...document.querySelectorAll('div')].find((d) => /^(\d+|closed)$/.test(d.textContent?.trim() ?? ''));
+      return {
+        drawn: Number(arc.getAttribute('stroke-dasharray')) - Number(arc.getAttribute('stroke-dashoffset')),
+        stroke: arc.getAttribute('stroke'),
+        numberColour: num ? getComputedStyle(num).color : null,
+      };
+    });
+    await lastPage.getByRole('button', { name: 'Back', exact: true }).click();
+    await lastPage.waitForTimeout(300);
+    return seen;
+  };
+  const lastDay = await ring(/ASOS, Running shoes/);
+  const longGone = await ring(/Argos, Toaster/);
+  results['the ring still shows something on the last day'] =
+    lastDay.drawn > 1 && lastDay.numberColour === 'rgb(255, 154, 118)' &&
+    // And nothing once the window has actually gone, rather than sweeping backwards.
+    longGone.drawn <= 0;
+  await lastCtx.close();
+}
+
+/*
  * Everything returned — and the two claims that state makes.
  *
  * "Every return made it back in time" was printed unconditionally, and a

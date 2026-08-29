@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 58 end-to-end checks, including a midnight rollover
+npm run smoke      # 59 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node, and the same page on a dark device
 npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
@@ -417,6 +417,14 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **On the last day the countdown ring drew nothing.** `daysLeft` is 0 on the
+  final day a thing can still go back, and the arc was `daysLeft / windowDays`
+  — so the detail screen read *"0 days left · RETURN BY 29 Aug"* beside an
+  empty grey track with no red anywhere on it, on the one day the ring matters
+  most. There IS a day left on the last day: the arc counts inclusive of today
+  now, and the number is coloured like the count on the home hero, which had
+  always done that. A receipt whose window has actually gone still draws
+  nothing, rather than sweeping backwards.
 - **"Every return made it back in time" was said whether or not it had.** The
   screen shown once everything is returned made a claim about timing that
   nothing checked — and a return can be made after the shop's window shuts, by

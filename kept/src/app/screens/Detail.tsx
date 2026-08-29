@@ -32,10 +32,18 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   const u = urgency(d.daysLeft, urgentDays);
   const rights = legalRights(receipt, today, !d.expired);
 
-  // The ring shows time REMAINING, so it empties as the window closes — the
-  // arc a glance reads as "how much is left". Clamped at both ends: a receipt
-  // past its deadline draws nothing rather than sweeping backwards.
-  const remaining = Math.max(0, Math.min(1, d.daysLeft / receipt.windowDays));
+  /*
+   * The ring shows time REMAINING, so it empties as the window closes — the
+   * arc a glance reads as "how much is left". Clamped at both ends: a receipt
+   * past its deadline draws nothing rather than sweeping backwards.
+   *
+   * Counted INCLUSIVE of today, which it was not. `daysLeft` is 0 on the last
+   * day the thing can go back, so the arc was zero-length on exactly the day
+   * the ring matters most: the screen read "0 days left · RETURN BY 29 Aug"
+   * beside an empty grey track, with no red anywhere on it. There is still a
+   * day left on the last day, and the ring now says so — thinly.
+   */
+  const remaining = Math.max(0, Math.min(1, (d.daysLeft + 1) / receipt.windowDays));
   const ringOffset = (RING_CIRCUMFERENCE * (1 - remaining)).toFixed(1);
   const ringColor = d.expired ? color.onInkDanger : u.level === 'critical' ? color.onInkDanger : u.level === 'soon' ? color.yellow : color.cream;
 
@@ -103,7 +111,10 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
               />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontFamily: font.figures, fontSize: d.expired ? 15 : 22, fontWeight: 700, lineHeight: 1 }}>
+              {/* Coloured like the count on the home hero, which has always
+                  done this. Here the ring's stroke was the only urgency
+                  signal on the screen, and on the last day it was a hairline. */}
+              <div style={{ fontFamily: font.figures, fontSize: d.expired ? 15 : 22, fontWeight: 700, lineHeight: 1, color: ringColor }}>
                 {d.expired ? 'closed' : d.daysLeft}
               </div>
               {!d.expired && <div style={{ fontSize: 10, color: color.faint, marginTop: 2 }}>days left</div>}
