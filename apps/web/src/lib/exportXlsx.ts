@@ -35,6 +35,37 @@ const FMT_NUM = '#,##0';
 const FMT_PCT = '0.0%';
 const FMT_X = '0.00"×"';
 
+/**
+ * What a cell says when the engine could not compute the figure at all.
+ *
+ * `irr()` returns null when there is no sign change in its bracket — a scheme
+ * that never returns its money has no internal rate of return to find, and the
+ * engine says so rather than guessing. Every screen honours that: the appraisal
+ * report, the deal overview and the development appraisal all print "N/A" or an
+ * em dash. This workbook wrote `?? 0` into a cell formatted `0.0%`, so the one
+ * artefact that leaves the firm — the file that goes to the lender, the LP, the
+ * JV partner — turned "no IRR exists" into the specific, false claim that the
+ * IRR is zero. Measured on a scheme losing £4,500,034: the JV sheet reported
+ * the LP's return as 0.0%, directly beneath a Project IRR of -77.1% that WAS
+ * computed correctly and so earned the column its credibility. That scheme is
+ * the fixture in `exportXlsx.test.ts`, so the figures here are the ones the
+ * committed tests actually produce.
+ *
+ * Text, not a number, and deliberately so. A spreadsheet is not a screen: a
+ * numeric zero in an IRR column is charted, averaged, sorted and compared
+ * against other deals, and a reader has no way to tell it from a real result.
+ * Text cannot silently become the wrong answer to any of those. The wording
+ * matches what the screens already say, so the same appraisal reads the same
+ * either way.
+ *
+ * The percentage format is still applied to these cells unconditionally, which
+ * looks odd and is deliberate: Excel ignores a number format on a text value,
+ * so guarding it changes nothing a reader can see. A conditional whose only
+ * defence would be a test asserting a cosmetic detail is worse than none — the
+ * value is the whole fix.
+ */
+const NOT_COMPUTED = 'N/A';
+
 const BRAND = 'FF14503B';
 const BRAND_TINT = 'FFECF3EF';
 const INK2 = 'FF5F665F';
@@ -172,7 +203,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   s.columns = [{ width: 34 }, { width: 18 }];
   titleBlock(s, dealName, address, 'Development appraisal summary', 2, firmName);
   headerRow(s, ['Measure', 'Value']);
-  const kpis: Array<[string, number, string]> = [
+  const kpis: Array<[string, number | string, string]> = [
     ['Gross development value (GDV)', Math.round(R.gdv), FMT_MONEY],
     [isResidual ? 'Residual land value (net)' : 'Land value (input)', Math.round(R.residualNet), FMT_MONEY],
     ['Developer profit', Math.round(R.profit), FMT_MONEY],
@@ -180,8 +211,8 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     ['Return on cost', R.poc, FMT_PCT],
     ['Return on GDV', R.rogdv, FMT_PCT],
     ['Return on equity', R.roe, FMT_PCT],
-    ['Project IRR (annualised)', R.cash?.projIrr ?? 0, FMT_PCT],
-    ['Equity IRR (annualised)', R.cash?.eqIrr ?? 0, FMT_PCT],
+    ['Project IRR (annualised)', R.cash?.projIrr ?? NOT_COMPUTED, FMT_PCT],
+    ['Equity IRR (annualised)', R.cash?.eqIrr ?? NOT_COMPUTED, FMT_PCT],
     ['Peak debt / facility', Math.round(R.facility), FMT_MONEY],
     ['Equity required', Math.round(R.equity), FMT_MONEY],
     ['NIA (sq ft)', Math.round(R.nia), FMT_NUM],
@@ -584,12 +615,12 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   jvs.columns = [{ width: 34 }, { width: 16 }, { width: 16 }];
   titleBlock(jvs, dealName, address, `Equity waterfall — ${input.jv?.prefPct ?? 8}% pref, ${input.jv?.promotePct ?? 20}% promote over ${jv.holdYears.toFixed(1)} yrs`, 3, firmName);
   headerRow(jvs, ['Measure', 'LP (investors)', 'GP (developer)']);
-  const jvRows: Array<[string, number, number, string]> = [
+  const jvRows: Array<[string, number | string, number | string, string]> = [
     ['Equity in', Math.round(jv.lp.equity), Math.round(jv.gp.equity), FMT_MONEY],
     ['Profit share', Math.round(jv.lp.profit), Math.round(jv.gp.profit), FMT_MONEY],
     ['Total back', Math.round(jv.lp.total), Math.round(jv.gp.total), FMT_MONEY],
     ['MOIC', jv.lp.moic, jv.gp.moic, FMT_X],
-    ['IRR (annualised MOIC basis)', jv.lp.irr ?? 0, jv.gp.irr ?? 0, FMT_PCT],
+    ['IRR (annualised MOIC basis)', jv.lp.irr ?? NOT_COMPUTED, jv.gp.irr ?? NOT_COMPUTED, FMT_PCT],
   ];
   for (const [label, lp, gp, fmt] of jvRows) {
     const r = jvs.addRow([label, lp, gp]);

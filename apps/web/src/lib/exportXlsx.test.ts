@@ -514,3 +514,122 @@ describe('buildAppraisalWorkbook — the file a client actually opens', async ()
     expect(reopened.getWorksheet('Cashflow')!.pageSetup.printTitlesRow).toMatch(/^\d+:\d+$/);
   });
 });
+
+/**
+ * "No IRR exists" is not "the IRR is zero".
+ *
+ * `irr()` returns null when there is no sign change in its bracket: a scheme
+ * that never returns its money has no internal rate of return to find, and the
+ * engine says so rather than guessing. Every screen honoured that — the
+ * appraisal report, the deal overview and the development appraisal all print
+ * "N/A" or an em dash. This workbook wrote `?? 0` into a cell formatted `0.0%`,
+ * so the one artefact that leaves the firm reported it as 0.0%.
+ *
+ * On the scheme below, which loses £4,500,034, the JV sheet told the LP their
+ * return was 0.0% — sitting directly beneath a Project IRR of -77.1% that WAS
+ * computed and IS reported, which is exactly what made the column credible. The
+ * tests therefore pull in both directions at once: a real IRR, however bad,
+ * must stay a formatted number, and an absent one must not be a number at all.
+ * Neither a blanket `?? 0` nor a blanket "N/A" passes both.
+ *
+ * The assertions are on `typeof`, not on rendered text, because the defect was
+ * the CELL TYPE. A numeric zero in an IRR column is charted, averaged, sorted
+ * and compared against other deals; a reader cannot tell it from a real result.
+ * And they run against a workbook written to a buffer and reopened, because
+ * what matters is what the recipient's Excel loads, not what this process held
+ * in memory.
+ */
+describe('an IRR the engine could not compute', () => {
+  /** Build cost far above what the units sell for: the money never comes back. */
+  const losing: AppraisalInput = {
+    ...referenceCase,
+    units: [{ label: 'Flats', count: 12, area: 750, cap: 180 }],
+    trades: [{ label: 'Build', rate: 420 }],
+    otherCosts: [],
+    site: { mode: 'profit', landFixed: 900_000, acqPct: 6.8 },
+  };
+  const RL = computeAppraisal(losing, { withCash: true });
+  const jvL = jvWaterfall(RL.equity, RL.profit, RL.holdYears, losing.jv!);
+  const RG = computeAppraisal(referenceCase, { withCash: true });
+  const jvG = jvWaterfall(RG.equity, RG.profit, RG.holdYears, referenceCase.jv!);
+
+  /** Written to a buffer and loaded back: what the recipient actually opens. */
+  const reopen = async (input: AppraisalInput, R: typeof RL, jv: typeof jvL) => {
+    const ExcelJS = (await import('exceljs')).default;
+    const built = await buildAppraisalWorkbook({
+      dealName: 'Scheme', address: 'Nowhere', input, R, jv, monthLabel,
+    });
+    const wb2 = new ExcelJS.Workbook();
+    await wb2.xlsx.load((await built.xlsx.writeBuffer()) as ArrayBuffer);
+    return wb2;
+  };
+
+  const cellFor = (wb2: Awaited<ReturnType<typeof reopen>>, sheet: string, label: string, col = 2) => {
+    const ws = wb2.getWorksheet(sheet);
+    if (!ws) throw new Error(`no sheet ${sheet}`);
+    let hit: { value: unknown; numFmt?: string } | null = null;
+    ws.eachRow((row) => {
+      if (String(row.getCell(1).value ?? '') === label) hit = row.getCell(col);
+    });
+    if (!hit) throw new Error(`no row "${label}" on ${sheet}`);
+    return hit as { value: unknown; numFmt?: string };
+  };
+
+  it('is the scheme it claims to be — a real loss with no equity IRR', () => {
+    // stated as a bound rather than pinned to the penny: the point is that this
+    // is a catastrophic loss, and an exact figure would be one more thing to
+    // re-baseline whenever an unrelated engine constant moves
+    expect(RL.profit).toBeLessThan(-4_000_000);
+    expect(RL.cash?.eqIrr, 'fixture no longer exercises the null branch').toBeNull();
+    expect(jvL.lp.irr).toBeNull();
+    expect(jvL.gp.irr).toBeNull();
+    // and the one that CAN be computed still is, so the test below has something
+    // to hold in the other direction
+    expect(typeof RL.cash?.projIrr).toBe('number');
+  });
+
+  it('never writes a number into the equity IRR cell', async () => {
+    const c = cellFor(await reopen(losing, RL, jvL), 'Summary', 'Equity IRR (annualised)');
+    expect(typeof c.value, 'a numeric cell here reads as a real 0.0% return').not.toBe('number');
+    expect(c.value).toBe('N/A');
+  });
+
+  it('never writes a number into either JV partner IRR cell', async () => {
+    const wb2 = await reopen(losing, RL, jvL);
+    for (const [col, who] of [[2, 'LP'], [3, 'GP']] as const) {
+      const c = cellFor(wb2, 'JV returns', 'IRR (annualised MOIC basis)', col);
+      expect(typeof c.value, `${who} IRR written as a number`).not.toBe('number');
+      expect(c.value).toBe('N/A');
+    }
+  });
+
+  /**
+   * The other direction. A bad IRR is a fact and must survive as one: if this
+   * ever becomes "N/A" the export has started hiding losses, which is the same
+   * defect wearing the opposite sign.
+   */
+  it('still reports a computed IRR, however bad, as a formatted number', async () => {
+    const c = cellFor(await reopen(losing, RL, jvL), 'Summary', 'Project IRR (annualised)');
+    expect(typeof c.value).toBe('number');
+    expect(c.value as number).toBeLessThan(0);
+    expect(c.numFmt).toBe('0.0%');
+  });
+
+  /**
+   * And the profitable golden fixture must be untouched — every IRR on it is
+   * computable, so every one of these cells stays a number carrying its
+   * percentage format. This is what fails if the fix is applied too widely.
+   */
+  it('leaves a profitable scheme entirely numeric', async () => {
+    const wb2 = await reopen(referenceCase, RG, jvG);
+    for (const [sheet, label] of [
+      ['Summary', 'Project IRR (annualised)'],
+      ['Summary', 'Equity IRR (annualised)'],
+      ['JV returns', 'IRR (annualised MOIC basis)'],
+    ] as const) {
+      const c = cellFor(wb2, sheet, label);
+      expect(typeof c.value, `${sheet} / ${label}`).toBe('number');
+      expect(c.numFmt, `${sheet} / ${label}`).toBe('0.0%');
+    }
+  });
+});

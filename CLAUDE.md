@@ -28,7 +28,7 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (642). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (77): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (82): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
