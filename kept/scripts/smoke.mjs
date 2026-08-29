@@ -550,6 +550,22 @@ await page.waitForTimeout(400);
 const argosDetail = await page.locator('main').innerText();
 await page.getByRole('button', { name: 'Back', exact: true }).click();
 await page.waitForTimeout(300);
+/*
+ * The third clock. Apple, Amazon and ASOS count their own windows from the
+ * day the parcel lands, and each carried a `gotcha` saying so in prose while
+ * `clockStart` said 'purchase' and the app counted from the order. With the
+ * arrival date in hand — which the paste now reads — it counts from there.
+ */
+const asosAdded = await addPaste(
+  'ASOS · Order placed 10 August 2026 · Trainers · Order total: £60.00 · Delivered 14 August 2026',
+  'Trainers',
+);
+results['a shop that counts from delivery starts its window there'] =
+  asosAdded.store === 'ASOS' && asosAdded.arrivedOn === '2026-08-14' && asosAdded.windowStartsOn === '2026-08-14' &&
+  // And Argos, which counts from the till, records the arrival without
+  // starting its window on it — the statutory clocks still run from there.
+  argosAdded.arrivedOn === undefined && argosAdded.windowStartsOn === undefined;
+
 results['an unknown dispatch date is shown as a floor, not a deadline'] =
   zaraNoDispatch.windowStartsOn === undefined &&
   /earliest it can be, never the latest/.test(zaraDetail) &&

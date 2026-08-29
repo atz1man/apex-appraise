@@ -3,7 +3,7 @@ import { color, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
-import { arrivalProblem } from '../../lib/draft';
+import { arrivalProblem, windowStartFor } from '../../lib/draft';
 import { makeReceiptId } from '../../lib/receipts';
 import { findStore, policyFor } from '../../lib/stores';
 import { FEATURED_TIER } from '../../lib/pricing';
@@ -139,9 +139,13 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
        * an Argos receipt carrying Zara's clock would be worse than one
        * carrying none.
        */
-      ...(policy?.clockStart === 'dispatch' && parsed.dispatchedOn
-        ? { windowStartsOn: parsed.dispatchedOn }
-        : {}),
+      ...(() => {
+        const start = windowStartFor(store, {
+          dispatchedOn: parsed.dispatchedOn ?? undefined,
+          arrivedOn: distance ? arrivedOn : undefined,
+        });
+        return start ? { windowStartsOn: start } : {};
+      })(),
       windowDays: effectiveWindow,
       ...(distance && arrivedOn ? { arrivedOn } : {}),
       policy: policyFor(store, effectiveWindow),

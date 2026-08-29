@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 492 unit tests over the decision logic
+npm test           # 496 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 51 end-to-end checks, including a midnight rollover
+npm run smoke      # 52 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -416,6 +416,20 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **Three shops said in prose what the field denied.** Apple, Amazon and ASOS
+  each carried a `gotcha` explaining that they count their window from the day
+  the parcel arrives and that Kept counted from the order, while `clockStart`
+  on those same entries said `'purchase'`. Now that the arrival date is read
+  from the paste and askable on the edit form, the app can do what the prose
+  said it could not. `clockStart` gained a third value and `windowStartFor` is
+  the one rule the add screen, `applyDraft` and the edit preview all ask —
+  because those three disagreeing is the failure this file keeps having. Where
+  the arrival is unknown it still falls back to the order, which is earlier
+  than the truth and therefore cautious, and the detail screen says the date
+  is a floor. A shop that counts from the till records the arrival without
+  starting its window on it: the statutory clocks run from there and the
+  retailer's does not, and conflating those two is the mistake `types.ts`
+  warns about at length.
 - **`clockStart` was declared on all twenty shops and read by nothing.** The
   gotcha the marketing leads with — *"Zara's clock starts at dispatch"* — was
   data on one seeded receipt and nothing else. Add a Zara receipt yourself and

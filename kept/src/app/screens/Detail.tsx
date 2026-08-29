@@ -42,8 +42,9 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   const dispatchDiffers = receipt.windowStartsOn && receipt.windowStartsOn !== receipt.purchasedOn;
   // The table, not the receipt: which clock a shop runs is not something a
   // receipt records, and unlike the WINDOW it is not a term that changes under
-  // a purchase — a shop either counts from dispatch or it does not.
-  const countsFromDispatch = findStore(receipt.store)?.clockStart === 'dispatch';
+  // a purchase — a shop counts from the till, the warehouse or the doormat,
+  // and it does not switch.
+  const clockStart = findStore(receipt.store)?.clockStart ?? 'purchase';
 
   // Rendered as a pair: a year on the deadline and none on the purchase is
   // what let "RETURN BY 15 Feb 2027" sit above "bought 15 Feb". See
@@ -125,7 +126,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
           <div style={{ fontSize: 14, marginTop: 5, lineHeight: 1.5, color: color.bodyStrong }}>{receipt.policy}</div>
           {dispatchDiffers && (
             <div style={{ fontSize: 12.5, marginTop: 8, color: color.muted }}>
-              Clock started {fmtDateLong(fromISODate(receipt.windowStartsOn!))} (dispatch), not the day you ordered.
+              Clock started {fmtDateLong(fromISODate(receipt.windowStartsOn!))} ({clockStart === 'dispatch' ? 'dispatch' : 'delivery'}), not the day you ordered.
             </div>
           )}
           {/* The other half of the same fact, and the one that was silent.
@@ -137,10 +138,11 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
               would still take the thing back. Same hedge the statutory
               clocks make when the arrival date is unknown, pointing the
               other way. */}
-          {countsFromDispatch && !receipt.windowStartsOn && (
+          {clockStart !== 'purchase' && !receipt.windowStartsOn && (
             <div style={{ fontSize: 12.5, marginTop: 8, color: color.muted }}>
-              {receipt.store} counts from dispatch, not from your order — and this receipt does not say when that
-              was, so the date above is the earliest it can be, never the latest.
+              {receipt.store} counts from {clockStart === 'dispatch' ? 'dispatch' : 'the day it arrives'}, not from your
+              order — and this receipt does not say when that was, so the date above is the earliest it can be, never
+              the latest.
             </div>
           )}
         </div>

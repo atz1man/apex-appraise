@@ -17,8 +17,24 @@ export interface StorePolicy {
   aliases: string[];
   windowDays: number;
   policy: string;
-  /** Where the return window starts counting. */
-  clockStart: 'purchase' | 'dispatch';
+  /**
+   * Where the RETAILER's own window starts counting — which is not always the
+   * till.
+   *
+   * Three values because three things happen: the thing is bought, it leaves
+   * the warehouse, it lands on the mat. Zara counts from the second, Apple,
+   * Amazon and ASOS from the third, everyone else from the first. This was a
+   * two-value field read by nothing at all, while three of the entries below
+   * carried a `gotcha` explaining in prose that they count from delivery and
+   * the app could not.
+   *
+   * Distinct from `Receipt.arrivedOn`, which is a FACT about one parcel. This
+   * is a RULE about a shop, and a shop does not change which of the three it
+   * counts from the way it changes how many days it gives — which is why
+   * reading it from the table at render time is right where re-reading the
+   * window would not be.
+   */
+  clockStart: 'purchase' | 'dispatch' | 'delivery';
   gotcha?: string;
   /**
    * True when this shop's name is also an ordinary word a receipt might use
@@ -38,14 +54,14 @@ export interface StorePolicy {
 
 export const STORE_POLICIES: readonly StorePolicy[] = [
   {
-    name: 'Apple', commonWord: true, aliases: ['apple'], windowDays: 14, clockStart: 'purchase', cat: 'audio',
+    name: 'Apple', commonWord: true, aliases: ['apple'], windowDays: 14, clockStart: 'delivery', cat: 'audio',
     policy: 'Apple · 14 days from delivery, any reason, original condition and packaging. Refund to the original payment method.',
-    gotcha: 'Apple counts the 14 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be. If the parcel took three days, so does your deadline.',
+    gotcha: 'Apple counts the 14 days from the day it arrives, not from your order. Put the arrival date on the receipt and kept counts from there; without it the date shown is the earliest it can be.',
   },
   {
-    name: 'Amazon', aliases: ['amazon'], windowDays: 30, clockStart: 'purchase',
+    name: 'Amazon', aliases: ['amazon'], windowDays: 30, clockStart: 'delivery',
     policy: 'Amazon · 30 days from delivery for most items. Some categories (opened software, groceries) are excluded.',
-    gotcha: 'Amazon counts the 30 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be, never the latest.',
+    gotcha: 'Amazon counts the 30 days from the day it arrives, not from your order. Put the arrival date on the receipt and kept counts from there; without it the date shown is the earliest it can be.',
   },
   {
     name: 'Currys', aliases: ['currys', 'pc world'], windowDays: 14, clockStart: 'purchase', cat: 'audio',
@@ -75,9 +91,9 @@ export const STORE_POLICIES: readonly StorePolicy[] = [
     gotcha: 'Uniqlo will not refund an online order at the till — it has to go back by post.',
   },
   {
-    name: 'ASOS', aliases: ['asos'], windowDays: 28, clockStart: 'purchase', cat: 'clothing',
+    name: 'ASOS', aliases: ['asos'], windowDays: 28, clockStart: 'delivery', cat: 'clothing',
     policy: 'ASOS · 28 days from delivery for a refund, 45 for credit. Frequent returners get the shorter window.',
-    gotcha: 'ASOS counts the 28 days from the day it arrives, and Kept counts from your order — so the date shown is the earliest it can be. After 28 days it is credit, not a refund.',
+    gotcha: 'ASOS counts the 28 days from the day it arrives, not from your order — put the arrival date on the receipt and kept counts from there. After 28 days it is credit, not a refund.',
   },
   {
     name: 'Next', commonWord: true, aliases: ['next'], windowDays: 28, clockStart: 'purchase', cat: 'clothing',

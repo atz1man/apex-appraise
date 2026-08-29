@@ -110,6 +110,36 @@ export function countsFromDispatch(store: string): boolean {
   return findStore(canonicalStoreName(store))?.clockStart === 'dispatch';
 }
 
+/** True when it starts on the doormat: Apple, Amazon and ASOS all say so. */
+export function countsFromDelivery(store: string): boolean {
+  return findStore(canonicalStoreName(store))?.clockStart === 'delivery';
+}
+
+/**
+ * The day this shop's own window starts, given what is known about the parcel.
+ *
+ * One rule, because three places need the answer and they must not disagree:
+ * the add screen when it saves, `applyDraft` when an edit saves, and the edit
+ * screen's deadline preview. The receipt stores the result in
+ * `windowStartsOn`, so nothing downstream has to know which of the three
+ * clocks this shop runs.
+ *
+ * A delivery-clocked shop takes the ARRIVAL date, which the app already knows
+ * or asks for: Apple, Amazon and ASOS each carried a `gotcha` saying in prose
+ * that they count from delivery and the app counted from the order. It does
+ * not any more, when the date is there. When it is not, this returns nothing
+ * and the window falls back to the order — earlier than the truth, which is
+ * the cautious direction, and the detail screen says it is a floor.
+ */
+export function windowStartFor(
+  store: string,
+  dates: { dispatchedOn?: string; arrivedOn?: string },
+): string | undefined {
+  if (countsFromDispatch(store)) return dates.dispatchedOn || undefined;
+  if (countsFromDelivery(store)) return dates.arrivedOn || undefined;
+  return undefined;
+}
+
 /**
  * What is wrong with a stated dispatch date, or nothing.
  *
@@ -255,9 +285,14 @@ export function effectiveWindowStart(_original: Receipt, draft: ReceiptDraft): s
  * dates should be told which of them to fix.
  */
 function draftWindowStart(draft: ReceiptDraft): string | undefined {
-  const raw = draft.dispatchedOnText.trim();
-  if (!raw || !countsFromDispatch(draft.store)) return undefined;
-  return raw >= draft.purchasedOn ? raw : undefined;
+  const start = windowStartFor(draft.store, {
+    dispatchedOn: draft.dispatchedOnText.trim(),
+    // Only when it was actually delivered: a counter purchase has no separate
+    // arrival, and the arrival field is not even shown for one.
+    arrivedOn: draft.distance ? draft.arrivedOnText.trim() : '',
+  });
+  if (!start) return undefined;
+  return start >= draft.purchasedOn ? start : undefined;
 }
 
 /**
@@ -290,7 +325,7 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     // comes from the DRAFT now, which the edit screen can set — same value
     // the preview above computed, from the same function, because those two
     // disagreeing is the failure this file keeps having.
-    windowStartsOn: valid.dispatchedOn,
+    windowStartsOn: windowStartFor(store, { dispatchedOn: valid.dispatchedOn, arrivedOn: valid.arrivedOn }),
     windowDays: valid.windowDays,
     distance: valid.distance,
     // Clearing the field clears the date, and so does saying it was bought in

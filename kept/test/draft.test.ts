@@ -455,3 +455,58 @@ describe('changing the shop', () => {
     expect(edited.windowStartsOn).toBe('2026-08-15');
   });
 });
+
+describe('a shop that counts from the doormat', () => {
+  const asos: Receipt = {
+    id: 'r9', store: 'ASOS', item: 'Trainers', cat: 'clothing', amount: toPence(60),
+    purchasedOn: '2026-08-10', windowDays: 28, policy: 'p', distance: true, status: 'active',
+  };
+
+  it('starts its window on the arrival date, once that is known', () => {
+    // The table said clockStart: 'purchase' while the entry's own gotcha said
+    // in prose that ASOS counts from the day it arrives and kept could not.
+    const draft = { ...draftFrom(asos), arrivedOnText: '2026-08-14' };
+    expect(effectiveWindowStart(asos, draft)).toBe('2026-08-14');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    const saved = applyDraft(asos, out.value);
+    expect(saved.windowStartsOn).toBe('2026-08-14');
+    expect(toISODate(derive(saved, TODAY).deadline)).toBe('2026-09-11');
+  });
+
+  it('falls back to the order when the arrival is unknown', () => {
+    // Earlier than the truth, which is the cautious direction — and the
+    // detail screen says the date is a floor.
+    const draft = draftFrom(asos);
+    expect(effectiveWindowStart(asos, draft)).toBe('2026-08-10');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(asos, out.value).windowStartsOn).toBeUndefined();
+  });
+
+  it('ignores an arrival date on a counter purchase', () => {
+    // A counter purchase arrives when it is bought, and the field is not even
+    // shown for one — so a stale value must not start a clock.
+    //
+    // Both halves: validateDraft already drops the date, so only the PREVIEW
+    // can be wrong here, and the preview disagreeing with the save is the
+    // failure this file keeps having.
+    const draft = { ...draftFrom(asos), distance: false, arrivedOnText: '2026-08-14' };
+    expect(effectiveWindowStart(asos, draft)).toBe('2026-08-10');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    expect(applyDraft(asos, out.value).windowStartsOn).toBeUndefined();
+  });
+
+  it('does not start a shop that counts from the till on the arrival date', () => {
+    const argos = { ...asos, store: 'Argos', windowDays: 30 };
+    const draft = { ...draftFrom(argos), arrivedOnText: '2026-08-14' };
+    expect(effectiveWindowStart(argos, draft)).toBe('2026-08-10');
+    const out = validateDraft(draft, TODAY);
+    if (!out.ok) throw new Error('expected valid');
+    const saved = applyDraft(argos, out.value);
+    expect(saved.windowStartsOn).toBeUndefined();
+    // The arrival is still recorded — the statutory clocks run from it.
+    expect(saved.arrivedOn).toBe('2026-08-14');
+  });
+});
