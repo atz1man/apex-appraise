@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 405 unit tests over the decision logic
+npm test           # 412 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -380,6 +380,22 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **Two claims in the shipped copy that nothing behind them kept.** The Watch
+  tab said "Warranty clocks added automatically" — and nothing sets a
+  warranty: not the parser, not the store table, not the add flow. The clock
+  itself is real and tracked (that half was fixed early, and `types.ts` still
+  carries the note saying so); it was never automatic, and a manufacturer's
+  warranty is not knowable from an order email, so the copy is what changed.
+  The same card set said "Kept flags if that's you before you buy" about
+  ASOS's frequent-returner window, with no purchase-frequency tracking and no
+  moment before a purchase to say it in. What Kept actually does is assume the
+  shorter window — `stores.ts` has ASOS at 28, not 45 — which is what it says
+  now. Both were in three places: the landing page, the bundled seed and
+  `public/policy-feed.json`, which is why `test/feed-agreement.test.ts` now
+  holds those last two to each other. It caught a drift on its first run: the
+  seed's comment claims its ids match the served feed exactly, and the bundle
+  was carrying four of the five, so a first launch with no signal showed a
+  Watch tab quietly missing one.
 - **The free tier is enforced, and counts what you are still tracking.** The
   10-receipt cap is claimed on the pricing page, in the Settings meter and on
   the Add screen, and nothing stopped an eleventh — the upsell was theatre.
