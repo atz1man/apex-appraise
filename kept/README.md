@@ -59,6 +59,15 @@ filter at all, so every commit to kept also ran a full pnpm install, a Prisma
 generate, a Postgres service and a Playwright browser job, green every time,
 on a diff that could not reach any of it.
 
+A path filter does less than it looks like it does, though, and this is worth
+knowing before reading a CI run and concluding the filter is broken: on
+`pull_request` GitHub evaluates it against the pull request's *whole diff*,
+not the commit just pushed. A pull request that touches a single file outside
+`kept/` runs Apex's suite on every later commit, whatever those commits touch
+— which is what the pull request introducing this arrangement does, since it
+edits both workflows, the root `.gitignore` and the root README. The saving is
+on pushes to main and on pull requests confined to `kept/`.
+
 Two jobs: a fast one (typecheck, 357 unit tests, build) and a browser one that
 serves the built app and runs five sweeps against it, plus `freshness`, which
 starts and stops a server of its own. Each of those found real defects the day

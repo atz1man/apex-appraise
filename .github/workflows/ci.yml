@@ -4,11 +4,20 @@ name: CI
 # repository — its own npm project, outside the pnpm-workspace globs, sharing
 # no dependency with Apex Appraise — and it has its own workflow
 # (.github/workflows/kept.yml), which is scoped to kept/** for the mirror
-# reason. Without this, every commit to kept ran a full pnpm install, a Prisma
+# reason. Without this, a commit to kept ran a full pnpm install, a Prisma
 # generate, a Postgres service and a Playwright browser job to prove nothing:
 # green every time, on a diff that could not reach any of it. kept.yml's own
 # header claimed this separation already existed in both directions; it did
 # not, and this is the half that was missing.
+#
+# Note what a path filter does NOT do, because it is easy to expect more of it:
+# on `pull_request` GitHub evaluates it against the PULL REQUEST'S WHOLE DIFF,
+# not the commit that was just pushed. A pull request that touches one file
+# outside kept/ — this workflow, say — runs this suite on every later commit,
+# whatever those commits touch. Measured on the pull request that introduced
+# this line, which still runs the full Apex suite for exactly that reason. The
+# saving is on pushes to main and on pull requests confined to kept/. The same
+# caveat applies to kept.yml's `paths:` in the other direction.
 on:
   workflow_dispatch:
   push:
