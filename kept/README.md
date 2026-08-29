@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 249 unit tests over the decision logic
+npm test           # 254 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 28 end-to-end checks, including offline with the network cut
+npm run smoke      # 29 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -131,6 +131,13 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **Two screens disagreed about the same deadline.** The edit screen previewed
+  it by counting from the purchase date; the receipt counted from dispatch. On
+  the seeded Zara coat that is two days, on the one subject the app exists to
+  be right about. Both now read `effectiveWindowStart`, which also encodes the
+  rule that a dispatch date belongs to the shop that dispatched it — so
+  changing the shop drops it, in the preview and in what gets saved, and a
+  test pins the two together.
 - **Your data can actually be taken back.** On a product whose whole promise
   is that the data is yours and lives here, there was no way to remove it.
   Uninstalling clears a native app; a web app's storage outlives a closed tab,

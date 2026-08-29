@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraft, draftFrom, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
 import { money, toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
 
@@ -166,6 +166,44 @@ describe('round-tripping an existing receipt', () => {
       item: 'Renamed', id: 'r1', status: 'returned', returnedOn: '2026-08-20', gotcha: 'dispatch, not delivery',
       policy: 'Currys · 14 days',
     });
+  });
+});
+
+describe('where the window will actually start', () => {
+  const zara: Receipt = {
+    id: 'r1', store: 'Zara', item: 'Coat', cat: 'clothing', amount: toPence(34.99),
+    purchasedOn: '2026-08-13', windowStartsOn: '2026-08-15', windowDays: 30,
+    policy: 'p', legalDays: 14, status: 'active',
+  };
+
+  it('is the dispatch date when the shop uses one', () => {
+    // The edit screen previews the deadline from this. Computing it from the
+    // purchase date instead put the preview two days adrift from the receipt.
+    expect(effectiveWindowStart(zara, draftFrom(zara))).toBe('2026-08-15');
+  });
+
+  it('follows an edited purchase date when there is no dispatch clock', () => {
+    const plain = { ...zara, windowStartsOn: undefined };
+    expect(effectiveWindowStart(plain, { ...draftFrom(plain), purchasedOn: '2026-08-01' })).toBe('2026-08-01');
+  });
+
+  it('drops the dispatch clock when the shop changes', () => {
+    expect(effectiveWindowStart(zara, { ...draftFrom(zara), store: 'Argos' })).toBe('2026-08-13');
+  });
+
+  it('ignores whitespace around the shop name, like applyDraft does', () => {
+    expect(effectiveWindowStart(zara, { ...draftFrom(zara), store: '  Zara  ' })).toBe('2026-08-15');
+  });
+
+  it('agrees with what applyDraft actually saves', () => {
+    // The two must not be able to drift: this is the pairing that broke.
+    for (const store of ['Zara', 'Argos']) {
+      const draft = { ...draftFrom(zara), store };
+      const out = validateDraft(draft, TODAY);
+      if (!out.ok) throw new Error('expected valid');
+      const saved = applyDraft(zara, out.value);
+      expect(saved.windowStartsOn ?? saved.purchasedOn).toBe(effectiveWindowStart(zara, draft));
+    }
   });
 });
 

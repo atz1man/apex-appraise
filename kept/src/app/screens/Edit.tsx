@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { color, radius, shadow } from '../../tokens';
-import { applyDraft, draftFrom, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
+import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
 import { addDays, addMonths, fmtDateLong, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { STORE_POLICIES } from '../../lib/stores';
 import type { Category, Receipt } from '../../lib/types';
@@ -49,7 +49,11 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
   // about.
   const windowDays = Number(draft.windowDaysText);
   const previewable = /^\d{4}-\d{2}-\d{2}$/.test(draft.purchasedOn) && Number.isInteger(windowDays) && windowDays > 0;
-  const deadline = previewable ? fmtDateNear(addDays(fromISODate(draft.purchasedOn), windowDays), today) : null;
+  // Counted from where the window will actually start once saved — which is
+  // the dispatch date, on a shop that uses one. Previewing from the purchase
+  // date showed a deadline two days adrift from the receipt's own.
+  const windowStart = effectiveWindowStart(receipt, draft);
+  const deadline = previewable ? fmtDateNear(addDays(fromISODate(windowStart), windowDays), today) : null;
 
   const warrantyMonths = Number(draft.warrantyMonthsText.trim());
   const warrantyEnds =
@@ -197,10 +201,10 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
         </Field>
       </div>
 
-      {receipt.windowStartsOn && receipt.windowStartsOn !== receipt.purchasedOn && (
+      {windowStart !== draft.purchasedOn && (
         <p style={{ fontSize: 12.5, color: color.muted, lineHeight: 1.55, margin: '12px 4px 0' }}>
-          This shop counts from dispatch ({fmtDateNear(fromISODate(receipt.windowStartsOn), today)}), so the deadline is measured from
-          that date rather than the one above.
+          This shop counts from dispatch ({fmtDateNear(fromISODate(windowStart), today)}), so the deadline above is measured
+          from that date rather than the day you ordered. Changing the shop drops it.
         </p>
       )}
 

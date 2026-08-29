@@ -119,6 +119,23 @@ export function draftFrom(r: Receipt): ReceiptDraft {
 }
 
 /**
+ * The date the return window will actually count from once this draft is
+ * saved.
+ *
+ * Exported because the edit screen has to preview the deadline, and computing
+ * that separately is how the preview came to disagree with the receipt by two
+ * days: it counted from the purchase date while the receipt counted from
+ * dispatch. One rule, used by both.
+ *
+ * A dispatch date belongs to the shop that dispatched it, so changing the shop
+ * discards it — the same condition applyDraft uses.
+ */
+export function effectiveWindowStart(original: Receipt, draft: ReceiptDraft): string {
+  const storeChanged = original.store !== draft.store.trim();
+  return !storeChanged && original.windowStartsOn ? original.windowStartsOn : draft.purchasedOn;
+}
+
+/**
  * Apply an edit. The policy text follows the shop when the shop changes —
  * otherwise correcting "Currys" to "Argos" would leave Currys' 14-day wording
  * sitting under an Argos receipt, which is exactly the kind of quietly wrong
@@ -148,7 +165,8 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
           gotcha: policy?.gotcha,
           // The old shop's dispatch clock does not follow the receipt to a new
           // shop; without this, a Zara window start would keep governing an
-          // Argos purchase.
+          // Argos purchase. effectiveWindowStart encodes the same condition,
+          // so the edit screen's deadline preview agrees with what lands here.
           windowStartsOn: undefined,
         }
       : {}),

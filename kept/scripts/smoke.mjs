@@ -140,8 +140,18 @@ results['onboarding is not shown again'] = !(await page
 // An edit must reach the screen, and the disk.
 await page.getByRole('button', { name: /Zara, Wool-blend/ }).click();
 await page.waitForTimeout(300);
+// Zara counts from dispatch. The detail screen and the edit screen must name
+// the same date — they disagreed by two days, because the preview counted
+// from the purchase date and the receipt counted from dispatch.
+const detailDeadline = await page.evaluate(() => {
+  const label = [...document.querySelectorAll('div')].find((d) => d.textContent.trim() === 'RETURN BY');
+  return label?.nextElementSibling?.textContent?.trim() ?? null;
+});
 await page.getByRole('button', { name: 'Edit', exact: true }).click();
 await page.waitForTimeout(300);
+const editDeadline = (await page.locator('#e-window-hint').textContent()) ?? '';
+results['both screens name the same deadline for a dispatch-clocked receipt'] =
+  !!detailDeadline && editDeadline.includes(detailDeadline);
 await page.fill('#e-item', '');
 await page.getByRole('button', { name: 'Save changes' }).click();
 await page.waitForTimeout(300);
