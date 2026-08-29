@@ -252,6 +252,43 @@ describe('the window in force when it was bought', () => {
   });
 });
 
+describe('one question about a shop, asked in two places', () => {
+  /*
+   * `assess` decides whether the Watch tab tells you a change is yours.
+   * `windowInForceFor` decides what window a NEW receipt from that shop is
+   * given. Both are asking "does this update name this shop", and they were
+   * answering differently: `assess` compared exactly, `windowInForceFor`
+   * case-insensitively, and `affectsStores` comes off the network with
+   * `readFeed` taking it verbatim.
+   *
+   * So a feed that wrote `["currys"]` shortened every new Currys purchase's
+   * window while the Watch tab showed that same change as not affecting you —
+   * the app acting on a change it had just said was not yours, in the
+   * direction that takes days off. Asserted as the agreement rather than as
+   * two behaviours, because the agreement is the thing that must hold.
+   */
+  const asWritten = (affectsStores: string[]): PolicyUpdate => ({
+    id: 'u', store: affectsStores[0], changedOn: '2026-01-01', text: 'changed',
+    affectsStores, affectNote: '', newWindowDays: 7,
+  });
+  const currysReceipt: Receipt = { ...zaraReceipt, id: 'c1', store: 'Currys', windowDays: 14 };
+
+  for (const written of ['Currys', 'currys', 'CURRYS', ' Currys ']) {
+    it(`answers the same on both surfaces for a feed writing ${JSON.stringify(written)}`, () => {
+      const u = asWritten([written]);
+      const watchSaysYours = assess([u], [currysReceipt], TODAY)[0].affectsYou;
+      const itGovernsANewOne = windowInForceFor('Currys', ago(1), [u]) !== undefined;
+      expect(watchSaysYours).toBe(itGovernsANewOne);
+    });
+  }
+
+  it('still says nothing about a shop the update does not name', () => {
+    const u = asWritten(['Boots']);
+    expect(assess([u], [currysReceipt], TODAY)[0].affectsYou).toBe(false);
+    expect(windowInForceFor('Currys', ago(1), [u])).toBeUndefined();
+  });
+});
+
 describe('two boundaries in the feed that nothing pinned', () => {
   /*
    * Found by mutation. `d.daysLeft < 0` flipped to `<= 0` makes the impact

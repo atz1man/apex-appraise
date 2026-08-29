@@ -1710,6 +1710,88 @@ It was verified in the smoke suite before that, under a comment saying the
 network was cut completely, and it was not — see the section above for what
 that check was actually proving.
 
+### One question about a shop, asked in two places
+
+Two functions decide what a policy update means for you, and they were
+answering the same question differently.
+
+`assess` decides whether the Watch tab tells you a change is yours. It asked
+`update.affectsStores.includes(receipt.store)` — an exact string match.
+`windowInForceFor`, written later, decides what window a *new* receipt from
+that shop is given, and asked case-insensitively. `affectsStores` arrives over
+the network and `readFeed` takes it verbatim, so the two answers parted company
+on nothing more than how the feed happened to capitalise a name.
+
+A feed entry writing `["currys"]` would then shorten every new Currys purchase
+while the Watch tab showed that same change as **not affecting you** — the app
+acting on a change it had just said was not yours, silently, in the direction
+that takes days off a deadline. Both halves were internally consistent; the
+question was one and the answer was two.
+
+One predicate now, and lenient rather than strict, because the failure of
+strictness here is silence: the receipt edited to "boots" that carried Boots'
+policy with every Boots change invisible to it was exactly that, and the
+casing of a shop's name in a hand-authored feed is not a distinction anybody
+means. The test asserts the *agreement* rather than the two behaviours
+separately, since the agreement is what has to hold.
+
+### The window a new purchase is given, and the line above it
+
+On the same card, four lines apart, the add screen stated two different
+windows about one purchase. The shop hint quoted the bundled table
+(`knownFromTyped.windowDays`); the "Return window" row beneath it quoted
+`effectiveWindow`, which prefers the policy feed. So for a shop whose window
+the feed has moved, the number a person reads first was the stale one — and
+"from Kept's list", said of a number the app took from its own policy watch, is
+untrue besides. Both now come from the same binding, and the wording names the
+change when the change is what moved it, which is the rule `policyFor` already
+applies to the receipt's own sentence.
+
+Behind that was the larger gap: **nothing exercised the feature at all.** No
+unit test reaches the screen, and no state the app can arrive at on its own
+does either — every entry in the shipped feed sets `newWindowDays` to the
+number already in `stores.ts`, deliberately, so the app as it ships has no
+moved window to demonstrate. Removing the feed from that line left every check
+in this repository green.
+
+`agreement` seeds one now: a change to seven days, dated before the purchase,
+for a shop the shipped feed does not name. The seeded number is stated in the
+sweep independently of anything the app derives from it, because a seed
+compared against a value computed from the same seed only agrees with itself.
+Both directions are pinned — putting the stale hint back reports `"35" vs
+"7"`, and taking the feed back out of the window reports that the change never
+reached the receipt.
+
+The first version of that check used Currys and failed, and the app was right:
+the shipped feed carries its own Currys entry dated *later* than the seed, and
+a later change is the one in force. Seeding a shop nobody else names leaves
+only the question being asked.
+
+### Deleting a statement, one at a time
+
+The earlier mutation passes flipped operators and moved constants. This one
+deletes a whole statement from a function body and runs the suite against
+each — a different question: not "is this comparison the right way round" but
+"does anything observe that this line ran at all". Variable declarations are
+excluded on purpose, since a used one is a `ReferenceError` that says nothing
+and an unused one `noUnusedLocals` already refuses.
+
+Ninety-three deletions across the modules that decide money and time, and
+**three survived**. Two are equivalent — `matches` returning early on an empty
+query is what `.every` on an empty list does anyway, and `search` short-
+circuiting the same case reaches the same array — and both are kept with the
+reason written where they sit, one for the sentence it states and one for the
+predicate call per row it skips. Neither got a test, because there is nothing
+to pin.
+
+The third was real and unobservable, which is the interesting shape. The
+warranty label's `if (days < 0) return ''` is reached for every expired
+warranty in the library — `derive` computes `label` whether or not anything
+reads it — and the detail screen checks `expired` first and prints the word,
+so the string is computed and rendered by nobody. Without the guard the field
+reads `-638 days` under a heading calling it remaining cover. The guard was
+right and nothing held it; it is held now.
+
 ## Not built yet
 
 - **Receipt scanning.** The button is present and visibly disabled with a

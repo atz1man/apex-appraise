@@ -174,6 +174,19 @@ describe('the warranty clock', () => {
     expect(withWarranty(12, 364).warranty!.label).toBe('1 day');
   });
 
+  it('says nothing at all once cover has run out', () => {
+    /*
+     * Found by deleting the `days < 0` guard and watching nothing fail. The
+     * detail screen reads `expired` first and prints the word "expired", so
+     * `label` is computed for every expired warranty and rendered by nobody —
+     * which is exactly how it stays wrong until the day something renders it.
+     * Without the guard the field reads "-638 days", under a heading that
+     * calls it remaining cover.
+     */
+    expect(withWarranty(12, 400).warranty!.expired).toBe(true);
+    expect(withWarranty(12, 400).warranty!.label).toBe('');
+  });
+
   it('carries a note with no clock, for a warranty imported as prose', () => {
     const d = derive(receipt({ warranty: { months: 0, note: '2-year manufacturer warranty' } }), TODAY);
     expect(d.warranty!.months).toBe(0);

@@ -105,9 +105,14 @@ export interface PolicyUpdate {
   affectsStores: string[];
   affectNote: string;
   /**
-   * The retailer's window AFTER the change, when the change moved it. Used to
-   * tell someone what a change would have meant — never to rewrite a receipt
-   * they already hold, which keeps the terms it was bought under.
+   * The retailer's window AFTER the change, when the change moved it.
+   *
+   * Two readers now, and the second arrived after this comment was written: it
+   * tells the holder of an EXISTING receipt what the change would have meant,
+   * and it gives a NEW purchase from that shop the window actually in force on
+   * the day it was bought (`windowInForceFor`). What it still never does is
+   * rewrite a receipt already held, which keeps the terms it was bought under
+   * — that is the line, and it is not "read on one screen only".
    */
   newWindowDays?: number;
 }

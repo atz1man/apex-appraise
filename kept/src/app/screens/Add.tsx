@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { color, font, radius, shadow } from '../../tokens';
-import { addDays, fmtDate, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
+import { addDays, fmtDate, fmtDateLong, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { arrivalProblem, windowStartFor } from '../../lib/draft';
@@ -267,9 +267,24 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, updates, onSav
                   fontFamily: font.ui, fontSize: 14.5, color: color.ink,
                 }}
               />
+              {/* The number this line quotes is the number the receipt gets.
+                  It quoted the TABLE's window while the "Return window" row a
+                  few lines down quoted `effectiveWindow`, which prefers the
+                  policy feed — so on a shop whose window the feed has moved,
+                  one card stated two different windows about one purchase,
+                  and the one read first was the stale one.
+
+                  Where the number came from is part of the fact, which is the
+                  rule `policyFor` already applies to the receipt's own
+                  sentence: the table's wording while the table's number still
+                  holds, and the change named otherwise. "From Kept's list",
+                  said of a number the app took from its own policy watch, is
+                  simply untrue. */}
               <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
                 {knownFromTyped
-                  ? `${knownFromTyped.name} — ${knownFromTyped.windowDays} days, from Kept’s list.`
+                  ? inForce && effectiveWindow !== knownFromTyped.windowDays
+                    ? `${knownFromTyped.name} — ${effectiveWindow} days, from a policy change on ${fmtDateLong(fromISODate(inForce.changedOn))}.`
+                    : `${knownFromTyped.name} — ${effectiveWindow} days, from Kept’s list.`
                   : 'We could not find a shop we know in that paste. Name it and we will use its real window if we have it.'}
               </div>
             </div>

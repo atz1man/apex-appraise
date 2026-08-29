@@ -300,6 +300,100 @@ agree(
   [...onPage.prices].sort().join(' '),
 );
 
+/*
+ * --- The window a NEW purchase is given, when the feed has moved it -------
+ *
+ * The add screen takes a new receipt's window from the policy feed when the
+ * feed carries a change the bundled table predates. That is what makes the
+ * watch tab's promise true rather than decorative — and nothing exercised it.
+ * No unit test reaches the screen, and no state the app can arrive at on its
+ * own does either: every entry in the shipped feed sets `newWindowDays` to the
+ * number already in `stores.ts`, deliberately, so the app as it ships has no
+ * moved window to demonstrate. Take the feed back out of that line and every
+ * check in this repository stays green.
+ *
+ * So the state is seeded rather than waited for, and what it has to produce is
+ * stated here independently of what the app does with it. A seed compared
+ * against a number the app derived from the same seed only agrees with itself,
+ * which is the vacuity this codebase has now been caught by twice.
+ */
+/*
+ * A shop the shipped feed does not mention, on purpose. The first version of
+ * this check seeded Currys and reported that the change had not reached the
+ * receipt — and the app was right: the shipped feed carries its own Currys
+ * entry dated later than the seed, and a later change is the one in force.
+ * Seeding a shop nobody else names leaves only the question being asked.
+ */
+const SHOP = 'Boots';
+const SEEDED_WINDOW = 7;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Relative to the day this runs, not written out. A fixed calendar date here
+// is a check that starts failing for the wrong reason.
+const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const bought = daysAgo(5);
+const boughtText = `${bought.getDate()} ${MONTHS[bought.getMonth()]} ${bought.getFullYear()}`;
+
+await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+await page.evaluate(({ shop, days, changedOn }) => {
+  const state = JSON.parse(localStorage.getItem('kept.v1') ?? '{}');
+  state.onboardingSeen = true;
+  state.updates = [
+    {
+      id: 'u_agreement_seeded_window',
+      store: shop,
+      changedOn,
+      text: `${shop} cut its return window to ${days} days.`,
+      affectsStores: [shop],
+      affectNote: 'new purchases get the shorter window',
+      newWindowDays: days,
+    },
+    ...(state.updates ?? []),
+  ];
+  localStorage.setItem('kept.v1', JSON.stringify(state));
+}, { shop: SHOP, days: SEEDED_WINDOW, changedOn: iso(daysAgo(60)) });
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+
+await page.getByRole('button', { name: 'Add a receipt' }).click();
+await page.waitForTimeout(300);
+// A total and a date and no shop anywhere in it, because the hint below is on
+// the branch the screen takes when the paste named nobody it knows.
+await page.fill('#paste', `Your order · Total £329.00 · ${boughtText}`);
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+await page.fill('#add-store', SHOP);
+await page.waitForTimeout(300);
+
+const window0 = await page.evaluate(() => {
+  const wrap = document.querySelector('#add-store')?.parentElement;
+  const hint = wrap ? ([...wrap.querySelectorAll('div')].map((d) => d.textContent ?? '').find((t) => /\d+ days/.test(t)) ?? '') : '';
+  const label = [...document.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Return window');
+  const row = label ? ([...label.parentElement.querySelectorAll('span')].at(-1)?.textContent ?? '') : '';
+  return { hint, row, sawShop: !!wrap, sawRow: !!label };
+});
+
+if (!window0.sawShop || !window0.sawRow) {
+  disagreements.push({
+    what: 'the add screen never reached the state this check exists for — a typed shop and the window it would be given',
+    saw: [window0.hint, window0.row],
+  });
+} else if (digits(window0.row) !== String(SEEDED_WINDOW)) {
+  // Stated from the seed, not from the app: the check is that a change dated
+  // before the purchase governs it. Reading the table's number here means the
+  // feed did not reach the receipt, which is the whole feature.
+  disagreements.push({
+    what: `a policy change to ${SEEDED_WINDOW} days, dated before the purchase, did not reach the window a new ${SHOP} receipt is given`,
+    saw: [window0.row],
+  });
+} else {
+  agree(
+    'the window a new receipt is given, in the shop hint and in the summary row below it',
+    digits(window0.hint),
+    digits(window0.row),
+  );
+}
+
 await browser.close();
 
 function report(crash) {

@@ -17,12 +17,22 @@ import type { Receipt } from './types';
 /** Every whitespace-separated term must appear somewhere. */
 export function matches(receipt: Receipt, query: string): boolean {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  // Deleting this line changes no answer — `.every` on an empty list is
+  // already true — and it survived being deleted for exactly that reason.
+  // Kept as the sentence rather than the implication: an empty query matches
+  // everything, which is a decision, not an accident of the array method
+  // underneath it. No test pins it, because there is nothing to pin.
   if (terms.length === 0) return true;
   const haystack = `${receipt.store} ${receipt.item}`.toLowerCase();
   return terms.every((t) => haystack.includes(t));
 }
 
 export function search(receipts: readonly Receipt[], query: string): Receipt[] {
+  // Equivalent to falling through, for the same reason as above: with no
+  // terms every receipt matches, so the filter returns the same list. This
+  // one earns its place on cost rather than meaning — it is the common case
+  // on a library the paid tier does not cap, and it skips a predicate call
+  // per row to reach an answer already known.
   if (!query.trim()) return [...receipts];
   return receipts.filter((r) => matches(r, query));
 }

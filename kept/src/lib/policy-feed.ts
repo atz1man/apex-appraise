@@ -73,21 +73,45 @@ export interface WindowInForce {
   changedOn: string;
 }
 
+/**
+ * Does this update name that shop?
+ *
+ * One predicate, because there were two and they answered differently.
+ * `assess` — which decides whether the Watch tab tells you a change is yours
+ * — asked `affectsStores.includes(receipt.store)`, an exact match.
+ * `windowInForceFor` — which decides what window a NEW receipt from that shop
+ * is given — asked the same question case-insensitively. `affectsStores`
+ * arrives over the network and `readFeed` takes it verbatim, so the two
+ * answers parted company on nothing more than how the feed happened to
+ * capitalise a name.
+ *
+ * A feed entry saying `["currys"]` would then shorten every new Currys
+ * purchase's window while the Watch tab showed that same change as not
+ * affecting you: the app acting on a change it had just said was not yours,
+ * silently, in the direction that takes days off.
+ *
+ * Lenient rather than strict, because the failure of strictness here is
+ * silence — the receipt edited to "boots" that carried Boots' policy with
+ * every Boots change invisible to it was exactly that — and because the
+ * casing of a shop's name in a hand-authored feed is not a distinction
+ * anybody means.
+ */
+function updateNames(update: PolicyUpdate, store: string): boolean {
+  const name = store.trim().toLowerCase();
+  if (!name) return false;
+  return update.affectsStores.some((s) => s.trim().toLowerCase() === name);
+}
+
 export function windowInForceFor(
   store: string,
   purchasedOn: string,
   updates: readonly PolicyUpdate[],
 ): WindowInForce | undefined {
-  const name = store.trim().toLowerCase();
-  if (!name) return undefined;
   let onDate = '';
   let days: number | undefined;
   for (const u of updates) {
     if (u.newWindowDays === undefined) continue;
-    // Case-insensitively, because `assess` once matched exactly while
-    // `findStore` did not, and a receipt edited to "boots" carried Boots'
-    // policy with every Boots change invisible to it.
-    if (!u.affectsStores.some((s) => s.trim().toLowerCase() === name)) continue;
+    if (!updateNames(u, store)) continue;
     // ISO dates compare correctly as strings, which is half of why they are
     // stored this way.
     if (u.changedOn > purchasedOn) continue;
@@ -158,7 +182,7 @@ export function assess(updates: readonly PolicyUpdate[], receipts: readonly Rece
   const active = receipts.filter((r) => r.status === 'active');
   return updates.map((update) => {
     const impacts = active
-      .filter((r) => update.affectsStores.includes(r.store))
+      .filter((r) => updateNames(update, r.store))
       .map((r) => impactFor(update, r, today));
     return { update, impacts, affectsYou: impacts.length > 0 };
   });
