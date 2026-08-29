@@ -6,6 +6,14 @@ import { Pressable } from '../components/Pressable';
 interface Props {
   amount: Pence;
   store: string;
+  /**
+   * Whether the shop's own window was still open when this was marked
+   * returned. The line below asserted it unconditionally, and the button that
+   * leads here is offered on any active receipt — so a refund won AFTER the
+   * window, which is the harder one and the one most worth celebrating, was
+   * congratulated with a sentence that was not true.
+   */
+  inTime: boolean;
   recovered: Pence;
   shared: 'no' | 'copied' | 'failed';
   /** The sentence itself, so a failed copy can still be read and selected. */
@@ -14,7 +22,7 @@ interface Props {
   onDone: () => void;
 }
 
-export function Celebrate({ amount, store, recovered, shared, line, onShare, onDone }: Props) {
+export function Celebrate({ amount, store, inTime, recovered, shared, line, onShare, onDone }: Props) {
   return (
     // Bottom padding clears the floating tab bar. The design drew this screen
     // with the same 40px inset every full-bleed screen has, which puts "Back to
@@ -31,7 +39,9 @@ export function Celebrate({ amount, store, recovered, shared, line, onShare, onD
             {money(amount)}
           </div>
           <div style={{ fontSize: 15, color: color.onInkBody, marginTop: 8 }}>
-            Recovered from {store} before the window closed.
+            {inTime
+              ? `Recovered from ${store} before the window closed.`
+              : `Recovered from ${store}, after the shop’s own window had closed.`}
           </div>
           <div style={{ borderTop: `1.5px dashed ${color.onInkDash}`, marginTop: 20, paddingTop: 14, display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk', monospace", fontSize: 12.5 }}>
             <span style={{ color: color.faint }}>kept back so far</span>

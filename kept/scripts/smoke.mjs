@@ -200,6 +200,23 @@ for (const [label, refuse] of [['confirms a copy that happened', false], ['does 
   const claimsCopied = /Copied — paste it anywhere/.test(said);
   const showsTheLine = said.includes('Just got £89.00 back from Currys');
   results[`sharing ${label}`] = refuse ? !claimsCopied && showsTheLine : claimsCopied && !showsTheLine;
+  /*
+   * And what the card and the line actually claim.
+   *
+   * Both were unconditional. The card said "Recovered from Currys before the
+   * window closed" on a receipt whose window had closed — the button is
+   * offered on any active receipt — and the shareable line said "kept.
+   * reminded me before the window shut" whether or not kept had said anything
+   * at all, which is a claim about the product for the person to send to
+   * their friends. Nothing has alerted about this receipt in this context: it
+   * is a sample, and samples do not interrupt.
+   */
+  if (refuse) {
+    results['the win does not claim a reminder that was never sent'] =
+      !/reminded me before the window shut/.test(said) &&
+      /keeps every return deadline in one place/.test(said) &&
+      said.includes('Recovered from Currys before the window closed');
+  }
   await shareCtx.close();
 }
 

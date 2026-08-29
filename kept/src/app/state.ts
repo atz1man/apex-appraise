@@ -2,7 +2,7 @@ import { useEffect, useReducer, useState } from 'react';
 import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
-import { makeReceiptId } from '../lib/receipts';
+import { derive, makeReceiptId } from '../lib/receipts';
 import { freshState, load, onExternalChange, save, type KeptState, type Settings } from '../lib/storage';
 import { quotaFull as quotaFullFor } from '../lib/quota';
 import type { Period } from '../lib/pricing';
@@ -23,8 +23,21 @@ export interface AppState extends KeptState {
   /** The receipt open on the detail screen. */
   selId: string | null;
   obStep: number;
-  /** The refund the celebrate screen is showing; null when it is not showing one. */
-  celebrating: { amount: number; store: string } | null;
+  /**
+   * The refund the celebrate screen is showing; null when it is not showing
+   * one.
+   *
+   * `inTime` and `warned` are recorded at the moment of the return because
+   * the screen was asserting both of them unconditionally. It said "Recovered
+   * from IKEA before the window closed" on a receipt whose window had closed —
+   * the button is offered on any active receipt, expired or not, and a refund
+   * won after the window (goodwill, or the faulty-goods route) is exactly the
+   * one worth celebrating. And the shareable line said "kept. reminded me
+   * before the window shut" whether or not kept had said anything at all: a
+   * claim about the product, put in the user's mouth, to be sent to their
+   * friends.
+   */
+  celebrating: { amount: number; store: string; inTime: boolean; warned: boolean } | null;
   /**
    * What happened when the win was shared. Not a boolean, because "the copy
    * failed" and "it has not been tried" are different things to say — and the
@@ -95,7 +108,14 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
           x.id === action.id ? { ...x, status: 'returned', returnedOn: toISODate(today) } : x,
         ),
         screen: 'celebrate',
-        celebrating: { amount: r.amount, store: r.store },
+        celebrating: {
+          amount: r.amount,
+          store: r.store,
+          inTime: !derive(r, today).expired,
+          // Any rung counts: what the line claims is that kept said something
+          // before this happened, not which rung it was.
+          warned: state.alertsSent.some((k) => k.startsWith(`${r.id}:`)),
+        },
         shared: 'no',
         selId: null,
       };

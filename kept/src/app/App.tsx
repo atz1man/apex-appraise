@@ -180,8 +180,19 @@ export function App() {
    * inside the handler, because the Celebrate screen has to be able to show it
    * when the copy fails.
    */
+  /*
+   * The second half is a claim about the product, and it was made whether or
+   * not the product had done it: a receipt marked returned on the day it was
+   * added, or with alerts switched off, still produced "kept. reminded me
+   * before the window shut" for the person to send to their friends. It says
+   * that only when kept actually said something first, and in time.
+   */
   const winLine = state.celebrating
-    ? `Just got ${money(state.celebrating.amount)} back from ${state.celebrating.store} — kept. reminded me before the window shut.`
+    ? `Just got ${money(state.celebrating.amount)} back from ${state.celebrating.store} — kept. ${
+        state.celebrating.warned && state.celebrating.inTime
+          ? 'reminded me before the window shut.'
+          : 'keeps every return deadline in one place.'
+      }`
     : '';
 
   const shareWin = async () => {
@@ -318,6 +329,7 @@ export function App() {
         <Celebrate
           amount={state.celebrating.amount}
           store={state.celebrating.store}
+          inTime={state.celebrating.inTime}
           recovered={recovered}
           shared={state.shared}
           line={winLine}

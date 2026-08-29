@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 474 unit tests over the decision logic
+npm test           # 477 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 47 end-to-end checks, including a midnight rollover
+npm run smoke      # 48 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -416,6 +416,18 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **The celebration congratulated you for something that had not happened.**
+  Two unconditional claims on one screen. "Recovered from Currys before the
+  window closed" was printed whether or not it had — the button that leads
+  there is offered on any active receipt, and a refund won *after* the window,
+  by goodwill or the faulty-goods route, is the harder one and the one most
+  worth celebrating. And the shareable line read "kept. reminded me before the
+  window shut" whether or not kept had said anything at all: a receipt marked
+  returned the day it was added, or with alerts switched off, produced a claim
+  about the product for the person to send to their friends. The return now
+  records `inTime` and `warned` at the moment it happens, and each sentence is
+  earned. Same reasoning as the clipboard fix above — a control that reports
+  success whatever happened is not reporting anything.
 - **The hero misspelled a brand.** Item names are placed mid-sentence — "9
   days left to return your …" — so the first word was lower-cased when it
   looked ordinary, leaving "JBL", "No7", "iPhone" and "kMix" alone because a

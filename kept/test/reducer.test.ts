@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { reducer, type AppState } from '../src/app/state';
+import { addDays, toISODate } from '../src/lib/dates';
 import { toPence } from '../src/lib/money';
 import { DEFAULT_SETTINGS } from '../src/lib/storage';
 import type { Receipt } from '../src/lib/types';
@@ -119,5 +120,44 @@ describe('tapping a price', () => {
     const done = reducer(asked, { type: 'settings', patch: { plan: 'pro' } }, TODAY);
     expect(done.settings.plan).toBe('pro');
     expect(done.upgrading).toBeNull();
+  });
+});
+
+describe('what the celebration is allowed to claim', () => {
+  const closed = (over: Partial<Receipt> = {}): Receipt => ({
+    ...receipt('late'),
+    // 60 days ago on a 30-day window: the shop's window shut a month back.
+    purchasedOn: toISODate(addDays(TODAY, -60)),
+    ...over,
+  });
+
+  it('does not say "before the window closed" when it had closed', () => {
+    // The button is offered on any active receipt, and a refund won after the
+    // window — goodwill, or the faulty-goods route — is the harder one.
+    const s = reducer(base({ receipts: [closed()] }), { type: 'return', id: 'late' }, TODAY);
+    expect(s.celebrating?.inTime).toBe(false);
+  });
+
+  it('says it when the window really was open', () => {
+    const s = reducer(base(), { type: 'return', id: 'a' }, TODAY);
+    expect(s.celebrating?.inTime).toBe(true);
+  });
+
+  it('does not claim kept warned you when kept said nothing', () => {
+    // The shareable line said "kept. reminded me before the window shut"
+    // whether or not it had — a claim about the product, put in the user's
+    // mouth, to be sent to their friends.
+    const s = reducer(base({ alertsSent: [] }), { type: 'return', id: 'a' }, TODAY);
+    expect(s.celebrating?.warned).toBe(false);
+  });
+
+  it('claims it when an alert really went out for that receipt', () => {
+    const s = reducer(base({ alertsSent: ['a:soon'] }), { type: 'return', id: 'a' }, TODAY);
+    expect(s.celebrating?.warned).toBe(true);
+  });
+
+  it('does not count an alert about a different receipt', () => {
+    const s = reducer(base({ alertsSent: ['b:soon'] }), { type: 'return', id: 'a' }, TODAY);
+    expect(s.celebrating?.warned).toBe(false);
   });
 });
