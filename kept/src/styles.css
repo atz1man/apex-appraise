@@ -57,9 +57,30 @@ a:hover { color: #896600; }
   width: 100%;
 }
 
+/*
+ * Two colours, because one cannot work everywhere.
+ *
+ * The ring was yellow alone, and yellow measures 1.72:1 against the cream
+ * paper this app is mostly made of — WCAG 2.1 SC 1.4.11 asks 3:1 of a focus
+ * indicator, and axe does not check it, so nothing here could have said so.
+ * On a keyboard that ring is the only thing telling you where you are.
+ *
+ * The ink ring is painted from the border box outward and the yellow outline
+ * sits on top of it at a 2px offset, so both are visible at once: ink carries
+ * every light ground (15-18:1) and yellow carries the ink surfaces (10:1),
+ * and on all seven grounds the app paints, at least one of them clears 3:1.
+ * tokens.test.ts checks that rather than trusting it.
+ */
 :focus-visible {
   outline: 2.5px solid #F2B90D;
   outline-offset: 2px;
+  /* !important because the CTAs carry an inline `boxShadow` — the signature
+     3px hard offset — and an inline style beats a stylesheet rule. Measured:
+     without this the computed shadow on "Got my money back" is the hard
+     offset and the ink ring is simply absent, on exactly the buttons that
+     matter most. The hard shadow is replaced for as long as the element is
+     focused, which is the right trade: the ring should dominate. */
+  box-shadow: 0 0 0 5px #171410 !important;
   border-radius: 4px;
 }
 
@@ -70,7 +91,7 @@ a:hover { color: #896600; }
 .k-soft:hover { background: #EDE8D8 !important; }
 .k-ink:hover { background: #000 !important; }
 
-textarea:focus { outline: 2px solid #F2B90D; }
+textarea:focus { outline: 2px solid #F2B90D; box-shadow: 0 0 0 4px #171410 !important; }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { color, font } from '../src/tokens';
+import { AA_LARGE, contrast } from '../src/lib/contrast';
 
 /**
  * One place decides what the app is set in.
@@ -122,5 +123,51 @@ describe('colour is set from the tokens', () => {
       .filter((x) => !x.rgb || !PALETTE.has(x.rgb))
       .map((x) => `${x.where} ${x.c}`);
     expect([...new Set(strays)]).toEqual([]);
+  });
+});
+
+describe('the focus ring is visible on every ground', () => {
+  /*
+   * WCAG 2.1 SC 1.4.11 asks 3:1 of a focus indicator against what is next to
+   * it, and axe does not check it — so nothing here could have said that the
+   * ring was yellow alone at 1.72:1 on the cream paper this app is mostly
+   * made of. On a keyboard that ring is the only thing telling you where you
+   * are.
+   *
+   * Two colours, because one cannot work everywhere: ink carries the light
+   * grounds and yellow carries the ink surfaces. The rule is that at least
+   * one part clears 3:1 on every surface the app paints on.
+   */
+  const RING = [color.yellow, color.ink];
+  const GROUNDS: Record<string, string> = {
+    cream: color.cream,
+    white: color.white,
+    creamAlt: color.creamAlt,
+    creamDeep: color.creamDeep,
+    ink: color.ink,
+    yellow: color.yellow,
+    yellowLight: color.yellowLight,
+  };
+
+  it('checks every ground the app paints on', () => {
+    expect(Object.keys(GROUNDS).length).toBeGreaterThan(4);
+    // Every ground named here is a real token, so this cannot drift into
+    // checking colours the app does not use.
+    for (const [name, value] of Object.entries(GROUNDS)) {
+      expect(Object.values(color), name).toContain(value);
+    }
+  });
+
+  it.each(Object.entries(GROUNDS))('is seen against %s', (_name, ground) => {
+    expect(Math.max(...RING.map((part) => contrast(part, ground)))).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  it('needs both parts — neither alone would do', () => {
+    // Stated as a property rather than a comment: if one colour were enough,
+    // the ring should be that colour and this file should say so.
+    for (const part of RING) {
+      const worst = Math.min(...Object.values(GROUNDS).map((g) => contrast(part, g)));
+      expect(worst).toBeLessThan(AA_LARGE);
+    }
   });
 });

@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 508 unit tests over the decision logic
+npm test           # 517 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -28,7 +28,7 @@ The browser checks need a built preview server:
 npm run build && npx vite preview --port 5183 &
 npm run smoke      # 54 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
-npm run a11y       # axe-core audit of every screen
+npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
                    #   and every screen again with the webfont blocked
 npm run agreement  # the same fact, on more than one screen, has to match
@@ -417,6 +417,24 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **The focus ring was invisible on the paper the app is made of.** Yellow
+  alone, measuring 1.72:1 against cream — WCAG 2.1 SC 1.4.11 asks 3:1 of a
+  focus indicator, axe does not check it, and on a keyboard that ring is the
+  only thing saying where you are. It is two colours now, because one cannot
+  work everywhere: ink carries the light grounds at 15–18:1 and yellow carries
+  the ink surfaces at 10:1, and `tokens.test.ts` checks every ground the app
+  paints on — including that *neither* colour would do alone, since if one
+  were enough the ring should be that colour.
+
+  The browser then found what the tokens could not. The ink half is a
+  `box-shadow`, and the CTAs carry the signature 3px hard offset as an INLINE
+  `boxShadow`, which beats a stylesheet rule — so the ring was absent on
+  exactly the buttons that matter most. `npm run a11y` now tabs through a
+  screen and asks the browser what it actually computed for each focused
+  element; with the `!important` removed it names "Got my money back". Tabbed
+  rather than `.focus()`, because `:focus-visible` does not match a
+  programmatic focus, so the rule never applies and the probe reports the
+  element's own shadow — which reads exactly like the defect.
 - **A link's hover colour was the shade the palette rejected.** `color.amber`
   was darkened from the handoff's `#B98A00` to `#896600` because the original
   measured 3.00:1 on cream — below AA wherever it was used. The stylesheet

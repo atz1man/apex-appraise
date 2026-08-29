@@ -314,6 +314,53 @@ for (const [label, go] of [
     lostFocus.push([label, `focus stayed on ${landed.tag} and nothing announced "${landed.heading}"`]);
   }
 }
+/*
+ * And the ring is actually painted where focus lands.
+ *
+ * axe does not check focus-indicator contrast (WCAG 2.1 SC 1.4.11 asks 3:1),
+ * and the ring was yellow alone at 1.72:1 on the cream this app is mostly
+ * made of. It is two colours now — ink for the light grounds, yellow for the
+ * ink surfaces — and the ink half is a `box-shadow`, which an INLINE
+ * `boxShadow` beats: the CTAs carry the signature 3px hard offset inline, so
+ * the ring was absent on exactly the buttons that matter most until the rule
+ * was marked important. A token-level check cannot see that; only asking the
+ * browser what it computed can.
+ *
+ * Tabbed, not `.focus()`: `:focus-visible` does not match a programmatic
+ * focus on a button, so the rule never applies and the probe reports the
+ * element's own shadow — which reads exactly like the defect.
+ */
+const ringPage = await (await browser.newContext({ viewport: { width: 402, height: 874 } })).newPage();
+await ringPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+await ringPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+await ringPage.waitForTimeout(400);
+await ringPage.getByRole('button', { name: /Currys, JBL/ }).click();
+await ringPage.waitForTimeout(500);
+const ringless = [];
+let ringsSeen = 0;
+for (let i = 0; i < 40; i += 1) {
+  await ringPage.keyboard.press('Tab');
+  const seen = await ringPage.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || el === document.body || !el.matches(':focus-visible')) return null;
+    const cs = getComputedStyle(el);
+    return {
+      what: (el.textContent ?? el.tagName).trim().slice(0, 30),
+      // Both halves, by the colours the tokens define.
+      hasInkRing: /rgb\(23,\s*20,\s*16\)/.test(cs.boxShadow) && /5px/.test(cs.boxShadow),
+      hasYellowOutline: /rgb\(242,\s*185,\s*13\)/.test(cs.outlineColor) && parseFloat(cs.outlineWidth) >= 2,
+    };
+  });
+  if (!seen) continue;
+  ringsSeen += 1;
+  if (!seen.hasInkRing || !seen.hasYellowOutline) {
+    ringless.push([`focus ring on "${seen.what}"`, `ink ring ${seen.hasInkRing ? 'yes' : 'MISSING'}, yellow outline ${seen.hasYellowOutline ? 'yes' : 'MISSING'}`]);
+  }
+}
+// A pass over nothing focusable would report a clean ring on no elements.
+if (ringsSeen < 3) ringless.push(['the focus-ring check', `only ${ringsSeen} focusable element(s) were reached`]);
+lostFocus.push(...ringless);
+
 await focusCtx.close();
 
 const motionCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, reducedMotion: 'reduce' });
