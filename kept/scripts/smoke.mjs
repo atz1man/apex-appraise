@@ -334,6 +334,34 @@ results['it is still usable offline, not just painted'] =
 await ctx.setOffline(false);
 
 /*
+ * Midnight, without a reload. Phones resume a PWA from the background rather
+ * than reloading it, so a deadline tracker left open overnight must notice the
+ * date turning over — it did not, and went on reporting yesterday's counts.
+ * Its own page and context, because installing a clock rewrites timers.
+ */
+{
+  const clockCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const clockPage = await clockCtx.newPage();
+  await clockPage.clock.install({ time: new Date('2026-09-10T22:00:00Z') });
+  await clockPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await clockPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await clockPage.waitForTimeout(400);
+  const heroDays = () =>
+    clockPage.evaluate(() => {
+      const label = [...document.querySelectorAll('span')].find((s) => s.textContent.trim() === 'NEXT WINDOW TO CLOSE');
+      const spans = [...(label?.closest('button')?.querySelectorAll('span') ?? [])];
+      return spans.find((s) => /^\d+$|^Today$|^Gone$/.test(s.textContent.trim()))?.textContent.trim() ?? null;
+    });
+  const beforeMidnight = await heroDays();
+  await clockPage.clock.fastForward('03:00:00');
+  await clockPage.waitForTimeout(600);
+  const afterMidnight = await heroDays();
+  results['the day count follows the clock past midnight'] =
+    beforeMidnight === '2' && afterMidnight === '1';
+  await clockCtx.close();
+}
+
+/*
  * A single unreadable row on disk must not take the app down. It did: a
  * receipt with no purchase date produced a completely blank screen on every
  * launch, with no way out but clearing site data by hand.

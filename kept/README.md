@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 30 end-to-end checks, including offline with the network cut
+npm run smoke      # 31 end-to-end checks, including offline and a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -132,6 +132,14 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **The app did not notice midnight.** `today` was computed once per session,
+  and phones resume a PWA from the background rather than reloading it — so a
+  deadline tracker left open overnight went on reporting yesterday's counts.
+  Verified by walking a fake clock forward without reloading: it said "2 days
+  left" three hours after midnight, and still said it two days later, on a
+  receipt whose window had shut. It now re-checks when the app returns to the
+  foreground and on a slow interval, and sets state only when the calendar day
+  actually turns over.
 - **One bad row on disk blanked the entire app.** The backup importer
   validates every row it reads, on the reasoning that a file off a disk is not
   trustworthy. The app's own storage got a single `Array.isArray` — and

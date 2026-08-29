@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
@@ -164,7 +164,36 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
  * across a midnight boundary.
  */
 export function useApp() {
-  const today = useMemo(() => startOfDay(new Date()), []);
+  /**
+   * The current day, and it has to stay current.
+   *
+   * This was memoised once per session, which is wrong for the one kind of app
+   * where it matters most: phones resume a PWA from the background rather than
+   * reloading it, so a deadline tracker left open overnight went on reporting
+   * yesterday's counts — "2 days left" on the morning it had become the last
+   * day. Every number on every screen derives from this value.
+   *
+   * Checked when the app comes back to the foreground, which is the common
+   * case, and on a slow interval for the app that simply stays open. The
+   * comparison is on the calendar day, so this sets state only when the date
+   * actually turns over.
+   */
+  const [today, setToday] = useState(() => startOfDay(new Date()));
+  useEffect(() => {
+    const check = () => {
+      const now = startOfDay(new Date());
+      setToday((current) => (now.getTime() === current.getTime() ? current : now));
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = setInterval(check, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
+  }, []);
   const [state, rawDispatch] = useReducer(
     (s: AppState, a: Action) => reducer(s, a, today),
     today,
