@@ -334,6 +334,45 @@ results['it is still usable offline, not just painted'] =
 await ctx.setOffline(false);
 
 /*
+ * Two tabs. Both hold the whole library in memory and both write all of it, so
+ * the one with older state used to destroy whatever the other had added — a
+ * setting toggle in the stale tab was enough, and it happened in silence.
+ * Its own context so the tabs share an origin without disturbing the run.
+ */
+{
+  const tabsCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const tabOne = await tabsCtx.newPage();
+  await tabOne.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await tabOne.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await tabOne.waitForTimeout(400);
+  const tabTwo = await tabsCtx.newPage();
+  await tabTwo.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await tabTwo.waitForTimeout(600);
+
+  await tabOne.bringToFront();
+  await tabOne.getByRole('button', { name: 'Add a receipt' }).click();
+  await tabOne.waitForTimeout(300);
+  await tabOne.fill('#paste', 'Your Apple order · Total £129.00 · 25 Aug');
+  await tabOne.getByRole('button', { name: 'Read it' }).click();
+  await tabOne.waitForTimeout(300);
+  await tabOne.fill('#add-item', 'AirPods Pro');
+  await tabOne.getByRole('button', { name: 'Save receipt' }).click();
+  await tabOne.waitForTimeout(600);
+
+  // The stale tab now writes, for an unrelated reason.
+  await tabTwo.bringToFront();
+  await tabTwo.getByRole('button', { name: 'Settings', exact: true }).click();
+  await tabTwo.waitForTimeout(300);
+  await tabTwo.getByRole('switch', { name: /Policy watch/ }).click();
+  await tabTwo.waitForTimeout(700);
+
+  results['a second tab does not destroy the first tab’s receipt'] = await tabTwo.evaluate(() =>
+    JSON.parse(localStorage.getItem('kept.v1')).receipts.some((r) => r.item === 'AirPods Pro'),
+  );
+  await tabsCtx.close();
+}
+
+/*
  * A write that does not land. There is no server behind this app, so a failed
  * save means the receipts are gone at the next launch while the screen still
  * shows them — it used to happen in complete silence. Its own context, because

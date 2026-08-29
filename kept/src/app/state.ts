@@ -3,7 +3,7 @@ import { pruneSent } from '../lib/alerts';
 import { startOfDay, toISODate } from '../lib/dates';
 import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
-import { freshState, load, save, type KeptState, type Settings } from '../lib/storage';
+import { freshState, load, onExternalChange, save, type KeptState, type Settings } from '../lib/storage';
 import { quotaFull as quotaFullFor } from '../lib/quota';
 import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
@@ -38,6 +38,7 @@ export type Action =
   | { type: 'undo-delete' }
   | { type: 'dismiss-undo' }
   | { type: 'wipe' }
+  | { type: 'sync'; state: KeptState }
   | { type: 'add'; receipt: Receipt }
   | { type: 'update'; receipt: Receipt }
   | { type: 'restore'; receipts: Receipt[] }
@@ -145,6 +146,18 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         selId: null,
         screen: 'home',
       };
+    case 'sync': {
+      // Adopt what another tab stored, keeping this tab's transient UI —
+      // screen, selection, an undo still on offer. If the receipt open here
+      // was deleted there, fall back rather than showing a blank detail.
+      const stillThere = state.selId && action.state.receipts.some((r) => r.id === state.selId);
+      return {
+        ...state,
+        ...action.state,
+        selId: stillThere ? state.selId : null,
+        screen: stillThere || (state.screen !== 'detail' && state.screen !== 'edit') ? state.screen : 'home',
+      };
+    }
     case 'feed':
       return { ...state, updates: action.updates };
     case 'alerted':
@@ -246,6 +259,13 @@ export function useApp() {
    * screen still shows it — the app has to say so.
    */
   const [saveFailed, setSaveFailed] = useState(false);
+
+  // Another tab of the same app writes the whole library too. Adopting its
+  // state is what stops this tab writing its own older copy over the top.
+  useEffect(() => {
+    if (state.embedded) return undefined;
+    return onExternalChange((incoming) => rawDispatch({ type: 'sync', state: incoming }), today);
+  }, [state.embedded, today]);
 
   useEffect(() => {
     if (state.embedded) return;

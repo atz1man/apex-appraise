@@ -135,12 +135,43 @@ export function save(state: KeptState): boolean {
   const store = storage();
   if (!store) return false;
   try {
-    store.setItem(KEY, JSON.stringify(state));
+    const next = JSON.stringify(state);
+    // Skip an identical write. Adopting another tab's state sets this state,
+    // which would otherwise write straight back what was just read — churning
+    // the quota for nothing.
+    if (store.getItem(KEY) === next) return true;
+    store.setItem(KEY, next);
     return true;
   } catch {
     // Quota exceeded, or a store that refuses writes entirely.
     return false;
   }
+}
+
+/**
+ * Notice another tab writing.
+ *
+ * Two tabs of a local-first app both hold the whole library in memory and both
+ * write all of it. Without this, the one with older state destroys whatever
+ * the other added the moment it changes anything at all — a setting toggle was
+ * enough — and it does so silently, which is the same species of loss the
+ * failed-save banner exists for.
+ *
+ * The `storage` event only fires in OTHER documents of the origin, so this
+ * cannot hear itself.
+ */
+export function onExternalChange(handler: (state: KeptState) => void, today: Date): () => void {
+  const listener = (e: StorageEvent) => {
+    if (e.key !== KEY || e.newValue === null) return;
+    try {
+      handler(hydrate(JSON.parse(e.newValue), today));
+    } catch {
+      // A write we cannot read is not worth adopting; this tab keeps what it
+      // has, which is at least coherent.
+    }
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }
 
 /**

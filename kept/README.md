@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 32 end-to-end checks, including offline and a midnight rollover
+npm run smoke      # 33 end-to-end checks, including offline and a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -132,6 +132,15 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **A second tab silently destroyed the first tab's receipts.** Two tabs of a
+  local-first app both hold the whole library in memory and both write all of
+  it, so whichever had older state overwrote the other — and a *setting toggle*
+  in the stale tab was enough to do it. Verified: tab A added a receipt, tab B
+  flipped an unrelated switch, and the receipt was gone. Tabs now adopt each
+  other's writes through the `storage` event, which only fires in other
+  documents so it cannot hear itself. If the receipt you are reading is deleted
+  in another tab, this one falls back to the list rather than to a blank
+  detail screen.
 - **The offline cache could never be evicted.** The service worker's cache name
   was a fixed `kept-v1`, and `activate` deletes every cache *except* the
   current one — so with a name that never changed, it deleted nothing. Each
