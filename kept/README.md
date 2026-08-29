@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 49 end-to-end checks, including a midnight rollover
+npm run smoke      # 50 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
@@ -431,6 +431,16 @@ deliberate departure, not an oversight:
   left. Set only for a shop whose entry says it counts from dispatch: an Argos
   receipt carrying Zara's clock would be worse than one carrying none, and the
   smoke check adds both to say so.
+
+  And when the paste does not say — most order confirmations are sent before
+  the parcel leaves — the deadline is a floor and is now shown as one: *"Zara
+  counts from dispatch, not from your order — and this receipt does not say
+  when that was, so the date above is the earliest it can be, never the
+  latest."* The same hedge the statutory clocks make about an unknown arrival,
+  pointing the other way. Which clock a shop runs is read from the table
+  rather than the receipt, deliberately: unlike the window, it is not a term
+  that changes under a purchase — a shop either counts from dispatch or it
+  does not.
 - **"No server" was the loose word in the privacy claim.** Settings and the
   landing page both said "No account, no server, no one reading your
   purchases" — on an app that is served from a server and downloads the

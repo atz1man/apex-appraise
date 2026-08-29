@@ -5,6 +5,7 @@ import { legalRights } from '../../lib/legal';
 import { money } from '../../lib/money';
 import { derive } from '../../lib/receipts';
 import type { Receipt } from '../../lib/types';
+import { findStore } from '../../lib/stores';
 import { urgency } from '../../lib/urgency';
 import { ChevronLeft, Warning } from '../components/Icons';
 import { Pressable } from '../components/Pressable';
@@ -39,6 +40,10 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
   const ringColor = d.expired ? color.onInkDanger : u.level === 'critical' ? color.onInkDanger : u.level === 'soon' ? color.yellow : color.cream;
 
   const dispatchDiffers = receipt.windowStartsOn && receipt.windowStartsOn !== receipt.purchasedOn;
+  // The table, not the receipt: which clock a shop runs is not something a
+  // receipt records, and unlike the WINDOW it is not a term that changes under
+  // a purchase — a shop either counts from dispatch or it does not.
+  const countsFromDispatch = findStore(receipt.store)?.clockStart === 'dispatch';
 
   // Rendered as a pair: a year on the deadline and none on the purchase is
   // what let "RETURN BY 15 Feb 2027" sit above "bought 15 Feb". See
@@ -121,6 +126,21 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
           {dispatchDiffers && (
             <div style={{ fontSize: 12.5, marginTop: 8, color: color.muted }}>
               Clock started {fmtDateLong(fromISODate(receipt.windowStartsOn!))} (dispatch), not the day you ordered.
+            </div>
+          )}
+          {/* The other half of the same fact, and the one that was silent.
+              This shop counts from dispatch and this receipt does not know
+              when that was — the paste did not say — so the app is counting
+              from the order, which is earlier and therefore cautious. It was
+              presenting that as the deadline rather than as a floor, and a
+              floor shown as a fact says "window closed" on a day the shop
+              would still take the thing back. Same hedge the statutory
+              clocks make when the arrival date is unknown, pointing the
+              other way. */}
+          {countsFromDispatch && !receipt.windowStartsOn && (
+            <div style={{ fontSize: 12.5, marginTop: 8, color: color.muted }}>
+              {receipt.store} counts from dispatch, not from your order — and this receipt does not say when that
+              was, so the date above is the earliest it can be, never the latest.
             </div>
           )}
         </div>

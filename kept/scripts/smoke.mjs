@@ -534,6 +534,29 @@ results['a dispatch-clocked shop counts from dispatch, and only that shop'] =
   argosAdded.store === 'Argos' && argosAdded.windowStartsOn === undefined;
 
 /*
+ * And when the paste does NOT say when it was dispatched, the deadline is a
+ * floor and has to be shown as one — the same hedge the statutory clocks make
+ * about an unknown arrival, pointing the other way. Presented as a fact, it
+ * says "window closed" on a day Zara would still take the coat back.
+ */
+const zaraNoDispatch = await addPaste('Zara · Order placed 13 August 2026 · Linen shirt · Total £25.99', 'Linen shirt');
+await page.getByRole('button', { name: /Zara, Linen shirt/ }).click();
+await page.waitForTimeout(400);
+const zaraDetail = await page.locator('main').innerText();
+await page.getByRole('button', { name: 'Back', exact: true }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /Argos, Kettle/ }).click();
+await page.waitForTimeout(400);
+const argosDetail = await page.locator('main').innerText();
+await page.getByRole('button', { name: 'Back', exact: true }).click();
+await page.waitForTimeout(300);
+results['an unknown dispatch date is shown as a floor, not a deadline'] =
+  zaraNoDispatch.windowStartsOn === undefined &&
+  /earliest it can be, never the latest/.test(zaraDetail) &&
+  // And not said about a shop that counts from the till, where it is false.
+  !/earliest it can be/.test(argosDetail);
+
+/*
  * What is on screen when the app cannot render.
  *
  * A throw anywhere below the root unmounts the whole tree — measured before
