@@ -914,6 +914,12 @@ as long as it says when. It reads the files rather than a list of known
 strings, skips comment lines (they quote the banned copy to explain it), and
 fails if it cannot read what it means to read.
 
+Which then found the same correction stopping one layer short a second time.
+Both `<meta name="description">` lines still said "pings you before either
+clock runs out" — the copy a search result and a link preview show, read by
+more people than either page. The guard covers the two `index.html` files
+now, and each was proved by putting its old sentence back.
+
 ### A deploy reaches the app, and the app works without one
 
 Two promises pull against each other. "Verified policy updates the day they

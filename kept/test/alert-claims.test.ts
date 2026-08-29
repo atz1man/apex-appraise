@@ -25,6 +25,13 @@ const FILES = [
   ...readdirSync(join(__dirname, '..', 'src', 'app', 'screens')).map((f) => join('src', 'app', 'screens', f)),
   join('src', 'landing', 'Landing.tsx'),
   join('src', 'landing', 'ticker.ts'),
+  // The two <meta name="description"> lines, which is where the correction
+  // stopped the first time: the hero and the features card were fixed and
+  // both descriptions went on saying "pings you before either clock runs
+  // out" — the copy a search result and a link preview show, read by more
+  // people than either.
+  'index.html',
+  join('app', 'index.html'),
 ];
 
 /** "pings you", "we'll remind you", "notifies you" — a delivery, unqualified. */
@@ -35,7 +42,7 @@ const QUALIFIED = /\bopen\b|\bcome back\b|\breturn to\b|\blaunch\b|\bforeground\
 function copyLines(): { file: string; line: number; text: string }[] {
   const out: { file: string; line: number; text: string }[] = [];
   for (const rel of FILES) {
-    if (!rel.endsWith('.ts') && !rel.endsWith('.tsx')) continue;
+    if (!/\.(ts|tsx|html)$/.test(rel)) continue;
     // Tolerant of a renamed file, so the count check below reports "I cannot
     // read what I mean to read" rather than the whole suite dying on ENOENT.
     let src: string;
@@ -48,7 +55,7 @@ function copyLines(): { file: string; line: number; text: string }[] {
       const t = text.trim();
       // Comments explain the rule and quote the copy it banned, so reading
       // them would make this test fail on its own explanation.
-      if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;
+      if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*') || t.startsWith('<!--')) return;
       out.push({ file: rel, line: i + 1, text });
     });
   }
