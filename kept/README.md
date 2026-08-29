@@ -1490,6 +1490,27 @@ Survivors that were left alone are equivalent mutants: `hit.date > best` versus
 `>=` when reducing to a maximum picks the same date, and `next < windowDays`
 versus `<=` sits below a branch that has already returned on equality.
 
+A second pass swapped `&&` for `||` and `+ 1` for `- 1` across the same
+modules, and turned up three more:
+
+**The sentence that is left when everything else has run out.** `${shopStillOpen
+|| ' You keep the rights above for anything that turns out to be faulty.'}` —
+`shopStillOpen` is a *string*, so the `||` is choosing between two sentences:
+the shop's own window is still open, or the faulty-goods route is what remains.
+Flipping it to `&&` swaps them, and the case it empties is the one that needs
+words most: the cooling-off has run out *and* the shop has shut. A person who
+has just been told two clocks have expired is one sentence away from believing
+there is nothing left to do. Both branches are pinned now, including that they
+are not both said at once.
+
+**A date shaped like a date that is not one.** `!shapeOK || notARealDate`
+flipped to `&&` was invisible, because every fixture used either a well-formed
+real date or obvious rubbish. The input that separates them is `2026-02-31`: it
+passes the shape check, and `fromISODate` does not reject it — `new Date(2026,
+1, 31)` is the 3rd of March. So an impossible date would not error, it would
+silently become a different real one three days later, on the field that starts
+both statutory clocks. Now refused, on arrival and on dispatch.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active

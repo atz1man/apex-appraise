@@ -241,3 +241,33 @@ describe('the parts a person only finds out by asking', () => {
     expect(coolingOff.body).not.toMatch(/never told you about this right/);
   });
 });
+
+describe('when both clocks have run out, it still says what is left', () => {
+  /*
+   * Found by mutation: `shopStillOpen || 'You keep the rights above…'` flipped
+   * to `&&` and nothing failed. `shopStillOpen` is a STRING, so the `||` is
+   * choosing between two sentences — the shop's window is still open, OR the
+   * only thing left is the faulty-goods route. The flip swaps them, which
+   * drops the reassurance in exactly the case that needs it: the cooling-off
+   * has run out AND the shop's window has shut.
+   *
+   * That is the moment this app exists for. A person who has just been told
+   * two clocks have run out is one sentence away from believing there is
+   * nothing left to do.
+   */
+  const expired = { ...online, purchasedOn: ago(20), arrivedOn: ago(20) };
+
+  it('names the faulty-goods route once the shop is shut too', () => {
+    const [, ...rest] = legalRights(expired, TODAY, false);
+    const cooling = [...rest, ...legalRights(expired, TODAY, false)].find((r) => r.chip === 'Consumer Contracts Regs');
+    expect(cooling?.live).toBe(false);
+    expect(cooling?.body).toContain('You keep the rights above for anything that turns out to be faulty');
+  });
+
+  it('points at the shop instead while the shop is still open', () => {
+    const cooling = legalRights(expired, TODAY, true).find((r) => r.chip === 'Consumer Contracts Regs');
+    expect(cooling?.body).toContain('The shop’s own window above is still open either way');
+    // And not both, which would be two answers to one question.
+    expect(cooling?.body).not.toContain('You keep the rights above for anything');
+  });
+});

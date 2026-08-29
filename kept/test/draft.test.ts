@@ -544,3 +544,31 @@ describe('same-day is not "before you ordered it"', () => {
     expect(out.ok).toBe(false);
   });
 });
+
+describe('a date that is shaped right and does not exist', () => {
+  /*
+   * Found by mutation: `!shapeOK || notARealDate` flipped to `&&` and nothing
+   * failed, because every fixture used either a well-formed real date or
+   * obvious rubbish. The input that separates them is one that PASSES the
+   * shape check and is not a day: 31 February.
+   *
+   * It matters because `fromISODate` does not reject it — `new Date(2026, 1,
+   * 31)` is the 3rd of March — so an impossible date does not error, it
+   * silently becomes a different real one, three days later, on the field that
+   * starts both statutory clocks.
+   */
+  it('refuses the 31st of February as an arrival date', () => {
+    expect(arrivalProblem('2026-02-31', '2026-02-01', TODAY)).toBe('Pick the day it arrived, or leave it blank');
+  });
+
+  it('refuses a thirteenth month', () => {
+    expect(arrivalProblem('2026-13-01', '2026-02-01', TODAY)).toBe('Pick the day it arrived, or leave it blank');
+  });
+
+  it('refuses the 31st of February as a dispatch date', () => {
+    const draft: ReceiptDraft = { ...base, store: 'Zara', purchasedOn: '2026-02-01', dispatchedOnText: '2026-02-31' };
+    const out = validateDraft(draft, TODAY);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.dispatchedOnText).toBe('Pick the day it was dispatched, or leave it blank');
+  });
+});
