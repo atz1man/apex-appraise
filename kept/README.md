@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 381 unit tests over the decision logic
+npm test           # 387 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -175,6 +175,16 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **Editing a shop's name to "boots" hid every Boots policy change.** A
+  receipt's `store` is not only a label: `assess` matches an update's
+  `affectsStores` against it exactly. `findStore` is case-insensitive, so such
+  a receipt cheerfully carried Boots' verified 35-day policy while no change
+  Boots published ever reached it — no banner, no flag on the Watch tab. The
+  add screen already resolved the typed name to the shop's own; the edit
+  screen did not, so the two ways into one field disagreed. Both use
+  `canonicalStoreName` now, and so does the deadline preview, because a
+  preview comparing raw text against a save comparing canonical names is the
+  exact disagreement `effectiveWindowStart` exists to prevent.
 - **A duplicated receipt id doubled the money.** The row reader validates one
   row at a time, so it cannot see a second row wearing the same id — and
   nothing else looked. One duplicate turns £89 still returnable into £178,
