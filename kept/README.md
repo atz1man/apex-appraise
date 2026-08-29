@@ -1778,8 +1778,8 @@ and an unused one `noUnusedLocals` already refuses.
 
 Ninety-three deletions across the modules that decide money and time, and
 **three survived**. Two are equivalent — `matches` returning early on an empty
-query is what `.every` on an empty list does anyway, and `search` short-
-circuiting the same case reaches the same array — and both are kept with the
+query is what `.every` on an empty list does anyway, and `search` taking the
+same shortcut reaches the same array — and both are kept with the
 reason written where they sit, one for the sentence it states and one for the
 predicate call per row it skips. Neither got a test, because there is nothing
 to pin.
