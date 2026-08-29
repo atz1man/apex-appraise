@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 31 end-to-end checks, including offline and a midnight rollover
+npm run smoke      # 32 end-to-end checks, including offline and a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -132,6 +132,15 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **A failed save was completely silent.** `save()` caught the quota error and
+  returned, on the reasoning that not throwing inside a render beats throwing.
+  The first half of that is right and the second half was missing: with no
+  server behind the app, a write that does not land means the data is gone at
+  the next launch *while the screen still shows it*. Verified by making writes
+  fail: the receipt appeared, nothing warned, and it was gone after a reload.
+  A failed write now raises a standing banner that says what happened and
+  offers the one action that preserves the data — an export — rather than an
+  apology.
 - **The app did not notice midnight.** `today` was computed once per session,
   and phones resume a PWA from the background rather than reloading it — so a
   deadline tracker left open overnight went on reporting yesterday's counts.

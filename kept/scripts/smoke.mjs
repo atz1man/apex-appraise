@@ -334,6 +334,37 @@ results['it is still usable offline, not just painted'] =
 await ctx.setOffline(false);
 
 /*
+ * A write that does not land. There is no server behind this app, so a failed
+ * save means the receipts are gone at the next launch while the screen still
+ * shows them — it used to happen in complete silence. Its own context, because
+ * breaking storage would derail every check after it.
+ */
+{
+  const fullCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const fullPage = await fullCtx.newPage();
+  await fullPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await fullPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await fullPage.waitForTimeout(300);
+  await fullPage.evaluate(() => {
+    const real = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = (k, v) => {
+      if (k === 'kept.v1') throw new DOMException('Quota', 'QuotaExceededError');
+      return real(k, v);
+    };
+  });
+  // Any change at all triggers a write.
+  await fullPage.getByRole('button', { name: /Zara, Wool-blend/ }).click();
+  await fullPage.waitForTimeout(300);
+  await fullPage.getByRole('button', { name: 'Got my money back' }).click();
+  await fullPage.waitForTimeout(500);
+  await fullPage.getByRole('button', { name: 'Back to receipts' }).click();
+  await fullPage.waitForTimeout(500);
+  results['a failed save is not silent'] =
+    await fullPage.getByText(/This device isn.t saving/).isVisible().catch(() => false);
+  await fullCtx.close();
+}
+
+/*
  * Midnight, without a reload. Phones resume a PWA from the background rather
  * than reloading it, so a deadline tracker left open overnight must notice the
  * date turning over — it did not, and went on reporting yesterday's counts.

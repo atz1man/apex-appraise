@@ -240,9 +240,16 @@ export function useApp() {
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   }, []);
 
+  /**
+   * Whether the last write reached the disk. There is no server behind this,
+   * so a failed write means the data is gone at the next launch while the
+   * screen still shows it — the app has to say so.
+   */
+  const [saveFailed, setSaveFailed] = useState(false);
+
   useEffect(() => {
     if (state.embedded) return;
-    save({
+    const ok = save({
       version: state.version,
       receipts: state.receipts,
       updates: state.updates,
@@ -250,9 +257,10 @@ export function useApp() {
       settings: state.settings,
       alertsSent: state.alertsSent,
     });
+    setSaveFailed(!ok);
   }, [state.embedded, state.version, state.receipts, state.updates, state.onboardingSeen, state.settings, state.alertsSent]);
 
-  return { state, dispatch: rawDispatch, today };
+  return { state, dispatch: rawDispatch, today, saveFailed };
 }
 
 export function quotaFull(state: AppState): boolean {

@@ -5,6 +5,7 @@ import { FEED_URL, mergeFeed, readFeed } from '../lib/policy-feed';
 import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
 import { exportBackup, wipe } from '../lib/storage';
+import { SaveFailedBanner } from './components/SaveFailedBanner';
 import { TabBar } from './components/TabBar';
 import { UndoBar } from './components/UndoBar';
 import { Add } from './screens/Add';
@@ -18,7 +19,7 @@ import { Watch } from './screens/Watch';
 import { quotaFull, useApp } from './state';
 
 export function App() {
-  const { state, dispatch, today } = useApp();
+  const { state, dispatch, today, saveFailed } = useApp();
   const { screen, settings } = state;
 
   const selected = state.receipts.find((r) => r.id === state.selId) ?? null;
@@ -152,6 +153,11 @@ export function App() {
       {/* One main landmark. Without it every screen's content sits outside any
           region, which is what a screen reader's landmark navigation moves
           between. */}
+      {/* Above the screen rather than over it: this is not a transient toast,
+          it is a standing condition, and it must be visible wherever the person
+          happens to be when it starts. */}
+      {saveFailed && !onboarding && <SaveFailedBanner onExport={exportNow} />}
+
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {onboarding && (
         <Onboarding

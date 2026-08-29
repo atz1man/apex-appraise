@@ -122,14 +122,24 @@ export function load(today: Date): KeptState {
   }
 }
 
-export function save(state: KeptState): void {
+/**
+ * Returns whether the write actually landed.
+ *
+ * Not throwing inside a render is right; staying silent about it is not. There
+ * is no server here, so a failed write is not a degraded experience — it is
+ * the data being gone at the next launch, while the screen still shows it. The
+ * caller surfaces this; swallowing it means someone adds a receipt, watches it
+ * appear, closes the app, and loses it with no indication anything went wrong.
+ */
+export function save(state: KeptState): boolean {
   const store = storage();
-  if (!store) return;
+  if (!store) return false;
   try {
     store.setItem(KEY, JSON.stringify(state));
+    return true;
   } catch {
-    // Quota exceeded. The in-memory state is still correct for this session;
-    // failing the write silently beats throwing inside a render.
+    // Quota exceeded, or a store that refuses writes entirely.
+    return false;
   }
 }
 
