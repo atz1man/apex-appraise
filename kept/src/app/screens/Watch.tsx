@@ -7,6 +7,8 @@ interface Props {
   updates: PolicyUpdate[];
   receipts: Receipt[];
   today: Date;
+  /** The Settings switch. It decides whether anything is fetched at all. */
+  watching: boolean;
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * item is a headline for one person and an alarm for another, and only the
  * device knows which.
  */
-export function Watch({ updates, receipts, today }: Props) {
+export function Watch({ updates, receipts, today, watching }: Props) {
   const assessed = assess(updates, receipts, today);
 
   return (
@@ -80,8 +82,15 @@ export function Watch({ updates, receipts, today }: Props) {
         {/* It said "Policies verified daily by kept · last check today 06:00".
             Nothing verifies daily and nothing recorded a check time — the hour
             was invented. What is true is where the list comes from and when it
-            is fetched, which is worth saying and is checkable. */}
-        Kept’s own list of changes, fetched each time you open the app
+            is fetched, which is worth saying and is checkable.
+
+            And it follows the switch. "Fetched each time you open the app" was
+            printed whether or not policy watch was on — a sentence that became
+            false the moment the switch in Settings started actually stopping
+            the fetch, which it now does. */}
+        {watching
+          ? 'Kept’s own list of changes, fetched each time you open the app'
+          : 'Kept’s own list of changes. Policy watch is off, so this is what was already on your device.'}
         <br />
         The whole list downloads, never a query naming your shops — receipts never leave your phone.
       </p>

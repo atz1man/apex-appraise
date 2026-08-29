@@ -473,6 +473,26 @@ results['the policy feed arrives and does not duplicate the bundled one'] =
   await watchPage.reload({ waitUntil: 'networkidle' });
   await watchPage.waitForTimeout(1200);
   results['switching policy watch off actually stops the download'] = hitsWhileOn > 0 && feedHits === 0;
+  // And the Watch tab stops claiming it. "Fetched each time you open the app"
+  // was printed whether or not the switch was on — a sentence that became
+  // false the moment the switch started actually stopping the fetch.
+  await watchPage.getByRole('button', { name: /^Watch/ }).click();
+  await watchPage.waitForTimeout(600);
+  const saidWhileOff = await watchPage.locator('main').innerText();
+  await watchPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    s.settings.policyWatch = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  });
+  await watchPage.reload({ waitUntil: 'networkidle' });
+  await watchPage.waitForTimeout(600);
+  await watchPage.getByRole('button', { name: /^Watch/ }).click();
+  await watchPage.waitForTimeout(600);
+  const saidWhileOn = await watchPage.locator('main').innerText();
+  results['the watch tab does not claim a fetch that is switched off'] =
+    /Policy watch is off/.test(saidWhileOff) &&
+    !/fetched each time you open the app/.test(saidWhileOff) &&
+    /fetched each time you open the app/.test(saidWhileOn);
   await watchCtx.close();
 }
 
@@ -544,6 +564,48 @@ await page.waitForTimeout(600);
 const delivered = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.at(-1));
 results['a delivery date in the paste is read, not asked for'] =
   prefilled === '2026-08-27' && delivered.arrivedOn === '2026-08-27' && delivered.purchasedOn === '2026-08-24';
+
+/*
+ * Everything returned — and the two claims that state makes.
+ *
+ * "Every return made it back in time" was printed unconditionally, and a
+ * return can be made after the shop's window shuts, by goodwill or the
+ * faulty-goods route. Same fault as the celebrate card: a claim about timing
+ * that nothing checked. And the money-back rows are hand-built rather than a
+ * ReceiptRow, so the "sample ·" marker added to the list never reached them —
+ * a demo receipt stopped saying what it was the moment it was ticked off, on
+ * the list where "which of these were mine" is the question.
+ */
+{
+  const doneCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(doneCtx);
+  const donePage = await doneCtx.newPage();
+  await donePage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await donePage.waitForTimeout(400);
+  const markAll = (late) => `() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    const d = new Date();
+    d.setDate(d.getDate() + (${late} ? 400 : 0));
+    s.receipts = s.receipts.map((r) => ({ ...r, status: 'returned', returnedOn: d.toISOString().slice(0, 10) }));
+    s.onboardingSeen = true;
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+  }`;
+  await donePage.evaluate(eval(markAll(false)));
+  await donePage.reload({ waitUntil: 'networkidle' });
+  await donePage.waitForTimeout(700);
+  const inTime = await donePage.locator('main').innerText();
+  await donePage.evaluate(eval(markAll(true)));
+  await donePage.reload({ waitUntil: 'networkidle' });
+  await donePage.waitForTimeout(700);
+  const late = await donePage.locator('main').innerText();
+  results['"every return made it back in time" is only said when it did'] =
+    /Every return made it back in time/.test(inTime) &&
+    !/Every return made it back in time/.test(late) &&
+    // The money is true either way.
+    /recovered — not bad/.test(late);
+  results['a sample receipt still says so once it is returned'] = /sample · JBL Tune 770NC/.test(inTime);
+  await doneCtx.close();
+}
 
 /*
  * A library with a backlog: the hero must not contradict itself.

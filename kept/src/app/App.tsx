@@ -285,7 +285,7 @@ export function App() {
         />
       )}
 
-      {screen === 'watch' && <Watch updates={state.updates} receipts={state.receipts} today={today} />}
+      {screen === 'watch' && <Watch updates={state.updates} receipts={state.receipts} today={today} watching={settings.policyWatch} />}
 
       {screen === 'detail' && selected && (
         <Detail

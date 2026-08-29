@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { color, font, radius, shadow } from '../../tokens';
-import { addDays, fmtDate, fmtDateNear } from '../../lib/dates';
+import { addDays, daysBetween, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
 import { search, shouldOfferSearch } from '../../lib/search';
@@ -46,6 +46,11 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   const dots = timelineDots(receipts, today);
   const empty = receipts.length === 0;
   const allDone = !searching && active.length === 0 && returned.length > 0;
+  // Only where the record supports it: a return with no date recorded cannot
+  // be claimed either way, so it counts against the boast rather than for it.
+  const allInTime = returned.every(
+    (r) => r.returnedOn !== undefined && daysBetween(fromISODate(r.returnedOn), derive(r, today).deadline) >= 0,
+  );
   const nothingMatched = searching && visible.length === 0;
 
   return (
@@ -155,8 +160,15 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
             <Tick size={26} />
           </div>
           <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px' }}>All squared away</div>
+          {/* "Every return made it back in time" was unconditional, and a
+              return can be made after the shop's window shuts — by goodwill,
+              or the faulty-goods route, which is the harder one. Same fault
+              the celebrate card had: a claim about timing that nothing
+              checked. Said only when it is true; the money is true either
+              way. */}
           <div style={{ fontSize: 14, color: color.muted, lineHeight: 1.6, marginTop: 8 }}>
-            Every return made it back in time. {money(keptBack)} recovered — not bad.
+            {allInTime ? 'Every return made it back in time. ' : ''}
+            {money(keptBack)} recovered — not bad.
           </div>
         </div>
       )}
@@ -232,7 +244,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
                     a stray swipe could never be opened, corrected or deleted. */}
                 <Pressable
                   onClick={() => onOpen(r.id)}
-                  aria-label={`${r.store}, ${r.item}, ${money(r.amount)}, returned`}
+                  aria-label={`${r.store}, ${r.item}${r.demo ? ' (sample)' : ''}, ${money(r.amount)}, returned`}
                   style={{ display: 'flex', alignItems: 'center', gap: 13, padding: 15, background: color.creamAlt, border: '1.5px solid rgba(23,20,16,0.06)', borderRadius: radius.card }}
                 >
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: color.yellowLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -240,7 +252,15 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, textDecoration: 'line-through', color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.store}</div>
-                    <div style={{ fontSize: 12, color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.item}</div>
+                    {/* The marker survives the return. This list is where
+                        "which of these were mine" is asked, and the row
+                        stopped saying so the moment it was ticked off — these
+                        rows are hand-built rather than a ReceiptRow, so the
+                        marker added there never reached them. */}
+                    <div style={{ fontSize: 12, color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.demo && <span>sample · </span>}
+                      {r.item}
+                    </div>
                   </div>
                   <div style={{ fontFamily: font.figures, fontSize: 15, fontWeight: 700, color: color.amber, flexShrink: 0 }}>{money(r.amount)}</div>
                 </Pressable>

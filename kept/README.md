@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 55 end-to-end checks, including a midnight rollover
+npm run smoke      # 58 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node, and the same page on a dark device
 npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
@@ -417,6 +417,23 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **"Every return made it back in time" was said whether or not it had.** The
+  screen shown once everything is returned made a claim about timing that
+  nothing checked — and a return can be made after the shop's window shuts, by
+  goodwill or the faulty-goods route, which is the harder one. The same fault
+  as the celebrate card, one screen along; found by rendering the all-returned
+  state, which nothing had. It is said only where the record supports it, and
+  a return with no date recorded counts against the boast rather than for it.
+  The money is true either way and is still said.
+
+  The same screen also lost the `sample ·` marker: the money-back rows are
+  hand-built rather than a `ReceiptRow`, so a demo receipt stopped saying what
+  it was the moment it was ticked off — on the list where "which of these were
+  mine" is the question being asked.
+- **The Watch tab claimed a fetch that was switched off.** Its footer said
+  "fetched each time you open the app" regardless — a sentence that became
+  false the moment the Settings switch started actually stopping the fetch.
+  It follows the switch now.
 - **The hero contradicted itself twice on a library with a backlog.** `bucket`
   keeps an expired-but-unreturned receipt at the very top, deliberately: the
   money may still be recoverable under the statutory rights, and demoting the
