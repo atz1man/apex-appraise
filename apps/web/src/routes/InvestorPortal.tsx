@@ -226,7 +226,7 @@ export default function InvestorPortal() {
                               {h.distributed > 0 ? fM(h.distributed) : '—'}
                             </Td>
                             <Td right fig className="font-semibold">
-                              {h.irr > 0 ? formatPct(h.irr, 1) : '—'}
+                              {h.irr !== 0 ? formatPct(h.irr, 1) : '—'}
                             </Td>
                             <Td className="pl-4">
                               <span className="label-mono inline-flex rounded-[7px] px-2 py-1" style={{ color: chip.text, background: chip.bg }}>
