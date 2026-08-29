@@ -1451,6 +1451,45 @@ pinned — remove the inline handling and the landing page's own spans are
 reported as squeezed to nothing; remove the wrap on the detail card and the
 real crush is named with its numbers.
 
+### Seven boundaries nothing was holding
+
+Mutation testing had been done here one fix at a time — reintroduce the defect,
+watch the named check fail. That answers "does this guard work". It does not
+answer "what else could change without anything noticing", so the operators in
+the modules that decide money and time were flipped one at a time, mechanically,
+and the suite run against each: `>=` for `>`, `<` for `<=`, `Math.max` for
+`Math.min`, `.every` for `.some`. Anything that survived is either an
+equivalent mutant or a boundary no test was holding.
+
+Seven were the second kind, and all seven are the same shape — an edge case
+that is ordinary in life and absent from the fixtures:
+
+| flipped | what it would have done |
+|---|---|
+| `daysLeft <= urgentDays` → `<` | a receipt exactly a week out drops from the amber "soon" chip to the grey one — on the boundary the week-ahead alert is named after |
+| `d > 31` → `>=` | **the thirty-first of any month stops parsing** — one purchase date in thirty-one |
+| `daysBetween(today, hit.date) <= 0` → `<` | a purchase made *today* is no longer read from the email; the app falls back to today anyway, so only `dateFound` tells you it guessed |
+| `d.daysLeft < 0` → `<=` | the policy-change line says "window closed" on the **last day** of a window |
+| `.some` → `.every` on `affectsStores` | a policy change naming two shops at once applies to neither |
+| arrival `< 0` → `<=` | a parcel that arrived the day it was ordered is refused as "before you ordered it" — which is click-and-collect |
+| dispatch `< 0` → `<=` | same, for an order dispatched the afternoon it was placed |
+
+The `.some`/`.every` one is in code written earlier the same day, and the tests
+written with it could not have caught it: every one used an update naming a
+single shop, where "some match" and "all match" are the same sentence.
+
+Each new test was confirmed to kill its own mutant. One did not at first — the
+purchase-made-today case — and the reason is worth keeping: when the parser
+finds no date it uses today, so a receipt bought today gets the right date
+either way. The difference is whether the app *read* it or *guessed* it, which
+is `dateFound`, and which the screen tells the person. Asserting the date was
+asserting the thing that could not change; asserting the flag is asserting the
+thing that could.
+
+Survivors that were left alone are equivalent mutants: `hit.date > best` versus
+`>=` when reducing to a maximum picks the same date, and `next < windowDays`
+versus `<=` sits below a branch that has already returned on equality.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active

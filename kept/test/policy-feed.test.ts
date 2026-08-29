@@ -250,3 +250,43 @@ describe('the window in force when it was bought', () => {
     expect(windowInForceFor('  ', '2026-08-20', [upd('a', 'Currys', '2026-08-01', 14)])).toBeUndefined();
   });
 });
+
+describe('two boundaries in the feed that nothing pinned', () => {
+  /*
+   * Found by mutation. `d.daysLeft < 0` flipped to `<= 0` makes the impact
+   * line say "window closed" on the LAST DAY of a window — the one day the
+   * sentence most needs to be right, and the same last-day fault this codebase
+   * has already fixed on the countdown ring and in the hero.
+   */
+  it('does not call the last day of a window a closed one', () => {
+    const bought = toISODate(addDays(TODAY, -30));
+    const r: Receipt = {
+      id: 'last', store: 'Currys', item: 'Kettle', cat: 'other', amount: toPence(29),
+      purchasedOn: bought, windowDays: 30, policy: 'Currys · 30 days', distance: false, status: 'active',
+    };
+    const update: PolicyUpdate = {
+      id: 'u', store: 'Currys', changedOn: ago(1), text: 'Currys shortened its window.',
+      affectsStores: ['Currys'], affectNote: '', newWindowDays: 14,
+    };
+    const [assessed] = assess([update], [r], TODAY);
+    expect(assessed.impacts[0].note).toContain('0 days left');
+    expect(assessed.impacts[0].note).not.toContain('window closed');
+  });
+
+  /*
+   * And `.some` flipped to `.every` in windowInForceFor, which the tests
+   * written with it could not catch: every one used an update naming a single
+   * shop, where "some match" and "all match" are the same sentence. A real
+   * change naming two shops at once — a group announcing one policy across its
+   * brands — would then have applied to neither.
+   */
+  it('matches an update that names more than one shop', () => {
+    const both: PolicyUpdate = {
+      id: 'group', store: 'Currys', changedOn: '2026-08-01', text: 'The group shortened both windows.',
+      affectsStores: ['Currys', 'Argos'], affectNote: '', newWindowDays: 14,
+    };
+    expect(windowInForceFor('Currys', '2026-08-20', [both])?.days).toBe(14);
+    expect(windowInForceFor('Argos', '2026-08-20', [both])?.days).toBe(14);
+    expect(windowInForceFor('Boots', '2026-08-20', [both])).toBeUndefined();
+  });
+});

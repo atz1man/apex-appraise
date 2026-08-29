@@ -306,3 +306,38 @@ describe('the day it was dispatched — a third clock, kept apart', () => {
     expect(p.arrivedOn).toBe('2026-08-18');
   });
 });
+
+describe('date boundaries nothing pinned', () => {
+  /*
+   * Both found by mutation, and both would have been silent.
+   *
+   * `d > 31` flipped to `d >= 31` rejects the thirty-first of any month — one
+   * purchase date in thirty-one — and every test still passed, because none
+   * used one. The real-date check below it (`dt.getDate() === d`) is what
+   * catches a 31 April; the first gate is only meant to be cheap.
+   *
+   * `daysBetween(today, hit.date) <= 0` flipped to `< 0` drops a date equal to
+   * today, which is the commonest purchase there is: something bought this
+   * morning, added this afternoon.
+   */
+  it('reads a purchase made on the thirty-first', () => {
+    const r = parse('Currys · Order placed 31 July 2026 · Kettle · Total £29.00');
+    expect(r.purchasedOn).toBe('2026-07-31');
+  });
+
+  it('reads a purchase made on a thirty-first written in numbers', () => {
+    const r = parse('Currys · Order placed 31/07/2026 · Kettle · Total £29.00');
+    expect(r.purchasedOn).toBe('2026-07-31');
+  });
+
+  it('reads a purchase made today, rather than falling back to today', () => {
+    // The assertion that discriminates is `dateFound`, not the date. When no
+    // date is read the parser uses today anyway — so a receipt bought today
+    // gets the right answer either way, and the difference is only whether the
+    // app READ it or guessed it. The screen says which, so the flag is the
+    // user-visible half and the one worth pinning.
+    const r = parse(`Currys · Order placed ${toISODate(TODAY).split('-').reverse().join('/')} · Kettle · Total £29.00`);
+    expect(r.purchasedOn).toBe(toISODate(TODAY));
+    expect(r.dateFound).toBe(true);
+  });
+});

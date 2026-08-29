@@ -42,3 +42,21 @@ describe('hero count', () => {
     expect(heroCount(-1).count).toBe('Gone');
   });
 });
+
+describe('the boundaries of the ladder, which nothing pinned', () => {
+  /*
+   * Found by mutation: `daysLeft <= urgentDays` flipped to `<` and the whole
+   * suite still passed. A receipt exactly `urgentDays` from its deadline is
+   * the one the week-ahead alert is named after, and it was free to become
+   * "relaxed" — the grey chip — without a test noticing.
+   */
+  it('is "soon" on the day the window is exactly the warning distance away', () => {
+    expect(urgency(7, 7).level).toBe('soon');
+    expect(urgency(8, 7).level).toBe('relaxed');
+  });
+
+  it('respects a warning distance the person changed', () => {
+    expect(urgency(14, 14).level).toBe('soon');
+    expect(urgency(15, 14).level).toBe('relaxed');
+  });
+});

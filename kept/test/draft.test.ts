@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraft, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
+import { applyDraft, arrivalProblem, draftFrom, effectiveWindowStart, validateDraft, type ReceiptDraft } from '../src/lib/draft';
 import { toISODate } from '../src/lib/dates';
 import { derive } from '../src/lib/receipts';
 import { money, toPence } from '../src/lib/money';
@@ -508,5 +508,39 @@ describe('a shop that counts from the doormat', () => {
     expect(saved.windowStartsOn).toBeUndefined();
     // The arrival is still recorded — the statutory clocks run from it.
     expect(saved.arrivedOn).toBe('2026-08-14');
+  });
+});
+
+describe('same-day is not "before you ordered it"', () => {
+  /*
+   * Found by mutation: `< 0` flipped to `<= 0` on both the arrival and the
+   * dispatch check, and every test passed. Same-day dispatch is ordinary — an
+   * order placed in the morning and picked in the afternoon — and same-day
+   * arrival is what click-and-collect is. Either would have started refusing a
+   * true date with "it cannot have arrived before you ordered it", which is
+   * the app calling the person wrong about their own parcel.
+   */
+  it('accepts a parcel that arrived the day it was ordered', () => {
+    expect(arrivalProblem('2026-08-16', '2026-08-16', TODAY)).toBeUndefined();
+  });
+
+  it('still refuses one that arrived the day before', () => {
+    expect(arrivalProblem('2026-08-15', '2026-08-16', TODAY)).toBe('It cannot have arrived before you ordered it');
+  });
+
+  it('accepts a parcel dispatched the day it was ordered', () => {
+    const draft: ReceiptDraft = {
+      ...base, store: 'Zara', purchasedOn: '2026-08-16', dispatchedOnText: '2026-08-16',
+    };
+    const out = validateDraft(draft, TODAY);
+    expect(out.ok, JSON.stringify(out.ok ? {} : out.errors)).toBe(true);
+  });
+
+  it('still refuses one dispatched the day before it was ordered', () => {
+    const draft: ReceiptDraft = {
+      ...base, store: 'Zara', purchasedOn: '2026-08-16', dispatchedOnText: '2026-08-15',
+    };
+    const out = validateDraft(draft, TODAY);
+    expect(out.ok).toBe(false);
   });
 });
