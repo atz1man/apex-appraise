@@ -36,3 +36,22 @@ export const SEARCH_APPEARS_ABOVE = 6;
 export function shouldOfferSearch(receipts: readonly Receipt[]): boolean {
   return receipts.length > SEARCH_APPEARS_ABOVE;
 }
+
+/**
+ * What the filter just did, for someone who cannot see the list change.
+ *
+ * Typing rewrote the list under the cursor and said nothing: a sighted person
+ * watches thirty rows become three, and a screen-reader user hears the
+ * keystroke and no more. WCAG 2.1 SC 4.1.3 asks that a result like this be
+ * conveyed without moving focus — which is what a live region is for, and
+ * axe cannot tell that one is missing.
+ *
+ * The empty case repeats the words already on the screen rather than
+ * inventing its own, so the two are one message reaching two people.
+ */
+export function searchStatus(count: number, query: string): string {
+  const q = query.trim();
+  if (!q) return '';
+  if (count === 0) return `Nothing matches ${q}`;
+  return `${count} ${count === 1 ? 'receipt' : 'receipts'} match${count === 1 ? 'es' : ''} ${q}`;
+}

@@ -934,6 +934,31 @@ measured at its ordinary size"). 20 rather than 18 is deliberate: at 18 the bar
 is 310px and still fits, so a sweep there would pass with the cap deleted and
 pin nothing.
 
+### The filter said nothing
+
+Above six receipts the list gets a search box, and typing in it rewrites the
+list under the cursor — nine rows become one. A sighted person watches that
+happen. A screen-reader user heard the keystroke and nothing else: no count,
+and on a query that matched nothing, not even the "Nothing matches …" the
+screen was showing. WCAG 2.1 SC 4.1.3 asks that the result of an action like
+this be conveyed without moving focus, and axe cannot tell that a live region
+is *missing* — only that a present one is malformed.
+
+A polite region beside the box says it now, after the typing pauses rather
+than on every keystroke, since a region rewritten ten times in two seconds is
+ten interruptions of the typing it is reporting on. The empty case repeats the
+words already on the screen rather than inventing its own, so the two are one
+message reaching two people. The sentence itself lives in `src/lib/search.ts`
+with the rest of searching, where its boundaries — nothing typed, one match,
+many, whitespace around the query — are unit tests rather than a screen.
+
+`npm run a11y` reads whatever live regions the page has, not a selector for
+the one this added, because the question is whether *anything* says it. Four
+mutations fail it by name: the region deleted, the empty case silenced, the
+filter no longer filtering ("the list did not narrow (9 rows before, 9 after),
+so nothing was there to announce"), and the box never appearing at all ("was
+not on the page, so nothing about searching was audited").
+
 ### Narrow screens and untidy data
 
 Everything else here is driven at 402px with the seeded demo receipts — the

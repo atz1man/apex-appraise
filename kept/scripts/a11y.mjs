@@ -408,6 +408,65 @@ const forcedColourProblems = [];
   await forcedCtx.close();
 }
 
+/*
+ * Filtering a list is an action with a result, and the result was silent.
+ *
+ * Typing in the search box rewrites the list under the cursor: thirty rows
+ * become three. A sighted person watches that happen. A screen-reader user
+ * heard the keystroke and nothing else — no count, and on a query that matched
+ * nothing, not even the "Nothing matches" the screen was showing. WCAG 2.1 SC
+ * 4.1.3 asks that a result like this be conveyed without moving focus, and axe
+ * cannot tell that a live region is missing, only that a present one is
+ * malformed.
+ *
+ * Read from the live regions the page actually has, not from a selector for
+ * the one this fix added — the question is whether ANYTHING says it.
+ */
+const statusProblems = [];
+{
+  const searchCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  const searchPage = await searchCtx.newPage();
+  await searchPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await searchPage.evaluate(SEED_MORE);
+  await searchPage.reload({ waitUntil: 'networkidle' });
+  await searchPage.waitForTimeout(500);
+
+  const box = searchPage.locator('#receipt-search');
+  const spoken = () =>
+    searchPage.evaluate(() =>
+      [...document.querySelectorAll('[role="status"], [aria-live]')]
+        .map((el) => (el.textContent ?? '').trim())
+        .filter(Boolean)
+        .join(' | '),
+    );
+
+  if ((await box.count()) === 0) {
+    statusProblems.push(['the search box', 'was not on the page, so nothing about searching was audited']);
+  } else {
+    const before = await searchPage.locator('li button').count();
+    await box.fill('Dyson');
+    await searchPage.waitForTimeout(900);
+    const after = await searchPage.locator('li button').count();
+    const said = await spoken();
+    // The list must actually have narrowed, or the announcement below would be
+    // a report about nothing having happened.
+    if (after >= before) {
+      statusProblems.push(['the search check', `the list did not narrow (${before} rows before, ${after} after), so nothing was there to announce`]);
+    }
+    if (!/\b1\b/.test(said) || !/receipt/i.test(said)) {
+      statusProblems.push(['a filtered list', `nothing announced how many receipts matched — the live regions said ${JSON.stringify(said)}`]);
+    }
+
+    await box.fill('zzzznothing');
+    await searchPage.waitForTimeout(900);
+    const saidNone = await spoken();
+    if (!/nothing matches/i.test(saidNone)) {
+      statusProblems.push(['a search that matched nothing', `the screen says so and nothing announced it — the live regions said ${JSON.stringify(saidNone)}`]);
+    }
+  }
+  await searchCtx.close();
+}
+
 await focusCtx.close();
 
 const motionCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, reducedMotion: 'reduce' });
@@ -458,6 +517,13 @@ if (ticker !== 'none') stillMoving.push(['landing', 'the marquee is not stopped'
 await motionCtx.close();
 
 await browser.close();
+
+if (statusProblems.length > 0) {
+  console.log(`✗ ${statusProblems.length} thing(s) the screen shows and nothing announces:\n`);
+  for (const [label, why] of statusProblems) console.log(`  ${label} — ${why}`);
+  console.log('');
+  process.exit(1);
+}
 
 if (forcedColourProblems.length > 0) {
   console.log(`✗ ${forcedColourProblems.length} thing(s) a forced-colours user cannot see:\n`);

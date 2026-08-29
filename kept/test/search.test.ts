@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matches, search, shouldOfferSearch, SEARCH_APPEARS_ABOVE } from '../src/lib/search';
+import { matches, search, searchStatus, shouldOfferSearch, SEARCH_APPEARS_ABOVE } from '../src/lib/search';
 import { toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
 
@@ -80,5 +80,30 @@ describe('when the box is worth showing', () => {
   it('counts returned receipts too — they are searchable as well', () => {
     const mixed = many(4).concat(many(4).map((r) => ({ ...r, id: r.id + 'x', status: 'returned' as const })));
     expect(shouldOfferSearch(mixed)).toBe(true);
+  });
+});
+
+describe('what the filter says out loud', () => {
+  /*
+   * Typing rewrote the list under the cursor and said nothing. This is the
+   * sentence a live region carries, so it is written where it can be tested at
+   * its boundaries rather than inside the screen that cannot be.
+   */
+  it('says nothing at all when nothing was typed', () => {
+    expect(searchStatus(30, '')).toBe('');
+    expect(searchStatus(0, '   ')).toBe('');
+  });
+
+  it('names the number, and agrees with itself about one', () => {
+    expect(searchStatus(1, 'headphones')).toBe('1 receipt matches headphones');
+    expect(searchStatus(3, 'headphones')).toBe('3 receipts match headphones');
+  });
+
+  it('repeats the words already on the screen when nothing matched', () => {
+    expect(searchStatus(0, 'zzzz')).toBe('Nothing matches zzzz');
+  });
+
+  it('quotes what was typed, not the whitespace around it', () => {
+    expect(searchStatus(2, '  boots  ')).toBe('2 receipts match boots');
   });
 });

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { color, font, radius, shadow } from '../../tokens';
 import { addDays, daysBetween, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
-import { search, shouldOfferSearch } from '../../lib/search';
+import { search, searchStatus, shouldOfferSearch } from '../../lib/search';
 import { midSentence } from '../../lib/words';
 import { heroCount, urgency } from '../../lib/urgency';
 import type { Receipt } from '../../lib/types';
@@ -53,6 +53,26 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
   );
   const nothingMatched = searching && visible.length === 0;
 
+  /*
+   * Said out loud, after a pause.
+   *
+   * A polite live region rewritten on every keystroke is ten interruptions of
+   * the typing it is reporting on, so the count waits until the typing stops.
+   * The region itself is rendered from the moment the box is — a live region
+   * that arrives on the page at the same moment as its text is not reliably
+   * announced, which is the same reason App's is always mounted.
+   */
+  const [spokenCount, setSpokenCount] = useState('');
+  const matchCount = visible.length;
+  useEffect(() => {
+    if (!searching) {
+      setSpokenCount('');
+      return undefined;
+    }
+    const t = setTimeout(() => setSpokenCount(searchStatus(matchCount, query)), 450);
+    return () => clearTimeout(t);
+  }, [searching, query, matchCount]);
+
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
       <header className="k-fade" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px 16px' }}>
@@ -100,6 +120,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
               fontFamily: font.ui, fontSize: 14.5, color: color.ink,
             }}
           />
+          <div className="k-sr" role="status" aria-live="polite">{spokenCount}</div>
         </div>
       )}
 
