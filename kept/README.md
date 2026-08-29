@@ -1523,6 +1523,34 @@ passes the shape check, and `fromISODate` does not reject it — `new Date(2026,
 silently become a different real one three days later, on the field that starts
 both statutory clocks. Now refused, on arrival and on dispatch.
 
+### The numbers that are facts, and the numbers that are judgements
+
+A third pass asked something different of the same suite: move every named
+numeric constant by one and see who notices. Thirteen constants, and the split
+is the whole result.
+
+**Three were caught**, and they are the three that are *facts* rather than
+choices: `REJECT_DAYS = 30` and `COOLING_OFF_DAYS = 14` — the two statutory
+periods — and `FREE_TIER_LIMIT = 10`, which the pricing promises on three
+surfaces. Move any by one and the suite fails.
+
+**Ten were not**, and they should not be. `URGENT_DAYS_MIN`, `SEARCH_APPEARS_
+ABOVE`, `LABEL_REACH`, the caps on absurd input — each is a judgement about
+how short a warning is useful, or how many receipts earn a search box, and the
+code is self-consistent at any value: the Settings slider takes its own range
+from the same constants it validates against. Their tests are *relational* —
+`shouldOfferSearch` false at N and true at N + 1 — which stays true at any N
+and is the right way to hold a judgement. Pinning the literal 6 would be a
+change-detector test, and this file has already deleted one of those.
+
+So the pass found nothing to fix, which is worth writing down: the numbers the
+law fixes are held, and the numbers someone chose are free to be re-chosen. The
+one thing it did surface is not a defect: `SCHEMA_VERSION` is written on every
+save and compared with nothing, because there is one schema. The note is now
+beside it, saying what the first version 2 has to decide — since on an app
+whose receipts live in one place, a build reading a newer store as an older one
+and saving it back is the expensive answer.
+
 ### A crash is a failure of the run, not of its findings
 
 The mutation passes were extended to the reducer and to storage, and two of

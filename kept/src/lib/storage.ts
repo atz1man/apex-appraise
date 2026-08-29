@@ -16,6 +16,22 @@ import { DEFAULT_URGENT_DAYS } from './urgency';
  */
 
 const KEY = 'kept.v1';
+
+/*
+ * Written on every save, and — deliberately — compared with nothing.
+ *
+ * There is one schema, so there is nothing to migrate between and a version
+ * check would be a branch nobody could take. What the field is FOR is the
+ * moment there are two, and the decision it exists to enable has not been made
+ * yet: what a build that understands version 1 should do when it opens a store
+ * written by version 2. Silently reading it as version 1 and saving it back is
+ * the answer nobody chooses on purpose, and on this app it is the expensive
+ * one — the receipts live here and nowhere else, so a stale bundle served by a
+ * worker after a rollback would be the only copy.
+ *
+ * Recorded here rather than guessed at: a migration written before there is
+ * anything to migrate is a branch that has never run.
+ */
 const SCHEMA_VERSION = 1;
 
 export interface Settings {
