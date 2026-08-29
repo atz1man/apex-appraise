@@ -416,6 +416,27 @@ results['naming a shop by hand brings its verified window'] =
   named.store === 'Boots' && named.windowDays === 35 && named.policy.startsWith('Boots ·');
 
 /*
+ * The delivery date, read out of the paste rather than out of the person.
+ *
+ * Both statutory clocks run from delivery, this screen asks for that date in
+ * so many words, and the order email being pasted says it three lines above
+ * the total — so it was asking someone to copy it across by hand. Checked as
+ * far as the saved receipt, not just the field: a pre-fill that never reaches
+ * disk is a decoration.
+ */
+await page.getByRole('button', { name: 'Add a receipt' }).click();
+await page.waitForTimeout(300);
+await page.fill('#paste', 'John Lewis · Order placed 24 August 2026 · Sony headphones · Order total: £329.00 · Delivered 27 August 2026');
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+const prefilled = await page.inputValue('#add-arrived').catch(() => '');
+await page.getByRole('button', { name: /^Save/ }).click();
+await page.waitForTimeout(600);
+const delivered = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.at(-1));
+results['a delivery date in the paste is read, not asked for'] =
+  prefilled === '2026-08-27' && delivered.arrivedOn === '2026-08-27' && delivered.purchasedOn === '2026-08-24';
+
+/*
  * What is on screen when the app cannot render.
  *
  * A throw anywhere below the root unmounts the whole tree — measured before

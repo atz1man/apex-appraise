@@ -201,3 +201,59 @@ describe('a whole realistic email', () => {
     expect(toISODate(addDays(new Date(2026, 7, 15), p.windowDays))).toBe('2026-09-14');
   });
 });
+
+describe('the day it arrived — read, never guessed', () => {
+  it('reads a labelled delivery date', () => {
+    const p = parse('John Lewis · Order placed 24 August 2026 · Total £329.00 · Delivered 27 August 2026');
+    expect(p.purchasedOn).toBe('2026-08-24');
+    expect(p.arrivedOn).toBe('2026-08-27');
+  });
+
+  it.each([
+    ['delivered on', 'Currys order 10 Aug 2026 · £89.00 · Delivered on 13 Aug 2026'],
+    ['arrived', 'Currys order 10 Aug 2026 · £89.00 · Arrived 13 Aug 2026'],
+    ['delivery date', 'Currys order 10 Aug 2026 · £89.00 · Delivery date: 13 Aug 2026'],
+  ])('recognises "%s"', (_label, text) => {
+    expect(parse(text).arrivedOn).toBe('2026-08-13');
+  });
+
+  it('says nothing when the paste says nothing', () => {
+    expect(parse('Argos · Total £64.99 · 12 Aug 2026').arrivedOn).toBeNull();
+  });
+
+  it('never takes an unlabelled date for a delivery', () => {
+    // Two dates, neither introduced as an arrival. Guessing here would put a
+    // fact in a field the app then treats as one.
+    expect(parse('Boots · 5 Aug 2026 · Total £24.98 · see 20 Aug 2026').arrivedOn).toBeNull();
+  });
+
+  it('refuses an estimate that has since become the past', () => {
+    // "Estimated delivery" is not a day anything landed. Most are in the
+    // future and excluded anyway; this is the email read a fortnight late.
+    expect(parse('Currys order 5 Aug 2026 · £89.00 · Estimated delivery 12 Aug 2026').arrivedOn).toBeNull();
+    expect(parse('Currys order 5 Aug 2026 · £89.00 · Expected delivery 12 Aug 2026').arrivedOn).toBeNull();
+  });
+
+  it('refuses a delivery date that has not happened yet', () => {
+    expect(parse('Currys order 20 Aug 2026 · £89.00 · Delivered 20 Sept 2026').arrivedOn).toBeNull();
+  });
+
+  it('refuses a delivery before the purchase it is attached to', () => {
+    // The app rejects that pair when it is typed by hand; it must not put it
+    // there itself.
+    expect(parse('Currys order placed 20 Aug 2026 · £89.00 · Delivered 12 Aug 2026').arrivedOn).toBeNull();
+  });
+
+  it('takes the later of two deliveries, which is the clock that counts', () => {
+    const p = parse('ASOS order placed 1 Aug 2026 · £40.00 · Delivered 5 Aug 2026 · redelivered 9 Aug 2026');
+    expect(p.arrivedOn).toBe('2026-08-09');
+  });
+
+  it('leaves the purchase date alone', () => {
+    // The delivery label demotes a date for pickDate and promotes it here:
+    // the two must not fight over the same one.
+    const p = parse('Zara · order placed 15 Aug 2026 · £34.99 · Delivered 18 Aug 2026');
+    expect(p.purchasedOn).toBe('2026-08-15');
+    expect(p.arrivedOn).toBe('2026-08-18');
+  });
+});

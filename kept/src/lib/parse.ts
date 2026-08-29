@@ -17,6 +17,8 @@ export interface ParsedReceipt {
   purchasedOn: string;
   /** True when the date was actually found rather than assumed. */
   dateFound: boolean;
+  /** ISO date the paste said it was delivered, or null when it did not say. */
+  arrivedOn: string | null;
   windowDays: number;
 }
 
@@ -164,6 +166,56 @@ function pickDate(text: string, today: Date): Date | null {
 }
 
 /**
+ * Phrases that name the day the parcel actually landed.
+ *
+ * Kept apart from ORDER_DATE_LABEL rather than folded into it, because the
+ * two answer opposite questions and one of them is dangerous to guess at.
+ * Both statutory clocks — the 30-day right to reject and the 14-day right to
+ * cancel — run from delivery, and the Add screen already asks for this date in
+ * so many words. The order emails it is asking someone to copy it out of say
+ * "Delivered 27 August 2026" three lines above the total.
+ */
+const DELIVERY_DATE_LABEL =
+  /\b(?:deliver(?:ed|y)(?:\s+date)?|date\s+deliver(?:ed|y)|arrived(?:\s+on)?)\b/gi;
+
+/**
+ * Words that turn a delivery date into a PROMISE of one.
+ *
+ * "Estimated delivery 3 September" is not a day anything landed, and reading
+ * it as one would start both statutory clocks before the parcel existed — the
+ * expensive direction, since it makes a live right look expired. Most such
+ * dates are in the future and are excluded anyway; this is for the email read
+ * a fortnight late, where the estimate has quietly become the past.
+ */
+const NOT_AN_ARRIVAL = /\b(?:estimat\w*|expect\w*|due|scheduled|between|by)\b[^\n]{0,20}$/i;
+
+/**
+ * The day it arrived, and only when the paste actually says so.
+ *
+ * Never inferred: an unlabelled date is a purchase date or noise, and the
+ * field this fills is one the app treats as fact — it makes the difference
+ * between "at least until 27 September" and "27 September". A wrong one is
+ * worse than none, so every condition below has to hold.
+ */
+function pickArrival(text: string, today: Date, purchased: Date | null): Date | null {
+  const labels = [...text.matchAll(DELIVERY_DATE_LABEL)].map((m) => ({ end: (m.index ?? 0) + m[0].length, start: m.index ?? 0 }));
+  if (labels.length === 0) return null;
+  const candidates = datesIn(text, today)
+    .filter((hit) => daysBetween(today, hit.date) <= 0)
+    .filter((hit) => labels.some((l) => hit.index >= l.end && hit.index - l.end <= LABEL_REACH
+      && !NOT_AN_ARRIVAL.test(text.slice(Math.max(0, l.start - 30), l.start))))
+    // A parcel cannot land before it is ordered. Such a pair means the label
+    // was read off some other order, and the app refuses the combination when
+    // it is typed by hand — it must not put it there itself.
+    .filter((hit) => !purchased || daysBetween(purchased, hit.date) >= 0);
+  if (candidates.length === 0) return null;
+  // The latest, because an email that mentions delivery twice is describing a
+  // redelivery or a second parcel, and the clock the person cares about is the
+  // one that started last.
+  return candidates.reduce((best, hit) => (hit.date > best ? hit.date : best), candidates[0].date);
+}
+
+/**
  * Words that make a mention of a shop a mention of THE SHOP.
  *
  * An order email says "your Boots order" or "boots.com". Something bought
@@ -220,6 +272,7 @@ export function parseReceiptText(text: string, today: Date = new Date()): ParseO
   if (!policy && amount === null) return { ok: false, reason: 'nothing-found' };
 
   const date = pickDate(text, today);
+  const arrived = pickArrival(text, today, date);
   return {
     ok: true,
     value: {
@@ -228,6 +281,7 @@ export function parseReceiptText(text: string, today: Date = new Date()): ParseO
       amount,
       purchasedOn: toISODate(date ?? startOfDay(today)),
       dateFound: date !== null,
+      arrivedOn: arrived ? toISODate(arrived) : null,
       windowDays: policy?.windowDays ?? UNKNOWN_STORE_WINDOW_DAYS,
     },
   };

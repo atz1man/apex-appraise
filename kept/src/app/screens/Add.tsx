@@ -75,7 +75,10 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     setItem('');
     setDistance(true);
     setStoreName('');
-    setArrivedOn('');
+    // The paste often says "Delivered 27 August" three lines above the total,
+    // and this screen was asking the person to read it back out by hand.
+    // Still a field they can clear or correct — it is pre-filled, not decided.
+    setArrivedOn(outcome.value.arrivedOn ?? '');
   };
 
   const read = () => readText(text);
@@ -209,7 +212,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               id="add-item"
               value={item}
               onChange={(e) => setItem(e.target.value)}
-              placeholder="Wool-blend overcoat"
+              placeholder="Running shoes"
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
                 border: `1.5px solid ${color.border}`, background: color.white,

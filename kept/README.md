@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 440 unit tests over the decision logic
+npm test           # 453 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 44 end-to-end checks, including a midnight rollover
+npm run smoke      # 45 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -728,6 +728,37 @@ layout sweep needed a change of its own — its covered-button check counted the
 scrim over the tab bar as a defect, which is what a modal is *for*, so it now
 narrows to the open dialog's own buttons and still fails when those are
 covered.
+
+### The date it was already holding
+
+The Add screen asks for the day the parcel landed — both statutory clocks run
+from delivery, and without it a receipt can only promise "at least until".
+The order email pasted into the box two fields above it says *Delivered 27
+August 2026*. The screen was asking someone to read that back out by hand.
+
+`pickArrival` reads it, under conditions strict enough that a wrong answer is
+harder to produce than no answer: the date must be introduced by a delivery
+word, must already have happened, must not be an estimate ("Estimated delivery
+12 August", read a fortnight late, is not a day anything landed), and must not
+precede the purchase — the app refuses that pair when it is typed by hand and
+must not put it there itself. Where an email names two deliveries the later
+wins, because that is the redelivery whose clock is running. It stays a field
+the person can clear or correct: pre-filled, not decided.
+
+Every one of those conditions is a separate test, and each was checked by
+deleting the condition and watching exactly one of them fail. The smoke check
+follows it to disk rather than stopping at the field, since a pre-fill that
+never reaches the saved receipt is decoration.
+
+### An example is not a suggestion
+
+The item box offered "Wool-blend overcoat" — which is the seeded Zara receipt,
+three taps away on the same install. Greyed text in a form the app has just
+filled in for you reads as something the app filled in, and on a fresh install
+the person is looking at a placeholder and a receipt with the same name.
+`placeholders.test.ts` walks the screens for `placeholder="…"` and refuses any
+that borrows the wording of a receipt the seed creates — with a count check
+first, because a sweep over an empty file list passes silently.
 
 ### A deploy reaches the app, and the app works without one
 

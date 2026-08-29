@@ -107,7 +107,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
             <input
               {...p}
               value={draft.item}
-              placeholder="Wool-blend overcoat"
+              placeholder="Running shoes"
               onChange={(e) => set('item', e.target.value)}
               style={inputStyle(p['aria-invalid'])}
             />
