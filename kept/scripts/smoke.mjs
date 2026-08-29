@@ -333,6 +333,22 @@ results['it is still usable offline, not just painted'] =
   await page.getByText('STORE POLICY').isVisible().catch(() => false);
 await ctx.setOffline(false);
 
+/*
+ * A single unreadable row on disk must not take the app down. It did: a
+ * receipt with no purchase date produced a completely blank screen on every
+ * launch, with no way out but clearing site data by hand.
+ */
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('kept.v1'));
+  s.receipts = [{ ...s.receipts[0], id: 'corrupt', purchasedOn: undefined }, ...s.receipts.slice(1)];
+  localStorage.setItem('kept.v1', JSON.stringify(s));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+results['a corrupt stored receipt does not blank the app'] =
+  (await page.getByText('RETURN DEADLINES, WATCHED').isVisible().catch(() => false)) &&
+  (await page.evaluate(() => document.body.innerText.length)) > 100;
+
 // Last, because it takes everything with it: erase must clear the disk, not
 // just the screen, and must not resurrect the demo data on the next launch.
 await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });

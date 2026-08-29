@@ -1,3 +1,5 @@
+import { readReceipt } from './backup';
+import { readFeed } from './policy-feed';
 import { seedReceipts, seedUpdates } from './seed';
 import type { PolicyUpdate, Receipt } from './types';
 import { DEFAULT_URGENT_DAYS } from './urgency';
@@ -66,23 +68,54 @@ function storage(): Storage | null {
   }
 }
 
+/**
+ * Turn whatever was on disk into state the app can survive.
+ *
+ * Every row is validated with the same reader the backup importer uses, and an
+ * unreadable one is dropped rather than trusted. This is not paranoia about a
+ * file someone chose to import — it is about the app's own store, which held a
+ * receipt with no purchase date and produced a completely blank screen on
+ * every launch thereafter, with no way out but clearing site data by hand.
+ *
+ * Dropping a row loses something. It loses one receipt instead of all of them
+ * plus the app, and the row was already unreadable.
+ *
+ * Separated from `load` so it can be tested without a browser.
+ */
+export function hydrate(raw: unknown, today: Date): KeptState {
+  if (typeof raw !== 'object' || raw === null) return freshState(today);
+  const parsed = raw as Partial<KeptState>;
+  if (!Array.isArray(parsed.receipts)) return freshState(today);
+
+  const receipts: Receipt[] = [];
+  for (const row of parsed.receipts) {
+    const r = readReceipt(row);
+    if (r) receipts.push(r);
+  }
+
+  // Policy updates are downloadable content, not user data — reseeding is
+  // always safe and keeps the feed current on an old install. Validated the
+  // same way, through the reader the network path already uses.
+  const storedUpdates = Array.isArray(parsed.updates)
+    ? readFeed({ feed: 'kept-policy', updates: parsed.updates }) ?? []
+    : [];
+
+  return {
+    version: SCHEMA_VERSION,
+    receipts,
+    updates: storedUpdates.length ? storedUpdates : seedUpdates(today),
+    onboardingSeen: parsed.onboardingSeen === true,
+    settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    alertsSent: Array.isArray(parsed.alertsSent) ? parsed.alertsSent.filter((k) => typeof k === 'string') : [],
+  };
+}
+
 export function load(today: Date): KeptState {
   const store = storage();
   const raw = store?.getItem(KEY);
   if (!raw) return freshState(today);
   try {
-    const parsed = JSON.parse(raw) as Partial<KeptState>;
-    if (!Array.isArray(parsed.receipts)) return freshState(today);
-    return {
-      version: SCHEMA_VERSION,
-      receipts: parsed.receipts,
-      // Policy updates are downloadable content, not user data — reseeding
-      // them is always safe and keeps the feed current on an old install.
-      updates: Array.isArray(parsed.updates) && parsed.updates.length ? parsed.updates : seedUpdates(today),
-      onboardingSeen: parsed.onboardingSeen === true,
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
-      alertsSent: Array.isArray(parsed.alertsSent) ? parsed.alertsSent.filter((k) => typeof k === 'string') : [],
-    };
+    return hydrate(JSON.parse(raw), today);
   } catch {
     // Corrupt JSON: start clean rather than trap the user on a broken launch.
     return freshState(today);

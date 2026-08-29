@@ -53,8 +53,15 @@ function readWarranty(raw: unknown): Warranty | undefined {
   return { months: w.months, ...(isStr(w.note) ? { note: w.note } : {}) };
 }
 
-/** One row, validated field by field. Returns null when it cannot be trusted. */
-function readReceipt(raw: unknown): Receipt | null {
+/**
+ * One row, validated field by field. Returns null when it cannot be trusted.
+ *
+ * Exported because the app's OWN storage needs exactly this: localStorage is
+ * no more trustworthy than a file off a disk — a truncated write, an
+ * interrupted save, a future migration, a hand-edit — and a single unreadable
+ * row used to take the whole app down with it.
+ */
+export function readReceipt(raw: unknown): Receipt | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
 

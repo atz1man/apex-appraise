@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 254 unit tests over the decision logic
+npm test           # 269 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 29 end-to-end checks, including offline with the network cut
+npm run smoke      # 30 end-to-end checks, including offline with the network cut
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -132,6 +132,16 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **One bad row on disk blanked the entire app.** The backup importer
+  validates every row it reads, on the reasoning that a file off a disk is not
+  trustworthy. The app's own storage got a single `Array.isArray` — and
+  `localStorage` is no more trustworthy than that file: a truncated write, an
+  interrupted save, a future migration, a hand-edit. A receipt with no purchase
+  date threw inside date parsing during render, producing a blank screen on
+  *every* launch thereafter, with no way out but clearing site data by hand.
+  Loading now runs each row through the same reader the importer uses and drops
+  what it cannot read. That loses one receipt instead of all of them plus the
+  app, and the row was already unreadable.
 - **Two screens disagreed about the same deadline.** The edit screen previewed
   it by counting from the purchase date; the receipt counted from dispatch. On
   the seeded Zara coat that is two days, on the one subject the app exists to
