@@ -62,6 +62,12 @@ const foreign = new Set();
  * the last screen counts the same as one made on the first.
  */
 const watchOrigins = (context) => {
+  // Page-initiated requests only, which is the right scope: Chromium itself
+  // dials accounts.google.com and its own component updater on startup, and
+  // that is the harness, not the app. Checked rather than assumed — opening
+  // this page records no non-origin request at all, and about:blank in the
+  // same browser records the same nothing.
+
   context.on('request', (r) => {
     const u = new URL(r.url());
     if (u.origin !== ORIGIN && u.protocol !== 'data:' && u.protocol !== 'blob:') foreign.add(u.origin);

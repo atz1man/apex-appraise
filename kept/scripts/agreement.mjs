@@ -171,10 +171,72 @@ const activeCount = rowMoney.filter((r) => !r.returned).length;
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(400);
 const meter = await page.evaluate(() => {
-  const el = [...document.querySelectorAll('span')].find((s) => /of 10 free receipts/.test(s.textContent ?? ''));
+  // \d+, not a hard 10: pinning the number here means this check quietly
+  // finds nothing the day the free tier changes size, and reports a pass.
+  const el = [...document.querySelectorAll('span')].find((s) => /of \d+ free receipts/.test(s.textContent ?? ''));
   return el?.textContent?.trim() ?? '';
 });
 agree('receipts counted, by the meter and on the list', (meter.match(/^(\d+)/) ?? [])[1], String(activeCount));
+
+/*
+ * --- The pricing, on the page someone buys from and inside the product -----
+ *
+ * Everything above this line is inside /app/, which is where this suite has
+ * always stopped — and the prices were literals in the landing page AND in
+ * Settings AND in the add screen's upsell, with the free tier's size written
+ * out as a bare "10" twice more in the marketing copy beside a
+ * FREE_TIER_LIMIT the app actually enforced. Six statements of three facts,
+ * nothing holding any of them together, and half of them on a page this file
+ * had never opened.
+ *
+ * A price that says one thing where someone bought and another inside the
+ * product is not a cosmetic drift.
+ */
+const inApp = await page.evaluate(() => {
+  const tiers = [...document.querySelectorAll('button')]
+    .map((b) => b.textContent ?? '')
+    .filter((t) => /^£[\d.]+(monthly|yearly|lifetime)/.test(t.replace(/BEST VALUE/, '').trim()))
+    .map((t) => t.replace(/BEST VALUE/, '').trim());
+  const free = ([...document.querySelectorAll('span')]
+    .map((s) => s.textContent ?? '')
+    .find((t) => /of \d+ free receipts/.test(t)) ?? '').match(/of (\d+) free/)?.[1];
+  return { prices: tiers.map((t) => (t.match(/£[\d.]+/) ?? [])[0]).filter(Boolean), free };
+});
+
+const landing = await ctx.newPage();
+await landing.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+await landing.waitForTimeout(600);
+const onPage = await landing.evaluate(() => {
+  // Scoped to the pricing section, not the whole page. Reading every £ amount
+  // in document.innerText picked up the £1.95 Zara postal fee quoted in the
+  // policy-watch card — the same species of self-inflicted disagreement this
+  // suite's first version reported three of.
+  const pricing = document.querySelector('#pricing');
+  const text = pricing?.textContent ?? '';
+  return {
+    prices: [...new Set(text.match(/£\d+\.\d{2}/g) ?? [])],
+    free: (text.match(/first (\d+) receipts/) ?? [])[1],
+    found: !!pricing,
+  };
+});
+await landing.close();
+
+// A selector that matched nothing would make both checks below pass over
+// empty strings, which is the shape of a sweep that reports success for a
+// question it never asked.
+if (!onPage.found) disagreements.push({ what: 'the landing page has no #pricing section to read', saw: [] });
+// Both sides going empty would "agree" on nothing at all. There are three
+// tiers; anything else means a selector stopped matching, not that the prices
+// match.
+for (const [where, found] of [['Settings', inApp.prices], ['the pricing cards', onPage.prices]]) {
+  if (found.length !== 3) disagreements.push({ what: `three prices were not found in ${where}`, saw: found });
+}
+agree('the free tier’s size, in the marketing copy and on the meter', onPage.free, inApp.free);
+agree(
+  'the prices, on the pricing cards and in Settings',
+  [...inApp.prices].sort().join(' '),
+  [...onPage.prices].sort().join(' '),
+);
 
 await browser.close();
 

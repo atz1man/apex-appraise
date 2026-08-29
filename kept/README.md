@@ -421,13 +421,28 @@ the alert that was sent. The deadline date, across the hero, the receipt and
 its edit form. Money still returnable and money kept back, against the sum of
 the rows. The free-tier meter, against the list it is counting.
 
-Two things about it are deliberate. It reads named elements rather than
+It crosses into the landing page too, which for a long time it did not. The
+three prices were literals in four places across both entry points, and the
+free tier's size was written out as a bare "10" twice in the marketing copy
+beside a `FREE_TIER_LIMIT` the app actually enforced: six statements of three
+facts, nothing holding any of them together, and half of them on a page this
+suite had never opened. A price that says one thing where someone bought and
+another inside the product is not a cosmetic drift. `lib/pricing.ts` is the
+one source now, and the suite reads both surfaces and requires them to match.
+
+Three things about it are deliberate. It reads named elements rather than
 regexing `textContent`: the first version did the latter and reported three
 disagreements that were all its own, because "£89.00" followed by "2 days"
 reads as "89.002 days" and a greedy `\d+` takes `002`. And the edit-form check
 runs against the *dispatch-clocked* receipt, because on any other one the two
 ways of computing the date agree by coincidence — aimed at the first row, it
-would have missed the very bug it was written for.
+would have missed the very bug it was written for. And the landing-page scrape
+is scoped to the `#pricing` section rather than the whole page: reading every
+£ amount in `document.innerText` picked up the £1.95 Zara postal fee quoted in
+the policy-watch card, which is the same self-inflicted disagreement again. A
+selector that matched nothing would let both halves "agree" over empty
+strings, so the suite also requires that it found a pricing section and three
+prices in each place.
 
 ### A deploy reaches the app, and the app works without one
 

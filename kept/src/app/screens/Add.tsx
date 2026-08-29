@@ -5,6 +5,7 @@ import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
 import { findStore } from '../../lib/stores';
+import { FEATURED_TIER } from '../../lib/pricing';
 import { FREE_TIER_LIMIT } from '../../lib/quota';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, CameraGlyph, LogoMark, MailGlyph, ShareGlyph, Warning } from '../components/Icons';
@@ -172,7 +173,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
             onClick={onUpgrade}
             style={{ marginTop: 12, padding: 13, textAlign: 'center', background: color.yellow, color: color.ink, borderRadius: 999, fontWeight: 700, fontSize: 14 }}
           >
-            Go unlimited · £16.99/yr
+            {`Go unlimited · ${FEATURED_TIER.price}${FEATURED_TIER.suffix}`}
           </Pressable>
         </div>
       )}

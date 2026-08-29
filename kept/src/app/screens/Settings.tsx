@@ -6,6 +6,7 @@ import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { VERIFIED_STORE_COUNT } from '../../lib/stores';
 import type { Settings as SettingsShape } from '../../lib/storage';
+import { TIERS } from '../../lib/pricing';
 import { countedAgainstQuota, FREE_TIER_LIMIT } from '../../lib/quota';
 import { Pressable } from '../components/Pressable';
 
@@ -159,9 +160,10 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 16 }}>
-            <Tier price="£2.99" period="monthly" onClick={() => onUpgrade('monthly')} />
-            <Tier price="£16.99" period="yearly" featured onClick={() => onUpgrade('yearly')} />
-            <Tier price="£39.99" period="lifetime" onClick={() => onUpgrade('lifetime')} />
+            {/* One source with the landing page's cards — see lib/pricing.ts. */}
+            {TIERS.map((t) => (
+              <Tier key={t.period} price={t.price} period={t.period} featured={t.featured} onClick={() => onUpgrade(t.period)} />
+            ))}
           </div>
           <div style={{ fontSize: 11, color: color.faint, textAlign: 'center', marginTop: 10 }}>One missed return pays for it.</div>
         </section>

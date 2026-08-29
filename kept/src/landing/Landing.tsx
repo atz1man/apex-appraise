@@ -1,5 +1,7 @@
 import { color } from '../tokens';
 import { Logo, Wordmark } from '../app/components/Icons';
+import { TIERS as PRICING_TIERS, type Period } from '../lib/pricing';
+import { FREE_TIER_LIMIT } from '../lib/quota';
 import { VERIFIED_STORE_COUNT } from '../lib/stores';
 import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
@@ -34,11 +36,19 @@ const WHY = [
   { n: '06', title: 'Deadline alerts', body: 'A clear countdown on every item, works offline, and a heads-up when something must go back this week.' },
 ];
 
-const TIERS = [
-  { name: 'Monthly', price: '£2.99', suffix: '/mo', lines: ['Unlimited receipts', 'Cancel anytime'] },
-  { name: 'Yearly', price: '£16.99', suffix: '/yr', lines: ['Unlimited receipts', 'One missed return pays for it'], featured: true },
-  { name: 'Lifetime', price: '£39.99', suffix: ' once', lines: ['Unlimited, forever', 'No subscription'] },
-];
+/**
+ * The selling copy is this page's own; the price and period come from
+ * lib/pricing.ts, which the app's Settings tiers read too. A price that says
+ * one thing on the page someone bought from and another inside the product is
+ * not a cosmetic drift.
+ */
+const TIER_COPY: Record<Period, { name: string; lines: string[] }> = {
+  monthly: { name: 'Monthly', lines: ['Unlimited receipts', 'Cancel anytime'] },
+  yearly: { name: 'Yearly', lines: ['Unlimited receipts', 'One missed return pays for it'] },
+  lifetime: { name: 'Lifetime', lines: ['Unlimited, forever', 'No subscription'] },
+};
+
+const TIERS = PRICING_TIERS.map((t) => ({ ...t, ...TIER_COPY[t.period] }));
 
 export function Landing() {
   return (
@@ -75,7 +85,7 @@ export function Landing() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 32, flexWrap: 'wrap' }}>
             <AppStoreButton />
             <div style={{ fontSize: 13.5, color: color.muted, lineHeight: 1.5 }}>
-              Free for your first 10 receipts.
+              Free for your first {FREE_TIER_LIMIT} receipts.
               <br />
               No account needed.
             </div>
@@ -228,7 +238,7 @@ export function Landing() {
         <div style={{ textAlign: 'center' }}>
           <Eyebrow>PRICING</Eyebrow>
           <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(30px, 4vw, 40px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '14px 0 0' }}>
-            Free for your first 10 receipts.
+            Free for your first {FREE_TIER_LIMIT} receipts.
           </h2>
           <p style={{ fontSize: 16, color: color.muted, margin: '12px 0 0' }}>Pro when it’s earning its keep.</p>
         </div>
