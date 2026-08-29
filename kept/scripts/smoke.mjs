@@ -259,6 +259,29 @@ results['a policy change is checked against the receipts held'] =
   (await page.getByText('AFFECTS YOUR RECEIPTS').first().isVisible()) &&
   (await page.getByText(/deadline unchanged, already checked/).first().isVisible());
 
+/*
+ * The parser names no shop rather than guessing one — "walking boots" is not a
+ * Boots order — so the add screen has to let someone say which shop it was,
+ * and naming one Kept knows has to bring that shop's REAL window with it.
+ * Asserted against what lands in storage, not against the preview: the preview
+ * agreeing with itself is what the agreement suite is for.
+ */
+await page.getByRole('button', { name: 'Add a receipt' }).click();
+await page.waitForTimeout(300);
+await page.fill('#paste', 'Your Vinted order · walking boots · Total £40.00 · 20 Aug 2026');
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+results['an unrecognised shop is asked for rather than guessed'] =
+  (await page.locator('#add-store').count()) === 1 &&
+  (await page.getByText('Not recognised').isVisible());
+await page.fill('#add-store', 'Boots');
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /^Save/ }).click();
+await page.waitForTimeout(600);
+const named = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.at(-1));
+results['naming a shop by hand brings its verified window'] =
+  named.store === 'Boots' && named.windowDays === 35 && named.policy.startsWith('Boots ·');
+
 // The free tier is claimed on the pricing page, in Settings and on the Add
 // screen. Fill it and the Save must actually refuse.
 await page.evaluate(() => {

@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 31 end-to-end checks, including a midnight rollover
+npm run smoke      # 33 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -144,6 +144,14 @@ deliberate departure, not an oversight:
   nothing, which the add screen shows as "Not recognised" against a window it
   says is assumed — an assumption someone can see and correct beats a
   confident lie.
+- **The add screen had no way to name a shop.** It followed from the fix
+  above: a parser that refuses to guess leaves the shop blank more often, and
+  the only remedy was to save a receipt called "Unknown store" and edit it
+  afterwards. When nothing is recognised the screen asks, and a shop Kept does
+  know brings its real window and wording with it — 40 pounds of walking boots
+  from Vinted stays on the assumed 28 days, the same paste with "Boots" typed
+  in becomes a verified 35. The preview and what actually lands read one
+  value, because two of them disagreeing is a bug this codebase has had.
 - **Three retailers quoted a clock the app does not keep.** Apple, Amazon and
   ASOS all say "from delivery" in their own policy wording while the app
   counts from the order date, because it knows when nothing arrived. The

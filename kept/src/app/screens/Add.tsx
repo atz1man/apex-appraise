@@ -4,6 +4,7 @@ import { addDays, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
+import { findStore } from '../../lib/stores';
 import { FREE_TIER_LIMIT } from '../../lib/quota';
 import type { Receipt } from '../../lib/types';
 import { ArrowRight, CameraGlyph, LogoMark, MailGlyph, ShareGlyph, Warning } from '../components/Icons';
@@ -40,6 +41,16 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
    * it over a counter has no such right, and finds that out at the counter.
    */
   const [distance, setDistance] = useState(true);
+  /**
+   * The shop, when the paste did not name one Kept knows.
+   *
+   * The parser deliberately says nothing rather than guessing — "walking
+   * boots" is not a Boots order — so this is where the person supplies what it
+   * would have been guessing at. Typing a shop Kept does know adopts its real
+   * window and wording, which is the whole product; typing anything else
+   * leaves the assumed window it already shows.
+   */
+  const [storeName, setStoreName] = useState('');
   // Read once, on arrival. A later keystroke must not re-trigger it.
   const [readShare, setReadShare] = useState(false);
 
@@ -54,6 +65,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     setError(false);
     setItem('');
     setDistance(true);
+    setStoreName('');
   };
 
   const read = () => readText(text);
@@ -67,31 +79,43 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sharedText, readShare]);
 
+  /**
+   * What the receipt will actually be saved with — the paste's shop, or the
+   * one typed in when it found none. Computed once and read by both the save
+   * and the deadline preview below, because a preview that disagreed with what
+   * lands is a bug this codebase has already had once.
+   */
+  const typed = storeName.trim();
+  const knownFromTyped = parsed?.store ? undefined : typed ? findStore(typed) : undefined;
+  const policy = parsed?.policy ?? knownFromTyped ?? null;
+  const effectiveStore = parsed?.store ?? policy?.name ?? typed;
+  const effectiveWindow = policy?.windowDays ?? parsed?.windowDays ?? 0;
+
   const save = () => {
     if (!parsed || quotaFull) return;
-    const store = parsed.store ?? 'Unknown store';
+    const store = effectiveStore || 'Unknown store';
     onSave({
       id: makeReceiptId(today),
       store,
       // A generic fallback, not a dead end: it is editable from the receipt
       // itself the moment this saves.
       item: item.trim() || `${store} purchase`,
-      cat: parsed.policy?.cat ?? 'other',
+      cat: policy?.cat ?? 'other',
       amount: parsed.amount ?? 0,
       purchasedOn: parsed.purchasedOn,
       // A dispatch-clocked retailer starts counting when the parcel leaves,
       // and a pasted order confirmation cannot know that date. Leaving it
       // unset counts from the order — the conservative reading is the one
       // that does not promise days the shop will not honour.
-      windowDays: parsed.windowDays,
-      policy: parsed.policy?.policy ?? `${store} · ${parsed.windowDays}-day return window assumed — check the receipt.`,
+      windowDays: effectiveWindow,
+      policy: policy?.policy ?? `${store} · ${effectiveWindow}-day return window assumed — check the receipt.`,
       distance,
-      gotcha: parsed.policy?.gotcha,
+      gotcha: policy?.gotcha,
       status: 'active',
     });
   };
 
-  const deadline = parsed ? fmtDateNear(addDays(fromISODate(parsed.purchasedOn), parsed.windowDays), today) : '';
+  const deadline = parsed ? fmtDateNear(addDays(fromISODate(parsed.purchasedOn), effectiveWindow), today) : '';
 
   return (
     <div className="k-fade" style={{ flex: 1, overflow: 'auto', padding: '6px 16px 120px' }}>
@@ -174,11 +198,34 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               }}
             />
           </div>
+          {parsed.store === null && (
+            <div style={{ marginTop: 12 }}>
+              <label htmlFor="add-store" style={{ display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '0.6px', color: color.muted, marginBottom: 6 }}>
+                WHICH SHOP?
+              </label>
+              <input
+                id="add-store"
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+                placeholder="Vinted"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
+                  border: `1.5px solid ${color.border}`, background: color.white,
+                  fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+                }}
+              />
+              <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
+                {knownFromTyped
+                  ? `${knownFromTyped.name} — ${knownFromTyped.windowDays} days, verified.`
+                  : 'We could not find a shop we know in that paste. Name it and we will use its real window if we have it.'}
+              </div>
+            </div>
+          )}
           <HowBought id="add-how" value={distance} onChange={setDistance} />
-          <Row label="Store" value={parsed.store ?? 'Not recognised'} mono={false} />
+          <Row label="Store" value={effectiveStore || 'Not recognised'} mono={false} />
           <Row label="Total" value={parsed.amount === null ? 'Not found' : money(parsed.amount)} mono />
           <Row label="Bought" value={`${fmtDate(fromISODate(parsed.purchasedOn))}${parsed.dateFound ? '' : ' (assumed today)'}`} mono />
-          <Row label="Return window" value={`${parsed.windowDays} days`} mono={false} />
+          <Row label="Return window" value={`${effectiveWindow} days`} mono={false} />
           <Row label="Deadline" value={deadline} mono accent />
           {/* The cap is claimed on the pricing page, in Settings and on the
               card above; a Save that quietly ignored it would make all three

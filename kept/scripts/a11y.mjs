@@ -121,6 +121,20 @@ await page.getByRole('button', { name: 'Read it' }).click();
 await page.waitForTimeout(400);
 await audit(page, 'add receipt', findings);
 
+// The parser names no shop rather than guessing one, so the add screen asks.
+// That field, its hint, and the hint's second wording once a known shop is
+// typed are three things nothing else on any screen renders.
+await page.fill('#paste', 'Your Vinted order · walking boots · Total £40.00 · 20 Aug 2026');
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+await audit(page, 'add receipt · shop not recognised', findings);
+await page.fill('#add-store', 'Boots');
+await page.waitForTimeout(300);
+await audit(page, 'add receipt · shop named by hand', findings);
+await page.fill('#paste', 'Your Apple order · Total £129.00 · 25 Aug');
+await page.getByRole('button', { name: 'Read it' }).click();
+await page.waitForTimeout(400);
+
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(400);
 await audit(page, 'settings', findings);
