@@ -228,6 +228,40 @@ results['a deleted receipt comes back from a backup'] =
   (await holds('No7 skincare set')) &&
   (await page.getByRole('button', { name: /Boots, No7/ }).isVisible());
 
+/*
+ * And a restore must not undo what happened since the file was written. The
+ * backup above was taken while every receipt was active; take one back, then
+ * restore that same file. Without the details/state split in mergeBackup the
+ * refund silently reverts — the receipt returns to "Go now or lose it", its
+ * refund date disappears, and the app starts telling someone to return
+ * something they already returned.
+ */
+await page.getByRole('button', { name: /Currys, JBL/ }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Got my money back' }).click();
+await page.waitForTimeout(600);
+await page.getByRole('button', { name: 'Back to receipts' }).click().catch(() => {});
+await page.waitForTimeout(400);
+const refunded = (item) =>
+  page.evaluate((needle) => {
+    const r = JSON.parse(localStorage.getItem('kept.v1')).receipts.find((x) => x.item === needle);
+    return r ? { status: r.status, returnedOn: r.returnedOn ?? null } : null;
+  }, item);
+const afterReturning = await refunded('JBL Tune 770NC headphones');
+
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(300);
+await page.setInputFiles('input[type=file]', backupPath);
+await page.waitForTimeout(600);
+const afterRestoring = await refunded('JBL Tune 770NC headphones');
+results['restoring an older backup does not undo a refund taken since'] =
+  afterReturning?.status === 'returned' &&
+  afterRestoring?.status === 'returned' &&
+  afterRestoring.returnedOn === afterReturning.returnedOn;
+
+await page.getByRole('button', { name: 'Receipts', exact: true }).click();
+await page.waitForTimeout(300);
+
 // A file that is not a backup must be refused without touching anything.
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(300);

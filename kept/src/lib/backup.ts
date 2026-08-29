@@ -153,18 +153,48 @@ export interface MergeResult {
 
 /**
  * Merge, never replace. A restore onto a phone that already has receipts must
- * not silently discard the ones added since the backup was taken — so rows
- * are matched by id, the incoming copy wins for a row that exists on both
- * sides, and everything local survives.
+ * not silently discard the ones added since the backup was taken — so rows are
+ * matched by id, and everything local survives.
+ *
+ * For a row on both sides the backup supplies the DETAILS and the device keeps
+ * the STATE. That asymmetry is the whole of this function's judgement, and it
+ * is there because the obvious rule — the incoming copy wins outright — loses
+ * money in the ordinary case:
+ *
+ *   Monday, export a backup. Tuesday, take the headphones back; £89 recovered,
+ *   the receipt marked returned. Wednesday, restore Monday's file to recover a
+ *   receipt deleted by mistake — and the headphones silently revert to active,
+ *   `returnedOn` disappears, £89 vanishes from the money-back total, and the
+ *   app starts telling you to return something you already returned.
+ *
+ * `returned` records something that happened in the world. `active` records
+ * only that it has not happened yet, so a file written before it happened
+ * cannot be evidence against it. The same asymmetry protects the other
+ * direction: someone who marked a receipt returned by a stray swipe and used
+ * "Not actually returned" does not have that undone by a restore either.
+ *
+ * A row absent locally comes in whole, state included — that is the case a
+ * restore exists for, and there is nothing on the device to contradict it.
  */
 export function mergeBackup(current: readonly Receipt[], incoming: readonly Receipt[]): MergeResult {
   const byId = new Map(current.map((r) => [r.id, r]));
   let added = 0;
   let replaced = 0;
   for (const r of incoming) {
-    if (byId.has(r.id)) replaced += 1;
-    else added += 1;
-    byId.set(r.id, r);
+    const here = byId.get(r.id);
+    if (!here) {
+      added += 1;
+      byId.set(r.id, r);
+      continue;
+    }
+    replaced += 1;
+    byId.set(r.id, {
+      ...r,
+      status: here.status,
+      // Deleted rather than carried over when the device says active, so an
+      // active receipt never keeps a refund date from the file.
+      ...(here.returnedOn !== undefined ? { returnedOn: here.returnedOn } : { returnedOn: undefined }),
+    });
   }
   return { receipts: [...byId.values()], added, replaced };
 }

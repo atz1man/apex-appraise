@@ -134,4 +134,42 @@ describe('merging a restore into what is already here', () => {
   it('restores cleanly onto an empty device', () => {
     expect(mergeBackup([], [good])).toMatchObject({ added: 1, replaced: 0 });
   });
+
+  describe('a restore does not undo what you did since', () => {
+    /*
+     * The backup supplies the details; the device keeps the state. Without
+     * that asymmetry the ordinary sequence loses money: export Monday, take
+     * the headphones back Tuesday, restore Monday's file on Wednesday to
+     * recover a different receipt — and the headphones revert to active, the
+     * refund date disappears, and the app starts telling you to return
+     * something you already returned.
+     */
+    const returnedHere: Receipt = { ...good, status: 'returned', returnedOn: '2026-08-25' };
+
+    it('keeps a refund the file was written before', () => {
+      const m = mergeBackup([returnedHere], [good]);
+      expect(m.receipts[0]).toMatchObject({ status: 'returned', returnedOn: '2026-08-25' });
+    });
+
+    it('keeps an un-return the file was written before', () => {
+      // The mirror case, and the reason this is not "returned always wins":
+      // a stray swipe marks a receipt returned, "Not actually returned" fixes
+      // it, and a restore must not put it back.
+      const m = mergeBackup([good], [returnedHere]);
+      expect(m.receipts[0].status).toBe('active');
+      expect(m.receipts[0].returnedOn).toBeUndefined();
+    });
+
+    it('still takes every other correction from the file', () => {
+      const m = mergeBackup([returnedHere], [{ ...good, item: 'Corrected name', amount: toPence(99) }]);
+      expect(m.receipts[0]).toMatchObject({ item: 'Corrected name', amount: toPence(99), status: 'returned' });
+    });
+
+    it('takes the state too for a receipt the device does not have', () => {
+      // Nothing here contradicts the file, and this is the case a restore
+      // exists for — a receipt deleted by mistake, or a new phone.
+      const m = mergeBackup([], [returnedHere]);
+      expect(m.receipts[0]).toMatchObject({ status: 'returned', returnedOn: '2026-08-25' });
+    });
+  });
 });

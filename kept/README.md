@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 35 end-to-end checks, including a midnight rollover
+npm run smoke      # 36 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states
@@ -175,6 +175,20 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **Restoring a backup undid a refund taken since.** The merge kept every
+  local row the file did not mention — that part was deliberate — but let the
+  incoming copy win outright for a row on both sides. Export Monday, take the
+  headphones back Tuesday, restore Monday's file Wednesday to recover a
+  receipt deleted by mistake: the headphones silently revert to active, the
+  refund date disappears, the money leaves the total, and the app starts
+  telling you to return something you already returned. The backup supplies a
+  row's *details* now and the device keeps its *state*, because `returned`
+  records something that happened in the world and `active` only records that
+  it has not happened yet — so a file written earlier cannot be evidence
+  against it. The same asymmetry protects the mirror case: a stray swipe
+  corrected with *Not actually returned* is not undone by a restore either. A
+  row absent locally still comes in whole, state included; that is the case a
+  restore exists for.
 - **A render error blanked the whole app.** Measured before the fix: a throw
   on one screen unmounted the tree and left a page with no text and not one
   button, while the receipts sat intact in localStorage with no server holding
