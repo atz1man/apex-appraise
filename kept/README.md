@@ -316,6 +316,13 @@ Three passes, because they catch different things:
   cannot ask — is every control named, is the heading order sane, are there
   landmarks, does anything rely on colour alone.
 
+Both sweeps also open the *states* nothing navigates to — the unreadable-paste
+error, a returned receipt's detail, the delete-undo offer, and the standing
+warning shown when the device will not save. States are where audit coverage
+quietly stops: a sweep that only walks screens reports a clean pass on
+everything it never rendered. Each was confirmed reachable by making its text
+unreadable and watching the sweep name that exact state before restoring it.
+
 That last one found four real faults on its first run: the onboarding step
 dots carried an `aria-label` on a bare `<div>`, which is prohibited and simply
 discarded; there was no `<main>` on any screen, so all content sat outside

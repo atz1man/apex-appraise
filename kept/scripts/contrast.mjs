@@ -165,6 +165,56 @@ await page.waitForTimeout(300);
 await sweep('settings · erase confirm');
 await page.getByRole('button', { name: 'Keep them' }).click().catch(() => {});
 
+
+/*
+ * States, not screens. Nothing above navigates to these, so until now none of
+ * them were audited at all — the same gap the erase confirm had.
+ */
+await page.getByRole('button', { name: 'Receipts', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+
+// The paste error card.
+await page.getByRole('button', { name: 'Add a receipt' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.fill('#paste', 'nothing a parser could use');
+await page.getByRole('button', { name: 'Read it' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await sweep('add receipt · unreadable paste');
+
+// A returned receipt's detail, reachable only from the money-back list.
+await page.getByRole('button', { name: 'Receipts', exact: true }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: /IKEA, MALM/ }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Got my money back' }).click().catch(() => {});
+await page.waitForTimeout(400);
+await page.getByRole('button', { name: 'Back to receipts' }).click().catch(() => {});
+await page.waitForTimeout(400);
+await page.getByRole('button', { name: /IKEA, MALM.*returned/ }).click().catch(() => {});
+await page.waitForTimeout(400);
+await sweep('receipt detail · returned');
+
+// The undo offer after a delete.
+await page.getByRole('button', { name: 'Delete' }).click().catch(() => {});
+await page.waitForTimeout(400);
+await sweep('home · delete undo');
+
+// The standing warning when the device will not save.
+await page.evaluate(() => {
+  const real = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = (k, v) => {
+    if (k === 'kept.v1') throw new DOMException('Quota', 'QuotaExceededError');
+    return real(k, v);
+  };
+});
+await page.getByRole('button', { name: /Zara, Wool-blend/ }).click().catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Got my money back' }).click().catch(() => {});
+await page.waitForTimeout(400);
+await page.getByRole('button', { name: 'Back to receipts' }).click().catch(() => {});
+await page.waitForTimeout(500);
+await sweep('home · this device is not saving');
+
 // The landing page too — it is the first thing anyone reads.
 const wide = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
 const lp = await wide.newPage();
