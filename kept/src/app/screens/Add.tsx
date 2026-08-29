@@ -3,6 +3,7 @@ import { color, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
+import { arrivalProblem } from '../../lib/draft';
 import { makeReceiptId } from '../../lib/receipts';
 import { findStore, policyFor } from '../../lib/stores';
 import { FEATURED_TIER } from '../../lib/pricing';
@@ -100,8 +101,16 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
   const effectiveStore = parsed?.store ?? policy?.name ?? typed;
   const effectiveWindow = policy?.windowDays ?? parsed?.windowDays ?? 0;
 
+  /**
+   * The same rule the edit screen applies, from the same function. This screen
+   * had none: the browser marked the field invalid for a date before the order
+   * and the app saved it anyway, which starts both statutory clocks early and
+   * reports a live right as expired.
+   */
+  const arrivalError = parsed && distance && arrivedOn ? arrivalProblem(arrivedOn, parsed.purchasedOn, today) : undefined;
+
   const save = () => {
-    if (!parsed || quotaFull) return;
+    if (!parsed || quotaFull || arrivalError) return;
     const store = effectiveStore || 'Unknown store';
     onSave({
       id: makeReceiptId(today),
@@ -237,23 +246,38 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               <label htmlFor="add-arrived" style={{ display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '0.6px', color: color.muted, marginBottom: 6 }}>
                 ARRIVED ON
               </label>
+              {/* No `min`. Chromium fills in the invariant parts of a narrow
+                  range, so an EMPTY optional field rendered as "08/dd/2026"
+                  whenever the purchase was recent — which is most of the time
+                  on this screen — and an optional field that looks partly
+                  filled reads as one that is set. Measured against the same
+                  input with a wide range and with none, which both show
+                  mm/dd/yyyy. The rule is enforced below, with a reason, which
+                  is better feedback than a picker that silently refuses. */}
               <input
                 id="add-arrived"
                 type="date"
                 value={arrivedOn}
-                min={parsed.purchasedOn}
                 max={toISODate(today)}
+                aria-invalid={!!arrivalError}
+                aria-describedby="add-arrived-note"
                 onChange={(e) => setArrivedOn(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
-                  border: `1.5px solid ${color.border}`, background: color.white,
+                  border: `1.5px solid ${arrivalError ? color.danger : color.border}`, background: color.white,
                   fontFamily: "'Space Grotesk', monospace", fontSize: 14.5, color: color.ink,
                 }}
               />
-              <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
-                Optional. Your legal rights start the day it lands, so this makes those dates exact instead of the
-                earliest they could be.
-              </div>
+              {arrivalError ? (
+                <div id="add-arrived-note" role="alert" style={{ fontSize: 12.5, fontWeight: 600, color: color.danger, marginTop: 5 }}>
+                  {arrivalError}
+                </div>
+              ) : (
+                <div id="add-arrived-note" style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
+                  Optional. Your legal rights start the day it lands, so this makes those dates exact instead of the
+                  earliest they could be.
+                </div>
+              )}
             </div>
           )}
           <Row label="Store" value={effectiveStore || 'Not recognised'} mono={false} />
@@ -267,7 +291,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
           <Pressable
             className={quotaFull ? undefined : 'k-ink'}
             onClick={save}
-            disabled={quotaFull}
+            disabled={quotaFull || !!arrivalError}
             style={{
               marginTop: 14, padding: 14, textAlign: 'center',
               background: quotaFull ? color.creamAlt : color.ink,
@@ -276,7 +300,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               cursor: quotaFull ? 'not-allowed' : 'pointer',
             }}
           >
-            {quotaFull ? 'Go unlimited to save this' : 'Save receipt'}
+            {quotaFull ? 'Go unlimited to save this' : arrivalError ? 'Fix the arrival date' : 'Save receipt'}
           </Pressable>
         </div>
       )}

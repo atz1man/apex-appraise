@@ -64,6 +64,30 @@ export interface ValidDraft {
 
 export type DraftOutcome = { ok: true; value: ValidDraft } | { ok: false; errors: DraftErrors };
 
+/**
+ * What is wrong with a stated arrival date, or nothing.
+ *
+ * Exported because the ADD screen asks for the same date and had no rule at
+ * all: the browser marked its field invalid for a date before the order and
+ * the app saved it regardless, 19 days early in the case that found this. Both
+ * statutory clocks start there, so an arrival before the purchase reports a
+ * live right as expired — the direction this app exists not to get wrong.
+ *
+ * One function so the two screens cannot disagree, which is the failure this
+ * codebase keeps having: `effectiveWindowStart` and `canonicalStoreName` are
+ * here for the same reason.
+ */
+export function arrivalProblem(arrivedOn: string, purchasedOn: string, today: Date): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(arrivedOn) || toISODate(fromISODate(arrivedOn)) !== arrivedOn) {
+    return 'Pick the day it arrived, or leave it blank';
+  }
+  if (daysBetween(today, fromISODate(arrivedOn)) > 0) return 'That date is in the future';
+  if (daysBetween(fromISODate(purchasedOn), fromISODate(arrivedOn)) < 0) {
+    return 'It cannot have arrived before you ordered it';
+  }
+  return undefined;
+}
+
 export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
   const errors: DraftErrors = {};
 
@@ -104,20 +128,12 @@ export function validateDraft(draft: ReceiptDraft, today: Date): DraftOutcome {
     errors.windowDaysText = 'That is longer than any real return window';
   }
 
-  // Optional, but a date that is there has to be real and has to make sense:
-  // nothing arrives before it is ordered, and nothing has arrived tomorrow.
   const arrivedRaw = draft.arrivedOnText.trim();
   let arrivedOn: string | undefined;
   if (arrivedRaw && draft.distance) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(arrivedRaw) || toISODate(fromISODate(arrivedRaw)) !== arrivedRaw) {
-      errors.arrivedOnText = 'Pick the day it arrived, or leave it blank';
-    } else if (daysBetween(today, fromISODate(arrivedRaw)) > 0) {
-      errors.arrivedOnText = 'That date is in the future';
-    } else if (!errors.purchasedOn && daysBetween(fromISODate(purchasedOn), fromISODate(arrivedRaw)) < 0) {
-      errors.arrivedOnText = 'It cannot have arrived before you ordered it';
-    } else {
-      arrivedOn = arrivedRaw;
-    }
+    const problem = errors.purchasedOn ? undefined : arrivalProblem(arrivedRaw, purchasedOn, today);
+    if (problem) errors.arrivedOnText = problem;
+    else arrivedOn = arrivedRaw;
   }
 
   const warrantyRaw = draft.warrantyMonthsText.trim();

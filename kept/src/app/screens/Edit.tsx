@@ -186,7 +186,6 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
                 {...p}
                 type="date"
                 value={draft.arrivedOnText}
-                min={draft.purchasedOn}
                 max={toISODate(today)}
                 onChange={(e) => set('arrivedOnText', e.target.value)}
                 style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}

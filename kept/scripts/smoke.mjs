@@ -360,6 +360,26 @@ results['an unrecognised shop is asked for rather than guessed'] =
   (await page.getByText('Not recognised').isVisible());
 await page.fill('#add-store', 'Boots');
 await page.waitForTimeout(300);
+/*
+ * The arrival date decides where both statutory clocks start, and this screen
+ * had no rule for it: the browser marked the field invalid for a date before
+ * the order and the app saved it anyway — 19 days early in the case that found
+ * it, which reports a live right as expired. The edit screen validated it; the
+ * add screen did not.
+ */
+await page.fill('#add-arrived', '2001-01-01');
+await page.waitForTimeout(300);
+const heldBeforeBadDate = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length);
+const badDateSave = page.getByRole('button', { name: /Fix the arrival date/ });
+await badDateSave.click({ force: true }).catch(() => {});
+await page.waitForTimeout(400);
+results['an arrival before the purchase is refused, not saved'] =
+  (await badDateSave.isDisabled().catch(() => false)) &&
+  (await page.getByText('It cannot have arrived before you ordered it').isVisible().catch(() => false)) &&
+  (await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length)) === heldBeforeBadDate;
+await page.fill('#add-arrived', '');
+await page.waitForTimeout(300);
+
 await page.getByRole('button', { name: /^Save/ }).click();
 await page.waitForTimeout(600);
 const named = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.at(-1));

@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 39 end-to-end checks, including a midnight rollover
+npm run smoke      # 40 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -380,6 +380,19 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **The add screen would save an arrival date from before the purchase.** The
+  field it was added to has a rule on the edit screen and had none here: the
+  browser marked the input invalid and the app read the value and saved it
+  anyway, 19 days before the order in the case that found it. Both statutory
+  clocks start on that date, so an arrival before the purchase reports a live
+  right as expired — the direction this app exists not to get wrong, in the
+  field added to stop exactly that. One `arrivalProblem` now, called by both
+  screens, for the same reason `effectiveWindowStart` and `canonicalStoreName`
+  exist. The narrow `min` came off the input while fixing it: Chromium fills
+  in the invariant parts of a range that spans one month, so an *empty*
+  optional field rendered as "08/dd/2026" whenever the purchase was recent —
+  which is most of the time on that screen — and a rule with a reason is
+  better feedback than a picker that silently refuses.
 - **"Copied — paste it anywhere ✓" was shown when the copy had failed.** The
   reasoning written beside it was that a control which appears dead is worse
   than one that lies — half right, and the same half this codebase already got
