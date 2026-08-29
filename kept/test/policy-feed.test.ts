@@ -38,10 +38,27 @@ describe('who an update actually affects', () => {
 });
 
 describe('what a change means for a receipt already held', () => {
-  it('says so plainly when nothing moved', () => {
+  it('reassures about the deadline AND passes on the advice, when nothing moved', () => {
+    // Zara's postal-returns fee left the window at 30 days, so this branch
+    // fired and said only "deadline unchanged, already checked" — discarding
+    // the one sentence in the update worth acting on.
     const [a] = assess([update({ newWindowDays: 30 })], [zaraReceipt], TODAY);
     expect(a.impacts[0].kind).toBe('unchanged');
+    expect(a.impacts[0].note).toBe('deadline unchanged · drop off in store to keep it free');
+  });
+
+  it('still says something when an unchanged update carries no advice', () => {
+    const [a] = assess([update({ newWindowDays: 30, affectNote: '' })], [zaraReceipt], TODAY);
     expect(a.impacts[0].note).toBe('deadline unchanged, already checked');
+  });
+
+  it('leaves the advice out where it would be false', () => {
+    // "your window is the shorter one" is written for a reader of the news.
+    // For a receipt already held it is wrong — that receipt keeps the window
+    // it was bought under, which is exactly what the derived note says.
+    const [a] = assess([update({ newWindowDays: 14, affectNote: 'your window is the shorter one' })], [zaraReceipt], TODAY);
+    expect(a.impacts[0].note).not.toContain('your window is the shorter one');
+    expect(a.impacts[0].note).toContain('yours keeps the 30 days it was bought under');
   });
 
   it('never rewrites a deadline the purchase was made under', () => {
@@ -75,6 +92,14 @@ describe('what a change means for a receipt already held', () => {
     const [a] = assess([update()], [zaraReceipt], TODAY);
     expect(a.impacts[0].kind).toBe('informational');
     expect(a.impacts[0].note).toBe('drop off in store to keep it free');
+  });
+
+  it('never leaves the note empty, because the screen writes a dash before it', () => {
+    // The Watch card renders "{item} — {note}", and mergeFeed defaults a
+    // missing affectNote to ''. An entry with neither a new window nor a note
+    // printed the receipt's name followed by a dangling dash.
+    const [a] = assess([update({ affectNote: '   ' })], [zaraReceipt], TODAY);
+    expect(a.impacts[0].note.trim().length).toBeGreaterThan(0);
   });
 });
 

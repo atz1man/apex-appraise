@@ -493,9 +493,22 @@ deliberate departure, not an oversight:
   a shop edited its page could tell someone they have less time than they
   actually do. What it does instead is what the design's own Zara card already
   said: *checks*. Each held receipt is compared against the change and told
-  plainly — "deadline unchanged, already checked", or "new purchases get 16
-  days less; yours keeps the 30 days it was bought under". The landing copy
-  was corrected to match.
+  plainly — "deadline unchanged · drop off in store to keep it free", or "new
+  purchases get 16 days less; yours keeps the 30 days it was bought under".
+  The landing copy was corrected to match.
+
+  The first of those two used to stop at "deadline unchanged, already
+  checked". Read on the screen, that is the failure the whole tab is for:
+  Zara's change was the postal-returns fee, its window stayed at 30 days, so
+  the unchanged branch fired and the holder of a Zara coat was told nothing
+  had moved while the sentence that would have saved them £1.95 sat unread in
+  the same update. Currys the same — the price-match note is the entire point
+  of that entry and its window did not move either. The reassurance still
+  leads, because "has my deadline moved" is the question being asked; the
+  advice now follows it. Where the window *did* move the note is still
+  dropped, deliberately: "your window is the shorter one" is written for a
+  reader of the news and is false of a receipt already held, which keeps the
+  window it was bought under.
 - **A warranty is a clock, not a sentence.** The landing page promises
   "warranty clocks added to your receipts automatically", and a warranty was a
   free-text string that could not answer the question that promise implies —

@@ -36,12 +36,36 @@ export interface AssessedUpdate {
 
 function impactFor(update: PolicyUpdate, receipt: Receipt, today: Date): ReceiptImpact {
   const next = update.newWindowDays;
+  const note = update.affectNote.trim();
   if (next === undefined) {
-    return { receipt, kind: 'informational', note: update.affectNote };
+    // A note is not guaranteed: `mergeFeed` defaults a missing one to ''. The
+    // renderer writes "{item} — {note}", so an empty one printed a dangling
+    // dash after the receipt's name.
+    return { receipt, kind: 'informational', note: note || 'worth a read — your deadline is unaffected' };
   }
   if (next === receipt.windowDays) {
-    return { receipt, kind: 'unchanged', note: 'deadline unchanged, already checked' };
+    /*
+     * Unchanged is the common case, and it was the one that threw the
+     * feed's own advice away.
+     *
+     * Zara's change was the postal-returns fee: the window stayed 30 days,
+     * so this branch fired and told the holder of a Zara coat "deadline
+     * unchanged, already checked" — true, and useless, while the sentence
+     * that would have saved them £1.95, "drop off in store to keep it
+     * free", sat in the same update unread. Currys the same: the price-match
+     * note is the whole point of that entry and its window did not move.
+     *
+     * The reassurance still leads, because "has my deadline moved" is the
+     * question the tab exists to answer. The advice follows it, after a "·"
+     * rather than a dash: the card already writes "{item} — {note}", and two
+     * em-dashes in one line read as one sentence interrupted twice.
+     */
+    return { receipt, kind: 'unchanged', note: note ? `deadline unchanged · ${note}` : 'deadline unchanged, already checked' };
   }
+  // Below, `affectNote` is deliberately NOT used. It is written for someone
+  // reading the news — ASOS's "your window is the shorter one" — and for a
+  // receipt already held it is false: that receipt keeps the window it was
+  // bought under. The derived sentence is both more specific and true.
   const days = Math.abs(next - receipt.windowDays);
   const unit = days === 1 ? 'day' : 'days';
   if (next < receipt.windowDays) {

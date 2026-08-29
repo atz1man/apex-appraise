@@ -363,9 +363,14 @@ await page.waitForTimeout(600);
 const updateIds = await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).updates.map((u) => u.id));
 results['the policy feed arrives and does not duplicate the bundled one'] =
   updateIds.length === new Set(updateIds).size && updateIds.includes('u_uniqlo_online_refunds');
+// Both halves, because the reassurance alone is what this check used to
+// accept: Zara's fee change left the window at 30 days, so the card said
+// "deadline unchanged" and stopped — dropping the one sentence in the update
+// worth acting on, which is the £1.95 the change is actually about.
 results['a policy change is checked against the receipts held'] =
   (await page.getByText('AFFECTS YOUR RECEIPTS').first().isVisible()) &&
-  (await page.getByText(/deadline unchanged, already checked/).first().isVisible());
+  (await page.getByText(/deadline unchanged/).first().isVisible()) &&
+  (await page.getByText(/drop off in store to keep it free/).first().isVisible());
 
 /*
  * The parser names no shop rather than guessing one — "walking boots" is not a
