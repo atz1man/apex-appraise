@@ -70,7 +70,10 @@ const WHY = [
   { n: '02', title: 'Knows your legal rights', body: 'The Consumer Rights Act gives you 30 days to reject faulty goods for a full refund, and online orders carry a 14-day cooling-off by law. Kept shows the legal deadline beside the shop’s own.' },
   { n: '03', title: 'Paste or scan, done', body: 'Paste an order email and Kept reads the store, total and date, and sets the deadline for you. Scanning a paper receipt lands in a later release.' },
   { n: '04', title: 'Warranties too', body: 'Put a warranty length on a receipt and Kept counts it down beside the return window, so you know whether the repair is still free before you pay for one.' },
-  { n: '05', title: 'Private by design', body: 'Everything lives on your phone. No account, no server, no one reading your purchases. Export a backup anytime.' },
+  // "No server" was the loose word — the app is served from one and downloads
+  // the policy feed from it on every launch. Naming the one call, and its
+  // direction, is a better privacy claim than denying it.
+  { n: '05', title: 'Private by design', body: 'Everything lives on your phone. No account, nothing uploaded, no one reading your purchases. Policy updates download to you; nothing about you goes back. Export a backup anytime.' },
   // "a heads-up when something must go back this week" implied a background
   // service. See notify.ts: a web app cannot wake itself, and the onboarding
   // was corrected for this exact claim while these two lines kept making it.

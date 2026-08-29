@@ -416,6 +416,15 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **"No server" was the loose word in the privacy claim.** Settings and the
+  landing page both said "No account, no server, no one reading your
+  purchases" — on an app that is served from a server and downloads the
+  policy feed from it on every launch, which the Watch tab says out loud two
+  taps away. "Nothing uploaded" is accurate and the stronger claim, and it is
+  what the onboarding already said; the landing card now also names the one
+  call and its direction, which is a better privacy claim than denying that a
+  call happens. `e2e`'s third-party check proves the rest: no request leaves
+  this origin at all.
 - **The celebration congratulated you for something that had not happened.**
   Two unconditional claims on one screen. "Recovered from Currys before the
   window closed" was printed whether or not it had — the button that leads

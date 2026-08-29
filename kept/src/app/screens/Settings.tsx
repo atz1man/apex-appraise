@@ -96,7 +96,12 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
           <span style={{ fontWeight: 700, fontSize: 15 }}>Private by design</span>
         </div>
         <p style={{ fontSize: 13, color: color.muted, lineHeight: 1.55, marginTop: 6, marginBottom: 0 }}>
-          Everything lives on this device. No account, no server, no one reading your purchases.
+          {/* "No server" was the loose word: this app is served from one, and
+              downloads the policy feed from it every launch — which the Watch
+              tab says two taps away. "Nothing uploaded" is both accurate and
+              the stronger claim, and it is the wording the onboarding already
+              uses. */}
+          Everything lives on this device. No account, nothing uploaded, no one reading your purchases.
         </p>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <Pressable
