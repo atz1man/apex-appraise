@@ -69,18 +69,23 @@ export function seedUpdates(today: Date): PolicyUpdate[] {
     },
     {
       id: 'u_asos_frequent_returners', store: 'ASOS', changedOn: ago(7),
-      text: 'New 28-day window for “frequent returners” (was 45). Kept flags if that’s you before you buy.',
+      text: 'New 28-day window for “frequent returners” (was 45). ASOS decides who counts, so Kept assumes the shorter one.',
       affectsStores: ['ASOS'], affectNote: 'your window is the shorter one', newWindowDays: 28,
     },
     {
       id: 'u_apple_iphone18_window', store: 'Apple', changedOn: ago(21),
-      text: '14-day window confirmed for the iPhone 18 line. Warranty clocks added automatically.',
-      affectsStores: ['Apple'], affectNote: 'warranty clock added', newWindowDays: 14,
+      text: '14-day window confirmed for the iPhone 18 line. Put the warranty length on the receipt and Kept counts that down too.',
+      affectsStores: ['Apple'], affectNote: 'confirmed at 14 days', newWindowDays: 14,
     },
     {
       id: 'u_currys_price_match', store: 'Currys', changedOn: ago(30),
       text: 'Price-match refund window extended to 14 days — if it drops in price after you buy, claim the difference.',
       affectsStores: ['Currys'], affectNote: 'you can claim the difference if the price drops', newWindowDays: 14,
+    },
+    {
+      id: 'u_uniqlo_online_refunds', store: 'Uniqlo', changedOn: ago(46),
+      text: 'Online orders can no longer be refunded in store — postal returns only. In-store purchases are unaffected.',
+      affectsStores: ['Uniqlo'], affectNote: 'an online order has to go back by post', newWindowDays: 30,
     },
   ];
 }

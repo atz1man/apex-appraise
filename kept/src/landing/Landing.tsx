@@ -23,8 +23,8 @@ const PROBLEMS = [
 
 const UPDATES = [
   { store: 'Zara', when: 'updated 2d ago', text: 'Free online returns ended — £1.95 unless you drop off in store. Your deadlines: unchanged, already checked.', emphasised: true },
-  { store: 'ASOS', when: 'updated 1w ago', text: 'New 28-day window for “frequent returners”. Kept tells you if that’s you — before you buy the third hoodie.', emphasised: false },
-  { store: 'Apple', when: 'updated 3w ago', text: '14-day window confirmed for the iPhone 18 line — warranty clocks added to your receipts automatically.', emphasised: false },
+  { store: 'ASOS', when: 'updated 1w ago', text: 'New 28-day window for “frequent returners”. ASOS decides who counts, so Kept assumes the shorter one.', emphasised: false },
+  { store: 'Apple', when: 'updated 3w ago', text: '14-day window confirmed for the iPhone 18 line. Put the warranty length on a receipt and Kept counts that down too.', emphasised: false },
 ];
 
 /**
@@ -43,7 +43,7 @@ const WHY = [
   { n: '01', title: 'Knows the real policies', body: `IKEA’s ${days('IKEA')} days, Boots’ ${days('Boots')}, Apple’s ${days('Apple')} — verified windows for ${VERIFIED_STORE_COUNT} major UK retailers, plus the gotchas: Zara’s clock starts at dispatch, Uniqlo won’t refund online orders in store.` },
   { n: '02', title: 'Knows your legal rights', body: 'The Consumer Rights Act gives you 30 days to reject faulty goods for a full refund, and online orders carry a 14-day cooling-off by law. Kept shows the legal deadline beside the shop’s own.' },
   { n: '03', title: 'Paste or scan, done', body: 'Paste an order email and Kept reads the store, total and date, and sets the deadline for you. Scanning a paper receipt lands in a later release.' },
-  { n: '04', title: 'Warranties too', body: 'Electronics and appliances get a warranty clock alongside the return window, so you know the repair is free before you pay for one.' },
+  { n: '04', title: 'Warranties too', body: 'Put a warranty length on a receipt and Kept counts it down beside the return window, so you know whether the repair is still free before you pay for one.' },
   { n: '05', title: 'Private by design', body: 'Everything lives on your phone. No account, no server, no one reading your purchases. Export a backup anytime.' },
   { n: '06', title: 'Deadline alerts', body: 'A clear countdown on every item, works offline, and a heads-up when something must go back this week.' },
 ];

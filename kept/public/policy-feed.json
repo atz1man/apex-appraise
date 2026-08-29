@@ -16,7 +16,7 @@
       "id": "u_asos_frequent_returners",
       "store": "ASOS",
       "changedOn": "2026-08-21",
-      "text": "New 28-day window for “frequent returners” (was 45). Kept flags if that’s you before you buy.",
+      "text": "New 28-day window for “frequent returners” (was 45). ASOS decides who counts, so Kept assumes the shorter one.",
       "affectsStores": ["ASOS"],
       "affectNote": "your window is the shorter one",
       "newWindowDays": 28
@@ -25,9 +25,9 @@
       "id": "u_apple_iphone18_window",
       "store": "Apple",
       "changedOn": "2026-08-07",
-      "text": "14-day window confirmed for the iPhone 18 line. Warranty clocks added automatically.",
+      "text": "14-day window confirmed for the iPhone 18 line. Put the warranty length on the receipt and Kept counts that down too.",
       "affectsStores": ["Apple"],
-      "affectNote": "warranty clock added",
+      "affectNote": "confirmed at 14 days",
       "newWindowDays": 14
     },
     {
