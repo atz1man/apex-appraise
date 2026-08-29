@@ -128,10 +128,24 @@ export function hydrate(raw: unknown, today: Date): KeptState {
   const parsed = raw as Partial<KeptState>;
   if (!Array.isArray(parsed.receipts)) return freshState(today);
 
+  // Validated row by row, and then deduplicated by id — which the row reader
+  // cannot do, because it only ever sees one row at a time.
+  //
+  // Two rows for one purchase means the money is counted twice, which is the
+  // single thing this app must not do: one duplicated id turns £89 still
+  // returnable into £178, and collides the React keys in three lists on the
+  // way. A restore has never been able to produce one (mergeBackup matches by
+  // id), but nothing checked the app's own store, and it is the store that
+  // already produced the corrupt row this function exists to survive. The
+  // first occurrence wins — neither is more correct, and deterministic beats
+  // clever.
   const receipts: Receipt[] = [];
+  const seen = new Set<string>();
   for (const row of parsed.receipts) {
     const r = readReceipt(row);
-    if (r) receipts.push(r);
+    if (!r || seen.has(r.id)) continue;
+    seen.add(r.id);
+    receipts.push(r);
   }
 
   // Policy updates are downloadable content, not user data — reseeding is

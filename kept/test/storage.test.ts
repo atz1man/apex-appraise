@@ -54,6 +54,22 @@ describe('surviving whatever is on disk', () => {
     expect(hydrate({ receipts: 'not an array' }, TODAY).receipts.length).toBeGreaterThan(0);
   });
 
+  it('keeps one row when the store holds two with the same id', () => {
+    // Two rows for one purchase means the money is counted twice, which is the
+    // single thing this app must not do. A restore cannot produce one — the
+    // merge matches by id — but nothing was checking the app's own store, and
+    // it is the store that already produced the corrupt row this whole
+    // function exists to survive.
+    const s = hydrate(stored({ receipts: [good, { ...good, item: 'A second copy' }] }), TODAY);
+    expect(s.receipts).toHaveLength(1);
+    expect(s.receipts[0].item).toBe(good.item);
+  });
+
+  it('keeps both when the ids genuinely differ', () => {
+    const s = hydrate(stored({ receipts: [good, { ...good, id: 'r2' }] }), TODAY);
+    expect(s.receipts.map((r) => r.id)).toEqual(['r1', 'r2']);
+  });
+
   it('drops an unreadable policy update and keeps the rest', () => {
     const update = { id: 'u1', store: 'Zara', changedOn: '2026-08-26', text: 'x', affectsStores: ['Zara'] };
     const s = hydrate(stored({ updates: [update, { broken: true }] }), TODAY);

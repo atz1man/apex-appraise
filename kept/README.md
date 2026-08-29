@@ -175,6 +175,13 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **A duplicated receipt id doubled the money.** The row reader validates one
+  row at a time, so it cannot see a second row wearing the same id — and
+  nothing else looked. One duplicate turns £89 still returnable into £178,
+  which is the single thing this app must not do, and collides the React keys
+  in three lists on the way. The restore path was already safe (the merge
+  matches by id); the app's own store was not, and it is the store that
+  produced the corrupt row  exists to survive.
 - **Settings were the one thing read off disk unchecked.** Receipts and policy
   updates have been validated on the way in since a single bad row blanked the
   app; the preferences beside them were spread straight over the defaults. An
