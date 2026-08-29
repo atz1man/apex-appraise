@@ -1570,6 +1570,28 @@ Tested paired with a receipt that is fine, because a file whose every row is
 refused is not a usable backup at all and `parseBackup` says so first — what
 needed showing is the bad row going without taking the good one.
 
+**And the first version of that was wrong in the dangerous direction.** It
+applied the ceilings inside `readReceipt` unconditionally — and `hydrate` reads
+the device's *own* store through that same function. So a receipt already
+sitting on someone's phone, above a limit this build had only just invented,
+would have been dropped on next launch. On an app whose receipts live in one
+place, that is the expensive answer, and it is the very thing written two
+commits earlier beside `SCHEMA_VERSION` as the mistake a future version must
+not make.
+
+CI caught it in nine minutes, through the guard added that morning: the layout
+sweep's adversarial fixture is £1,299,999.99, and the report read *"expected
+one receipt with a very long shop name, and got none"*. It was named, not
+inferred from a stack trace, because that sweep now says what it found.
+
+The rule it settled on: **the app never alters or discards what it already
+holds — it bounds what comes in.** An absurd amount already on the device
+renders visibly wrong and the edit screen refuses to save it, which is a
+correction the person can make; a deleted row takes the shop, the item, the
+dates and the deadline with it, and nobody can correct that. Both directions
+are pinned: applying the ceilings to the store fails, and removing them from
+the import path fails.
+
 ### The numbers that are facts, and the numbers that are judgements
 
 A third pass asked something different of the same suite: move every named

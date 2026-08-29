@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { afterEach } from 'vitest';
 import { hydrate, rescueBackup, DEFAULT_SETTINGS, URGENT_DAYS_MIN, URGENT_DAYS_MAX } from '../src/lib/storage';
+import { MAX_AMOUNT_PENCE, MAX_WINDOW_DAYS } from '../src/lib/draft';
 import { MAX_UPDATES } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
@@ -223,5 +224,41 @@ describe('the ends of the range someone can actually choose', () => {
   it('still falls back just outside them', () => {
     expect(urgentOf({ urgentDays: URGENT_DAYS_MIN - 1 })).toBe(DEFAULT_SETTINGS.urgentDays);
     expect(urgentOf({ urgentDays: URGENT_DAYS_MAX + 1 })).toBe(DEFAULT_SETTINGS.urgentDays);
+  });
+});
+
+describe('the app never discards what it already holds', () => {
+  /*
+   * `hydrate` reads the device's own store through the same `readReceipt` a
+   * backup file comes through, and the first version of the import ceilings
+   * applied there too — so a receipt already on someone's phone, above a limit
+   * this build had only just invented, would have been dropped on next launch.
+   * The layout sweep caught it within the hour: its adversarial fixture is
+   * £1,299,999.99 and it simply stopped existing.
+   *
+   * On an app whose receipts live in one place, that is the expensive answer.
+   * An absurd amount already on the device renders visibly wrong and the edit
+   * screen refuses to save it, which is a correction the person can make; a
+   * deleted row takes the shop, the item, the dates and the deadline with it,
+   * and nobody can correct that.
+   */
+  const absurd = { ...good, id: 'big', amount: MAX_AMOUNT_PENCE + 1, windowDays: MAX_WINDOW_DAYS + 1 };
+
+  it('keeps a stored receipt that the import path would refuse', () => {
+    const s = hydrate(stored({ receipts: [absurd] }), TODAY);
+    expect(s.receipts.map((r) => r.id)).toEqual(['big']);
+    expect(s.receipts[0].amount).toBe(MAX_AMOUNT_PENCE + 1);
+  });
+
+  it('does not quietly shorten stored text either', () => {
+    const long = { ...good, id: 'wordy', item: 'x'.repeat(5000) };
+    const s = hydrate(stored({ receipts: [long] }), TODAY);
+    expect(s.receipts[0].item).toHaveLength(5000);
+  });
+
+  it('still drops a stored row that is malformed rather than merely large', () => {
+    // The reason hydrate validates at all: one bad row used to blank the app.
+    const s = hydrate(stored({ receipts: [{ ...good, id: 'ok' }, { ...good, id: 'bad', amount: 12.5 }] }), TODAY);
+    expect(s.receipts.map((r) => r.id)).toEqual(['ok']);
   });
 });

@@ -37,18 +37,34 @@ const isStr = (v: unknown): v is string => typeof v === 'string' && v.trim().len
 /*
  * How much of a receipt a file may claim, and what to do when it claims more.
  *
- * The policy feed was held to the app's own limits first; this is the other
- * door into the same localStorage bucket, and it had the same gap. A typed
- * amount is refused past a million pounds and a typed window past ten years —
- * an imported one was bounded only from below.
+ * The policy feed was held to the app's own limits first; a backup file is the
+ * other door into the same localStorage bucket, and it had the same gap. A
+ * typed amount is refused past a million pounds and a typed window past ten
+ * years — an imported one was bounded only from below.
  *
- * The two kinds of excess get opposite treatment, and the file already argues
- * for both. A NUMBER that is out of range gets the receipt dropped, because
- * this is the money the app tells someone they are owed and it may not show a
- * false figure or quietly change a real one — the same reason a float amount
- * is already dropped rather than rounded. TEXT gets trimmed and the receipt
- * kept, because dropping a row loses a purchase and "saying less" is the
- * choice this file already makes about a warranty it cannot read.
+ * FROM OUTSIDE ONLY, and that is the whole of the second attempt at this. The
+ * first applied the limits in `readReceipt` unconditionally, and `hydrate`
+ * comes through this same function to read the app's OWN store — so a receipt
+ * already sitting on someone's device, above a ceiling this build had only
+ * just invented, would have been dropped on next launch. On an app whose
+ * receipts live in one place that is the expensive answer, and the layout
+ * sweep said so within the hour: its adversarial fixture is £1,299,999.99 and
+ * it simply stopped existing.
+ *
+ * So the rule is: the app never alters or discards what it already holds. It
+ * bounds what comes in. An absurd amount already on the device renders visibly
+ * wrong and the edit screen refuses to save it, which is a correction the
+ * person can make; a deleted row takes the shop, the item, the dates and the
+ * deadline with it, and cannot be corrected by anyone.
+ *
+ * Of what does come in, the two kinds of excess get opposite treatment, and
+ * the file already argues for both. A NUMBER that is out of range gets the
+ * receipt dropped, because this is the money the app tells someone they are
+ * owed and it may not show a false figure or quietly change a real one — the
+ * same reason a float amount is already dropped rather than rounded. TEXT gets
+ * trimmed and the receipt kept, because dropping a row loses a purchase and
+ * "saying less" is the choice this file already makes about a warranty it
+ * cannot read.
  */
 const MAX_STORE = 120;
 const MAX_ITEM = 200;
@@ -100,7 +116,7 @@ function readDistance(r: Record<string, unknown>): boolean | null {
   return null;
 }
 
-export function readReceipt(raw: unknown): Receipt | null {
+export function readReceipt(raw: unknown, fromOutside = false): Receipt | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
 
@@ -108,25 +124,13 @@ export function readReceipt(raw: unknown): Receipt | null {
   if (!isISODate(r.purchasedOn)) return null;
   if (r.windowStartsOn !== undefined && !isISODate(r.windowStartsOn)) return null;
   if (r.arrivedOn !== undefined && !isISODate(r.arrivedOn)) return null;
-  if (
-    typeof r.windowDays !== 'number' ||
-    !Number.isInteger(r.windowDays) ||
-    r.windowDays < 1 ||
-    r.windowDays > MAX_WINDOW_DAYS
-  ) {
-    return null;
-  }
+  if (typeof r.windowDays !== 'number' || !Number.isInteger(r.windowDays) || r.windowDays < 1) return null;
+  if (fromOutside && r.windowDays > MAX_WINDOW_DAYS) return null;
   // Amounts are integer pence everywhere; a float here means a file written by
   // something that did not understand that, and rounding it silently would
   // change what the app tells someone they are owed.
-  if (
-    typeof r.amount !== 'number' ||
-    !Number.isInteger(r.amount) ||
-    r.amount < 0 ||
-    r.amount > MAX_AMOUNT_PENCE
-  ) {
-    return null;
-  }
+  if (typeof r.amount !== 'number' || !Number.isInteger(r.amount) || r.amount < 0) return null;
+  if (fromOutside && r.amount > MAX_AMOUNT_PENCE) return null;
   const distance = readDistance(r);
   if (distance === null) return null;
   if (!STATUSES.includes(r.status as ReceiptStatus)) return null;
@@ -141,8 +145,8 @@ export function readReceipt(raw: unknown): Receipt | null {
     // and rows saved before the add and edit screens agreed about this are
     // already sitting on people's devices. It only ever changes case and
     // spacing: a shop the table does not know is kept exactly as written.
-    store: canonicalStoreName(trim(r.store, MAX_STORE)),
-    item: trim(r.item, MAX_ITEM),
+    store: canonicalStoreName(fromOutside ? trim(r.store, MAX_STORE) : r.store),
+    item: fromOutside ? trim(r.item, MAX_ITEM) : r.item,
     // An unknown category is cosmetic — it picks a row icon — so it falls back
     // rather than costing the user a receipt.
     cat: CATEGORIES.includes(r.cat as Category) ? (r.cat as Category) : 'other',
@@ -157,7 +161,7 @@ export function readReceipt(raw: unknown): Receipt | null {
       const warranty = readWarranty(r.warranty);
       return warranty ? { warranty } : {};
     })(),
-    ...(isStr(r.gotcha) ? { gotcha: trim(r.gotcha, MAX_NOTE) } : {}),
+    ...(isStr(r.gotcha) ? { gotcha: fromOutside ? trim(r.gotcha, MAX_NOTE) : r.gotcha } : {}),
     status: r.status as ReceiptStatus,
     ...(r.returnedOn !== undefined ? { returnedOn: r.returnedOn as string } : {}),
     // Carried through the round trip, because it decides whether the receipt
@@ -183,7 +187,7 @@ export function parseBackup(text: string): ImportOutcome {
   const receipts: Receipt[] = [];
   let skipped = 0;
   for (const raw of d.receipts) {
-    const r = readReceipt(raw);
+    const r = readReceipt(raw, true);
     if (r) receipts.push(r);
     else skipped += 1;
   }
