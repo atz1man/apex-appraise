@@ -509,6 +509,17 @@ deliberate departure, not an oversight:
   dropped, deliberately: "your window is the shorter one" is written for a
   reader of the news and is false of a receipt already held, which keeps the
   window it was bought under.
+- **The shop window quoted the feed from memory.** The landing page's three
+  policy-change cards were hand-typed strings beside a `seedUpdates` that
+  already carried the same changes and is already held to
+  `public/policy-feed.json` entry for entry. They had drifted: the page said
+  Zara's "free ONLINE returns ended" where the feed says POSTAL — different
+  things, and the difference is whether you can still walk it into a shop for
+  nothing. The Zara card also still promised "your deadlines: unchanged,
+  already checked", a sentence the app stopped saying when the unchanged case
+  started passing on the advice that came with the change. The cards are
+  derived now, newest three, with relative dates — the same argument as the
+  store windows below, one file further along.
 - **A warranty is a clock, not a sentence.** The landing page promises
   "warranty clocks added to your receipts automatically", and a warranty was a
   free-text string that could not answer the question that promise implies —
@@ -667,7 +678,16 @@ suite had never opened. A price that says one thing where someone bought and
 another inside the product is not a cosmetic drift. `lib/pricing.ts` is the
 one source now, and the suite reads both surfaces and requires them to match.
 
-Three things about it are deliberate. It reads named elements rather than
+It also holds the two entry points to one tagline. That line was three
+literals — the landing hero, the landing footer, the line under Settings —
+and the words in it, "WORK HARD · PLAY HARD", were the only thing on the page
+saying nothing about returns, money or privacy, in the most prominent
+typographic slot the hero has. `lib/brand.ts` owns it now, the sweep reads the
+export out of the source rather than pinning the wording (a fourth copy would
+be the same bug again), and compares by containment, since Settings sets it
+mid-sentence and the hero sets it in caps alone.
+
+Four things about it are deliberate. It reads named elements rather than
 regexing `textContent`: the first version did the latter and reported three
 disagreements that were all its own, because "£89.00" followed by "2 days"
 reads as "89.002 days" and a greedy `\d+` takes `002`. And the edit-form check

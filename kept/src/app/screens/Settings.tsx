@@ -4,6 +4,7 @@ import { fmtDateLong, fromISODate } from '../../lib/dates';
 import { mergeBackup, parseBackup } from '../../lib/backup';
 import { notifyState, requestNotifyPermission, type NotifyState } from '../notify';
 import type { Receipt } from '../../lib/types';
+import { TAGLINE } from '../../lib/brand';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { STORE_COUNT, TABLE_CHECKED_ON } from '../../lib/stores';
 import { URGENT_DAYS_MAX, URGENT_DAYS_MIN, type Settings as SettingsShape } from '../../lib/storage';
@@ -307,7 +308,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
       </section>
 
       <p style={{ fontSize: 11, color: color.muted, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
-        kept · work hard, play hard — get your money back
+        kept · {TAGLINE} — get your money back
         <br />
         {LEGAL_DISCLAIMER}
       </p>

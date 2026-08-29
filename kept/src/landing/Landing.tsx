@@ -3,6 +3,9 @@ import { Logo, Wordmark } from '../app/components/Icons';
 import { TIERS as PRICING_TIERS, type Period } from '../lib/pricing';
 import { FREE_TIER_LIMIT } from '../lib/quota';
 import { STORE_COUNT, findStore } from '../lib/stores';
+import { TAGLINE, TAGLINE_CAPS } from '../lib/brand';
+import { seedUpdates } from '../lib/seed';
+import { fromISODate, relativeAgo } from '../lib/dates';
 import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
 import { Card, Eyebrow, OpenAppButton, SectionTitle, WRAP } from './sections/primitives';
@@ -21,11 +24,31 @@ const PROBLEMS = [
   { art: <FinePrintArt />, title: 'Nobody reads clause 14b', body: '“30 days from dispatch, unworn, tags attached, exclusions apply.” Kept reads it so you never have to.' },
 ];
 
-const UPDATES = [
-  { store: 'Zara', when: 'updated 2d ago', text: 'Free online returns ended — £1.95 unless you drop off in store. Your deadlines: unchanged, already checked.', emphasised: true },
-  { store: 'ASOS', when: 'updated 1w ago', text: 'New 28-day window for “frequent returners”. ASOS decides who counts, so Kept assumes the shorter one.', emphasised: false },
-  { store: 'Apple', when: 'updated 3w ago', text: '14-day window confirmed for the iPhone 18 line. Put the warranty length on a receipt and Kept counts that down too.', emphasised: false },
-];
+/**
+ * The policy changes this page shows are the app's own, not a fourth copy.
+ *
+ * They were three hand-typed strings, and they had already drifted from the
+ * feed they were quoting: the shop window said Zara's "free ONLINE returns
+ * ended" where the feed says POSTAL — different things, and the difference is
+ * whether you can still walk it into a shop for nothing. The Zara card also
+ * still promised "your deadlines: unchanged, already checked", which is a
+ * sentence the app stopped saying when the unchanged case started passing on
+ * the advice that came with the change.
+ *
+ * `seedUpdates` is the bundled fallback, already held to
+ * `public/policy-feed.json` entry for entry by feed-agreement.test.ts, so
+ * reading it here puts this page inside that guarantee — the same argument as
+ * `days()` below, one file further along. Newest three, and the dates are
+ * relative, so the shop window never shows a change dated last spring.
+ */
+const UPDATES = seedUpdates(new Date())
+  .slice(0, 3)
+  .map((u, i) => ({
+    store: u.store,
+    when: `updated ${relativeAgo(fromISODate(u.changedOn), new Date())}`,
+    text: u.text,
+    emphasised: i === 0,
+  }));
 
 /**
  * The three windows this page names are the table's, not a second copy of it.
@@ -102,8 +125,10 @@ export function Landing() {
               No account needed.
             </div>
           </div>
+          {/* One source with the footer below and with Settings — see
+              lib/brand.ts for what it used to say and why it does not. */}
           <div style={{ marginTop: 22, fontFamily: "'Space Grotesk', monospace", fontSize: 13, fontWeight: 600, letterSpacing: '1.5px', color: color.amber }}>
-            WORK HARD · PLAY HARD
+            {TAGLINE_CAPS}
           </div>
         </div>
 
@@ -301,7 +326,7 @@ export function Landing() {
             <Logo size={20} />
             <Wordmark size={16} />
           </div>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontWeight: 600, color: color.amber }}>work hard · play hard</div>
+          <div style={{ fontFamily: "'Space Grotesk', monospace", fontWeight: 600, color: color.amber }}>{TAGLINE}</div>
           <div>
             local-first receipt &amp; return tracking · <a href="#how">how it works</a> · <a href="#pricing">pricing</a>
           </div>

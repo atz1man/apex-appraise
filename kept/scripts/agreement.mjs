@@ -16,6 +16,7 @@
  * this file's business.
  */
 import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
 
 const ORIGIN = process.env.KEPT_ORIGIN ?? 'http://localhost:5183';
 const EXEC = process.env.CHROMIUM_PATH;
@@ -234,7 +235,7 @@ const inApp = await page.evaluate(() => {
   const free = ([...document.querySelectorAll('span')]
     .map((s) => s.textContent ?? '')
     .find((t) => /of \d+ free receipts/.test(t)) ?? '').match(/of (\d+) free/)?.[1];
-  return { prices: tiers.map((t) => (t.match(/£[\d.]+/) ?? [])[0]).filter(Boolean), free };
+  return { prices: tiers.map((t) => (t.match(/£[\d.]+/) ?? [])[0]).filter(Boolean), free, text: document.body.innerText.toLowerCase() };
 });
 
 const landing = await ctx.newPage();
@@ -251,6 +252,7 @@ const onPage = await landing.evaluate(() => {
     prices: [...new Set(text.match(/£\d+\.\d{2}/g) ?? [])],
     free: (text.match(/first (\d+) receipts/) ?? [])[1],
     found: !!pricing,
+    text: document.body.innerText.toLowerCase(),
   };
 });
 await landing.close();
@@ -266,6 +268,30 @@ for (const [where, found] of [['Settings', inApp.prices], ['the pricing cards', 
   if (found.length !== 3) disagreements.push({ what: `three prices were not found in ${where}`, saw: found });
 }
 agree('the free tier’s size, in the marketing copy and on the meter', onPage.free, inApp.free);
+/*
+ * The tagline, against the one module that owns it.
+ *
+ * It was three literals — the landing hero, the landing footer, the line
+ * under Settings — so changing one left two others saying something else.
+ * Compared by CONTAINMENT rather than equality, because Settings sets it in
+ * the middle of a sentence and the hero sets it in caps on its own; the
+ * shared thing is the words, not the frame around them.
+ *
+ * Read out of the source, not hardcoded here: pinning the current wording in
+ * this file would just be a fourth copy, and a rename would then have to be
+ * made in four places or this would fail for no reason.
+ */
+const TAGLINE = (readFileSync(new URL('../src/lib/brand.ts', import.meta.url), 'utf8')
+  .match(/export const TAGLINE = '([^']+)'/) ?? [])[1];
+if (!TAGLINE) {
+  disagreements.push({ what: 'lib/brand.ts no longer exports a TAGLINE this check can read', saw: [] });
+} else {
+  for (const [where, text] of [['Settings', inApp.text], ['the landing page', onPage.text]]) {
+    if (!text.includes(TAGLINE.toLowerCase())) {
+      disagreements.push({ what: `${where} does not say the tagline lib/brand.ts owns`, saw: [TAGLINE, where] });
+    }
+  }
+}
 agree(
   'the prices, on the pricing cards and in Settings',
   [...inApp.prices].sort().join(' '),
