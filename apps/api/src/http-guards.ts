@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 import { prisma, principalFromAuthHeader, type Principal } from './context.js';
 import { assertTrialLive } from './trial.js';
+import { assertCanWrite } from './auth/roles.js';
 
 /**
  * The rules tRPC applies, for the routes that are not tRPC.
@@ -40,6 +41,8 @@ export class GuardError extends Error {
  * The equivalent of `internalProcedure` on a mutation:
  *   - a valid session token, honouring User.sessionsValidFrom
  *   - an internal principal, never an investor or buyer portal login
+ *   - a role that is allowed to write, so a view-only member cannot fill the
+ *     data room through a surface the role check never reached
  *   - a trial that has not lapsed
  *
  * `what` names the action for the trial check, in the same `namespace.action`
@@ -53,7 +56,8 @@ export async function internalWriter(
   const principal = await principalFromAuthHeader(db, req.headers.authorization);
   if (!principal) throw new GuardError(401, 'unauthorised');
   if (principal.principalType !== 'internal') throw new GuardError(403, 'internal access required');
-  // throws a TRPCError with the message a customer should read
+  // both of these throw a TRPCError carrying the message a customer should read
+  assertCanWrite(principal);
   await assertTrialLive(db, principal.orgId, what);
   return principal;
 }

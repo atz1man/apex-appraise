@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (642). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (653). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (82): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -75,6 +75,16 @@ the point, so read the failure rather than adding an exemption.
 - `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- `viewer-readonly` — every INTERNAL mutation refuses a VIEWER. The team screen has
+  always printed "View" for that role and nothing enforced it: 47 of 87 mutations were
+  reachable, including `appraisal.save`, `sales.deleteUnit` and
+  `integrations.saveCredentials`. The rule lives in `auth/roles.ts`, called from
+  `internalProcedure` AND `internalWriter()` — the upload routes are the third rule to
+  need that, so the test drives `internalWriter` directly with a signed token rather
+  than testing the predicate it happens to call. The sweep decides each procedure's tier
+  by CALLING it as anonymous and as a buyer, never by a list, so procedure 88 is covered;
+  and it classifies BEFORE asking the viewer, because the obvious order passes
+  vacuously the moment the fix lands (measured: internal=0, leaked=0, green).
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

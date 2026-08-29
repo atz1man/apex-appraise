@@ -80,7 +80,23 @@ export function ThemeToggle() {
 
 /** 56px sticky top bar: brand lockup → breadcrumb → global nav (internal) → status/actions. */
 export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode }) {
-  const internal = getPrincipal()?.principalType === 'internal';
+  const principal = getPrincipal();
+  const internal = principal?.principalType === 'internal';
+  /**
+   * A view-only member should learn that from the app, not from a refusal.
+   *
+   * The API now enforces what the team screen has always claimed — a VIEWER's
+   * permission is "View" — so every write is refused with a message naming the
+   * way out. Without this chip the first a member hears of it is an error toast
+   * on work they have already done, which reads as a broken app rather than as
+   * a permission.
+   *
+   * The chip only; the write controls themselves are still rendered. Hiding
+   * them is a real piece of work across dozens of screens and forty-five
+   * mutations, and is NOT done here — it is a follow-up. What is not acceptable
+   * is a member who cannot tell which of the two they are looking at.
+   */
+  const viewOnly = internal && principal?.role === 'VIEWER';
   return (
     <header
       className="sticky top-0 z-40 h-14 flex items-center gap-3 px-5"
@@ -117,6 +133,11 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
         </nav>
       )}
       <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+        {viewOnly && (
+          <span className="flex-none" title="Your account has view-only access to this workspace. An administrator can change your role under Settings → Team.">
+            <StatusChip status="neutral" label="View only" />
+          </span>
+        )}
         <ThemeToggle />
         {right}
       </div>
