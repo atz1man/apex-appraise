@@ -1,4 +1,4 @@
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { money, type Pence } from '../../lib/money';
 import { LogoChecked, LogoWatermark } from '../components/Icons';
 import { Pressable } from '../components/Pressable';
@@ -32,10 +32,10 @@ export function Celebrate({ amount, store, inTime, recovered, shared, line, onSh
         <div style={{ background: color.ink, color: color.cream, borderRadius: radius.heroLg, padding: '30px 26px', boxShadow: shadow.yellowXl, position: 'relative', overflow: 'hidden' }}>
           <LogoWatermark style={{ position: 'absolute', top: -28, right: -34, transform: 'rotate(12deg)', opacity: 0.14 }} />
           <LogoChecked />
-          <h1 tabIndex={-1} style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, letterSpacing: '2px', color: color.faint, fontWeight: 600, margin: '14px 0 0' }}>
+          <h1 tabIndex={-1} style={{ fontFamily: font.figures, fontSize: 12, letterSpacing: '2px', color: color.faint, fontWeight: 600, margin: '14px 0 0' }}>
             MONEY BACK
           </h1>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 56, fontWeight: 700, letterSpacing: '-2.5px', color: color.yellow, marginTop: 4 }}>
+          <div style={{ fontFamily: font.figures, fontSize: 56, fontWeight: 700, letterSpacing: '-2.5px', color: color.yellow, marginTop: 4 }}>
             {money(amount)}
           </div>
           <div style={{ fontSize: 15, color: color.onInkBody, marginTop: 8 }}>
@@ -43,11 +43,11 @@ export function Celebrate({ amount, store, inTime, recovered, shared, line, onSh
               ? `Recovered from ${store} before the window closed.`
               : `Recovered from ${store}, after the shop’s own window had closed.`}
           </div>
-          <div style={{ borderTop: `1.5px dashed ${color.onInkDash}`, marginTop: 20, paddingTop: 14, display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk', monospace", fontSize: 12.5 }}>
+          <div style={{ borderTop: `1.5px dashed ${color.onInkDash}`, marginTop: 20, paddingTop: 14, display: 'flex', justifyContent: 'space-between', fontFamily: font.figures, fontSize: 12.5 }}>
             <span style={{ color: color.faint }}>kept back so far</span>
             <span style={{ color: color.yellow, fontWeight: 600 }}>{money(recovered)}</span>
           </div>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 11, color: color.onInkFaint, marginTop: 14, textAlign: 'center', letterSpacing: '1px' }}>
+          <div style={{ fontFamily: font.figures, fontSize: 11, color: color.onInkFaint, marginTop: 14, textAlign: 'center', letterSpacing: '1px' }}>
             kept. — stop donating money to shops
           </div>
         </div>

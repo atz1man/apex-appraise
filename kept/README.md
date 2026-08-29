@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 503 unit tests over the decision logic
+npm test           # 506 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -29,7 +29,8 @@ npm run build && npx vite preview --port 5183 &
 npm run smoke      # 54 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
-npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
+npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
+                   #   and every screen again with the webfont blocked
 npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 npm run freshness  # starts and stops its OWN server — see below, no preview needed
@@ -416,6 +417,22 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **Nothing used the typeface tokens, and the fallback was three different
+  fonts.** `font` was exported from `tokens.ts` and used by no component:
+  forty-eight `font-family` literals were spelled out across fourteen files
+  instead, in three different stacks for Space Grotesk alone — 38 falling back
+  to `monospace`, 9 to `sans-serif`, and the unused token to a third thing.
+  That is not cosmetic on this app. The faces are self-hosted precisely so a
+  screen renders with no signal, which makes the FALLBACK a state it actually
+  ships in — and in it the same face fell back to a monospace in one element
+  and a proportional sans in the next, on one screen. Nobody had looked,
+  because nothing named it. Three roles now, one stack each, and `figures` is
+  a real distinction rather than a synonym: money and day counts want digits
+  that hold their column when the webfont is missing, and a heading does not.
+  `tokens.test.ts` refuses a typeface named outside the tokens and a stack
+  that does not end in a generic family; `npm run layout` sweeps every screen
+  with the webfont blocked, which is wider than Space Grotesk and therefore
+  the state where a row's chips stop fitting beside its shop name.
 - **A fourth onboarding slide would have been unreachable.** The reducer
   finished the flow at `obStep >= 2` — the last index, typed as a literal —
   while `ONBOARDING_STEPS` sat exported from the file that owns the slides and

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fmtDateNear } from '../../lib/dates';
 import { money, sumPence } from '../../lib/money';
 import { bucket, derive, timelineDots } from '../../lib/receipts';
@@ -92,7 +92,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
             style={{
               width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 999,
               border: `1.5px solid ${color.border}`, background: color.white,
-              fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+              fontFamily: font.ui, fontSize: 14.5, color: color.ink,
             }}
           />
         </div>
@@ -109,7 +109,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
         >
           <span className="k-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: color.ink, flexShrink: 0 }} />
           <span style={{ flex: 1, fontSize: 13, fontWeight: 700, lineHeight: 1.35, textAlign: 'left' }}>{policyAlert}</span>
-          <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 13, fontWeight: 700 }}>→</span>
+          <span style={{ fontFamily: font.figures, fontSize: 13, fontWeight: 700 }}>→</span>
         </Pressable>
       )}
 
@@ -117,7 +117,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
         <section className="k-fade" style={{ margin: '18px 2px 0' }} aria-label="Deadlines in the next 30 days">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: color.muted, letterSpacing: '0.5px' }}>
             <span>NEXT 30 DAYS</span>
-            <span style={{ fontFamily: "'Space Grotesk', monospace" }}>today → {fmtDate(addDays(today, 30))}</span>
+            <span style={{ fontFamily: font.figures }}>today → {fmtDate(addDays(today, 30))}</span>
           </div>
           <div style={{ position: 'relative', height: 22, marginTop: 8 }}>
             <div style={{ position: 'absolute', top: 10, left: 0, right: 0, height: 2, borderRadius: 2, background: color.rail }} />
@@ -140,7 +140,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
 
       {nothingMatched && (
         <div style={{ textAlign: 'center', padding: '40px 24px' }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px' }}>
+          <div style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px' }}>
             Nothing matches “{query.trim()}”
           </div>
           <div style={{ fontSize: 14, color: color.muted, lineHeight: 1.6, marginTop: 8 }}>
@@ -154,7 +154,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
           <div style={{ width: 64, height: 64, borderRadius: 20, background: color.yellowLight, border: `1.5px solid ${color.ink}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <Tick size={26} />
           </div>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px' }}>All squared away</div>
+          <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px' }}>All squared away</div>
           <div style={{ fontSize: 14, color: color.muted, lineHeight: 1.6, marginTop: 8 }}>
             Every return made it back in time. {money(keptBack)} recovered — not bad.
           </div>
@@ -219,7 +219,7 @@ export function Home({ receipts, today, urgentDays, policyAlert, changedStores, 
                     <div style={{ fontWeight: 700, fontSize: 15, textDecoration: 'line-through', color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.store}</div>
                     <div style={{ fontSize: 12, color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.item}</div>
                   </div>
-                  <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 15, fontWeight: 700, color: color.amber, flexShrink: 0 }}>{money(r.amount)}</div>
+                  <div style={{ fontFamily: font.figures, fontSize: 15, fontWeight: 700, color: color.amber, flexShrink: 0 }}>{money(r.amount)}</div>
                 </Pressable>
               </li>
             ))}
@@ -249,7 +249,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
       <LogoWatermark style={{ position: 'absolute', top: -28, right: -34, transform: 'rotate(12deg)', opacity: 0.14 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="k-pulse" style={{ width: 7, height: 7, borderRadius: 999, background: accent }} />
-        <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 11, letterSpacing: '2px', color: color.faint, fontWeight: 600 }}>
+        <span style={{ fontFamily: font.figures, fontSize: 11, letterSpacing: '2px', color: color.faint, fontWeight: 600 }}>
           NEXT WINDOW TO CLOSE
         </span>
       </div>
@@ -257,7 +257,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
           sentence wraps inside its own column rather than dropping below a
           44px number and leaving it stranded on a line of its own. */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 12 }}>
-        <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 44, fontWeight: 700, letterSpacing: '-1.8px', color: accent, lineHeight: 1, flexShrink: 0 }}>
+        <span style={{ fontFamily: font.figures, fontSize: 44, fontWeight: 700, letterSpacing: '-1.8px', color: accent, lineHeight: 1, flexShrink: 0 }}>
           {count}
         </span>
         <span style={{ fontSize: 15, fontWeight: 600, color: color.onInkBody }}>
@@ -270,7 +270,7 @@ function HeroCard({ receipt, today, stillReturnable, keptBack, onOpen }: {
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '11px 20px', background: color.yellow, color: color.ink, borderRadius: 999, fontWeight: 700, fontSize: 13.5 }}>
         See what to do <ArrowRight />
       </div>
-      <div style={{ borderTop: `1.5px dashed ${color.onInkDash}`, marginTop: 18, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 10, fontFamily: "'Space Grotesk', monospace", fontSize: 12.5 }}>
+      <div style={{ borderTop: `1.5px dashed ${color.onInkDash}`, marginTop: 18, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 10, fontFamily: font.figures, fontSize: 12.5 }}>
         <span style={{ color: color.faint }}>{stillReturnable} still returnable</span>
         <span style={{ color: color.yellow, fontWeight: 600 }}>{keptBack} kept back</span>
       </div>
@@ -282,7 +282,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div style={{ textAlign: 'center', padding: '44px 24px 30px' }}>
       <LogoDashed />
-      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px' }}>Nothing tracked yet</div>
+      <div style={{ fontFamily: font.display, fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px' }}>Nothing tracked yet</div>
       <div style={{ fontSize: 14, color: color.muted, lineHeight: 1.6, marginTop: 8 }}>
         Bought something this week? The return clock is already ticking. Add your first receipt and kept takes it from there.
       </div>

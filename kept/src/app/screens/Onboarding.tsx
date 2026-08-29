@@ -1,4 +1,4 @@
-import { color, shadow } from '../../tokens';
+import { color, font, shadow } from '../../tokens';
 import { Pressable } from '../components/Pressable';
 import { Logo, Wordmark } from '../components/Icons';
 
@@ -62,7 +62,7 @@ export function Onboarding({ step, onNext, onSkip }: Props) {
           <StepArt step={step} />
         </div>
 
-        <h1 tabIndex={-1} style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 700, lineHeight: 1.05, letterSpacing: '-1.2px', margin: 0 }}>
+        <h1 tabIndex={-1} style={{ fontFamily: font.display, fontSize: 30, fontWeight: 700, lineHeight: 1.05, letterSpacing: '-1.2px', margin: 0 }}>
           {current.title}
         </h1>
         <p style={{ fontSize: 15.5, lineHeight: 1.6, color: color.body, marginTop: 14, marginBottom: 0 }}>{current.body}</p>

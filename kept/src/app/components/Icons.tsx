@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { color } from '../../tokens';
+import { color, font } from '../../tokens';
 import type { Category } from '../../lib/types';
 
 /** The receipt mark: rounded top, torn zigzag bottom. The brand's whole logo. */
@@ -59,7 +59,7 @@ export function Wordmark({ size = 24 }: { size?: number }) {
     // instead of carrying a hand-kept allowlist that would rot.
     <span
       data-logotype
-      style={{ fontFamily: "'Space Grotesk', monospace", fontSize: size, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}
+      style={{ fontFamily: font.figures, fontSize: size, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}
     >
       kept<span style={{ color: color.yellow }}>.</span>
     </span>

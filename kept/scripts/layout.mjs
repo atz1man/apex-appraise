@@ -185,8 +185,18 @@ async function checkOverflow(page, label, width) {
   }
 }
 
-async function sweep(width, seedState, label, steps) {
+async function sweep(width, seedState, label, steps, { blockFonts = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height: 844 } });
+  /*
+   * The state a cold cache paints.
+   *
+   * The typefaces are self-hosted precisely so the app renders with no
+   * signal — which makes the FALLBACK a real state this app ships in, and
+   * nothing had ever looked at it. It is wider than Space Grotesk, so it is
+   * the state where a row's chips stop fitting beside its shop name and where
+   * a hero wraps a line it did not before.
+   */
+  if (blockFonts) await ctx.route('**/fonts/*.woff2', (r) => r.abort());
   const page = await ctx.newPage();
   page.on('pageerror', (e) => failures.push({ label, width, kind: 'pageerror', detail: e.message }));
   await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
@@ -248,6 +258,7 @@ for (const width of WIDTHS) {
   await sweep(width, seedAdversarial(ADVERSARIAL), 'long content', screens);
   await sweep(width, wipeTo('none'), 'no receipts', [['home', async () => {}], ['add', async (p) => { await p.getByRole('button', { name: 'Add a receipt' }).click(); }]]);
   await sweep(width, wipeTo('returned'), 'all returned', [['home', async () => {}]]);
+  await sweep(width, null, 'webfont blocked', screens, { blockFonts: true });
 }
 
 // The landing page has to survive the same phone.

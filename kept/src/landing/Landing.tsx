@@ -1,4 +1,4 @@
-import { color } from '../tokens';
+import { color, font } from '../tokens';
 import { Logo, Wordmark } from '../app/components/Icons';
 import { TIERS as PRICING_TIERS, type Period } from '../lib/pricing';
 import { FREE_TIER_LIMIT } from '../lib/quota';
@@ -120,7 +120,7 @@ export function Landing() {
             <span style={{ width: 8, height: 8, borderRadius: 999, background: color.yellow, flexShrink: 0 }} />
             NO ACCOUNT · NO CLOUD · NO ONE SEES YOUR RECEIPTS
           </div>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(40px, 6vw, 64px)', fontWeight: 700, lineHeight: 1.02, letterSpacing: '-0.04em', margin: 0 }}>
+          <h1 style={{ fontFamily: font.display, fontSize: 'clamp(40px, 6vw, 64px)', fontWeight: 700, lineHeight: 1.02, letterSpacing: '-0.04em', margin: 0 }}>
             Stop <span style={{ background: `linear-gradient(transparent 62%, ${color.yellowLight} 62%)` }}>donating money</span> to shops.
           </h1>
           <p style={{ fontSize: 17.5, lineHeight: 1.6, color: color.body, maxWidth: 520, margin: '24px 0 0' }}>
@@ -136,7 +136,7 @@ export function Landing() {
           </div>
           {/* One source with the footer below and with Settings — see
               lib/brand.ts for what it used to say and why it does not. */}
-          <div style={{ marginTop: 22, fontFamily: "'Space Grotesk', monospace", fontSize: 13, fontWeight: 600, letterSpacing: '1.5px', color: color.amber }}>
+          <div style={{ marginTop: 22, fontFamily: font.figures, fontSize: 13, fontWeight: 600, letterSpacing: '1.5px', color: color.amber }}>
             {TAGLINE_CAPS}
           </div>
         </div>
@@ -144,7 +144,7 @@ export function Landing() {
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 10 }}>
             <span className="k-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: color.yellow }} />
-            <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '1.5px', color: color.muted }}>
+            <span style={{ fontFamily: font.figures, fontSize: 12, fontWeight: 700, letterSpacing: '1.5px', color: color.muted }}>
               LIVE DEMO — GO ON, TAP IT
             </span>
           </div>
@@ -166,7 +166,7 @@ export function Landing() {
 
       {/* Ticker */}
       <div style={{ background: color.ink, padding: '14px 0', overflow: 'hidden', whiteSpace: 'nowrap' }} aria-hidden="true">
-        <div className="k-ticker" style={{ display: 'inline-flex', gap: 48, fontFamily: "'Space Grotesk', monospace", fontSize: 13, fontWeight: 600, color: color.yellow }}>
+        <div className="k-ticker" style={{ display: 'inline-flex', gap: 48, fontFamily: font.figures, fontSize: 13, fontWeight: 600, color: color.yellow }}>
           {[...TICKER, ...TICKER].map((line, i) => (
             <span key={i} style={{ display: 'inline-flex', gap: 48 }}>
               <span>{line}</span>
@@ -221,7 +221,7 @@ export function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 18, textAlign: 'center', marginBottom: SOCIAL_PROOF_IS_PLACEHOLDER ? 20 : 56 }}>
             {STATS.map((s) => (
               <div key={s.label}>
-                <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 'clamp(34px, 4vw, 46px)', fontWeight: 700, letterSpacing: '-2px', color: color.amber }}>{s.value}</div>
+                <div style={{ fontFamily: font.figures, fontSize: 'clamp(34px, 4vw, 46px)', fontWeight: 700, letterSpacing: '-2px', color: color.amber }}>{s.value}</div>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: color.muted, marginTop: 4 }}>{s.label}</div>
               </div>
             ))}
@@ -270,7 +270,7 @@ export function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 1, background: color.onInkBorder, border: `1px solid ${color.onInkBorder}`, borderRadius: 20, overflow: 'hidden', marginTop: 44 }}>
             {WHY.map((w) => (
               <div key={w.n} style={{ background: color.ink, padding: '30px 28px' }}>
-                <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 22, color: color.yellow }}>{w.n}</div>
+                <div style={{ fontFamily: font.figures, fontSize: 22, color: color.yellow }}>{w.n}</div>
                 <div style={{ fontWeight: 700, fontSize: 17, marginTop: 14 }}>{w.title}</div>
                 <div style={{ fontSize: 14, lineHeight: 1.6, color: color.fainter, marginTop: 8 }}>{w.body}</div>
               </div>
@@ -283,7 +283,7 @@ export function Landing() {
       <section id="pricing" style={{ ...WRAP, padding: '80px 28px' }}>
         <div style={{ textAlign: 'center' }}>
           <Eyebrow>PRICING</Eyebrow>
-          <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(30px, 4vw, 40px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '14px 0 0' }}>
+          <h2 style={{ fontFamily: font.display, fontSize: 'clamp(30px, 4vw, 40px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '14px 0 0' }}>
             Free for your first {FREE_TIER_LIMIT} receipts.
           </h2>
           <p style={{ fontSize: 16, color: color.muted, margin: '12px 0 0' }}>Pro when it’s earning its keep.</p>
@@ -296,7 +296,7 @@ export function Landing() {
                   BEST VALUE
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: color.fainter }}>{t.name}</div>
-                <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 36, fontWeight: 700, marginTop: 10, color: color.yellow }}>
+                <div style={{ fontFamily: font.figures, fontSize: 36, fontWeight: 700, marginTop: 10, color: color.yellow }}>
                   {t.price}
                   <span style={{ fontSize: 15, color: color.fainter, fontWeight: 500 }}>{t.suffix}</span>
                 </div>
@@ -309,7 +309,7 @@ export function Landing() {
             ) : (
               <div key={t.name} style={{ background: color.white, border: `1.5px solid ${color.borderSoft}`, borderRadius: 22, padding: '30px 26px' }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: color.muted }}>{t.name}</div>
-                <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 36, fontWeight: 700, marginTop: 10 }}>
+                <div style={{ fontFamily: font.figures, fontSize: 36, fontWeight: 700, marginTop: 10 }}>
                   {t.price}
                   <span style={{ fontSize: 15, color: color.muted, fontWeight: 500 }}>{t.suffix}</span>
                 </div>
@@ -335,7 +335,7 @@ export function Landing() {
             <Logo size={20} />
             <Wordmark size={16} />
           </div>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontWeight: 600, color: color.amber }}>{TAGLINE}</div>
+          <div style={{ fontFamily: font.figures, fontWeight: 600, color: color.amber }}>{TAGLINE}</div>
           <div>
             local-first receipt &amp; return tracking · <a href="#how">how it works</a> · <a href="#pricing">pricing</a>
           </div>

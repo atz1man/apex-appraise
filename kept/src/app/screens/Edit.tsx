@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { applyDraft, countsFromDispatch, draftFrom, effectiveWindowStart, validateDraft, type DraftErrors, type ReceiptDraft } from '../../lib/draft';
 import { addDays, addMonths, fmtDateLong, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { STORE_POLICIES } from '../../lib/stores';
@@ -148,7 +148,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
               value={draft.amountText}
               placeholder="24.99"
               onChange={(e) => set('amountText', e.target.value)}
-              style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
             />
           )}
         </Field>
@@ -161,7 +161,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
               value={draft.purchasedOn}
               max={toISODate(today)}
               onChange={(e) => set('purchasedOn', e.target.value)}
-              style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
             />
           )}
         </Field>
@@ -188,7 +188,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
                 value={draft.arrivedOnText}
                 max={toISODate(today)}
                 onChange={(e) => set('arrivedOnText', e.target.value)}
-                style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+                style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
               />
             )}
           </Field>
@@ -216,7 +216,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
                 value={draft.dispatchedOnText}
                 max={toISODate(today)}
                 onChange={(e) => set('dispatchedOnText', e.target.value)}
-                style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+                style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
               />
             )}
           </Field>
@@ -234,7 +234,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
               inputMode="numeric"
               value={draft.windowDaysText}
               onChange={(e) => set('windowDaysText', e.target.value)}
-              style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
             />
           )}
         </Field>
@@ -252,7 +252,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
               value={draft.warrantyMonthsText}
               placeholder="24"
               onChange={(e) => set('warrantyMonthsText', e.target.value)}
-              style={{ ...inputStyle(p['aria-invalid']), fontFamily: "'Space Grotesk', monospace" }}
+              style={{ ...inputStyle(p['aria-invalid']), fontFamily: font.figures }}
             />
           )}
         </Field>

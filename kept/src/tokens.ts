@@ -55,8 +55,30 @@ export const color = {
   rail: 'rgba(23,20,16,0.14)',
 } as const;
 
+/**
+ * The three type roles, each with ONE fallback stack.
+ *
+ * These tokens existed and nothing used them: forty-eight font-family
+ * literals were spelled out across fourteen files instead, in three different
+ * stacks for Space Grotesk alone — 38 falling back to `monospace`, 9 to
+ * `sans-serif`, and the token here to a third thing.
+ *
+ * That is not cosmetic on this app. The typefaces are self-hosted so a signed
+ * screen renders offline, which means the FALLBACK is the state a phone with
+ * a cold cache actually paints — and in it, the same face fell back to a
+ * monospace in one element and a proportional sans in the next, on one
+ * screen. Nobody had looked at that state, because nothing named it.
+ *
+ * `figures` is a real distinction and not a synonym for `display`: money,
+ * countdowns and dates want digits that hold their column when the webfont is
+ * missing, and a heading does not.
+ */
 export const font = {
-  display: "'Space Grotesk', ui-monospace, monospace",
+  /** Headings and the wordmark. */
+  display: "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
+  /** Money, day counts, dates — anything whose digits should stay aligned. */
+  figures: "'Space Grotesk', ui-monospace, SFMono-Regular, monospace",
+  /** Body text and controls. */
   ui: "'Instrument Sans', system-ui, -apple-system, sans-serif",
 } as const;
 

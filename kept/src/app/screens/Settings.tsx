@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { color, radius } from '../../tokens';
+import { color, font, radius } from '../../tokens';
 import { fmtDateLong, fromISODate } from '../../lib/dates';
 import { mergeBackup, parseBackup } from '../../lib/backup';
 import { notifyState, requestNotifyPermission, type NotifyState } from '../notify';
@@ -151,7 +151,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
         <section style={{ background: color.ink, color: color.cream, borderRadius: radius.cardLg, padding: 18, marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 15 }}>Free plan</span>
-            <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, color: color.faint }}>
+            <span style={{ fontFamily: font.figures, fontSize: 12, color: color.faint }}>
               {used} of {FREE_TIER_LIMIT} free receipts
             </span>
           </div>
@@ -185,7 +185,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
         <section style={{ background: color.ink, color: color.cream, borderRadius: radius.cardLg, padding: 18, marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 15 }}>Unlocked</span>
-            <span style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, color: color.faint }}>
+            <span style={{ fontFamily: font.figures, fontSize: 12, color: color.faint }}>
               {used} receipts · no limit
             </span>
           </div>
@@ -306,7 +306,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
             onChange={(e) => onChange({ urgentDays: Number(e.target.value) })}
             style={{ flex: 1, accentColor: color.yellow }}
           />
-          <span style={{ fontFamily: "'Space Grotesk', monospace", fontWeight: 700, fontSize: 14, minWidth: 56, textAlign: 'right' }}>
+          <span style={{ fontFamily: font.figures, fontWeight: 700, fontSize: 14, minWidth: 56, textAlign: 'right' }}>
             {settings.urgentDays} days
           </span>
         </div>
@@ -336,7 +336,7 @@ function Tier({ price, period, featured, onClick }: { price: string; period: str
           BEST VALUE
         </span>
       )}
-      <div style={{ fontFamily: "'Space Grotesk', monospace", fontWeight: 700, fontSize: 14, color: featured ? color.yellow : color.cream }}>{price}</div>
+      <div style={{ fontFamily: font.figures, fontWeight: 700, fontSize: 14, color: featured ? color.yellow : color.cream }}>{price}</div>
       <div style={{ fontSize: 11, color: color.faint, marginTop: 2 }}>{period}</div>
     </Pressable>
   );

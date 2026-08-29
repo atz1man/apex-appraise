@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { money } from '../../lib/money';
 import type { Receipt } from '../../lib/types';
 import type { Urgency } from '../../lib/urgency';
@@ -173,7 +173,7 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
         </div>
 
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 15, fontWeight: 700 }}>{money(receipt.amount)}</div>
+          <div style={{ fontFamily: font.figures, fontSize: 15, fontWeight: 700 }}>{money(receipt.amount)}</div>
           <div style={{ display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: urgency.bg, color: urgency.fg }}>
             {urgency.label}
           </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { fmtDateLong, fmtDatesTogether, fromISODate } from '../../lib/dates';
 import { legalRights } from '../../lib/legal';
 import { money } from '../../lib/money';
@@ -88,7 +88,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
             <h1 tabIndex={-1} style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>{receipt.store}</h1>
             <div style={{ fontSize: 13, color: color.faint, marginTop: 3 }}>{receipt.item}</div>
           </div>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 26, fontWeight: 700, color: color.yellow }}>
+          <div style={{ fontFamily: font.figures, fontSize: 26, fontWeight: 700, color: color.yellow }}>
             {money(receipt.amount)}
           </div>
         </div>
@@ -103,7 +103,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
               />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: d.expired ? 15 : 22, fontWeight: 700, lineHeight: 1 }}>
+              <div style={{ fontFamily: font.figures, fontSize: d.expired ? 15 : 22, fontWeight: 700, lineHeight: 1 }}>
                 {d.expired ? 'closed' : d.daysLeft}
               </div>
               {!d.expired && <div style={{ fontSize: 10, color: color.faint, marginTop: 2 }}>days left</div>}
@@ -113,7 +113,7 @@ export function Detail({ receipt, today, urgentDays, onBack, onEdit, onReturn, o
             <div style={{ fontSize: 11, letterSpacing: '1.6px', color: color.faint, fontWeight: 600 }}>
               {d.expired ? 'WINDOW CLOSED' : 'RETURN BY'}
             </div>
-            <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 24, fontWeight: 700, marginTop: 4 }}>
+            <div style={{ fontFamily: font.figures, fontSize: 24, fontWeight: 700, marginTop: 4 }}>
               {deadlineText}
             </div>
             <div style={{ fontSize: 12, color: color.faint, marginTop: 6 }}>

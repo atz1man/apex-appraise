@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { addDays, fmtDate, fmtDateNear, fromISODate, toISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
@@ -179,7 +179,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
         style={{
           width: '100%', boxSizing: 'border-box', height: 120, border: '1.5px dashed rgba(23,20,16,0.3)',
           borderRadius: radius.card, background: color.white, padding: 14,
-          fontFamily: "'Space Grotesk', monospace", fontSize: 13, color: color.ink, resize: 'none',
+          fontFamily: font.figures, fontSize: 13, color: color.ink, resize: 'none',
         }}
       />
 
@@ -219,7 +219,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
 
       {parsed && (
         <div className="k-fade" style={{ background: color.white, border: `1.5px solid ${color.ink}`, borderRadius: radius.cardLg, padding: 18, marginTop: 16, boxShadow: shadow.hard }}>
-          <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 11, letterSpacing: '1.6px', color: color.amber, fontWeight: 700 }}>
+          <div style={{ fontFamily: font.figures, fontSize: 11, letterSpacing: '1.6px', color: color.amber, fontWeight: 700 }}>
             FOUND IN YOUR PASTE
           </div>
           <div style={{ marginTop: 12 }}>
@@ -234,7 +234,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
                 border: `1.5px solid ${color.border}`, background: color.white,
-                fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+                fontFamily: font.ui, fontSize: 14.5, color: color.ink,
               }}
             />
           </div>
@@ -251,7 +251,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
                   border: `1.5px solid ${color.border}`, background: color.white,
-                  fontFamily: "'Instrument Sans', system-ui, sans-serif", fontSize: 14.5, color: color.ink,
+                  fontFamily: font.ui, fontSize: 14.5, color: color.ink,
                 }}
               />
               <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
@@ -286,7 +286,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 14,
                   border: `1.5px solid ${arrivalError ? color.danger : color.border}`, background: color.white,
-                  fontFamily: "'Space Grotesk', monospace", fontSize: 14.5, color: color.ink,
+                  fontFamily: font.figures, fontSize: 14.5, color: color.ink,
                 }}
               />
               {arrivalError ? (
@@ -373,7 +373,7 @@ function Row({ label, value, mono, accent }: { label: string; value: string; mon
       <span
         style={{
           fontWeight: 700, fontSize: 14, textAlign: 'right',
-          fontFamily: mono ? "'Space Grotesk', monospace" : undefined,
+          fontFamily: mono ? font.figures : undefined,
           color: accent ? color.amber : undefined,
         }}
       >

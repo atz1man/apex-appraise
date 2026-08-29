@@ -1,12 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { color } from '../../tokens';
+import { color, font } from '../../tokens';
 import { LogoMark } from '../../app/components/Icons';
 
 export const WRAP: CSSProperties = { maxWidth: 1160, margin: '0 auto', padding: '0 28px' };
 
 export function Eyebrow({ children, onInk }: { children: ReactNode; onInk?: boolean }) {
   return (
-    <div style={{ fontFamily: "'Space Grotesk', monospace", fontSize: 12, letterSpacing: '2.5px', color: onInk ? color.yellow : color.amber, fontWeight: 600 }}>
+    <div style={{ fontFamily: font.figures, fontSize: 12, letterSpacing: '2.5px', color: onInk ? color.yellow : color.amber, fontWeight: 600 }}>
       {children}
     </div>
   );
@@ -14,7 +14,7 @@ export function Eyebrow({ children, onInk }: { children: ReactNode; onInk?: bool
 
 export function SectionTitle({ children, maxWidth = 620 }: { children: ReactNode; maxWidth?: number }) {
   return (
-    <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(30px, 4vw, 40px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '14px 0 0', maxWidth, lineHeight: 1.1 }}>
+    <h2 style={{ fontFamily: font.display, fontSize: 'clamp(30px, 4vw, 40px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '14px 0 0', maxWidth, lineHeight: 1.1 }}>
       {children}
     </h2>
   );

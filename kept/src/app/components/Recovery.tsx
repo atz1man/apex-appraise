@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { color, radius } from '../../tokens';
+import { color, font, radius } from '../../tokens';
 import { rescueBackup } from '../../lib/storage';
 
 /**
@@ -63,10 +63,10 @@ export class Recovery extends Component<{ children: ReactNode }, State> {
         style={{
           minHeight: '100dvh', display: 'flex', flexDirection: 'column', justifyContent: 'center',
           gap: 14, padding: '28px 22px', background: color.cream, color: color.ink,
-          fontFamily: "'Instrument Sans', system-ui, sans-serif",
+          fontFamily: font.ui,
         }}
       >
-        <h1 tabIndex={-1} style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 26, fontWeight: 700, margin: 0 }}>
+        <h1 tabIndex={-1} style={{ fontFamily: font.display, fontSize: 26, fontWeight: 700, margin: 0 }}>
           Something in kept broke
         </h1>
         <p style={{ fontSize: 14.5, lineHeight: 1.55, color: color.body, margin: 0 }}>

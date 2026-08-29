@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { color, radius, shadow } from '../../tokens';
+import { color, font, radius, shadow } from '../../tokens';
 import { TIERS, type Period } from '../../lib/pricing';
 import { Pressable } from './Pressable';
 
@@ -54,7 +54,7 @@ export function UpgradeNotice({ period, onUnlock, onCancel }: { period: Period; 
           marginBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <h2 id="upg-title" style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
+        <h2 id="upg-title" style={{ fontFamily: font.display, fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
           Nothing has been charged
         </h2>
         <p style={{ fontSize: 14, color: color.body, lineHeight: 1.6, margin: '10px 0 0' }}>

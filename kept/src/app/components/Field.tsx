@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { color, radius } from '../../tokens';
+import { color, font, radius } from '../../tokens';
 
 /**
  * One labelled form row. The error is wired to the input through
@@ -44,7 +44,7 @@ export function inputStyle(invalid: boolean) {
     borderRadius: radius.card,
     border: `1.5px solid ${invalid ? color.danger : color.border}`,
     background: color.white,
-    fontFamily: "'Instrument Sans', system-ui, sans-serif",
+    fontFamily: font.ui,
     fontSize: 15,
     color: color.ink,
   };
