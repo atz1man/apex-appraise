@@ -380,6 +380,13 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **The first screen of a new install promised a feature that is not built.**
+  Onboarding said "Paste an order email or snap the paper slip" — scanning is
+  deferred, the add screen shows it as a visibly disabled SOON button, and the
+  landing page says outright that it "lands in a later release". This was the
+  one surface promising it. The same screen's second step said "You get pinged
+  before either runs out", when alerts are computed on opening kept and a web
+  app cannot wake itself, which `notify.ts` and the Settings screen both say.
 - **The landing page had no way into the app.** Its call to action was an App
   Store badge with `href="#"` — promising an iOS app that does not exist, and
   pointing at nothing — while the nav button beside it went to the pricing

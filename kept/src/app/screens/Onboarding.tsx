@@ -2,14 +2,27 @@ import { color, shadow } from '../../tokens';
 import { Pressable } from '../components/Pressable';
 import { Logo, Wordmark } from '../components/Icons';
 
+/*
+ * The first thing anyone reads, so it had better be true — and two of these
+ * three were not.
+ *
+ * "or snap the paper slip": scanning is not built. The add screen is honest
+ * about it (a visibly disabled button with a SOON chip) and so is the landing
+ * page ("scanning a paper receipt lands in a later release"); this was the one
+ * surface promising it outright, on the first screen of a new install.
+ *
+ * "You get pinged before either runs out": alerts are computed when kept is
+ * opened or brought back to the foreground. A web app cannot wake itself —
+ * notify.ts says so, and the Settings screen says so. This said otherwise.
+ */
 const STEPS = [
   {
     title: 'Every receipt, remembered.',
-    body: 'Paste an order email or snap the paper slip. Kept reads the store, the total and the date — and starts the clock for you.',
+    body: 'Paste an order email and Kept reads the store, the total and the date — then starts the clock for you.',
   },
   {
     title: 'Two clocks. We watch both.',
-    body: 'The shop’s return window and your legal rights under the Consumer Rights Act. You get pinged before either runs out.',
+    body: 'The shop’s return window, and the statutory one running beside it. Kept counts both down and tells you which closes first, every time you open it.',
   },
   {
     title: 'Your receipts stay yours.',
