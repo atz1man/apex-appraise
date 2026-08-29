@@ -36,11 +36,10 @@ export const REVIEWS = [
   },
 ] as const;
 
-/** The scrolling headline bar. These restate published retailer policies. */
-export const TICKER_LINES = [
-  'ZARA changed its returns policy 2 days ago — kept already updated',
-  'ASOS: 28-day window for frequent returners',
-  'IKEA: 365 days, still unbeaten',
-  'APPLE: 14-day window confirmed for iPhone 18',
-  'UNIQLO: online orders can’t be refunded in store',
-] as const;
+/*
+ * The scrolling headline bar used to live here, exempted from the warning
+ * above on the grounds that it "restates published retailer policies". That
+ * was the reason to move it out, not to keep it: a restatement is true only
+ * while it matches what it restates, and nothing held these five strings to
+ * `stores.ts` or to the feed. See `ticker.ts`, where they are computed.
+ */

@@ -6,7 +6,8 @@ import { STORE_COUNT, findStore } from '../lib/stores';
 import { TAGLINE, TAGLINE_CAPS } from '../lib/brand';
 import { seedUpdates } from '../lib/seed';
 import { fromISODate, relativeAgo } from '../lib/dates';
-import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
+import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS } from './placeholder-content';
+import { tickerLines } from './ticker';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
 import { Card, Eyebrow, OpenAppButton, SectionTitle, WRAP } from './sections/primitives';
 
@@ -41,6 +42,8 @@ const PROBLEMS = [
  * `days()` below, one file further along. Newest three, and the dates are
  * relative, so the shop window never shows a change dated last spring.
  */
+const TICKER = tickerLines(new Date());
+
 const UPDATES = seedUpdates(new Date())
   .slice(0, 3)
   .map((u, i) => ({
@@ -158,7 +161,7 @@ export function Landing() {
       {/* Ticker */}
       <div style={{ background: color.ink, padding: '14px 0', overflow: 'hidden', whiteSpace: 'nowrap' }} aria-hidden="true">
         <div className="k-ticker" style={{ display: 'inline-flex', gap: 48, fontFamily: "'Space Grotesk', monospace", fontSize: 13, fontWeight: 600, color: color.yellow }}>
-          {[...TICKER_LINES, ...TICKER_LINES].map((line, i) => (
+          {[...TICKER, ...TICKER].map((line, i) => (
             <span key={i} style={{ display: 'inline-flex', gap: 48 }}>
               <span>{line}</span>
               <span style={{ color: color.onInkFaint }}>◆</span>

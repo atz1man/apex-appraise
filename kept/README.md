@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 457 unit tests over the decision logic
+npm test           # 463 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -509,6 +509,18 @@ deliberate departure, not an oversight:
   dropped, deliberately: "your window is the shorter one" is written for a
   reader of the news and is false of a receipt already held, which keeps the
   window it was bought under.
+- **The scrolling bar quoted the table from memory.** Five hand-typed lines
+  in `placeholder-content.ts` — the module whose header says "nothing here is
+  measured" — exempted from that warning on the grounds that they "restate
+  published retailer policies". That is the reason they did not belong there:
+  a restatement is true only while it matches what it restates, and nothing
+  held these to `stores.ts`. One was already off. "IKEA: 365 days, still
+  unbeaten" singles IKEA out, and Decathlon matches it at 365 in Kept's own
+  list. `ticker.ts` computes them now — the longest window whichever shop
+  holds it, worded so a tie is still true; ASOS's and Apple's numbers from the
+  table; the newest change and its date from the feed; and the Uniqlo gotcha
+  with its leading "Uniqlo" stripped, since the bar has already said it.
+  `ticker.test.ts` breaks each derivation separately.
 - **The shop window quoted the feed from memory.** The landing page's three
   policy-change cards were hand-typed strings beside a `seedUpdates` that
   already carried the same changes and is already held to
