@@ -497,9 +497,35 @@ results['a delivery date in the paste is read, not asked for'] =
 
 // The free tier is claimed on the pricing page, in Settings and on the Add
 // screen. Fill it and the Save must actually refuse.
+/*
+ * First: the five receipts a fresh install arrives with must not spend the
+ * allowance. Settings opened at "5 of 10 free receipts" before the person had
+ * added anything, and the wall came after five of their own — with a price on
+ * it. Read off the meter, because that is where somebody sees it.
+ *
+ * Its own context, because "a fresh install" is the whole claim and this page
+ * has by now added, edited and returned things.
+ */
+{
+  const freshCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(freshCtx);
+  const freshPage = await freshCtx.newPage();
+  await freshPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await freshPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await freshPage.waitForTimeout(300);
+  await freshPage.getByRole('button', { name: 'Settings', exact: true }).click();
+  await freshPage.waitForTimeout(400);
+  const meter = await freshPage.getByRole('progressbar').getAttribute('aria-valuenow');
+  const seededCount = await freshPage.evaluate(() =>
+    JSON.parse(localStorage.getItem('kept.v1')).receipts.filter((r) => r.demo && r.status === 'active').length);
+  results['the demo set does not spend the free tier'] = seededCount > 0 && meter === '0';
+  await freshCtx.close();
+}
+
 await page.evaluate(() => {
   const state = JSON.parse(localStorage.getItem('kept.v1'));
-  const base = state.receipts[0];
+  // Deliberately NOT demo rows: the point is ten receipts the person added.
+  const { demo, ...base } = state.receipts[0];
   state.receipts = Array.from({ length: 10 }, (_, i) => ({ ...base, id: `q${i}`, item: `Item ${i}`, status: 'active' }));
   localStorage.setItem('kept.v1', JSON.stringify(state));
 });

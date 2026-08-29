@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 453 unit tests over the decision logic
+npm test           # 457 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,10 +26,10 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 45 end-to-end checks, including a midnight rollover
+npm run smoke      # 46 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
-npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
+npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names
 npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 npm run freshness  # starts and stops its OWN server — see below, no preview needed
@@ -759,6 +759,48 @@ the person is looking at a placeholder and a receipt with the same name.
 `placeholders.test.ts` walks the screens for `placeholder="…"` and refuses any
 that borrows the wording of a receipt the seed creates — with a count check
 first, because a sweep over an empty file list passes silently.
+
+### Paying for the showroom
+
+A fresh install arrives with five receipts so the first launch is a working
+app rather than an empty list. They counted against the free tier. Settings
+opened at "5 of 10 free receipts" before the person had done anything, and
+the wall — with three prices on it — arrived after five receipts of their own.
+Half the allowance went on data they never entered.
+
+`demo: true` on the seeded rows, excluded from `countedAgainstQuota`, and
+carried through an exported backup so a restore does not quietly start
+charging for the sample set the file was holding (strictly `=== true`, so a
+stray value is not a free receipt). Each half was proved by breaking it
+separately: the flag ignored in the quota, dropped in the backup, widened to
+any truthy value, and absent from the seed — four mutations, four different
+failures.
+
+That fix needed a visible half. "0 of 10 free receipts" beside five receipts
+reads as a bug unless the receipts say what they are, so the rows carry a
+`sample ·` marker — which also gives the agreement suite something to read
+them by. Its meter check now adds two real receipts first, because a fresh
+install is entirely sample rows and "0 versus 0" passes whatever the meter
+renders.
+
+### A name squeezed to nothing
+
+The marker started as a chip beside the store name, and on a row that also
+carries POLICY CHANGED the store rendered as "Cu…" and "Z…" — two characters
+of the one word that says whose return it is. Every sweep stayed green: a
+squeezed name neither overflows the page nor covers a button.
+
+So `npm run layout` now measures it, and the first thing it found was not the
+new chip but the old one — at 320px, POLICY CHANGED alone left "Zara" 4px of
+the 32 it needs. The name keeps a 64px floor and the chip drops to its own
+line when the two will not fit. The marker moved to the item line, and then
+to the *front* of it, because that line truncates from the tail and at 320px
+every row had been reading "Kenwood kMix stan…" with the marker gone on
+exactly the phone with the least room to explain itself.
+
+The check carries the same vacuity guard as its neighbours — remove the
+`data-name` attribute it reads and it reports that it measured nothing,
+rather than reporting a pass.
 
 ### A deploy reaches the app, and the app works without one
 

@@ -15,11 +15,17 @@ export type Plan = 'free' | 'pro';
  * the app refusing to do the one thing it is for. A returned receipt is
  * finished business; its money is already recovered.
  *
- * If the business wants the stricter reading, this function is the only place
- * that changes.
+ * And not the demo set. A fresh install arrives with five receipts nobody
+ * added, out of an allowance of ten, so Settings opened at "5 of 10 free
+ * receipts" before the person had done anything and the wall arrived after
+ * five real ones — with a price attached. Sample data is the app's own
+ * furniture; charging for it is asking someone to pay for the showroom.
+ *
+ * If the business wants either stricter reading, this function is the only
+ * place that changes.
  */
 export function countedAgainstQuota(receipts: readonly Receipt[]): number {
-  return receipts.filter((r) => r.status === 'active').length;
+  return receipts.filter((r) => r.status === 'active' && !r.demo).length;
 }
 
 export function quotaFull(receipts: readonly Receipt[], plan: Plan): boolean {

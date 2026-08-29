@@ -124,6 +124,11 @@ export function readReceipt(raw: unknown): Receipt | null {
     ...(isStr(r.gotcha) ? { gotcha: r.gotcha } : {}),
     status: r.status as ReceiptStatus,
     ...(r.returnedOn !== undefined ? { returnedOn: r.returnedOn as string } : {}),
+    // Carried through the round trip, because it decides whether the receipt
+    // costs a free-tier slot: a restore that dropped it would silently charge
+    // the person for the demo set their own backup was holding. Strictly
+    // true-only — anything else is simply not a demo receipt.
+    ...(r.demo === true ? { demo: true as const } : {}),
   };
 }
 

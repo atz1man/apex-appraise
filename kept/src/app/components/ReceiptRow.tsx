@@ -23,6 +23,13 @@ interface Props {
   onReturn: () => void;
 }
 
+/**
+ * The floor under a row's store name, in pixels. Matches the number the
+ * layout sweep enforces — see `MIN_NAME_PX` in scripts/layout.mjs. Below this
+ * a name is not truncated, it is erased.
+ */
+const MIN_NAME_PX = 64;
+
 export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen, onReturn }: Props) {
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -90,7 +97,11 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
           }
           onOpen();
         }}
-        aria-label={`${receipt.store}, ${receipt.item}, ${money(receipt.amount)}, ${urgency.label}`}
+        // "(sample)" sits with the item rather than at the end, because the
+        // agreement sweep reads the amount and the status off the last two
+        // fields of this label — and because "mixer (sample)" is how a person
+        // would say it.
+        aria-label={`${receipt.store}, ${receipt.item}${receipt.demo ? ' (sample)' : ''}, ${money(receipt.amount)}, ${urgency.label}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 13, padding: 15,
           background: emphasised ? color.white : color.cream,
@@ -114,12 +125,22 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {/* Wraps, and the name keeps a floor.
+              At 320px there is about 134px for this whole block and the
+              POLICY CHANGED chip wants 95 of it, so with the chip refusing to
+              shrink the name absorbed every pixel: "Zara" rendered 4px wide of
+              32. Nothing failed — a squeezed name neither overflows the page
+              nor covers a button — which is why the layout sweep now measures
+              it. The chip drops to its own line when the two will not fit,
+              instead of eating the one word that says whose return this is. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, rowGap: 4, minWidth: 0, flexWrap: 'wrap' }}>
             {/* Truncated like the item beneath it. A store name is free text —
                 the edit form accepts anything — and an untruncated one wrapped
                 to five lines on a 320px phone while the item it belongs to was
                 still being clipped to one. */}
-            <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+            {/* data-name is read by the layout sweep, which measures whether
+                anything beside this has squeezed it past reading. */}
+            <span data-name style={{ fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: MIN_NAME_PX }}>
               {receipt.store}
             </span>
             {policyChanged && (
@@ -127,8 +148,26 @@ export function ReceiptRow({ receipt, urgency, emphasised, policyChanged, onOpen
                 POLICY CHANGED
               </span>
             )}
+
           </div>
+          {/* A fresh install opens on five receipts nobody added, and until
+              this they were indistinguishable from real ones — which also made
+              the "0 of 10 free receipts" beside them look like a bug rather
+              than a deliberate generosity.
+
+              On the ITEM line, not up beside the store name as a chip. Tried
+              that: on a row that also carries POLICY CHANGED the store was
+              crushed to "Cu…" and "Z…" on a 402px phone — two characters of
+              the one word that says whose return this is. Nothing failed;
+              every sweep was green, because a squeezed name does not overflow
+              and does not cover a button.
+
+              And BEFORE the item, not after it. Tried that too: this line
+              truncates from the tail, so at 320px every row read "Kenwood
+              kMix stan…" and the marker vanished on exactly the phone with
+              the least room to explain itself. */}
           <div style={{ fontSize: 12, color: color.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {receipt.demo && <span>sample · </span>}
             {receipt.item}
           </div>
         </div>

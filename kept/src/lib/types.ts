@@ -78,6 +78,21 @@ export interface Receipt {
   status: ReceiptStatus;
   /** ISO date the refund landed — set when the receipt is marked returned. */
   returnedOn?: string;
+  /**
+   * True for the five receipts a fresh install arrives with.
+   *
+   * They exist so a first launch is a working app rather than an empty list,
+   * and they were being charged for: the free tier is ten receipts, the demo
+   * set is five of them, so someone who had added nothing at all opened
+   * Settings to "5 of 10 free receipts" and hit "That's your 10 free
+   * receipts" after adding five of their own. Half the allowance went on
+   * data they never entered, and the wall it produced asked them for money.
+   *
+   * A flag rather than an id prefix, because "this is demo data" is a fact
+   * about the receipt and should be legible as one — including in an exported
+   * backup, which is why it survives the round trip.
+   */
+  demo?: boolean;
 }
 
 export interface PolicyUpdate {

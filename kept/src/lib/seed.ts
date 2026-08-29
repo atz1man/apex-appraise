@@ -15,13 +15,13 @@ export function seedReceipts(today: Date): Receipt[] {
       amount: toPence(89.0), purchasedOn: ago(12), windowDays: 14,
       policy: 'Currys · 14 days change of mind, unopened or unwanted. Refund to original payment method.',
       distance: false, warranty: { months: 24, note: 'Manufacturer warranty — repairs free within it' },
-      status: 'active',
+      status: 'active', demo: true,
     },
     {
       id: 'seed_argos', store: 'Argos', item: 'Kenwood kMix stand mixer', cat: 'kitchen',
       amount: toPence(64.99), purchasedOn: ago(21), windowDays: 30,
       policy: 'Argos · 30 days with proof of purchase. Return to any store or arrange collection.',
-      distance: false, warranty: { months: 12, note: 'Kenwood guarantee' }, status: 'active',
+      distance: false, warranty: { months: 12, note: 'Kenwood guarantee' }, status: 'active', demo: true,
     },
     {
       // The dispatch gotcha as data, not prose: the order was placed two days
@@ -35,19 +35,19 @@ export function seedReceipts(today: Date): Receipt[] {
       // screen's two-right case reachable from a fresh install.
       distance: true,
       gotcha: 'Zara counts the 30 days from dispatch, not from the day the parcel landed on your mat — the clock had already been running when it arrived.',
-      status: 'active',
+      status: 'active', demo: true,
     },
     {
       id: 'seed_boots', store: 'Boots', item: 'No7 skincare set', cat: 'beauty',
       amount: toPence(24.98), purchasedOn: ago(14), windowDays: 35,
       policy: 'Boots · 35 days, unopened, with receipt. Advantage Card refunds go back as points.',
-      distance: false, status: 'active',
+      distance: false, status: 'active', demo: true,
     },
     {
       id: 'seed_ikea', store: 'IKEA', item: 'MALM chest of 6 drawers', cat: 'furniture',
       amount: toPence(199.0), purchasedOn: ago(195), windowDays: 365,
       policy: 'IKEA · 365 days, even assembled, with proof of purchase. 14 days for cut fabric.',
-      distance: false, warranty: { months: 120, note: '10-year guarantee on MALM frames' }, status: 'active',
+      distance: false, warranty: { months: 120, note: '10-year guarantee on MALM frames' }, status: 'active', demo: true,
     },
   ];
 }

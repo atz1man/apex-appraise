@@ -44,6 +44,7 @@ const failures = [];
  * exactly how the first version of that check behaved.
  */
 let everScrolled = 0;
+let everNamed = 0;
 
 /** Anything wider than the viewport makes the page scroll sideways. */
 /**
@@ -117,6 +118,42 @@ async function checkCovered(page, label, width) {
   return scrolled;
 }
 
+/**
+ * A name squeezed to nothing.
+ *
+ * Nothing above catches this: a flex sibling that eats a row's primary label
+ * neither overflows the page nor covers a button, so every sweep stays green
+ * while the store column reads "Cu…" and "Z…" — two characters of the one word
+ * that says whose return it is. Measured after adding a second chip beside the
+ * store name; the design was reverted, and this is what would have said so.
+ *
+ * The rule is deliberately loose: either the name fits, or it gets a readable
+ * share of itself. A long shop name truncating on a 320px phone is fine and
+ * intended; being cut to a couple of glyphs by something beside it is not.
+ */
+const MIN_NAME_PX = 64;
+
+async function checkNames(page, label, width) {
+  const names = await page.evaluate((min) =>
+    [...document.querySelectorAll('li button [data-name]')]
+      .map((el) => ({
+        text: (el.textContent ?? '').trim().slice(0, 24),
+        shown: el.clientWidth,
+        natural: el.scrollWidth,
+        crushed: el.scrollWidth > el.clientWidth + 1 && el.clientWidth < min,
+      })), MIN_NAME_PX);
+  const crushed = names.filter((n) => n.crushed);
+  if (crushed.length > 0) {
+    failures.push({
+      label,
+      width,
+      kind: 'a row’s name is squeezed past reading',
+      detail: crushed.map((c) => `"${c.text}" given ${c.shown}px of ${c.natural}px`).join('; '),
+    });
+  }
+  return names.length;
+}
+
 async function checkOverflow(page, label, width) {
   const bad = await page.evaluate((w) => {
     const out = [];
@@ -164,6 +201,7 @@ async function sweep(width, seedState, label, steps) {
     await act(page).catch((e) => failures.push({ label, width, kind: 'step failed', detail: `${name}: ${e.message}` }));
     await page.waitForTimeout(400);
     await checkOverflow(page, `${label} · ${name}`, width);
+    everNamed += await checkNames(page, `${label} · ${name}`, width);
     everScrolled += await checkCovered(page, `${label} · ${name}`, width);
   }
   await ctx.close();
@@ -231,6 +269,15 @@ await browser.close();
 // Before the verdict, not after it: this guard was written below the success
 // path's process.exit and was therefore unreachable — a vacuity check that
 // could itself never run, which is the joke it exists to prevent.
+if (everNamed === 0) {
+  failures.push({
+    label: 'the crushed-name check',
+    width: 0,
+    kind: 'never found a row name to measure',
+    detail: 'no [data-name] element was on any screen, so "no name is squeezed" was a pass over nothing',
+  });
+}
+
 if (everScrolled === 0) {
   failures.push({
     label: 'the covered-button check',
@@ -241,7 +288,7 @@ if (everScrolled === 0) {
 }
 
 if (failures.length === 0) {
-  console.log(`✓ no sideways scroll, no covered buttons, at ${WIDTHS.join('px, ')}px, on any screen or state`);
+  console.log(`✓ no sideways scroll, no covered buttons, no crushed names, at ${WIDTHS.join('px, ')}px, on any screen or state`);
   process.exit(0);
 }
 console.log(`✗ ${failures.length} layout problem(s):\n`);

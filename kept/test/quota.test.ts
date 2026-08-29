@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countedAgainstQuota, FREE_TIER_LIMIT, quotaFull, quotaRemaining } from '../src/lib/quota';
 import { toPence } from '../src/lib/money';
+import { seedReceipts } from '../src/lib/seed';
 import type { Receipt } from '../src/lib/types';
 
 const receipt = (id: string, status: Receipt['status'] = 'active'): Receipt => ({
@@ -9,6 +10,7 @@ const receipt = (id: string, status: Receipt['status'] = 'active'): Receipt => (
 });
 
 const active = (n: number) => Array.from({ length: n }, (_, i) => receipt(`a${i}`));
+const demo = (n: number) => Array.from({ length: n }, (_, i) => ({ ...receipt(`d${i}`), demo: true }));
 const returned = (n: number) => Array.from({ length: n }, (_, i) => receipt(`r${i}`, 'returned'));
 
 describe('what the free tier counts', () => {
@@ -20,6 +22,23 @@ describe('what the free tier counts', () => {
     // Otherwise using the app exactly as intended fills the tier permanently,
     // and it starts refusing to do the one thing it is for.
     expect(countedAgainstQuota([...active(3), ...returned(20)])).toBe(3);
+  });
+
+  it('does not count the demo set, which nobody added', () => {
+    expect(countedAgainstQuota(demo(5))).toBe(0);
+    expect(countedAgainstQuota([...demo(5), ...active(2)])).toBe(2);
+  });
+
+  it('gives a fresh install its whole allowance', () => {
+    // Settings opened at "5 of 10 free receipts" before the person had done
+    // anything, and the wall arrived after five of their own — with a price
+    // attached to it.
+    const fresh = seedReceipts(new Date(2026, 7, 28));
+    expect(fresh.length).toBeGreaterThan(0);
+    expect(countedAgainstQuota(fresh)).toBe(0);
+    expect(quotaRemaining(fresh, 'free')).toBe(FREE_TIER_LIMIT);
+    expect(quotaFull([...fresh, ...active(FREE_TIER_LIMIT - 1)], 'free')).toBe(false);
+    expect(quotaFull([...fresh, ...active(FREE_TIER_LIMIT)], 'free')).toBe(true);
   });
 });
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { mergeBackup, parseBackup } from '../src/lib/backup';
 import { toPence } from '../src/lib/money';
+import { seedReceipts } from '../src/lib/seed';
+import { countedAgainstQuota } from '../src/lib/quota';
 import type { Receipt } from '../src/lib/types';
 
 const good: Receipt = {
@@ -188,5 +190,25 @@ describe('merging a restore into what is already here', () => {
       const m = mergeBackup([], [returnedHere]);
       expect(m.receipts[0]).toMatchObject({ status: 'returned', returnedOn: '2026-08-25' });
     });
+  });
+});
+
+describe('the demo flag survives a backup', () => {
+  it('comes back, so a restore does not start charging for the sample data', () => {
+    const seeded = seedReceipts(new Date(2026, 7, 28));
+    const out = parseBackup(JSON.stringify({ app: 'kept', version: 1, receipts: seeded }));
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.summary.receipts.every((r: Receipt) => r.demo === true)).toBe(true);
+    expect(countedAgainstQuota(out.summary.receipts)).toBe(0);
+  });
+
+  it('is true-only, so a stray value is not a free receipt', () => {
+    const [one] = seedReceipts(new Date(2026, 7, 28));
+    const out = parseBackup(JSON.stringify({ app: 'kept', version: 1, receipts: [{ ...one, demo: 'yes' }] }));
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.summary.receipts[0].demo).toBeUndefined();
+    expect(countedAgainstQuota(out.summary.receipts)).toBe(1);
   });
 });

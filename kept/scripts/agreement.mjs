@@ -151,7 +151,7 @@ const rowMoney = await page.evaluate(() =>
   [...document.querySelectorAll('li button')].map((b) => {
     const label = b.getAttribute('aria-label') ?? '';
     const parts = label.split(', ');
-    return { amount: parts.at(-2) ?? '', returned: parts.at(-1) === 'returned' };
+    return { amount: parts.at(-2) ?? '', returned: parts.at(-1) === 'returned', demo: label.includes('(sample)') };
   }),
 );
 const sum = (list) => list.reduce((a, r) => a + Number((r.amount || '£0').replace(/[£,]/g, '')), 0);
@@ -166,8 +166,42 @@ agree(
   sum(rowMoney.filter((r) => r.returned)).toFixed(2),
 );
 
-// --- The free-tier meter versus what is actually tracked ------------------
-const activeCount = rowMoney.filter((r) => !r.returned).length;
+/*
+ * --- The free-tier meter versus what is actually tracked ------------------
+ *
+ * The rows the PERSON added. The demo set is on the screen and does not spend
+ * the allowance, which is why those rows carry a SAMPLE chip: without it the
+ * meter reading 0 beside five receipts looks like a bug rather than a
+ * deliberate generosity, and this check would have nothing to read them by.
+ *
+ * Two real receipts are added first, because a fresh install is entirely demo
+ * rows and "0 versus 0" is a pass whatever the meter renders — the same
+ * vacuity that has caught this codebase four times. Two, not one, so a meter
+ * that counted rows instead of the free-tier rule is off by five rather than
+ * coincidentally right.
+ */
+for (const [item, paste] of [['Sony headphones', 'Currys · Sony headphones · Total £329.00 · 20 Aug 2026'], ['Kettle', 'Argos · Kettle · Total £29.00 · 21 Aug 2026']]) {
+  await page.getByRole('button', { name: 'Add a receipt' }).click();
+  await page.waitForTimeout(300);
+  await page.fill('#paste', paste);
+  await page.getByRole('button', { name: 'Read it' }).click();
+  await page.waitForTimeout(400);
+  await page.fill('#add-item', item);
+  await page.getByRole('button', { name: /^Save/ }).click();
+  await page.waitForTimeout(500);
+}
+await page.getByRole('button', { name: 'Receipts', exact: true }).click();
+await page.waitForTimeout(400);
+const rowsNow = await page.evaluate(() =>
+  [...document.querySelectorAll('li button')].map((b) => {
+    const label = b.getAttribute('aria-label') ?? '';
+    return { returned: label.split(', ').at(-1) === 'returned', demo: label.includes('(sample)') };
+  }),
+);
+const activeCount = rowsNow.filter((r) => !r.returned && !r.demo).length;
+if (activeCount === 0 || rowsNow.every((r) => r.demo)) {
+  disagreements.push({ what: 'the free-tier meter check had no receipt the person added to count', saw: [] });
+}
 await page.getByRole('button', { name: 'Settings', exact: true }).click();
 await page.waitForTimeout(400);
 const meter = await page.evaluate(() => {
