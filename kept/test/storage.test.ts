@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hydrate, DEFAULT_SETTINGS } from '../src/lib/storage';
+import { MAX_UPDATES } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import type { Receipt } from '../src/lib/types';
 
@@ -61,6 +62,17 @@ describe('surviving whatever is on disk', () => {
   it('reseeds the feed when nothing readable survived', () => {
     // The feed is downloadable content, so falling back is always safe.
     expect(hydrate(stored({ updates: [{ broken: true }] }), TODAY).updates.length).toBeGreaterThan(0);
+  });
+
+  it('recovers a store an oversized feed already filled', () => {
+    // The cap is not only a guard on the next download. A device that took one
+    // bad feed before the cap existed has it on disk, and every launch writes
+    // it back; the next launch has to be able to shed it.
+    const updates = Array.from({ length: MAX_UPDATES * 4 }, (_, i) => ({
+      id: `u${i}`, store: 'Zara', changedOn: `2026-0${(i % 9) + 1}-01`.slice(0, 10),
+      text: 'x', affectsStores: ['Zara'],
+    }));
+    expect(hydrate(stored({ updates }), TODAY).updates).toHaveLength(MAX_UPDATES);
   });
 
   it('fills in settings a older version never wrote', () => {

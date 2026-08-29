@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assess, mergeFeed, readFeed } from '../src/lib/policy-feed';
+import { MAX_UPDATES, assess, mergeFeed, readFeed } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import { addDays, toISODate } from '../src/lib/dates';
 import type { PolicyUpdate, Receipt } from '../src/lib/types';
@@ -124,5 +124,42 @@ describe('merging a feed over what is held', () => {
   it('puts the newest first', () => {
     expect(mergeFeed([], [update({ id: 'old', changedOn: ago(30) }), update({ id: 'new', changedOn: ago(1) })]).map((u) => u.id))
       .toEqual(['new', 'old']);
+  });
+});
+
+describe('the news cannot crowd out the receipts', () => {
+  // The feed shares one localStorage bucket with the library the app exists
+  // for, and until this cap `mergeFeed` only ever grew: a single oversized or
+  // misgenerated response was persisted permanently, and no later good feed
+  // shrank it. The only way back was Erase everything, which takes the
+  // receipts with it.
+  const many = (n: number, from = 0) =>
+    Array.from({ length: n }, (_, i) => update({ id: `u${from + i}`, changedOn: ago(from + i + 1) }));
+
+  it('bounds one oversized response at the door', () => {
+    expect(readFeed({ feed: 'kept-policy', updates: many(MAX_UPDATES * 5) })).toHaveLength(MAX_UPDATES);
+  });
+
+  it('keeps the newest of an oversized response, not the first it happened to read', () => {
+    const oldestFirst = [...many(MAX_UPDATES * 2)].reverse();
+    const kept = readFeed({ feed: 'kept-policy', updates: oldestFirst })!;
+    expect(kept[0].id).toBe('u0');
+    expect(kept.every((u) => Number(u.id.slice(1)) < MAX_UPDATES)).toBe(true);
+  });
+
+  it('bounds the merge, however many launches it takes', () => {
+    let held = mergeFeed([], many(MAX_UPDATES));
+    for (let launch = 0; launch < 5; launch += 1) {
+      held = mergeFeed(held, many(MAX_UPDATES, MAX_UPDATES * (launch + 1)));
+      expect(held.length).toBeLessThanOrEqual(MAX_UPDATES);
+    }
+  });
+
+  it('forgets the oldest news to make room for the newest', () => {
+    const held = many(MAX_UPDATES, 1);
+    const merged = mergeFeed(held, [update({ id: 'today', changedOn: ago(0) })]);
+    expect(merged).toHaveLength(MAX_UPDATES);
+    expect(merged[0].id).toBe('today');
+    expect(merged.some((u) => u.id === `u${MAX_UPDATES}`)).toBe(false);
   });
 });
