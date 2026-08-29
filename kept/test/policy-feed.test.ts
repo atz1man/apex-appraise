@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_UPDATES, assess, mergeFeed, readFeed } from '../src/lib/policy-feed';
+import { MAX_UPDATES, assess, mergeFeed, readFeed, windowInForceFor } from '../src/lib/policy-feed';
 import { toPence } from '../src/lib/money';
 import { addDays, toISODate } from '../src/lib/dates';
 import type { PolicyUpdate, Receipt } from '../src/lib/types';
@@ -186,5 +186,67 @@ describe('the news cannot crowd out the receipts', () => {
     expect(merged).toHaveLength(MAX_UPDATES);
     expect(merged[0].id).toBe('today');
     expect(merged.some((u) => u.id === `u${MAX_UPDATES}`)).toBe(false);
+  });
+});
+
+describe('the window in force when it was bought', () => {
+  /*
+   * `newWindowDays` was read for exactly one thing: telling the holder of an
+   * existing receipt how their deadline compares. So the Watch tab would say
+   * "new purchases get 16 days less; yours keeps the 30 days it was bought
+   * under" while the Add screen handed a new purchase the table's 30.
+   */
+  const upd = (id: string, store: string, changedOn: string, newWindowDays?: number): PolicyUpdate => ({
+    id,
+    store,
+    changedOn,
+    text: `${store} changed something`,
+    affectsStores: [store],
+    affectNote: '',
+    ...(newWindowDays === undefined ? {} : { newWindowDays }),
+  });
+
+  it('has nothing to say when the feed never mentioned that shop', () => {
+    expect(windowInForceFor('Currys', '2026-08-20', [upd('a', 'Boots', '2026-01-01', 14)])).toBeUndefined();
+  });
+
+  it('has nothing to say when the update carries no window', () => {
+    expect(windowInForceFor('Currys', '2026-08-20', [upd('a', 'Currys', '2026-01-01')])).toBeUndefined();
+  });
+
+  it('takes the change that had already happened', () => {
+    expect(windowInForceFor('Currys', '2026-08-20', [upd('a', 'Currys', '2026-08-01', 14)])).toEqual({ days: 14, changedOn: '2026-08-01' });
+  });
+
+  it('ignores a change made after the purchase — that receipt keeps its terms', () => {
+    expect(windowInForceFor('Currys', '2026-08-20', [upd('a', 'Currys', '2026-08-21', 14)])).toBeUndefined();
+  });
+
+  it('counts a change made on the day itself as in force', () => {
+    expect(windowInForceFor('Currys', '2026-08-20', [upd('a', 'Currys', '2026-08-20', 14)])).toEqual({ days: 14, changedOn: '2026-08-20' });
+  });
+
+  it('takes the most recent of several, not the last in the list', () => {
+    const feed = [upd('a', 'Currys', '2026-08-01', 14), upd('b', 'Currys', '2026-03-01', 45)];
+    expect(windowInForceFor('Currys', '2026-08-20', feed)?.days).toBe(14);
+  });
+
+  it('takes the shorter when two changes share a date', () => {
+    // Arbitrary as arithmetic, not as judgement: the tie goes to the answer
+    // that cannot tell someone they have longer than they do.
+    const feed = [upd('a', 'Currys', '2026-08-01', 30), upd('b', 'Currys', '2026-08-01', 14)];
+    expect(windowInForceFor('Currys', '2026-08-20', feed)?.days).toBe(14);
+    expect(windowInForceFor('Currys', '2026-08-20', [...feed].reverse())?.days).toBe(14);
+  });
+
+  it('matches the shop however it is cased', () => {
+    // `assess` once matched exactly while `findStore` did not, and a receipt
+    // edited to "boots" carried Boots' policy with every Boots change
+    // invisible to it.
+    expect(windowInForceFor('currys', '2026-08-20', [upd('a', 'Currys', '2026-08-01', 14)])?.days).toBe(14);
+  });
+
+  it('says nothing for a shop with no name', () => {
+    expect(windowInForceFor('  ', '2026-08-20', [upd('a', 'Currys', '2026-08-01', 14)])).toBeUndefined();
   });
 });

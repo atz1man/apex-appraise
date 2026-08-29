@@ -1,3 +1,4 @@
+import { fmtDateLong, fromISODate } from './dates';
 import type { Category } from './types';
 
 /**
@@ -184,9 +185,24 @@ for (const s of STORE_POLICIES) for (const a of s.aliases) BY_ALIAS.set(a, s);
  * verified. One function, so the add screen and the edit screen cannot phrase
  * the same situation differently — which they already did.
  */
-export function policyFor(store: string, windowDays: number): string {
+/**
+ * The sentence a receipt carries, matching the window it was actually given.
+ *
+ * Three provenances now, and the third arrived the day the Add screen started
+ * taking its window from the policy feed. Before that a window differing from
+ * the table could only have been typed by the person, so one fallback covered
+ * it: "as entered, not verified". Said of a number the app took from its own
+ * policy watch, that is simply untrue — it tells someone to go and check a
+ * receipt against a figure the app is more confident in than the one it
+ * shipped with, and it hides where the number came from on the one screen that
+ * explains the deadline.
+ */
+export function policyFor(store: string, windowDays: number, changedOn?: string): string {
   const known = findStore(store);
   if (known && known.windowDays === windowDays) return known.policy;
+  if (changedOn) {
+    return `${store} · ${windowDays}-day return window, from a policy change on ${fmtDateLong(fromISODate(changedOn))}.`;
+  }
   return `${store} · ${windowDays}-day return window — as entered, not verified. Check the receipt.`;
 }
 

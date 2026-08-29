@@ -315,6 +315,7 @@ export function App() {
           sharedText={state.sharedText ?? undefined}
           quotaFull={quotaFull(state)}
           trackedTotal={money(sumPence(state.receipts.map((r) => r.amount)))}
+          updates={state.updates}
           onSave={(receipt) => dispatch({ type: 'add', receipt })}
           onUpgrade={() => dispatch({ type: 'upgrade-ask', period: FEATURED_TIER.period })}
         />

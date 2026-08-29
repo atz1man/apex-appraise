@@ -6,9 +6,10 @@ import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { arrivalProblem, windowStartFor } from '../../lib/draft';
 import { makeReceiptId } from '../../lib/receipts';
 import { findStore, policyFor } from '../../lib/stores';
+import { windowInForceFor } from '../../lib/policy-feed';
 import { FEATURED_TIER } from '../../lib/pricing';
 import { FREE_TIER_LIMIT } from '../../lib/quota';
-import type { Receipt } from '../../lib/types';
+import type { PolicyUpdate, Receipt } from '../../lib/types';
 import { ArrowRight, CameraGlyph, LogoMark, MailGlyph, ShareGlyph, Warning } from '../components/Icons';
 import { HowBought } from '../components/HowBought';
 import { Pressable } from '../components/Pressable';
@@ -23,11 +24,13 @@ interface Props {
   sharedText?: string;
   quotaFull: boolean;
   trackedTotal: string;
+  /** The policy feed, so a new purchase gets the window in force today. */
+  updates: readonly PolicyUpdate[];
   onSave: (r: Receipt) => void;
   onUpgrade: () => void;
 }
 
-export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgrade }: Props) {
+export function Add({ today, sharedText, quotaFull, trackedTotal, updates, onSave, onUpgrade }: Props) {
   const [text, setText] = useState(sharedText ?? '');
   const [parsed, setParsed] = useState<ParsedReceipt | null>(null);
   const [error, setError] = useState(false);
@@ -102,7 +105,17 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
   const knownFromTyped = parsed?.store ? undefined : typed ? findStore(typed) : undefined;
   const policy = parsed?.policy ?? knownFromTyped ?? null;
   const effectiveStore = parsed?.store ?? policy?.name ?? typed;
-  const effectiveWindow = policy?.windowDays ?? parsed?.windowDays ?? 0;
+  /*
+   * The feed first, then the table. A shop's window can have moved since this
+   * build shipped, and the Watch tab was already saying so on the screen next
+   * door while this one handed out the old number.
+   *
+   * One binding, read by both the save and the deadline preview below, because
+   * a preview that disagreed with what lands is a bug this codebase has had
+   * once already.
+   */
+  const inForce = policy && parsed ? windowInForceFor(policy.name, parsed.purchasedOn, updates) : undefined;
+  const effectiveWindow = inForce?.days ?? policy?.windowDays ?? parsed?.windowDays ?? 0;
 
   /**
    * The same rule the edit screen applies, from the same function. This screen
@@ -148,7 +161,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
       })(),
       windowDays: effectiveWindow,
       ...(distance && arrivedOn ? { arrivedOn } : {}),
-      policy: policyFor(store, effectiveWindow),
+      policy: policyFor(store, effectiveWindow, inForce?.changedOn),
       distance,
       gotcha: policy?.gotcha,
       status: 'active',

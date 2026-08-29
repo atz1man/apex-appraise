@@ -757,6 +757,70 @@ results['a dispatch-clocked shop counts from dispatch, and only that shop'] =
   argosAdded.store === 'Argos' && argosAdded.windowStartsOn === undefined;
 
 /*
+ * A shop that changed its window since this build shipped.
+ *
+ * The feed exists to carry exactly that, and `newWindowDays` was read for one
+ * thing only: telling the holder of an existing receipt how their deadline
+ * compares. So the Watch tab would say "new purchases get 16 days less; yours
+ * keeps the 30 days it was bought under" — and the Add screen next door would
+ * hand a NEW Currys purchase the table's number anyway. A deadline later than
+ * the shop will honour, on a receipt added minutes after the app said so.
+ *
+ * Driven through the real screen rather than the function, because the
+ * function had a caller before this and it was not this one.
+ */
+{
+  const feedCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(feedCtx);
+  const feedPage = await feedCtx.newPage();
+  await feedPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await feedPage.waitForTimeout(400);
+  // Dated AFTER the seeded Currys entry, which is itself a change carrying a
+  // window: the first version of this dated it in January and the app
+  // correctly preferred the July one, which is the rule working rather than
+  // failing. The test data was wrong, not the code.
+  const feedDays = await feedPage.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kept.v1'));
+    s.onboardingSeen = true;
+    s.updates = [
+      {
+        id: 'currys-shortened',
+        store: 'Currys',
+        changedOn: '2026-08-10',
+        text: 'Currys shortened its returns window.',
+        affectsStores: ['Currys'],
+        affectNote: 'new purchases only',
+        newWindowDays: 7,
+      },
+    ];
+    localStorage.setItem('kept.v1', JSON.stringify(s));
+    return 7;
+  });
+  await feedPage.reload({ waitUntil: 'networkidle' });
+  await feedPage.waitForTimeout(600);
+  await feedPage.getByRole('button', { name: 'Add a receipt' }).click();
+  await feedPage.waitForTimeout(300);
+  await feedPage.fill('#paste', 'Currys · Order placed 20 August 2026 · Kettle · Total £29.00');
+  await feedPage.getByRole('button', { name: 'Read it' }).click();
+  await feedPage.waitForTimeout(400);
+  await feedPage.fill('#add-item', 'Kettle');
+  await feedPage.getByRole('button', { name: /^Save/ }).click();
+  await feedPage.waitForTimeout(600);
+  const added = await feedPage.evaluate(() =>
+    JSON.parse(localStorage.getItem('kept.v1')).receipts.find((r) => r.item === 'Kettle'));
+  results['a shop that changed its window gives a new purchase the new one'] =
+    !!added && added.windowDays === feedDays &&
+    // And the sentence quoting it moves with it, or the row would read
+    // "Currys · 14 days" above a deadline seven days out — a drift this
+    // codebase has already had once. It also has to say WHERE the number came
+    // from: the fallback wording was written for a window someone typed, and
+    // "as entered, not verified. Check the receipt" is untrue of one the app
+    // took from its own policy watch.
+    /7-day return window, from a policy change on 10 August 2026/.test(added.policy ?? '');
+  await feedCtx.close();
+}
+
+/*
  * And when the paste does NOT say when it was dispatched, the deadline is a
  * floor and has to be shown as one — the same hedge the statutory clocks make
  * about an unknown arrival, pointing the other way. Presented as a fact, it

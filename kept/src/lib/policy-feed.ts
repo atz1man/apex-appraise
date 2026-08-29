@@ -34,6 +34,72 @@ export interface AssessedUpdate {
   affectsYou: boolean;
 }
 
+/**
+ * The return window in force at a shop on the day something was bought.
+ *
+ * The feed's whole purpose is to carry a change the bundled table does not
+ * know about yet, and `newWindowDays` was read for exactly one thing: telling
+ * the holder of an existing receipt how their deadline compares. So the app
+ * would say, in the Watch tab, "new purchases get 16 days less; yours keeps
+ * the 30 days it was bought under" — and then hand a NEW purchase from that
+ * same shop the table's 30 days. A deadline sixteen days later than the shop
+ * will honour, on a receipt added minutes after the app said so, which is the
+ * overstating direction and the one failure this app must not have.
+ *
+ * Dated, not merely latest. A change that happened after the purchase does not
+ * govern it — that is the same rule the sentence above states, applied to the
+ * purchase rather than to the reader — and it is what lets a receipt entered
+ * late still get the window it was actually bought under.
+ *
+ * On two changes dated the same day, the shorter wins. It is arbitrary as
+ * arithmetic and not as judgement: everywhere else here, the tie goes to the
+ * answer that cannot tell someone they have longer than they do.
+ *
+ * It returns the DATE as well as the number, because the receipt's policy
+ * sentence has to say where its window came from — "as entered, not verified"
+ * was written when a window differing from the table could only have been
+ * typed by a person, and is untrue of one the app took from its own watch.
+ *
+ * Note what this hands the feed: the power to move a computed deadline, where
+ * before it could only move words on a screen. That is the point of the
+ * feature and it is also a wider blast radius, which is why signing the feed
+ * is on the list in the README rather than merely nice to have. `mergeFeed`
+ * already refuses a window that is not a positive integer.
+ */
+export interface WindowInForce {
+  days: number;
+  /** The day the change took effect, for the sentence the receipt carries. */
+  changedOn: string;
+}
+
+export function windowInForceFor(
+  store: string,
+  purchasedOn: string,
+  updates: readonly PolicyUpdate[],
+): WindowInForce | undefined {
+  const name = store.trim().toLowerCase();
+  if (!name) return undefined;
+  let onDate = '';
+  let days: number | undefined;
+  for (const u of updates) {
+    if (u.newWindowDays === undefined) continue;
+    // Case-insensitively, because `assess` once matched exactly while
+    // `findStore` did not, and a receipt edited to "boots" carried Boots'
+    // policy with every Boots change invisible to it.
+    if (!u.affectsStores.some((s) => s.trim().toLowerCase() === name)) continue;
+    // ISO dates compare correctly as strings, which is half of why they are
+    // stored this way.
+    if (u.changedOn > purchasedOn) continue;
+    if (u.changedOn > onDate) {
+      onDate = u.changedOn;
+      days = u.newWindowDays;
+    } else if (u.changedOn === onDate && days !== undefined) {
+      days = Math.min(days, u.newWindowDays);
+    }
+  }
+  return days === undefined ? undefined : { days, changedOn: onDate };
+}
+
 function impactFor(update: PolicyUpdate, receipt: Receipt, today: Date): ReceiptImpact {
   const next = update.newWindowDays;
   const note = update.affectNote.trim();

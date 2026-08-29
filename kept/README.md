@@ -1306,6 +1306,48 @@ stop does not return until the port has stopped answering. When it has not, the
 three offline results are recorded as *not asked* rather than passed, because
 that is what they are.
 
+### The window in force when it was bought
+
+The Watch tab tells the holder of a Currys receipt, in the app's own derived
+sentence: *"new purchases get 16 days less; yours keeps the 30 days it was
+bought under."* Add a new Currys receipt on the screen next door and the app
+gave it the bundled table's 30 days — a deadline sixteen days later than the
+shop will honour, on a receipt added minutes after the app said so, in the
+overstating direction that is the one failure this app must not have.
+
+`newWindowDays` was read for exactly one thing: comparing an existing
+receipt's deadline. Carrying a change the bundled table does not know about yet
+is the *whole purpose* of the feed, and nothing was doing anything with it.
+Found by asking who reads a field — the same question the two sweeps above
+now ask mechanically, and one they cannot answer, because this field was read;
+it was read for the wrong half of its job.
+
+`windowInForceFor` answers it properly, and dated rather than merely latest: a
+change made *after* a purchase does not govern it, which is the same rule that
+sentence states, applied to the purchase instead of to the reader. On two
+changes sharing a date the shorter wins — arbitrary as arithmetic, not as
+judgement, since the tie goes to the answer that cannot tell someone they have
+longer than they do.
+
+The first version of the end-to-end check dated its update in January and
+failed, because the seeded feed already carries a Currys change from July and
+the app correctly preferred it. That was the rule working, not failing; the
+test data was wrong.
+
+And it made a sentence newly checkable, which is the fourth pattern in this
+file doing what it always does. `policyFor`'s fallback — *"as entered, not
+verified. Check the receipt"* — was written when a window differing from the
+table could only have been typed by a person. Said of a number the app took
+from its own policy watch it is simply untrue, and it hides where the figure
+came from on the screen whose job is explaining the deadline. There are three
+provenances now and the receipt says which.
+
+**Worth knowing before this ships**: this hands the feed the power to move a
+computed deadline, where before it could only move words on a screen. That is
+the point of the feature and also a wider blast radius. `mergeFeed` already
+refuses a window that is not a positive integer; signing the feed is on the
+list below for a reason.
+
 ### The third statement on the same card
 
 The hero card had been corrected twice for saying two things at once. On a
