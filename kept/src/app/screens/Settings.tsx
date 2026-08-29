@@ -5,7 +5,7 @@ import { mergeBackup, parseBackup } from '../../lib/backup';
 import { notifyState, requestNotifyPermission, type NotifyState } from '../notify';
 import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
-import { TABLE_CHECKED_ON, VERIFIED_STORE_COUNT } from '../../lib/stores';
+import { STORE_COUNT, TABLE_CHECKED_ON } from '../../lib/stores';
 import { URGENT_DAYS_MAX, URGENT_DAYS_MIN, type Settings as SettingsShape } from '../../lib/storage';
 import { TIERS } from '../../lib/pricing';
 import { countedAgainstQuota, FREE_TIER_LIMIT } from '../../lib/quota';
@@ -203,7 +203,7 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>Retailer policies</span>
             <span style={{ fontSize: 14, color: color.muted }}>
-              {VERIFIED_STORE_COUNT} shops
+              {STORE_COUNT} shops
               {TABLE_CHECKED_ON ? ` · checked ${fmtDateLong(fromISODate(TABLE_CHECKED_ON))}` : ''}
             </span>
           </div>

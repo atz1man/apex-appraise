@@ -127,7 +127,9 @@ export const STORE_POLICIES: readonly StorePolicy[] = [
 ] as const;
 
 /** How many retailers the marketing copy may honestly claim. */
-export const VERIFIED_STORE_COUNT = STORE_POLICIES.length;
+/** How many shops the table holds. Not how many have been checked — see
+ *  TABLE_CHECKED_ON below, which is the thing that word used to imply. */
+export const STORE_COUNT = STORE_POLICIES.length;
 
 /**
  * The day someone last checked all of these against the retailers' own

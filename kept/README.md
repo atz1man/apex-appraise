@@ -380,6 +380,17 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **"Verified" was a process the app does not have, in five places.** The
+  worst was the Watch tab's footer: "Policies verified daily by kept · last
+  check today 06:00" — nothing verifies daily, nothing records a check time,
+  and the hour was invented outright. Beside it, the Add hint said a shop's
+  window was "verified", the Edit hint promised a "verified policy", the
+  landing page offered "verified windows for 20 major UK retailers", and its
+  policy-watch section claimed "verified policy updates" for a feed whose
+  missing provenance is written up two sections below as not built. The
+  constant behind the count was called `VERIFIED_STORE_COUNT`, which asserted
+  it once more. All of it now says what is true and checkable instead: whose
+  list it is, and when it is fetched.
 - **Three more on the Settings screen, found the same way.** "Retailer
   policies — 20 verified today", where nothing records or could record a
   verification date and the README's own pre-ship task is to check every

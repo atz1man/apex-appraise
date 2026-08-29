@@ -77,9 +77,13 @@ export function Watch({ updates, receipts, today }: Props) {
       </ul>
 
       <p style={{ fontSize: 11, color: color.muted, textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
-        Policies verified daily by kept · last check today 06:00
+        {/* It said "Policies verified daily by kept · last check today 06:00".
+            Nothing verifies daily and nothing recorded a check time — the hour
+            was invented. What is true is where the list comes from and when it
+            is fetched, which is worth saying and is checkable. */}
+        Kept’s own list of changes, fetched each time you open the app
         <br />
-        Updates download in the background — receipts never leave your phone.
+        The whole list downloads, never a query naming your shops — receipts never leave your phone.
       </p>
     </div>
   );

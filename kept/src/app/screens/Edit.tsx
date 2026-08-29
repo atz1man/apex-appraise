@@ -83,7 +83,7 @@ export function Edit({ receipt, today, onSave, onCancel }: Props) {
       </p>
 
       <div style={{ background: color.white, border: `1.5px solid ${color.border}`, borderRadius: radius.cardLg, padding: '4px 18px 20px', marginTop: 12 }}>
-        <Field id="e-store" label="Shop" error={errors.store} hint="A shop we know brings its verified policy with it.">
+        <Field id="e-store" label="Shop" error={errors.store} hint="A shop we know brings its policy and window with it.">
           {(p) => (
             <>
               <input

@@ -217,7 +217,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
               />
               <div style={{ fontSize: 12.5, color: color.muted, marginTop: 5 }}>
                 {knownFromTyped
-                  ? `${knownFromTyped.name} — ${knownFromTyped.windowDays} days, verified.`
+                  ? `${knownFromTyped.name} — ${knownFromTyped.windowDays} days, from Kept’s list.`
                   : 'We could not find a shop we know in that paste. Name it and we will use its real window if we have it.'}
               </div>
             </div>

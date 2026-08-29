@@ -2,7 +2,7 @@ import { color } from '../tokens';
 import { Logo, Wordmark } from '../app/components/Icons';
 import { TIERS as PRICING_TIERS, type Period } from '../lib/pricing';
 import { FREE_TIER_LIMIT } from '../lib/quota';
-import { VERIFIED_STORE_COUNT, findStore } from '../lib/stores';
+import { STORE_COUNT, findStore } from '../lib/stores';
 import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
 import { AppStoreButton, Card, Eyebrow, SectionTitle, WRAP } from './sections/primitives';
@@ -40,7 +40,7 @@ const UPDATES = [
 const days = (name: string) => findStore(name)?.windowDays ?? 0;
 
 const WHY = [
-  { n: '01', title: 'Knows the real policies', body: `IKEA’s ${days('IKEA')} days, Boots’ ${days('Boots')}, Apple’s ${days('Apple')} — verified windows for ${VERIFIED_STORE_COUNT} major UK retailers, plus the gotchas: Zara’s clock starts at dispatch, Uniqlo won’t refund online orders in store.` },
+  { n: '01', title: 'Knows the real policies', body: `IKEA’s ${days('IKEA')} days, Boots’ ${days('Boots')}, Apple’s ${days('Apple')} — Kept’s own list of windows for ${STORE_COUNT} major UK retailers, plus the gotchas: Zara’s clock starts at dispatch, Uniqlo won’t refund online orders in store.` },
   { n: '02', title: 'Knows your legal rights', body: 'The Consumer Rights Act gives you 30 days to reject faulty goods for a full refund, and online orders carry a 14-day cooling-off by law. Kept shows the legal deadline beside the shop’s own.' },
   { n: '03', title: 'Paste or scan, done', body: 'Paste an order email and Kept reads the store, total and date, and sets the deadline for you. Scanning a paper receipt lands in a later release.' },
   { n: '04', title: 'Warranties too', body: 'Put a warranty length on a receipt and Kept counts it down beside the return window, so you know whether the repair is still free before you pay for one.' },
@@ -164,8 +164,8 @@ export function Landing() {
         <Eyebrow>LIVE POLICY WATCH</Eyebrow>
         <SectionTitle>Shops rewrite the rules quietly. Your app hears about it first.</SectionTitle>
         <p style={{ fontSize: 16, color: color.muted, margin: '14px 0 0', maxWidth: 560, lineHeight: 1.6 }}>
-          Retailers change return windows all the time — and never send a memo. Kept ships verified policy updates
-          the day they change, and checks every receipt you hold against them. A purchase keeps the terms it was made
+          Retailers change return windows all the time — and never send a memo. Kept ships policy updates the day
+          they change, and checks every receipt you hold against them. A purchase keeps the terms it was made
           under; you just find out when the shop moves the goalposts for the next one.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: 18, margin: '38px 0 80px' }}>
