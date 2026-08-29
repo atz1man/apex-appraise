@@ -416,6 +416,20 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **The hero misspelled a brand.** Item names are placed mid-sentence — "9
+  days left to return your …" — so the first word was lower-cased when it
+  looked ordinary, leaving "JBL", "No7", "iPhone" and "kMix" alone because a
+  word that is not simply Capitalised is carrying information in its case.
+  Read on the screen, the hero said *"9 days left to return your kenwood kMix
+  stand mixer"*. "Kenwood" is simply Capitalised and is also a brand, and no
+  version of that rule can tell those apart: "Sony headphones", "Nike
+  trainers" and "Wool-blend overcoat" are structurally identical. The
+  transformation is gone, because the two mistakes are not the same size —
+  a capital left standing mid-sentence is at worst inelegant and is the
+  person's own text read back to them, while a lower-cased proper noun is
+  wrong, on the one word the reader has to recognise. The old test asserted
+  `'kenwood kMix stand mixer'`, which is how the defect was pinned rather
+  than caught.
 - **A notification is not a demonstration.** The sample receipts are labelled
   on the list and cost nothing against the free tier, and this was the last
   place they still behaved as real: grant permission on a fresh install and

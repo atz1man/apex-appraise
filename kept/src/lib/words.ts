@@ -1,33 +1,33 @@
 /**
  * Fitting a name someone typed into the middle of a sentence.
  *
- * The hero reads "2 days left to return your …" and the policy banner reads
- * "your … is affected", so the item wants to be lower case there. It was done
- * with `toLowerCase()`, which is right for "Wool-blend overcoat" and wrong for
- * everything with a brand or a model number in it: the seeded Currys receipt
- * rendered as "return your jbl tune 770nc headphones", which reads as a typo
- * about a product whose name is the thing the person has to recognise.
+ * The hero reads "9 days left to return your …" and the policy banner reads
+ * "your … is affected", so the item wants to be lower case there. This did it
+ * — carefully, it seemed: only the FIRST word, and only when that word looked
+ * ordinary (a leading capital, then nothing but lower case), so "JBL", "No7",
+ * "iPhone" and "kMix" were left alone because a word that is not simply
+ * Capitalised is carrying information in its case.
  *
- * So only the FIRST word is touched, and only when it looks like an ordinary
- * capitalised word — a leading capital followed by lower case. "Wool-blend"
- * becomes "wool-blend"; "JBL", "iPhone", "No7" and "kMix" are left exactly as
- * they were written, because a word that is not simply Capitalised is carrying
- * information in its case.
- */
-/**
- * A leading capital, then nothing but lower case — allowing the hyphens and
- * apostrophes ordinary words carry, and no digits, because a digit inside a
- * word is a model number rather than a word.
+ * Read on the screen, the hero said:
  *
- *   Wool-blend  ✓      JBL     ✗ (capitals after the first)
- *   Kenwood     ✓      No7     ✗ (a digit)
- *   Men's       ✓      iPhone  ✗ (does not start capitalised)
+ *     9 days left to return your kenwood kMix stand mixer
+ *
+ * "Kenwood" is simply Capitalised and is also a brand, and the rule cannot
+ * tell those apart — nor could any version of it: "Sony headphones", "Nike
+ * trainers", "Adidas hoodie" are all a Capitalised proper noun followed by an
+ * ordinary word, structurally identical to "Wool-blend overcoat". The
+ * information is not in the string.
+ *
+ * So the transformation is gone, because the two mistakes are not the same
+ * size. Leaving "Wool-blend overcoat" capitalised mid-sentence is at worst
+ * inelegant, and it is the person's own text read back to them. Lower-casing
+ * "Kenwood" is wrong — a proper noun spelled incorrectly, on the one word the
+ * reader has to recognise, which is the exact fault the old rule was written
+ * to prevent and then committed itself in the case it could not see.
+ *
+ * The function stays, rather than every caller learning to trim: the callers
+ * are placing user text mid-sentence and that is a thing worth naming.
  */
-const ORDINARY_WORD = /^\p{Lu}[\p{Ll}'’-]*$/u;
-
 export function midSentence(name: string): string {
-  const trimmed = name.trim();
-  const first = trimmed.split(/\s/, 1)[0];
-  if (!first || !ORDINARY_WORD.test(first)) return trimmed;
-  return first.toLowerCase() + trimmed.slice(first.length);
+  return name.trim();
 }
