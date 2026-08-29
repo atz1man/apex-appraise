@@ -2,7 +2,7 @@ import { color } from '../tokens';
 import { Logo, Wordmark } from '../app/components/Icons';
 import { TIERS as PRICING_TIERS, type Period } from '../lib/pricing';
 import { FREE_TIER_LIMIT } from '../lib/quota';
-import { VERIFIED_STORE_COUNT } from '../lib/stores';
+import { VERIFIED_STORE_COUNT, findStore } from '../lib/stores';
 import { REVIEWS, SOCIAL_PROOF_IS_PLACEHOLDER, STATS, TICKER_LINES } from './placeholder-content';
 import { FinePrintArt, HaulArt, LostReceiptsArt } from './sections/ProblemArt';
 import { AppStoreButton, Card, Eyebrow, SectionTitle, WRAP } from './sections/primitives';
@@ -27,8 +27,20 @@ const UPDATES = [
   { store: 'Apple', when: 'updated 3w ago', text: '14-day window confirmed for the iPhone 18 line — warranty clocks added to your receipts automatically.', emphasised: false },
 ];
 
+/**
+ * The three windows this page names are the table's, not a second copy of it.
+ *
+ * They were literals — "IKEA's 365 days, Boots' 35, Apple's 14" — beside a
+ * `stores.ts` that owns those numbers, and the README's own pre-ship task is
+ * to check all twenty against each retailer's published terms. Whoever does
+ * that changes the table; without this they would leave the shop window
+ * quoting the old figure, on the page whose whole claim is that Kept knows the
+ * real one.
+ */
+const days = (name: string) => findStore(name)?.windowDays ?? 0;
+
 const WHY = [
-  { n: '01', title: 'Knows the real policies', body: `IKEA’s 365 days, Boots’ 35, Apple’s 14 — verified windows for ${VERIFIED_STORE_COUNT} major UK retailers, plus the gotchas: Zara’s clock starts at dispatch, Uniqlo won’t refund online orders in store.` },
+  { n: '01', title: 'Knows the real policies', body: `IKEA’s ${days('IKEA')} days, Boots’ ${days('Boots')}, Apple’s ${days('Apple')} — verified windows for ${VERIFIED_STORE_COUNT} major UK retailers, plus the gotchas: Zara’s clock starts at dispatch, Uniqlo won’t refund online orders in store.` },
   { n: '02', title: 'Knows your legal rights', body: 'The Consumer Rights Act gives you 30 days to reject faulty goods for a full refund, and online orders carry a 14-day cooling-off by law. Kept shows the legal deadline beside the shop’s own.' },
   { n: '03', title: 'Paste or scan, done', body: 'Paste an order email and Kept reads the store, total and date, and sets the deadline for you. Scanning a paper receipt lands in a later release.' },
   { n: '04', title: 'Warranties too', body: 'Electronics and appliances get a warranty clock alongside the return window, so you know the repair is free before you pay for one.' },
