@@ -702,6 +702,29 @@ results['a delivery date in the paste is read, not asked for'] =
     !/£193\.25 back if it goes back/.test(shown) &&
     // Nor filed under the one thing that cannot be done about it.
     /WINDOW CLOSED · CHECK YOUR RIGHTS/.test(shown);
+
+  /*
+   * And the third statement on the same card: its footer.
+   *
+   * "£X still returnable" summed every ACTIVE receipt, and the expired one is
+   * active on purpose — so the card that had just said WINDOW ALREADY CLOSED
+   * counted that receipt's £193.25 as money still to come back, three lines
+   * below. Read off the rendered figure and checked against the two sums the
+   * page itself holds, rather than against a number written here that would go
+   * stale with the seed.
+   */
+  const footer = /(£[\d,]+\.\d\d) still returnable/.exec(shown);
+  const sums = await backlogPage.evaluate(() => {
+    const rs = JSON.parse(localStorage.getItem('kept.v1')).receipts.filter((r) => r.status === 'active');
+    return { all: rs.reduce((n, r) => n + r.amount, 0), gone: (rs.find((r) => r.id === 'gone') ?? {}).amount ?? 0 };
+  });
+  const shownPence = footer ? Math.round(parseFloat(footer[1].replace(/[£,]/g, '')) * 100) : -1;
+  results['money past the shop’s window is not counted as still returnable'] =
+    // The second clause is the point: if the expired receipt were worth
+    // nothing, the two totals would be equal and the first clause would pass
+    // over a difference that was never there.
+    shownPence === sums.all - sums.gone && sums.gone > 0;
+
   await backlogCtx.close();
 }
 

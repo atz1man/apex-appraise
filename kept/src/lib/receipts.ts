@@ -1,4 +1,5 @@
 import { addDays, addMonths, daysBetween, fromISODate, startOfDay } from './dates';
+import { sumPence } from './money';
 import type { Receipt } from './types';
 
 /**
@@ -134,6 +135,28 @@ export function bucket(receipts: readonly Receipt[], today: Date, urgentDays: nu
     later: active.filter((x) => x.derived.daysLeft > urgentDays).map((x) => x.receipt),
     returned: receipts.filter((r) => r.status === 'returned'),
   };
+}
+
+/**
+ * The money a shop will still take back.
+ *
+ * NOT every active receipt, and that distinction is the whole of it. `bucket`
+ * deliberately keeps an expired one at the top of the list — the money may
+ * still be recoverable under the statutory rights, and demoting it would hide
+ * the row a person most needs to see — so summing every active receipt put
+ * those amounts under the words "still returnable", in the footer of the same
+ * card whose label reads WINDOW ALREADY CLOSED and whose line above it says
+ * the shop's window shut.
+ *
+ * That card had already been corrected twice for exactly this contradiction:
+ * the label above the headline, then the sentence below it. The footer was the
+ * third statement on it and was still counting money the shop will not give
+ * back. A closed window is not returnable in the ordinary sense this total
+ * means; what is left to try is said per receipt in the section below, in the
+ * language of rights rather than of refunds.
+ */
+export function stillReturnablePence(b: Buckets): number {
+  return sumPence([...b.urgent, ...b.later].map((r) => r.amount));
 }
 
 /** Receipts whose deadline lands inside the 30-day timeline strip. */

@@ -1241,6 +1241,34 @@ stop does not return until the port has stopped answering. When it has not, the
 three offline results are recorded as *not asked* rather than passed, because
 that is what they are.
 
+### The third statement on the same card
+
+The hero card had been corrected twice for saying two things at once. On a
+library with a backlog the most urgent active receipt is an *expired* one —
+`bucket` keeps it at the top deliberately, because the money may still be
+recoverable and demoting it would hide the row a person most needs to see — and
+the card's label and its sentence had both been made to say so.
+
+Its footer was still summing every active receipt. So the card that reads
+**WINDOW ALREADY CLOSED**, above a line saying the shop's window shut, ended
+with "£412.96 still returnable" — a total that included the £193.25 attached to
+that very window. A person reads that as money they can go and get.
+
+`stillReturnablePence` counts the open windows only, and lives in
+`receipts.ts` beside `bucket` so the judgement has one home and can be tested
+at its edges: the last day of a window counts (`daysLeft === 0` is inside it),
+a returned receipt does not, an expired one does not. What is left to try on a
+closed window is still said, per receipt, in the section below — in the
+language of rights rather than of refunds, which is the honest register for it.
+
+The unit tests pin the rule; `npm run smoke` pins the wiring, since a screen
+can always go back to summing the wrong list. It reads the rendered figure and
+compares it against the two sums the page itself holds, so the check does not
+carry a number that would go stale with the seed — and it requires the expired
+receipt to be worth something, because if it were worth nothing the two totals
+would be equal and the comparison would pass over a difference that was never
+there. Both mutations fail it.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active

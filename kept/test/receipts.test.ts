@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays, toISODate } from '../src/lib/dates';
 import { toPence } from '../src/lib/money';
-import { bucket, derive, timelineDots } from '../src/lib/receipts';
+import { bucket, derive, stillReturnablePence, timelineDots } from '../src/lib/receipts';
 import type { Receipt } from '../src/lib/types';
 
 const TODAY = new Date(2026, 7, 28);
@@ -177,5 +177,49 @@ describe('the warranty clock', () => {
   it('carries a note with no clock, for a warranty imported as prose', () => {
     const d = derive(receipt({ warranty: { months: 0, note: '2-year manufacturer warranty' } }), TODAY);
     expect(d.warranty!.months).toBe(0);
+  });
+});
+
+describe('what "still returnable" counts', () => {
+  /*
+   * The hero footer summed every ACTIVE receipt, and `bucket` keeps an expired
+   * one active on purpose. So the card that says WINDOW ALREADY CLOSED was
+   * counting that receipt's money as still returnable, three lines below.
+   */
+  const today = new Date(2026, 7, 29);
+  const at = (daysAgo: number, amount: number, id: string): Receipt => ({
+    id,
+    store: 'Currys',
+    item: 'Thing',
+    cat: 'other',
+    amount,
+    purchasedOn: toISODate(addDays(today, -daysAgo)),
+    windowDays: 30,
+    policy: 'Currys · 30 days',
+    distance: false,
+    status: 'active',
+  });
+
+  it('leaves out the money the shop will no longer take back', () => {
+    const rs = [at(40, 19325, 'gone'), at(2, 5000, 'open')];
+    expect(stillReturnablePence(bucket(rs, today, 7))).toBe(5000);
+  });
+
+  it('counts both an urgent one and a relaxed one', () => {
+    const rs = [at(28, 1000, 'urgent'), at(1, 2000, 'later')];
+    expect(stillReturnablePence(bucket(rs, today, 7))).toBe(3000);
+  });
+
+  it('counts the last day of a window, which is still a day', () => {
+    // daysLeft === 0 is inside the window, not past it — the receipt that most
+    // needs its money counted is the one you can still act on today.
+    const rs = [at(30, 4200, 'lastday')];
+    expect(bucket(rs, today, 7).urgent).toHaveLength(1);
+    expect(stillReturnablePence(bucket(rs, today, 7))).toBe(4200);
+  });
+
+  it('does not count a receipt already returned', () => {
+    const rs = [{ ...at(2, 5000, 'back'), status: 'returned' as const }, at(2, 1000, 'open')];
+    expect(stillReturnablePence(bucket(rs, today, 7))).toBe(1000);
   });
 });
