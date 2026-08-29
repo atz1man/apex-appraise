@@ -1025,6 +1025,39 @@ duplicated rather than imported (`ONBOARDING_STEPS`). Those still need the
 question asked by hand, and the test says so where someone would otherwise
 assume otherwise.
 
+### And who reads this *field*?
+
+The sweep above says at its top that it cannot ask the question of a field.
+`test/fields-read.test.ts` asks it there, which is where two of the three worst
+versions of this defect actually lived.
+
+The trick is that a dead field does not look dead. `clockStart` was written by
+hand on all twenty entries of the store table — three of them with prose beside
+it explaining the limitation it was there to remove — and read by nothing, so
+every Zara receipt anyone added counted its 30 days from the order rather than
+from dispatch, which can say "window closed" on a day Zara would still take the
+coat back. Grep for the name and you find twenty hits. So the parser
+distinguishes: a key in an object literal or the left of an assignment is a
+write; a property access or a destructuring is a read. Only reads count.
+
+`returnedOn` needed one distinction further, and slipped through the first
+version of this file. Its reads were real — `backup.ts` reads it to copy it
+into an export and back out of one — but copying a value through a serialiser
+is not looking at it, and a field written, saved, restored and never consulted
+by anything that decides or displays is as dead as one with no reads at all. So
+the persistence layer is counted separately and a field only it reads is
+reported in its own words: *"saved and restored, and nothing decides or
+displays anything with it"*.
+
+Neither list has an entry today, and both were confirmed to fill by putting the
+original defects back — `clockStart` unread, and `returnedOn` read only by the
+saving of it. Three vacuity guards go with them: the models have to have been
+found (this one fired immediately, on a model named `StorePolicy` rather than
+`Store`), the read/write distinction is checked against source written in the
+test rather than trusted, and the pattern naming the persistence layer has to
+still match two files — rename `backup.ts` and every field it copies would
+quietly start counting as used.
+
 ### It does not contradict itself
 
 Unit tests check each calculation. Smoke checks each flow. Neither catches the
