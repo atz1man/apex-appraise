@@ -68,7 +68,7 @@ not the commit just pushed. A pull request that touches a single file outside
 edits both workflows, the root `.gitignore` and the root README. The saving is
 on pushes to main and on pull requests confined to `kept/`.
 
-Two jobs: a fast one (typecheck, 381 unit tests, build) and a browser one that
+Two jobs: a fast one (typecheck, unit tests, build) and a browser one that
 serves the built app and runs five sweeps against it, plus `freshness`, which
 starts and stops a server of its own. Each of those found real defects the day
 it was written, which is why they are gates rather than a ritual someone
