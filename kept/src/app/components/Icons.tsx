@@ -191,24 +191,6 @@ export function PlusGlyph() {
   );
 }
 
-export function ClockGlyph({ size = 34 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
-      <circle cx="9" cy="9" r="7" fill="none" stroke={color.yellow} strokeWidth="1.6" />
-      <path d="M9 5v4l2.8 2" fill="none" stroke={color.yellow} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function LockGlyph({ size = 34 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
-      <rect x="3.5" y="8" width="11" height="7.5" rx="2" fill="none" stroke={color.yellow} strokeWidth="1.6" />
-      <path d="M6 8V5.5a3 3 0 016 0V8" fill="none" stroke={color.yellow} strokeWidth="1.6" />
-    </svg>
-  );
-}
-
 export function CameraGlyph() {
   return (
     <svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true">
@@ -237,10 +219,3 @@ export function ShareGlyph() {
   );
 }
 
-export function AppleGlyph({ width = 20, fill = color.cream }: { width?: number; fill?: string }) {
-  return (
-    <svg width={width} height={(width / 14) * 17} viewBox="0 0 14 17" fill={fill} aria-hidden="true">
-      <path d="M11.5 9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.8-3.5.8-.7 0-1.8-.8-3-.8C2.1 3.7.6 4.6-.2 6.1c-1.6 2.8-.4 7 1.1 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.2.9-1.3 1.3-2.6 1.3-2.6s-2.4-1-2.4-3.9zM9.2 2.2c.6-.8 1.1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1.1.1 2.1-.5 2.8-1.3z" transform="translate(1 1) scale(.85)" />
-    </svg>
-  );
-}

@@ -111,7 +111,7 @@ export function countsFromDispatch(store: string): boolean {
 }
 
 /** True when it starts on the doormat: Apple, Amazon and ASOS all say so. */
-export function countsFromDelivery(store: string): boolean {
+function countsFromDelivery(store: string): boolean {
   return findStore(canonicalStoreName(store))?.clockStart === 'delivery';
 }
 
@@ -148,7 +148,7 @@ export function windowStartFor(
  * it is bought either. Separate from `arrivalProblem` only so the messages can
  * name the right event: a person correcting one of these needs to know which.
  */
-export function dispatchProblem(dispatchedOn: string, purchasedOn: string, today: Date): string | undefined {
+function dispatchProblem(dispatchedOn: string, purchasedOn: string, today: Date): string | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dispatchedOn) || toISODate(fromISODate(dispatchedOn)) !== dispatchedOn) {
     return 'Pick the day it was dispatched, or leave it blank';
   }

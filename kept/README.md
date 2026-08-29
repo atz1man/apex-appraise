@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 500 unit tests over the decision logic
+npm test           # 503 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -416,6 +416,19 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **A fourth onboarding slide would have been unreachable.** The reducer
+  finished the flow at `obStep >= 2` — the last index, typed as a literal —
+  while `ONBOARDING_STEPS` sat exported from the file that owns the slides and
+  used by nothing. Add a slide and it would have been written, rendered, and
+  counted in "Step 4 of 4", and the flow would still have ended on the third.
+  The count is derived now, and the test walks whatever number of slides there
+  are: adding a fourth makes the old literal fail and the derived count pass.
+- **Three icons nobody drew.** A clock, a padlock and an Apple logo, exported
+  from `Icons.tsx` and referenced nowhere — shipped in the bundle of an app
+  that has to work offline on a phone, one of them a trademark nothing had
+  asked to render. `icons.test.ts` requires every icon the set exports to be
+  drawn somewhere, because an icon set is written ahead of the screens that
+  use it and that is where dead code collects.
 - **The policy-watch switch switched nothing.** `settings.policyWatch` was a
   stored boolean read by the Settings row that draws it and by nothing else.
   The row said "Policy watch · Every launch · on", turning it off changed the

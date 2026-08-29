@@ -25,7 +25,7 @@ export function notifyState(): NotifyState {
 }
 
 /** True when this is the landing page's embedded demo rather than the real app. */
-export function isEmbedded(): boolean {
+function isEmbedded(): boolean {
   try {
     return window.self !== window.top;
   } catch {

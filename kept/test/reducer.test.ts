@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reducer, type AppState } from '../src/app/state';
 import { addDays, toISODate } from '../src/lib/dates';
+import { ONBOARDING_STEPS } from '../src/app/screens/Onboarding';
 import { toPence } from '../src/lib/money';
 import { DEFAULT_SETTINGS } from '../src/lib/storage';
 import type { Receipt } from '../src/lib/types';
@@ -159,5 +160,23 @@ describe('what the celebration is allowed to claim', () => {
   it('does not count an alert about a different receipt', () => {
     const s = reducer(base({ alertsSent: ['b:soon'] }), { type: 'return', id: 'a' }, TODAY);
     expect(s.celebrating?.warned).toBe(false);
+  });
+});
+
+describe('the onboarding flow reaches its last slide', () => {
+  it('advances through every step and finishes on the last', () => {
+    // The reducer carried the last index as a literal 2 while
+    // ONBOARDING_STEPS sat exported and unused. A fourth slide would have
+    // been written, rendered, counted in "Step 4 of 4" — and unreachable.
+    expect(ONBOARDING_STEPS).toBeGreaterThan(1);
+    let s = base({ screen: 'onboard', obStep: 0, onboardingSeen: false });
+    for (let i = 1; i < ONBOARDING_STEPS; i += 1) {
+      s = reducer(s, { type: 'ob-next' }, TODAY);
+      expect(s.obStep, `after ${i} taps`).toBe(i);
+      expect(s.screen, `after ${i} taps`).toBe('onboard');
+    }
+    s = reducer(s, { type: 'ob-next' }, TODAY);
+    expect(s.screen).toBe('home');
+    expect(s.onboardingSeen).toBe(true);
   });
 });

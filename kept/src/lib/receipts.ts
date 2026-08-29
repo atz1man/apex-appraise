@@ -94,7 +94,7 @@ export function derive(r: Receipt, today: Date): DerivedReceipt {
  * hundred receipts is thousands of redundant date parses to establish an
  * order that was already knowable.
  */
-export function sortByDeadline(receipts: readonly Receipt[], today: Date): DerivedPair[] {
+function sortByDeadline(receipts: readonly Receipt[], today: Date): DerivedPair[] {
   return receipts
     .map((r) => ({ receipt: r, derived: derive(r, today) }))
     .sort((a, b) => a.derived.daysLeft - b.derived.daysLeft);

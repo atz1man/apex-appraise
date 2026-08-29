@@ -5,6 +5,7 @@ import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { derive, makeReceiptId } from '../lib/receipts';
 import { freshState, load, onExternalChange, save, type KeptState, type Settings } from '../lib/storage';
 import { quotaFull as quotaFullFor } from '../lib/quota';
+import { ONBOARDING_STEPS } from './screens/Onboarding';
 import type { Period } from '../lib/pricing';
 import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
@@ -94,7 +95,7 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
     case 'open':
       return { ...state, justDeleted: null, screen: 'detail', selId: action.id };
     case 'ob-next':
-      return state.obStep >= 2
+      return state.obStep >= ONBOARDING_STEPS - 1
         ? { ...state, screen: 'home', onboardingSeen: true }
         : { ...state, obStep: state.obStep + 1 };
     case 'ob-skip':
