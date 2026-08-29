@@ -196,3 +196,48 @@ describe('the 30-day right to reject faulty goods', () => {
     expect(r.body).toContain('repair or replacement');
   });
 });
+
+describe('the parts a person only finds out by asking', () => {
+  const TODAY = new Date(2026, 7, 28);
+  const bought = (daysAgo: number, distance: boolean): Receipt => ({
+    id: 'x', store: 'ASOS', item: 'Coat', cat: 'clothing', amount: 4000,
+    purchasedOn: toISODate(addDays(TODAY, -daysAgo)), windowDays: 28, policy: 'p',
+    distance, status: 'active',
+  });
+
+  it('names the Scottish period as well as the English one', () => {
+    // "up to six years in England and Wales" gives a Scottish reader no
+    // number at all, on an app sold UK-wide.
+    const [reject] = legalRights(bought(60, false), TODAY, true);
+    expect(reject.live).toBe(false);
+    expect(reject.body).toContain('six years in England and Wales');
+    expect(reject.body).toContain('five in Scotland');
+  });
+
+  it('says an expired cooling-off may not be expired', () => {
+    // Regulation 31: if the trader never gave the cancellation information,
+    // the period ends twelve months after it otherwise would have. Closing
+    // the door on that is closing it on a refund the person may still be owed.
+    const rights = legalRights(bought(40, true), TODAY, true);
+    const coolingOff = rights.find((r) => r.chip === 'Consumer Contracts Regs')!;
+    expect(coolingOff.live).toBe(false);
+    expect(coolingOff.body).toMatch(/never told you about this right/);
+    expect(coolingOff.body).toMatch(/up to a year/);
+  });
+
+  it('says it whether or not the arrival date is known', () => {
+    const withArrival = { ...bought(40, true), arrivedOn: toISODate(addDays(TODAY, -38)) };
+    const known = legalRights(withArrival, TODAY, true).find((r) => r.chip === 'Consumer Contracts Regs')!;
+    expect(known.live).toBe(false);
+    expect(known.body).toMatch(/never told you about this right/);
+  });
+
+  it('does not clutter a live right with it', () => {
+    // While the right is plainly running there is nothing here worth the
+    // words, and the sentence would read as a warning about the wrong thing.
+    const rights = legalRights(bought(3, true), TODAY, true);
+    const coolingOff = rights.find((r) => r.chip === 'Consumer Contracts Regs')!;
+    expect(coolingOff.live).toBe(true);
+    expect(coolingOff.body).not.toMatch(/never told you about this right/);
+  });
+});

@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 465 unit tests over the decision logic
+npm test           # 469 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -416,6 +416,19 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **An expired cooling-off is not always expired, and Scotland is not England.**
+  Two things the record supports that the screen was not saying. Regulation 31
+  of the 2013 Regulations: where the trader never gave the consumer the
+  cancellation information the Regulations require, the period does not simply
+  end — supply it late and it runs 14 days from then, never supply it and it
+  ends twelve months after it otherwise would have. The app was closing the
+  door on a refund the person may still be owed, so the expired case now says
+  so, as something to check rather than a conclusion, since whether the shop
+  told them is a fact only they have. And the repair line said "for up to six
+  years in England and Wales", which gives a Scottish reader no number at all
+  on an app sold UK-wide; it names the five-year Scottish period too. Both are
+  stated only where they earn the words — the extension on an expired right,
+  never on a live one, where it would read as a warning about the wrong thing.
 - **The first screen of a new install promised a feature that is not built.**
   Onboarding said "Paste an order email or snap the paper slip" — scanning is
   deferred, the add screen shows it as a visibly disabled SOON button, and the

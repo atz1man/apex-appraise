@@ -58,12 +58,34 @@ const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const AFTER_ARRIVAL = 'The clock starts the day it arrived, so a parcel that came later runs later.';
 const CHECK_ARRIVAL = 'but it starts the day the parcel arrived, so check that date';
 
+/**
+ * The extension nobody is told about, said where it is worth money.
+ *
+ * Regulation 31 of the 2013 Regulations: if the trader did not give the
+ * consumer the cancellation information the Regulations require, the
+ * cancellation period does not simply end. Supply it late and the period runs
+ * 14 days from then; never supply it and the period ends twelve months after
+ * it otherwise would have. So an expired cooling-off is not always an expired
+ * cooling-off, and the app was closing the door on it.
+ *
+ * Stated only in the EXPIRED case, and as something to check rather than a
+ * conclusion, because whether the shop gave that information is a fact only
+ * the buyer has. While the right is plainly live there is nothing here worth
+ * the words.
+ */
+const UNTOLD_EXTENSION =
+  'If the shop never told you about this right in writing, the law can extend it by up to a year — worth checking what came with the order.';
+
 /** @param hedged True when the arrival date is unknown, so the end is a floor. */
 function shortTermRejectRight(bought: Date, today: Date, hedged: boolean): LegalRight {
   const ends = addDays(bought, REJECT_DAYS);
   const left = daysBetween(today, ends);
+  // Both jurisdictions, because the app is sold UK-wide and a Scottish reader
+  // given only "six years in England and Wales" is given no number at all.
+  // The periods are the Limitation Act 1980's six years and the Prescription
+  // and Limitation (Scotland) Act 1973's five.
   const repair =
-    'you can still ask for a free repair or replacement if a fault appears, for up to six years in England and Wales.';
+    'you can still ask for a free repair or replacement if a fault appears, for up to six years in England and Wales, five in Scotland.';
   return {
     chip: 'Consumer Rights Act',
     live: left >= 0,
@@ -91,8 +113,8 @@ function coolingOffRight(bought: Date, today: Date, storeWindowOpen: boolean, he
           ? `14-day cooling-off on distance purchases — you can cancel for any reason until at least ${fmtDate(ends)} (${days(left)} left), then 14 more days to send it back. ${AFTER_ARRIVAL}`
           : `14-day cooling-off on distance purchases — you can cancel for any reason until ${fmtDate(ends)} (${days(left)} left), counting from the day it arrived, then 14 more days to send it back.`
         : hedged
-          ? `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'}`
-          : `The 14-day cooling-off has passed, counting from the day it arrived.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'}`,
+          ? `Counting from your order, the 14-day cooling-off has run out — ${CHECK_ARRIVAL}.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'} ${UNTOLD_EXTENSION}`
+          : `The 14-day cooling-off has passed, counting from the day it arrived.${shopStillOpen || ' You keep the rights above for anything that turns out to be faulty.'} ${UNTOLD_EXTENSION}`,
   };
 }
 
