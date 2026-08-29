@@ -203,7 +203,81 @@ await lp.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 await lp.waitForTimeout(800);
 await audit(lp, 'landing', findings);
 
+/*
+ * Reduced motion, which axe does not check and nothing else here exercised.
+ *
+ * The stylesheet has honoured `prefers-reduced-motion` since it was written —
+ * for the three animation CLASSES it names. Five transitions are declared
+ * inline on the element instead, including the swipe row's `transform .25s`,
+ * and an inline style is unreachable from a media query. So the setting was
+ * stopping the decorative marquee and leaving the motion that moves a whole
+ * row under someone's finger.
+ *
+ * Asked of the real screens rather than of the stylesheet: with the setting
+ * on, nothing may still be running an endless animation, and no transition may
+ * be long enough to be motion.
+ */
+const motionCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, reducedMotion: 'reduce' });
+const motionPage = await motionCtx.newPage();
+function stillMovingIn() {
+  const bad = [];
+  const secs = (v) =>
+    Math.max(0, ...String(v).split(',').map((x) => (x.includes('ms') ? parseFloat(x) / 1000 : parseFloat(x)) || 0));
+  for (const el of document.querySelectorAll('*')) {
+    const s = getComputedStyle(el);
+    if (s.animationName !== 'none' && s.animationIterationCount.split(',').includes('infinite')) {
+      bad.push(['endless animation', s.animationName, (typeof el.className === 'string' && el.className) || el.tagName]);
+    } else if (s.animationName !== 'none' && secs(s.animationDuration) > 0.05) {
+      bad.push(['animation', s.animationDuration, (typeof el.className === 'string' && el.className) || el.tagName]);
+    }
+    if (secs(s.transitionDuration) > 0.05) bad.push(['transition', s.transitionDuration, (typeof el.className === 'string' && el.className) || el.tagName]);
+  }
+  return bad;
+}
+
+const stillMoving = [];
+for (const [label, go] of [
+  ['home', async () => {
+    await motionPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+    await motionPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  }],
+  ['receipt detail', async () => { await motionPage.getByRole('button', { name: /Currys, JBL/ }).click(); }],
+  ['settings', async () => { await motionPage.getByRole('button', { name: 'Settings', exact: true }).click(); }],
+  ['landing', async () => { await motionPage.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' }); }],
+]) {
+  await go();
+  await motionPage.waitForTimeout(500);
+  // A screen that rendered nothing would report a clean pass over an empty
+  // page, which is the shape of a sweep that never asked its question.
+  const rendered = await motionPage.evaluate(() => document.querySelectorAll('main *, section *').length);
+  if (rendered < 5) stillMoving.push([label, 'nothing rendered to check', String(rendered), 'the walk broke here']);
+  for (const row of await motionPage.evaluate(stillMovingIn)) stillMoving.push([label, ...row]);
+}
+
+// The ticker must be stopped outright, not merely run once by the blanket
+// rule — the two class rules above it in the stylesheet are what do that.
+await motionPage.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+const ticker = await motionPage.evaluate(() => {
+  const el = document.querySelector('.k-ticker');
+  return el ? getComputedStyle(el).animationName : 'missing';
+});
+if (ticker !== 'none') stillMoving.push(['landing', 'the marquee is not stopped', ticker, '.k-ticker']);
+await motionCtx.close();
+
 await browser.close();
+
+if (stillMoving.length > 0) {
+  console.log(`✗ ${stillMoving.length} thing(s) still moving with reduced motion on:\n`);
+  const seen = new Set();
+  for (const [screen, kind, value, who] of stillMoving) {
+    const key = `${kind}|${value}|${who}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    console.log(`  ${kind} ${value} — ${String(who).slice(0, 60)} (${screen})`);
+  }
+  console.log('');
+  process.exit(1);
+}
 
 // One row per rule, listing the screens it fires on: the same mistake in nine
 // places is one thing to fix, not nine.

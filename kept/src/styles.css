@@ -85,6 +85,26 @@ textarea:focus { outline: 2px solid #F2B90D; }
 @media (prefers-reduced-motion: reduce) {
   .k-fade { animation-duration: .01ms; }
   .k-pulse, .k-ticker { animation: none !important; }
+
+  /*
+   * And everything else, including what a stylesheet cannot otherwise reach.
+   *
+   * The three rules above name CLASSES, and five of this app's transitions are
+   * declared inline on the element — among them the swipe row's
+   * `transform .25s`, which moves a whole row under someone's finger. An
+   * inline style beats any stylesheet rule that is not !important, so the
+   * setting was stopping the decorative marquee and leaving the motion most
+   * likely to matter.
+   *
+   * `*` has zero specificity, so the two rules above still win where they
+   * apply: the ticker stays stopped outright rather than running once.
+   */
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* The scrolling policy headline bar on the landing page. */

@@ -378,6 +378,19 @@ Three passes, because they catch different things:
 - `npm run contrast` re-measures what is actually rendered, compositing
   through translucent layers, catching a component that reached for the wrong
   token.
+- `npm run a11y` also asks the one motion question axe does not. The
+  stylesheet has honoured `prefers-reduced-motion` since it was written — for
+  the three animation *classes* it names. Five of this app's transitions are
+  declared inline on the element, an inline style beats any stylesheet rule
+  that is not `!important`, and one of them is the swipe row's
+  `transform .25s`: with the setting on, the decorative marquee stopped and
+  the motion that moves a whole row under someone's finger did not. Measured
+  on the real screens, not read off the stylesheet — ten elements were still
+  moving. The blanket rule that fixes it sits inside the media query and has
+  zero specificity, so the two class rules still win where they apply and the
+  ticker stays stopped outright rather than running once; the sweep checks
+  that too, and checks that each screen rendered something before reporting a
+  clean pass over it.
 - `npm run a11y` runs axe-core over every screen for the questions contrast
   cannot ask — is every control named, is the heading order sane, are there
   landmarks, does anything rely on colour alone.
