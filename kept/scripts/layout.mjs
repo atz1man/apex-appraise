@@ -80,8 +80,14 @@ async function checkCovered(page, label, width) {
     })
     .catch(() => 0);
   await page.waitForTimeout(350);
-  const covered = await page.evaluate(() =>
-    [...document.querySelectorAll('button')]
+  const covered = await page.evaluate(() => {
+    // While a modal is open, everything behind it is SUPPOSED to be
+    // untappable — that is what modal means — so the question narrows to the
+    // sheet's own buttons. Without this the check reports the scrim covering
+    // the tab bar as a defect, which would train a reader to ignore it.
+    const modal = document.querySelector('[role="dialog"][aria-modal="true"]');
+    const root = modal ?? document;
+    return [...root.querySelectorAll('button')]
       .filter((b) => !b.disabled)
       .map((b) => {
         const r = b.getBoundingClientRect();
@@ -96,8 +102,8 @@ async function checkCovered(page, label, width) {
           covering: (hit.closest('button')?.textContent ?? hit.tagName).trim().slice(0, 30),
         };
       })
-      .filter(Boolean),
-  );
+      .filter(Boolean);
+  });
   await page.setViewportSize({ width, height: 844 });
   await page.waitForTimeout(200);
   if (covered.length > 0) {
@@ -190,6 +196,13 @@ const screens = [
   ['watch', async (p) => { await p.getByRole('button', { name: /^Watch/ }).click(); }],
   ['add', async (p) => { await p.getByRole('button', { name: 'Add a receipt' }).click(); }],
   ['settings', async (p) => { await p.getByRole('button', { name: 'Settings', exact: true }).click(); }],
+  // A modal, so it sizes itself rather than inheriting the page's padding —
+  // the one surface here that can push a 320px viewport sideways on its own.
+  ['settings · upgrade notice', async (p) => {
+    await p.getByRole('button', { name: 'Settings', exact: true }).click();
+    await p.waitForTimeout(250);
+    await p.getByRole('button', { name: /£39\.99/ }).click({ timeout: 2000 }).catch(() => {});
+  }],
 ];
 
 for (const width of WIDTHS) {

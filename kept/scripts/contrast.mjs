@@ -203,6 +203,14 @@ await page.waitForTimeout(300);
 await sweep('settings · erase confirm');
 await page.getByRole('button', { name: 'Keep them' }).click().catch(() => {});
 
+// The upgrade sheet, which paints its own surface over a scrim and is
+// reachable only by tapping a price.
+await page.getByRole('button', { name: /£39\.99/ }).click().catch(() => {});
+await page.waitForTimeout(300);
+await sweep('settings · upgrade notice');
+await page.getByRole('button', { name: 'Not now' }).click({ timeout: 2000 }).catch(() => {});
+await page.waitForTimeout(300);
+
 
 /*
  * States, not screens. Nothing above navigates to these, so until now none of

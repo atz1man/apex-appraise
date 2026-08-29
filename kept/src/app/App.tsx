@@ -6,9 +6,11 @@ import { deliver } from './notify';
 import { money, sumPence } from '../lib/money';
 import { midSentence } from '../lib/words';
 import { exportBackup, wipe } from '../lib/storage';
+import { FEATURED_TIER } from '../lib/pricing';
 import { SaveFailedBanner } from './components/SaveFailedBanner';
 import { TabBar } from './components/TabBar';
 import { UndoBar } from './components/UndoBar';
+import { UpgradeNotice } from './components/UpgradeNotice';
 import { Add } from './screens/Add';
 import { Celebrate } from './screens/Celebrate';
 import { Detail } from './screens/Detail';
@@ -290,7 +292,7 @@ export function App() {
           quotaFull={quotaFull(state)}
           trackedTotal={money(sumPence(state.receipts.map((r) => r.amount)))}
           onSave={(receipt) => dispatch({ type: 'add', receipt })}
-          onUpgrade={() => dispatch({ type: 'settings', patch: { plan: 'pro' } })}
+          onUpgrade={() => dispatch({ type: 'upgrade-ask', period: FEATURED_TIER.period })}
         />
       )}
 
@@ -307,7 +309,7 @@ export function App() {
             wipe();
             dispatch({ type: 'wipe' });
           }}
-          onUpgrade={() => dispatch({ type: 'settings', patch: { plan: 'pro' } })}
+          onUpgrade={(period) => dispatch({ type: 'upgrade-ask', period })}
           onChange={(patch) => dispatch({ type: 'settings', patch })}
         />
       )}
@@ -331,6 +333,14 @@ export function App() {
           label={`Deleted ${state.justDeleted.item}`}
           onUndo={() => dispatch({ type: 'undo-delete' })}
           onDismiss={() => dispatch({ type: 'dismiss-undo' })}
+        />
+      )}
+
+      {state.upgrading && (
+        <UpgradeNotice
+          period={state.upgrading}
+          onUnlock={() => dispatch({ type: 'settings', patch: { plan: 'pro' } })}
+          onCancel={() => dispatch({ type: 'upgrade-cancel' })}
         />
       )}
 

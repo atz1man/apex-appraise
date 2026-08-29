@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 434 unit tests over the decision logic
+npm test           # 440 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 41 end-to-end checks, including a midnight rollover
+npm run smoke      # 44 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -702,6 +702,33 @@ the rule, and the smoke suite opens the IKEA receipt and requires the two dates
 the detail screen prints together to differ and to agree about the year. Both
 were proved by putting `fmtDateNear` back and watching each name the defect.
 
+### A price you tap is not a price you paid
+
+Tapping a tier in Settings dispatched `plan: 'pro'` on the spot. No card box,
+no confirmation, no word either way — press "£39.99 lifetime" and the paywall
+simply vanishes. The only reading available to someone doing that is that they
+have just been charged £39.99. Payments are not built (see *Not built yet*),
+so nothing was, and an app that displays a price, takes a tap, and then behaves
+as though money changed hands is making a claim about somebody's bank account.
+
+A tap now opens a sheet that leads with the thing that costs money to get
+wrong — nothing charged, no card taken, nothing to cancel — names the tier
+that was pressed, and then offers the unlock, which is real and free. Unlocking
+used to remove the plan block and put nothing in its place, so the app went
+quiet about it; where the prices were there is now a standing "Unlocked ·
+nothing was charged", because someone returning a week later has no other way
+to tell whether they are being billed.
+
+Three sweeps grew a case for it, since a modal is reachable only by tapping and
+so was invisible to all of them: smoke checks that a tap leaves the plan alone
+and that the sheet says so, that "Not now" unlocks nothing, and that the
+disclosure survives the unlock; a11y audits the dialog (proved by removing its
+accessible name and watching axe name it); contrast sweeps its surface. The
+layout sweep needed a change of its own — its covered-button check counted the
+scrim over the tab bar as a defect, which is what a modal is *for*, so it now
+narrows to the open dialog's own buttons and still fails when those are
+covered.
+
 ### A deploy reaches the app, and the app works without one
 
 Two promises pull against each other. "Verified policy updates the day they
@@ -789,7 +816,8 @@ that check was actually proving.
   Settings says exactly that instead of implying a service that does not
   exist. A native shell or a push path replaces `notify.ts` alone; the
   decision engine does not change.
-- **Payments.** The pricing tiers set the local plan flag. No billing.
+- **Payments.** The pricing tiers unlock the local plan flag and say plainly
+  that nothing was charged. No card, no billing, nothing to cancel.
 - **Signing the policy feed.** The feed is fetched from the app's own origin,
   validated entry by entry and merged (`lib/policy-feed.ts`), and the download
   is of *all* changes — never a query naming the shops a particular user

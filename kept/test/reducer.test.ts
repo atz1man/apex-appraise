@@ -14,7 +14,7 @@ const receipt = (id: string): Receipt => ({
 const base = (over: Partial<AppState> = {}): AppState => ({
   version: 1, receipts: [receipt('a'), receipt('b')], updates: [], onboardingSeen: true,
   settings: { ...DEFAULT_SETTINGS }, alertsSent: [],
-  screen: 'home', selId: null, obStep: 0, celebrating: null, shared: 'no',
+  screen: 'home', selId: null, obStep: 0, celebrating: null, shared: 'no', upgrading: null,
   sharedText: null, embedded: false, justDeleted: null,
   ...over,
 });
@@ -95,5 +95,29 @@ describe('adopting another tab’s state', () => {
       } }, TODAY);
       expect(synced).toMatchObject({ screen: 'home', selId: null });
     }
+  });
+});
+
+describe('tapping a price', () => {
+  // It used to dispatch the plan change directly, so a tap on "£39.99
+  // lifetime" flipped the app to pro with no card taken and nothing said.
+  it('opens the notice and leaves the plan alone', () => {
+    const s = reducer(base(), { type: 'upgrade-ask', period: 'lifetime' }, TODAY);
+    expect(s.upgrading).toBe('lifetime');
+    expect(s.settings.plan).toBe('free');
+  });
+
+  it('unlocks nothing when the notice is dismissed', () => {
+    const asked = reducer(base(), { type: 'upgrade-ask', period: 'yearly' }, TODAY);
+    const closed = reducer(asked, { type: 'upgrade-cancel' }, TODAY);
+    expect(closed.upgrading).toBeNull();
+    expect(closed.settings.plan).toBe('free');
+  });
+
+  it('closes the notice when the unlock it was asking about goes through', () => {
+    const asked = reducer(base(), { type: 'upgrade-ask', period: 'monthly' }, TODAY);
+    const done = reducer(asked, { type: 'settings', patch: { plan: 'pro' } }, TODAY);
+    expect(done.settings.plan).toBe('pro');
+    expect(done.upgrading).toBeNull();
   });
 });

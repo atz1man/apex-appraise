@@ -5,6 +5,7 @@ import { SHARE_PARAMS, sharedTextFrom } from '../lib/share';
 import { makeReceiptId } from '../lib/receipts';
 import { freshState, load, onExternalChange, save, type KeptState, type Settings } from '../lib/storage';
 import { quotaFull as quotaFullFor } from '../lib/quota';
+import type { Period } from '../lib/pricing';
 import type { PolicyUpdate, Receipt, Screen } from '../lib/types';
 
 export interface AppState extends KeptState {
@@ -30,6 +31,18 @@ export interface AppState extends KeptState {
    * button said "Copied ✓" for both.
    */
   shared: 'no' | 'copied' | 'failed';
+  /**
+   * The tier someone tapped, waiting to be told what tapping it actually does.
+   *
+   * It used to do this: flip `plan` to 'pro', immediately, with no card, no
+   * confirmation and no word about either. Someone taps "£39.99 lifetime",
+   * the paywall disappears, and the only reading available to them is that
+   * they were charged £39.99. Payments are not built (see the README), so
+   * nothing was — and an app that shows a price, takes a tap, and then behaves
+   * as though money changed hands is making a claim about their bank account
+   * that is not true.
+   */
+  upgrading: Period | null;
 }
 
 export type Action =
@@ -50,7 +63,9 @@ export type Action =
   | { type: 'alerted'; keys: string[] }
   | { type: 'feed'; updates: PolicyUpdate[] }
   | { type: 'settings'; patch: Partial<Settings> }
-  | { type: 'shared'; copied: boolean };
+  | { type: 'shared'; copied: boolean }
+  | { type: 'upgrade-ask'; period: Period }
+  | { type: 'upgrade-cancel' };
 
 export function reducer(state: AppState, action: Action, today: Date): AppState {
   switch (action.type) {
@@ -145,7 +160,14 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         selId: null,
       };
     case 'settings':
-      return { ...state, settings: { ...state.settings, ...action.patch } };
+      // Any settings change closes the notice: the only one that reaches it
+      // is the unlock it was asking about, and leaving the sheet up over an
+      // app that has just unlocked would be its own small lie.
+      return { ...state, settings: { ...state.settings, ...action.patch }, upgrading: null };
+    case 'upgrade-ask':
+      return { ...state, upgrading: action.period };
+    case 'upgrade-cancel':
+      return { ...state, upgrading: null };
     case 'wipe':
       // Everything, including what the app remembers about having spoken:
       // alert keys naming receipts that no longer exist would be a residue of
@@ -250,6 +272,7 @@ export function useApp() {
         obStep: 0,
         celebrating: null,
         shared: 'no',
+        upgrading: null,
       };
     },
   );

@@ -498,6 +498,50 @@ results['a full free tier actually refuses the save'] =
   (await page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).receipts.length)) === beforeBlocked;
 
 /*
+ * Tapping a price must not behave as though money changed hands.
+ *
+ * It did: the tier tiles dispatched plan:'pro' on the spot, so someone who
+ * pressed "£39.99 lifetime" watched the paywall vanish with no card box, no
+ * confirmation and no word either way. The only reading available to them was
+ * that they had just been charged £39.99. Payments are not built, so nothing
+ * was — which is exactly the thing the screen has to say.
+ */
+const planOf = () => page.evaluate(() => JSON.parse(localStorage.getItem('kept.v1')).settings.plan);
+await page.getByRole('button', { name: 'Settings', exact: true }).click();
+await page.waitForTimeout(400);
+await page.getByRole('button', { name: /£39\.99/ }).click();
+await page.waitForTimeout(400);
+const notice = page.getByRole('dialog');
+const noticeSaid = (await notice.innerText().catch(() => '')) || '';
+results['tapping a price does not pretend to charge for it'] =
+  (await planOf()) === 'free' &&
+  /charge/i.test(noticeSaid) &&
+  /£39\.99/.test(noticeSaid);
+// And it must be leaveable without buying anything. The clicks below are
+// guarded because the failure this section exists to catch removes the sheet
+// entirely: an unguarded click would kill the harness before it printed a
+// single verdict, and a suite that dies is not a suite that failed.
+await page.getByRole('button', { name: 'Not now' }).click({ timeout: 2000 }).catch(() => {});
+await page.waitForTimeout(400);
+results['the notice can be dismissed, and nothing is unlocked'] =
+  (await planOf()) === 'free' && (await page.getByRole('dialog').count()) === 0;
+// The unlock itself is real, and the screen keeps saying it was free.
+await page.getByRole('button', { name: /£16\.99/ }).click({ timeout: 2000 }).catch(() => {});
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Unlock everything, free' }).click({ timeout: 2000 }).catch(() => {});
+await page.waitForTimeout(500);
+results['unlocking says, where the price was, that nothing was charged'] =
+  (await planOf()) === 'pro' &&
+  /Nothing was charged/.test(await page.locator('main').innerText());
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('kept.v1'));
+  state.settings.plan = 'free';
+  localStorage.setItem('kept.v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+
+/*
  * The marketing page embeds this same build at this same origin, so the demo
  * was reading and writing the real app's storage — swipe a receipt in the shop
  * window and you had changed what the installed app shows. It must be able to

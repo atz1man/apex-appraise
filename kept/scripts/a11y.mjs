@@ -156,6 +156,15 @@ await page.waitForTimeout(300);
 await audit(page, 'settings · erase confirm', findings);
 await page.getByRole('button', { name: 'Keep them' }).click().catch(() => {});
 
+// The upgrade sheet — a modal, which is the one thing on here that can trap a
+// keyboard or announce itself as nothing at all, and it is reachable only by
+// tapping a price.
+await page.getByRole('button', { name: /£39\.99/ }).click().catch(() => {});
+await page.waitForTimeout(300);
+await audit(page, 'settings · upgrade notice', findings);
+await page.getByRole('button', { name: 'Not now' }).click({ timeout: 2000 }).catch(() => {});
+await page.waitForTimeout(300);
+
 
 /*
  * States, not screens. Nothing above navigates to these, so until now none of
