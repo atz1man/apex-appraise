@@ -111,7 +111,9 @@ deliberate departure, not an oversight:
 - **Typefaces are self-hosted.** The app has to render with no signal, and the
   privacy notice says nobody else sees your receipts — a font request on every
   launch is a request that says when you opened it. The smoke test fails the
-  build if the page contacts any third party at all.
+  build if any page contacts a third party at all — every page, in every
+  context it opens, having watched only the app until a Google Fonts link added
+  to the landing page loaded and the check still passed.
 - **Notification rows are switches.** The design drew them as static rows
   ending in a chevron; a setting you can read but not change is a setting in
   name only.
@@ -426,11 +428,16 @@ on.
 
 "Works offline" is the app's central claim — a deadline you can check on the
 train, in the shop, with no signal — and it is the one claim that cannot be
-verified by reading the code. The smoke test cuts the network completely and
-then requires the app to launch, render receipts, load its self-hosted fonts
-and still navigate. The service worker caches the shell at install and fills
-in the hashed bundles, fonts, icons and the policy feed on first run, so the
-Watch tab shows the last-known feed offline too.
+verified by reading the code. It is verified by `npm run freshness`, which
+stops its own server and then requires the app to launch, render the library
+in its self-hosted typeface, navigate to a receipt, and serve the policy feed
+from the copy it kept. The service worker caches the shell at install and
+fills in the hashed bundles, fonts and icons on first run; the feed is
+network-first with that cached copy behind it.
+
+It was verified in the smoke suite before that, under a comment saying the
+network was cut completely, and it was not — see the section above for what
+that check was actually proving.
 
 ## Not built yet
 

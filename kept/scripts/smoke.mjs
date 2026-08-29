@@ -48,10 +48,27 @@ await page.addInitScript(() => {
 
 const problems = [];
 const foreign = new Set();
-page.on('request', (r) => {
-  const u = new URL(r.url());
-  if (u.origin !== ORIGIN && u.protocol !== 'data:' && u.protocol !== 'blob:') foreign.add(u.origin);
-});
+
+/**
+ * "Nobody else" is a promise on the privacy card, so every request this suite
+ * can see is checked against it.
+ *
+ * Watched at the CONTEXT rather than the page, because it was on the page and
+ * the page is only the app. The landing page opens as a second page in this
+ * same context, and the landing page is where a Google Fonts <link> would
+ * plausibly come back — measured: one added there was loaded by the browser
+ * and the check still reported a clean pass. Every context this script opens
+ * is watched now, and the verdict is read at the very end so a request made on
+ * the last screen counts the same as one made on the first.
+ */
+const watchOrigins = (context) => {
+  context.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.origin !== ORIGIN && u.protocol !== 'data:' && u.protocol !== 'blob:') foreign.add(u.origin);
+  });
+};
+watchOrigins(ctx);
+
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
 page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console: ${m.text()}`);
@@ -299,8 +316,6 @@ results['the landing demo cannot touch the real app’s data'] =
   (await page.evaluate(() => localStorage.getItem('kept.v1'))) === storedBefore;
 await landing.close();
 
-results['nothing is fetched from a third party'] = foreign.size === 0;
-
 // The manifest has to be installable-shaped, because "add it to your home
 // screen" is how the share target and the offline promise are reached at all.
 const manifest = await page.evaluate(async () => (await fetch('/manifest.webmanifest')).json());
@@ -333,6 +348,7 @@ results['the manifest is installable and declares the share target'] =
  */
 {
   const tabsCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(tabsCtx);
   const tabOne = await tabsCtx.newPage();
   await tabOne.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
   await tabOne.getByRole('button', { name: 'Skip' }).click().catch(() => {});
@@ -372,6 +388,7 @@ results['the manifest is installable and declares the share target'] =
  */
 {
   const fullCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(fullCtx);
   const fullPage = await fullCtx.newPage();
   await fullPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
   await fullPage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
@@ -403,6 +420,7 @@ results['the manifest is installable and declares the share target'] =
  */
 {
   const clockCtx = await browser.newContext({ viewport: { width: 402, height: 874 } });
+  watchOrigins(clockCtx);
   const clockPage = await clockCtx.newPage();
   await clockPage.clock.install({ time: new Date('2026-09-10T22:00:00Z') });
   await clockPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
@@ -461,6 +479,8 @@ await page.waitForTimeout(700);
 results['erasing clears the disk and does not reseed'] =
   (await receiptCount()) === 0 && (await page.getByText('Nothing tracked yet').isVisible());
 
+// Last, so that everything every context loaded has been seen.
+results['nothing is fetched from a third party'] = foreign.size === 0;
 results['no console or page errors'] = problems.length === 0;
 
 await browser.close();
