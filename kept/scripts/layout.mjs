@@ -275,6 +275,118 @@ for (const width of WIDTHS) {
   await ctx.close();
 }
 
+/*
+ * And the same phone with the text turned up.
+ *
+ * A browser's minimum-font-size setting is a floor, not a preference: it
+ * raises every px size below it, and this app's smallest type is the 10px on
+ * the tab bar. At 18px those labels take the bar from 280px to 370px — wider
+ * than a 320px screen — and the bar is centred with translateX(-50%), so it
+ * left the screen at BOTH ends: the R of "Receipts" cut off at one edge and
+ * "Settings" at the other, on the app's only navigation.
+ *
+ * Every check above was blind to it. The shell is `overflow: hidden`, so the
+ * document reported no sideways scroll; nothing overflowed a row; no text
+ * failed contrast. It needs its own browser because the setting is a launch
+ * flag, not something a context can be given.
+ */
+const bigTextFailures = [];
+{
+  const big = await chromium.launch({
+    ...(EXEC ? { executablePath: EXEC } : {}),
+    // 20, not 18, and the number is the point. Measured on a 320px screen:
+    // 16px gives a 288px bar, 18px a 310px bar — both still on the screen —
+    // and 20px a 333px one, which is not. Below 20 the narrow-width padding
+    // alone is enough, so a sweep at 18 would pass with the cap deleted and
+    // pin nothing.
+    args: ['--blink-settings=minimumFontSize=20,minimumLogicalFontSize=20'],
+  });
+  let smallestLabel = 0;
+  for (const width of WIDTHS) {
+    const ctx = await big.newContext({ viewport: { width, height: 780 } });
+    const page = await ctx.newPage();
+    await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Skip' }).click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    for (const [name, go] of [['home', null], ['watch', /^Watch/], ['settings', 'Settings'], ['add', 'Add a receipt']]) {
+      if (go) {
+        await page.getByRole('button', { name: go, exact: typeof go === 'string' }).click({ timeout: 2000 }).catch(() => {});
+        await page.waitForTimeout(350);
+      }
+      const seen = await page.evaluate(() => {
+        const nav = document.querySelector('nav[aria-label="Main"]');
+        if (!nav) return null;
+        const w = document.documentElement.clientWidth;
+        const b = nav.getBoundingClientRect();
+        const labels = [...nav.querySelectorAll('button')].map((btn) => {
+          const span = btn.querySelector('span:not([aria-hidden])');
+          const r = (span ?? btn).getBoundingClientRect();
+          return {
+            name: (btn.textContent ?? '').trim() || btn.getAttribute('aria-label') || '?',
+            fontSize: span ? parseFloat(getComputedStyle(span).fontSize) : 0,
+            left: Math.round(r.left),
+            right: Math.round(r.right),
+            // How much of the word survives the ellipsis. A ratio rather than
+            // a pixel floor, so it means the same thing at any text size.
+            shown: span && span.scrollWidth > 0 ? span.clientWidth / span.scrollWidth : 1,
+          };
+        });
+        return { w, left: Math.round(b.left), right: Math.round(b.right), width: Math.round(b.width), labels };
+      });
+      if (!seen) {
+        bigTextFailures.push({ label: `${name} with the text turned up`, width, kind: 'no tab bar', detail: 'nav[aria-label="Main"] was not on the page, so nothing was measured' });
+        continue;
+      }
+      for (const l of seen.labels) if (l.fontSize > smallestLabel) smallestLabel = l.fontSize;
+      /*
+       * Trimmed is allowed; erased is not.
+       *
+       * Capping the bar makes the shrink land on the labels, and at the bar's
+       * ordinary padding it landed hard enough to leave "Rec…", "W…" and
+       * "Set…" — three tabs identifiable only by their icons. The narrow-width
+       * padding buys back about 20px a tab. Measured at 320px with the text
+       * at 20px: 87, 87 and 88 per cent of the three words with it, and 61,
+       * 60 and 60 without. The floor sits at three quarters because that is
+       * between the two, and because a threshold picked from one side only is
+       * a threshold nobody has shown can fail.
+       */
+      for (const l of seen.labels) {
+        if (l.shown < 0.75) {
+          bigTextFailures.push({
+            label: `${name} with the text turned up`,
+            width,
+            kind: 'a tab label is trimmed past reading',
+            detail: `"${l.name}" shows ${Math.round(l.shown * 100)}% of its word`,
+          });
+        }
+      }
+      if (seen.left < -0.5 || seen.right > seen.w + 0.5) {
+        bigTextFailures.push({
+          label: `${name} with the text turned up`,
+          width,
+          kind: 'the tab bar is off the screen',
+          detail: `the bar is ${seen.width}px wide and runs from ${seen.left} to ${seen.right} on a ${seen.w}px screen`,
+          offenders: seen.labels.filter((l) => l.left < -0.5 || l.right > seen.w + 0.5).map((l) => ({ tag: 'tab', left: l.left, right: l.right, text: l.name })),
+        });
+      }
+    }
+    await ctx.close();
+  }
+  // A pass here means nothing if the setting never applied — the labels are
+  // 10px by design, so anything at or below that is the ordinary render and
+  // this whole section measured the state it was written to escape.
+  if (smallestLabel <= 10) {
+    bigTextFailures.push({
+      label: 'the large-text check',
+      width: 0,
+      kind: 'the minimum-font-size setting never took effect',
+      detail: `the biggest tab label computed to ${smallestLabel}px, so the bar was measured at its ordinary size`,
+    });
+  }
+  await big.close();
+}
+failures.push(...bigTextFailures);
+
 await browser.close();
 
 // Before the verdict, not after it: this guard was written below the success
@@ -299,7 +411,7 @@ if (everScrolled === 0) {
 }
 
 if (failures.length === 0) {
-  console.log(`✓ no sideways scroll, no covered buttons, no crushed names, at ${WIDTHS.join('px, ')}px, on any screen or state`);
+  console.log(`✓ no sideways scroll, no covered buttons, no crushed names, no tab bar off the screen with the text turned up, at ${WIDTHS.join('px, ')}px, on any screen or state`);
   process.exit(0);
 }
 console.log(`✗ ${failures.length} layout problem(s):\n`);

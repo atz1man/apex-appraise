@@ -152,6 +152,30 @@ textarea:focus { outline: 2px solid #F2B90D; box-shadow: 0 0 0 4px #171410 !impo
   }
 }
 
+/*
+ * The tab bar's padding, in the stylesheet rather than beside the rest of the
+ * tab's style, because it is the one part of it that has to answer to the
+ * width of the screen.
+ *
+ * The pair differ by the 1.5px the active tab spends on its border, so the box
+ * is the same size either way and nothing shifts as you move between tabs.
+ *
+ * Squeezed on a narrow phone, and this is not about the phone: it is about a
+ * browser minimum-font-size setting, which takes these 10px labels to 18px and
+ * the bar from 280px to 370px. On a 320px screen that is wider than the
+ * screen. The bar is capped to the viewport now, so the shrink lands on the
+ * labels — and at the roomy padding it landed hard, leaving "Rec…", "W…" and
+ * "Set…". Giving the padding back buys about 16px of label per tab, which is
+ * the difference between a word you can read and a letter you cannot.
+ */
+.k-tab { padding: 9.5px 15.5px; }
+.k-tab.k-tab-on { padding: 8px 14px; }
+
+@media (max-width: 380px) {
+  .k-tab { padding: 9.5px 5.5px; }
+  .k-tab.k-tab-on { padding: 8px 4px; }
+}
+
 /* The scrolling policy headline bar on the landing page. */
 .k-ticker { animation: ticker 28s linear infinite; }
 

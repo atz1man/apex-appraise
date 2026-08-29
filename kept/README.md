@@ -30,7 +30,8 @@ npm run smoke      # 59 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node, and the same page on a dark device
 npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
-                   #   and every screen again with the webfont blocked
+                   #   every screen again with the webfont blocked, and again with a browser
+                   #   minimum font size applied
 npm run agreement  # the same fact, on more than one screen, has to match
 npm run perf       # diagnostic, not a gate: how it behaves as the list grows
 npm run freshness  # starts and stops its OWN server — see below, no preview needed
@@ -905,6 +906,33 @@ the state was *less* visible than before it was fixed. The 1.5px is paid back in
 padding instead. `npm run a11y` renders the app with `forcedColors: 'active'`
 and requires exactly the current tab to be outlined; both mutations, no border
 and a transparent one, were confirmed to fail it by name.
+
+Then the same bar failed a second way, in a state nothing had rendered either.
+A browser's **minimum font size** is a floor, not a preference: it raises every
+px size below it, and the smallest type in this app is the 10px on these
+labels. At 20px the bar wants 333px, and it is centred with
+`translateX(-50%)`, so on a 320px screen it hung off **both** edges — the R of
+"Receipts" cut away at one end and "Settings" at the other. Nothing could see
+it. The shell is `overflow: hidden`, so the document reported no sideways
+scroll at all; no row overflowed, no text failed contrast, and the layout sweep
+passed the whole time.
+
+The bar is capped to the viewport now, which makes the shrink land on the
+labels instead — and at the bar's ordinary padding it landed hard enough to
+leave "Rec…", "W…" and "Set…", three tabs identifiable only by their icons.
+Tightening the padding on a narrow screen buys about 20px a tab back. Measured
+at 320px with the text at 20px: 87, 87 and 88 per cent of the three words with
+it, and 61, 60 and 60 without.
+
+`npm run layout` runs a second browser launched with the setting applied. Its
+threshold is three quarters, which is *between* those two measurements rather
+than picked from one side, and all three mutations fail it by name: the cap
+removed ("the bar is 333px wide and runs from -7 to 327 on a 320px screen"),
+the padding removed ("'Settings' shows 60% of its word"), and the setting
+itself removed ("the biggest tab label computed to 10px, so the bar was
+measured at its ordinary size"). 20 rather than 18 is deliberate: at 18 the bar
+is 310px and still fits, so a sweep there would pass with the cap deleted and
+pin nothing.
 
 ### Narrow screens and untidy data
 

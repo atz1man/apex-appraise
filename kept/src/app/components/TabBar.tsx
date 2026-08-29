@@ -35,15 +35,38 @@ const tab = (active: boolean) => ({
   flexDirection: 'column' as const,
   alignItems: 'center',
   gap: 2,
-  padding: active ? '8px 14px' : '9.5px 15.5px',
   borderRadius: 999,
   background: active ? color.yellowLight : 'transparent',
   ...(active ? { border: `1.5px solid ${color.ink}` } : {}),
   width: 'auto',
   position: 'relative' as const,
+  // Allowed to shrink. A flex item will not go below its content width
+  // without this, which is how the bar came to be wider than the phone.
+  minWidth: 0,
 });
 
-const label = { fontSize: 10, fontWeight: 700 };
+/*
+ * The label truncates rather than the bar leaving the screen.
+ *
+ * At 10px this is the text a browser's minimum-font-size setting inflates
+ * most — 10 to 18 is 1.8x — and at that size the four tabs need 370px. On a
+ * 320px screen the bar, centred with translateX(-50%), sat from -25 to 345:
+ * the R of "Receipts" cut off at one edge and "Settings" at the other, on the
+ * app's only navigation. Nothing could see it, either. The shell is
+ * `overflow: hidden`, so the page reported no sideways scroll at all and the
+ * layout sweep passed.
+ *
+ * The accessible name is unaffected, so "Setti…" is only ever a visual last
+ * resort — and a truncated label you can still tap beats a tab off the screen.
+ */
+const label = {
+  fontSize: 10,
+  fontWeight: 700,
+  maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis' as const,
+  whiteSpace: 'nowrap' as const,
+};
 
 export function TabBar({ screen, alert, onGo }: Props) {
   // The detail screen is reached from the receipts list, so the list stays lit
@@ -62,6 +85,9 @@ export function TabBar({ screen, alert, onGo }: Props) {
         alignItems: 'center',
         gap: 2,
         padding: 6,
+        // Never wider than the screen it floats over, whatever the text size.
+        maxWidth: 'calc(100% - 16px)',
+        boxSizing: 'border-box',
         borderRadius: 999,
         background: 'rgba(253,250,241,0.88)',
         backdropFilter: 'blur(16px) saturate(160%)',
@@ -71,12 +97,13 @@ export function TabBar({ screen, alert, onGo }: Props) {
         zIndex: 30,
       }}
     >
-      <Pressable style={tab(onReceipts)} aria-current={onReceipts ? 'page' : undefined} onClick={() => onGo('home')}>
+      <Pressable className={onReceipts ? 'k-tab k-tab-on' : 'k-tab'} style={tab(onReceipts)} aria-current={onReceipts ? 'page' : undefined} onClick={() => onGo('home')}>
         <ReceiptGlyph />
         <span style={label}>Receipts</span>
       </Pressable>
 
       <Pressable
+        className={screen === 'watch' ? 'k-tab k-tab-on' : 'k-tab'}
         style={tab(screen === 'watch')}
         aria-current={screen === 'watch' ? 'page' : undefined}
         // The dot's meaning belongs to the TAB, as its name. Labelling the dot
@@ -112,7 +139,7 @@ export function TabBar({ screen, alert, onGo }: Props) {
         <PlusGlyph />
       </Pressable>
 
-      <Pressable style={tab(screen === 'settings')} aria-current={screen === 'settings' ? 'page' : undefined} onClick={() => onGo('settings')}>
+      <Pressable className={screen === 'settings' ? 'k-tab k-tab-on' : 'k-tab'} style={tab(screen === 'settings')} aria-current={screen === 'settings' ? 'page' : undefined} onClick={() => onGo('settings')}>
         <GearGlyph />
         <span style={label}>Settings</span>
       </Pressable>
