@@ -4,7 +4,7 @@ import { addDays, fmtDate, fmtDateNear, fromISODate } from '../../lib/dates';
 import { money } from '../../lib/money';
 import { parseReceiptText, type ParsedReceipt } from '../../lib/parse';
 import { makeReceiptId } from '../../lib/receipts';
-import { findStore } from '../../lib/stores';
+import { findStore, policyFor } from '../../lib/stores';
 import { FEATURED_TIER } from '../../lib/pricing';
 import { FREE_TIER_LIMIT } from '../../lib/quota';
 import type { Receipt } from '../../lib/types';
@@ -109,7 +109,7 @@ export function Add({ today, sharedText, quotaFull, trackedTotal, onSave, onUpgr
       // unset counts from the order — the conservative reading is the one
       // that does not promise days the shop will not honour.
       windowDays: effectiveWindow,
-      policy: policy?.policy ?? `${store} · ${effectiveWindow}-day return window assumed — check the receipt.`,
+      policy: policyFor(store, effectiveWindow),
       distance,
       gotcha: policy?.gotcha,
       status: 'active',

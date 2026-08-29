@@ -1,6 +1,6 @@
 import { daysBetween, fromISODate, toISODate } from './dates';
 import { toPence, type Pence } from './money';
-import { canonicalStoreName, findStore } from './stores';
+import { canonicalStoreName, findStore, policyFor } from './stores';
 import type { Category, Receipt } from './types';
 
 /**
@@ -183,9 +183,22 @@ export function applyDraft(original: Receipt, valid: ValidDraft): Receipt {
     warranty: valid.warrantyMonths
       ? { months: valid.warrantyMonths, ...(original.warranty?.note ? { note: original.warranty.note } : {}) }
       : undefined,
+    // Re-derived when the SHOP or the WINDOW changes, and only then.
+    //
+    // Editing the window alone used to leave the policy card quoting the
+    // shop's number while the deadline counted the edited one — fifteen days
+    // apart on one screen, with the card being the wording someone repeats at
+    // a counter.
+    //
+    // Not on every save, though. A receipt's policy sentence is the terms it
+    // was bought under, and rewriting it to the table's CURRENT wording just
+    // because someone opened the edit screen and pressed save is the same
+    // silent rewriting that policy-feed.ts refuses to do to a deadline.
+    ...(storeChanged || valid.windowDays !== original.windowDays
+      ? { policy: policyFor(store, valid.windowDays) }
+      : {}),
     ...(storeChanged
       ? {
-          policy: policy?.policy ?? `${valid.store} · ${valid.windowDays}-day return window as entered — check the receipt.`,
           gotcha: policy?.gotcha,
           // The old shop's dispatch clock does not follow the receipt to a new
           // shop; without this, a Zara window start would keep governing an

@@ -185,6 +185,45 @@ describe('how it was bought', () => {
   });
 });
 
+describe('the window a receipt says it has', () => {
+  /*
+   * A receipt carries a number (`windowDays`) and a sentence quoting that
+   * number, and they were free to drift. Editing a Boots receipt from 35 days
+   * to 20 left RETURN BY counting 20 above a STORE POLICY card reading
+   * "Boots · 35 days" — fifteen days apart on one screen, and the card is the
+   * wording someone repeats at a counter, so the number they would act on was
+   * the one that makes them late.
+   */
+  const boots: Receipt = {
+    id: 'r1', store: 'Boots', item: 'No7 set', cat: 'beauty', amount: toPence(24.98),
+    purchasedOn: '2026-08-20', windowDays: 35, distance: false, status: 'active',
+    policy: 'Boots · 35 days, unopened, with receipt. Advantage Card refunds go back as points.',
+  };
+  const edit = (patch: Partial<ReceiptDraft>) => applyDraft(boots, valid({ ...draftFrom(boots), ...patch }));
+
+  it('stops quoting the shop’s number once the window is edited away from it', () => {
+    const out = edit({ windowDaysText: '20' });
+    expect(out.windowDays).toBe(20);
+    expect(out.policy).not.toContain('35 days');
+    expect(out.policy).toContain('20-day');
+    expect(out.policy).toContain('not verified');
+  });
+
+  it('goes back to the shop’s own wording when the window is corrected back', () => {
+    const out = applyDraft(edit({ windowDaysText: '20' }), valid({ ...draftFrom(boots), windowDaysText: '35' }));
+    expect(out.policy).toBe(boots.policy);
+  });
+
+  it('leaves the sentence alone when the window did not change', () => {
+    // The terms a purchase was made under govern it. Opening the edit screen
+    // and pressing save must not quietly adopt the table's current wording —
+    // that is the same silent rewriting policy-feed.ts refuses to do to a
+    // deadline.
+    const stale: Receipt = { ...boots, policy: 'Boots · 35 days, as worded when this was bought.' };
+    expect(applyDraft(stale, valid({ ...draftFrom(stale), item: 'Renamed' })).policy).toBe(stale.policy);
+  });
+});
+
 describe('the shop a receipt says it is from', () => {
   /*
    * `store` is not only a label: `assess` matches a policy update's

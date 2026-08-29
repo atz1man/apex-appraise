@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 391 unit tests over the decision logic
+npm test           # 394 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -175,6 +175,17 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **A receipt's window and the sentence quoting it drifted apart.** Edit a
+  Boots receipt from 35 days to 20 and the detail screen showed RETURN BY
+  counting 20, above a STORE POLICY card still reading "Boots · 35 days".
+  Fifteen days apart on one screen — and the card is the wording someone
+  repeats at a counter, so the number they would act on was the one that makes
+  them late. The sentence is re-derived when the shop or the window changes,
+  through one `policyFor` the add and edit screens share so they cannot phrase
+  the same situation differently. Deliberately *not* on every save: a
+  receipt's policy text is the terms it was bought under, and adopting the
+  table's current wording because someone opened the edit screen would be the
+  same silent rewriting `policy-feed.ts` refuses to do to a deadline.
 - **Editing a shop's name to "boots" hid every Boots policy change.** A
   receipt's `store` is not only a label: `assess` matches an update's
   `affectsStores` against it exactly. `findStore` is case-insensitive, so such

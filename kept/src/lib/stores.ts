@@ -133,6 +133,30 @@ const BY_ALIAS = new Map<string, StorePolicy>();
 for (const s of STORE_POLICIES) for (const a of s.aliases) BY_ALIAS.set(a, s);
 
 /**
+ * The sentence a receipt carries about its return window.
+ *
+ * Derived from the shop AND the window together, because they are one fact
+ * stated two ways and they were drifting apart. A receipt keeps its own
+ * `windowDays` — the terms it was bought under, which is right — and it also
+ * kept the table's sentence whatever happened to that number: editing a Boots
+ * receipt from 35 days to 20 left the detail screen showing RETURN BY 9 Sept
+ * above a STORE POLICY card reading "Boots · 35 days". Fifteen days apart, on
+ * one screen, and the card is the wording someone repeats at a counter — so
+ * the number they would act on was the wrong one, in the direction that makes
+ * them late.
+ *
+ * The table's own wording is used only while the window still matches it.
+ * Anything else says what the receipt actually holds and admits it is not
+ * verified. One function, so the add screen and the edit screen cannot phrase
+ * the same situation differently — which they already did.
+ */
+export function policyFor(store: string, windowDays: number): string {
+  const known = findStore(store);
+  if (known && known.windowDays === windowDays) return known.policy;
+  return `${store} · ${windowDays}-day return window — as entered, not verified. Check the receipt.`;
+}
+
+/**
  * The shop's own name for whatever someone typed.
  *
  * A receipt's `store` is not only a label: `assess` matches a policy update's
