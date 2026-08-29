@@ -1435,6 +1435,22 @@ render — and it is measured against the real font, by rendering each word in a
 hidden span with the element's computed type. Reintroducing the crush names it
 with the numbers: *"has 57px to render 'Bournemouth', which needs 140px"*.
 
+That check then had a fault of its own, found by pointing it at the landing
+page, which had never been rendered with the text turned up at all. It compared
+`clientWidth` against the word width, and `clientWidth` is **0** on a
+non-replaced inline element — always, whatever the text says. Nothing had fired
+only because the one screen it walked happens to have no inline element with
+two words in it; the app has five under `main` elsewhere, and the landing page
+has *"donating money"* and *"how it works"*. The first extension of that check
+to any other screen would have produced a handful of confident nonsense, and
+the natural response to that is to weaken the check.
+
+An inline run's widest line box is the number that means what `clientWidth`
+means for a block: how much room the text was actually given. Both halves are
+pinned — remove the inline handling and the landing page's own spans are
+reported as squeezed to nothing; remove the wrap on the detail card and the
+real crush is named with its numbers.
+
 ### It stays usable as the library grows
 
 Every other suite runs against a small list — the free tier caps at ten active

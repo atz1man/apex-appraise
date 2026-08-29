@@ -216,6 +216,67 @@ async function sweep(width, seedState, label, steps, { blockFonts = false, expec
   await ctx.close();
 }
 
+/**
+ * Every block of text given less room than the longest word it must render.
+ *
+ * Takes a root selector because the app's screens live under `main` and the
+ * landing page does not — and the landing page is where the inline-element
+ * fault above was found, so it is swept too rather than trusted.
+ */
+async function squeezedText(page, root) {
+  return page.evaluate((sel) => {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0';
+      document.body.appendChild(probe);
+      const out = [];
+      for (const el of document.querySelectorAll(`${sel} *`)) {
+        // Only a block rendering text of its own, and only where there are
+        // words to compare — a single unbreakable token is allowed to be wider
+        // than its box, which is what an ellipsis is for.
+        const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim();
+        const words = own.split(/\s+/).filter(Boolean);
+        if (words.length < 2) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if (cs.textOverflow === 'ellipsis') continue;
+        /*
+         * `clientWidth` is 0 on a non-replaced INLINE element, always — it is
+         * a property of a box that an inline run does not have. Comparing it
+         * with a word width therefore called every inline span squeezed to
+         * nothing. Nothing fired only because the screen this walks happens to
+         * have none; the app has five under `main` elsewhere, and the landing
+         * page has "donating money" and "how it works", which is where this
+         * turned up.
+         *
+         * The widest of an inline's own line boxes is the number that means
+         * what `clientWidth` means for a block: how much room the text was
+         * actually given.
+         */
+        const box =
+          cs.display === 'inline'
+            ? Math.max(0, ...[...el.getClientRects()].map((r) => r.width))
+            : el.clientWidth;
+        probe.style.font = cs.font;
+        probe.style.fontFamily = cs.fontFamily;
+        probe.style.fontSize = cs.fontSize;
+        probe.style.fontWeight = cs.fontWeight;
+        probe.style.letterSpacing = cs.letterSpacing;
+        let widest = 0;
+        let word = '';
+        for (const w of words) {
+          probe.textContent = w;
+          const px = probe.getBoundingClientRect().width;
+          if (px > widest) { widest = px; word = w; }
+        }
+        if (box + 0.5 < widest) {
+          out.push({ text: own.slice(0, 30), box: Math.round(box), needs: Math.round(widest), word });
+        }
+      }
+      probe.remove();
+      return out;
+  }, root);
+}
+
 /*
  * Seeding — and the call that was missing from it.
  *
@@ -474,40 +535,7 @@ const bigTextFailures = [];
       });
     }
 
-    const squeezed = await longPage.evaluate(() => {
-      const probe = document.createElement('span');
-      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0';
-      document.body.appendChild(probe);
-      const out = [];
-      for (const el of document.querySelectorAll('main *')) {
-        // Only a block rendering text of its own, and only where there are
-        // words to compare — a single unbreakable token is allowed to be wider
-        // than its box, which is what an ellipsis is for.
-        const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim();
-        const words = own.split(/\s+/).filter(Boolean);
-        if (words.length < 2) continue;
-        const cs = getComputedStyle(el);
-        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-        if (cs.textOverflow === 'ellipsis') continue;
-        probe.style.font = cs.font;
-        probe.style.fontFamily = cs.fontFamily;
-        probe.style.fontSize = cs.fontSize;
-        probe.style.fontWeight = cs.fontWeight;
-        probe.style.letterSpacing = cs.letterSpacing;
-        let widest = 0;
-        let word = '';
-        for (const w of words) {
-          probe.textContent = w;
-          const px = probe.getBoundingClientRect().width;
-          if (px > widest) { widest = px; word = w; }
-        }
-        if (el.clientWidth + 0.5 < widest) {
-          out.push({ text: own.slice(0, 30), box: Math.round(el.clientWidth), needs: Math.round(widest), word });
-        }
-      }
-      probe.remove();
-      return out;
-    });
+    const squeezed = await squeezedText(longPage, 'main');
     for (const sq of squeezed) {
       bigTextFailures.push({
         label: 'a block of text with the text turned up',
@@ -518,6 +546,26 @@ const bigTextFailures = [];
     }
     everSqueezeChecked += 1;
     await longCtx.close();
+
+    /*
+     * And the landing page, which had never been rendered with the text turned
+     * up at all. It is also the surface that caught the fault in the check
+     * itself: two of its elements are inline, and an inline element's
+     * `clientWidth` is 0 whatever the text says.
+     */
+    const lpCtx = await big.newContext({ viewport: { width, height: 900 } });
+    const lp = await lpCtx.newPage();
+    await lp.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+    await lp.waitForTimeout(900);
+    for (const sq of await squeezedText(lp, 'body')) {
+      bigTextFailures.push({
+        label: 'a block of text on the landing page with the text turned up',
+        width,
+        kind: 'squeezed narrower than its own longest word',
+        detail: `"${sq.text}…" has ${sq.box}px to render "${sq.word}", which needs ${sq.needs}px`,
+      });
+    }
+    await lpCtx.close();
   }
   // A pass here means nothing if the setting never applied — the labels are
   // 10px by design, so anything at or below that is the ordinary render and
