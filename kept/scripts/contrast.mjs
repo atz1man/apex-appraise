@@ -306,6 +306,43 @@ for (const f of await lp.evaluate(eval(SWEEP))) failures.push({ screen: 'landing
   await brokenCtx.close();
 }
 
+/*
+ * And the app looks like itself whatever the operating system says.
+ *
+ * `color-scheme` was undeclared and nothing painted the canvas, so the native
+ * date pickers, the scrollbars and the area a rubber-band scroll reveals were
+ * all following the OS. Chromium happened to render them light; that was luck
+ * rather than a decision, and it is the sort of thing that differs by engine.
+ *
+ * This app has one palette by design — the whole aesthetic is printed paper —
+ * so the check is simply that a dark-mode device gets the same page, measured
+ * rather than declared.
+ */
+const deviceProblems = [];
+{
+  const darkCtx = await browser.newContext({ viewport: { width: 402, height: 874 }, colorScheme: 'dark' });
+  const darkPage = await darkCtx.newPage();
+  await darkPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await darkPage.waitForTimeout(600);
+  const seen = await darkPage.evaluate(() => ({
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+    canvas: getComputedStyle(document.documentElement).backgroundColor,
+    body: getComputedStyle(document.body).backgroundColor,
+    text: getComputedStyle(document.body).color,
+  }));
+  const CREAM = 'rgb(253, 250, 241)';
+  const INK = 'rgb(23, 20, 16)';
+  if (seen.scheme !== 'light') {
+    deviceProblems.push(`the root declares colour-scheme "${seen.scheme}", so the native date pickers, scrollbars and overscroll follow the OS instead of the app`);
+  }
+  if (seen.canvas !== CREAM) {
+    deviceProblems.push(`the canvas behind the app computes to ${seen.canvas}, not the paper — a rubber-band scroll past the top shows through to it`);
+  }
+  if (seen.body !== CREAM) deviceProblems.push(`body is ${seen.body}, not the paper`);
+  if (seen.text !== INK) deviceProblems.push(`body text is ${seen.text}, not the ink it is on a light device`);
+  await darkCtx.close();
+}
+
 await browser.close();
 
 // One row per distinct colour-on-colour pairing; the same token failing in
@@ -321,10 +358,13 @@ for (const f of failures) {
   }
 }
 
-if (seen.size === 0) {
-  console.log('✓ every text node meets WCAG AA on every screen');
+if (deviceProblems.length === 0 && seen.size === 0) {
+  console.log('✓ every text node meets WCAG AA on every screen, on a light device and a dark one');
   process.exit(0);
 }
+for (const p of deviceProblems) console.log(`✗ on a dark-mode device: ${p}`);
+if (deviceProblems.length > 0) console.log('');
+if (failures.length === 0) process.exit(1);
 console.log(`✗ ${seen.size} colour pairing(s) below WCAG AA, across ${failures.length} element(s):\n`);
 for (const f of [...seen.values()].sort((a, b) => a.ratio - b.ratio)) {
   console.log(`  ${f.ratio}:1 (needs ${f.required}:1)  ${f.color} on ${f.background}`);

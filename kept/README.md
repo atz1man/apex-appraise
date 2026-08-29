@@ -27,7 +27,7 @@ The browser checks need a built preview server:
 ```bash
 npm run build && npx vite preview --port 5183 &
 npm run smoke      # 54 end-to-end checks, including a midnight rollover
-npm run contrast   # WCAG AA sweep over every rendered text node
+npm run contrast   # WCAG AA sweep over every rendered text node, and the same page on a dark device
 npm run a11y       # axe-core audit of every screen, plus focus management and the focus ring
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons, crushed names,
                    #   and every screen again with the webfont blocked
@@ -417,6 +417,17 @@ deliberate departure, not an oversight:
   must never do. A counter purchase is not asked, because it arrives when it
   is bought — and changing a receipt to a shop purchase drops the date rather
   than leaving one that would then be wrong.
+- **Nothing said which palette the app is.** `color-scheme` was undeclared, so
+  the native controls this app leans on — the date pickers, the scrollbars,
+  the area a rubber-band scroll reveals — followed the operating system.
+  Chromium happened to render them light; that was luck rather than a
+  decision, and it is exactly the sort of thing that differs by engine. And
+  nothing painted the canvas: the cream comes from an element inside the root,
+  so `body` computed to *transparent* and an overscroll past the top of a phone
+  showed the UA's white rather than the app's paper. Both belong in the
+  stylesheet rather than a component, because both are about the surface under
+  every component. `npm run contrast` now loads the app on a dark-mode device
+  and requires the same page — measured, not declared.
 - **The focus ring was invisible on the paper the app is made of.** Yellow
   alone, measuring 1.72:1 against cream — WCAG 2.1 SC 1.4.11 asks 3:1 of a
   focus indicator, axe does not check it, and on a keyboard that ring is the

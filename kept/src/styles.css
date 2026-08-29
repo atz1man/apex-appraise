@@ -22,8 +22,29 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 
+/*
+ * The app paints one palette, and says so.
+ *
+ * `color-scheme` was undeclared, which left the native controls — the date
+ * pickers this app leans on, the scrollbars, the overscroll canvas — to
+ * follow the operating system. Chromium happened to render them light here;
+ * that was luck, not a decision, and it is exactly the sort of thing that
+ * differs by engine.
+ *
+ * And nothing painted the CANVAS. The cream comes from an element inside the
+ * root, so `body` computed to transparent and the area revealed by a
+ * rubber-band scroll past the top of a phone was the UA's white, not the
+ * app's paper. Both fixed here rather than in a component, because both are
+ * about the surface underneath every component.
+ */
+html {
+  color-scheme: light;
+  background: #FDFAF1;
+}
+
 body {
   margin: 0;
+  background: #FDFAF1;
   font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
   color: #171410;
   -webkit-font-smoothing: antialiased;
