@@ -107,10 +107,17 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         selId: null,
       };
     }
-    case 'undo-delete':
-      return state.justDeleted
-        ? { ...state, receipts: [...state.receipts, state.justDeleted], justDeleted: null }
-        : state;
+    case 'undo-delete': {
+      const restoring = state.justDeleted;
+      if (!restoring) return state;
+      // Another tab can put the receipt back before the undo is tapped — its
+      // own state still had it, and adopting that is the point of `sync`. In
+      // practice the other tab usually adopts the delete first, but a lost or
+      // late event leaves this reachable, and a duplicated receipt is a bad
+      // way to find out: two rows, and the money counted twice.
+      if (state.receipts.some((r) => r.id === restoring.id)) return { ...state, justDeleted: null };
+      return { ...state, receipts: [...state.receipts, restoring], justDeleted: null };
+    }
     case 'dismiss-undo':
       return state.justDeleted ? { ...state, justDeleted: null } : state;
     case 'add':

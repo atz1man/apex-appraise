@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 269 unit tests over the decision logic
+npm test           # 275 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -132,6 +132,13 @@ deliberate departure, not an oversight:
   every morning gets muted, and then it cannot say the one thing that
   mattered. Turning the switch on asks the browser first, so it cannot read
   "on" while the browser is refusing to show anything.
+- **Undo could have duplicated a receipt.** Introduced by the fix below: if
+  another tab writes state that still contains the receipt you just deleted,
+  the undo would add a second copy — two rows, and the money counted twice,
+  which is the one thing this app must not do. In practice the other tab
+  usually adopts the deletion first, so it takes a late or lost event to
+  reach; the guard costs one comparison and the reducer is now unit-tested
+  directly, which it was not before.
 - **A second tab silently destroyed the first tab's receipts.** Two tabs of a
   local-first app both hold the whole library in memory and both write all of
   it, so whichever had older state overwrote the other — and a *setting toggle*
