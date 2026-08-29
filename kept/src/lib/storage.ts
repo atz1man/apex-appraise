@@ -40,6 +40,13 @@ export interface KeptState {
   alertsSent: string[];
 }
 
+/**
+ * The bounds the Settings slider offers. Kept here rather than in the screen
+ * because they are also what a stored value has to satisfy to be believed.
+ */
+export const URGENT_DAYS_MIN = 2;
+export const URGENT_DAYS_MAX = 21;
+
 export const DEFAULT_SETTINGS: Settings = {
   urgentDays: DEFAULT_URGENT_DAYS,
   plan: 'free',
@@ -82,6 +89,40 @@ function storage(): Storage | null {
  *
  * Separated from `load` so it can be tested without a browser.
  */
+/**
+ * Settings, field by field, with anything unreadable falling back to its
+ * default rather than through.
+ *
+ * The receipts and the policy updates have been validated on the way in since
+ * the day a single bad row blanked the app. The settings were spread straight
+ * over the defaults, which quietly undid the point: `urgentDays: "soon"`, or a
+ * negative, makes every comparison against it false, so a receipt five days
+ * from its deadline renders as RELAXED — grey, no warning — and the
+ * week-ahead alert never fires for anything, ever. The app's whole job,
+ * switched off by a value nothing was checking.
+ *
+ * Per field rather than all-or-nothing: one unreadable preference should not
+ * discard the three beside it that were fine.
+ */
+function readSettings(raw: unknown): Settings {
+  if (typeof raw !== 'object' || raw === null) return { ...DEFAULT_SETTINGS };
+  const s = raw as Record<string, unknown>;
+  const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+  const urgent =
+    typeof s.urgentDays === 'number' &&
+    Number.isInteger(s.urgentDays) &&
+    s.urgentDays >= URGENT_DAYS_MIN &&
+    s.urgentDays <= URGENT_DAYS_MAX
+      ? s.urgentDays
+      : DEFAULT_SETTINGS.urgentDays;
+  return {
+    urgentDays: urgent,
+    plan: s.plan === 'pro' ? 'pro' : 'free',
+    deadlineAlerts: bool(s.deadlineAlerts, DEFAULT_SETTINGS.deadlineAlerts),
+    policyWatch: bool(s.policyWatch, DEFAULT_SETTINGS.policyWatch),
+  };
+}
+
 export function hydrate(raw: unknown, today: Date): KeptState {
   if (typeof raw !== 'object' || raw === null) return freshState(today);
   const parsed = raw as Partial<KeptState>;
@@ -105,7 +146,7 @@ export function hydrate(raw: unknown, today: Date): KeptState {
     receipts,
     updates: storedUpdates.length ? storedUpdates : seedUpdates(today),
     onboardingSeen: parsed.onboardingSeen === true,
-    settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    settings: readSettings(parsed.settings),
     alertsSent: Array.isArray(parsed.alertsSent) ? parsed.alertsSent.filter((k) => typeof k === 'string') : [],
   };
 }

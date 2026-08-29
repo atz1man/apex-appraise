@@ -81,6 +81,56 @@ describe('surviving whatever is on disk', () => {
     expect(s.settings).toEqual({ ...DEFAULT_SETTINGS, urgentDays: 14 });
   });
 
+  describe('a preference it cannot read does not switch the app off', () => {
+    /*
+     * Receipts and policy updates have been validated on the way in since a
+     * single bad row blanked the app. Settings were spread straight over the
+     * defaults — and `urgentDays: "soon"`, or a negative, makes every
+     * comparison against it false: a receipt five days from its deadline
+     * renders relaxed, and the week-ahead alert never fires for anything.
+     */
+    const urgentOf = (settings: unknown) => hydrate(stored({ settings }), TODAY).settings.urgentDays;
+
+    it.each([
+      ['a word', 'soon'],
+      ['a negative', -5],
+      ['zero', 0],
+      ['null', null],
+      ['a fraction', 7.5],
+      ['longer than the slider offers', 400],
+    ])('falls back when the urgent window is %s', (_label, value) => {
+      expect(urgentOf({ urgentDays: value })).toBe(DEFAULT_SETTINGS.urgentDays);
+    });
+
+    it('keeps a real one', () => {
+      expect(urgentOf({ urgentDays: 14 })).toBe(14);
+    });
+
+    it('keeps the good fields beside an unreadable one', () => {
+      // Per field, not all-or-nothing: one bad preference should not discard
+      // the three beside it that were fine.
+      const s = hydrate(stored({ settings: { urgentDays: 'soon', plan: 'pro', policyWatch: false } }), TODAY);
+      expect(s.settings).toEqual({ ...DEFAULT_SETTINGS, plan: 'pro', policyWatch: false });
+    });
+
+    it.each([
+      ['a string', 'yes'],
+      ['a number', 1],
+      ['null', null],
+    ])('will not take %s for a switch', (_label, value) => {
+      expect(hydrate(stored({ settings: { deadlineAlerts: value } }), TODAY).settings.deadlineAlerts)
+        .toBe(DEFAULT_SETTINGS.deadlineAlerts);
+    });
+
+    it('refuses a plan it does not sell', () => {
+      expect(hydrate(stored({ settings: { plan: 'enterprise' } }), TODAY).settings.plan).toBe('free');
+    });
+
+    it('survives settings that are not an object at all', () => {
+      expect(hydrate(stored({ settings: 'not an object' }), TODAY).settings).toEqual(DEFAULT_SETTINGS);
+    });
+  });
+
   it('ignores junk in the alert list rather than choking on it', () => {
     expect(hydrate(stored({ alertsSent: ['r1:soon', 42, null] }), TODAY).alertsSent).toEqual(['r1:soon']);
   });

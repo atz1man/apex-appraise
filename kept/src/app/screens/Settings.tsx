@@ -5,7 +5,7 @@ import { notifyState, requestNotifyPermission, type NotifyState } from '../notif
 import type { Receipt } from '../../lib/types';
 import { LEGAL_DISCLAIMER } from '../../lib/legal';
 import { VERIFIED_STORE_COUNT } from '../../lib/stores';
-import type { Settings as SettingsShape } from '../../lib/storage';
+import { URGENT_DAYS_MAX, URGENT_DAYS_MIN, type Settings as SettingsShape } from '../../lib/storage';
 import { TIERS } from '../../lib/pricing';
 import { countedAgainstQuota, FREE_TIER_LIMIT } from '../../lib/quota';
 import { Pressable } from '../components/Pressable';
@@ -255,8 +255,8 @@ export function Settings({ settings, receipts, onExport, onRestore, onWipe, onUp
           <input
             id="urgent"
             type="range"
-            min={2}
-            max={21}
+            min={URGENT_DAYS_MIN}
+            max={URGENT_DAYS_MAX}
             step={1}
             value={settings.urgentDays}
             onChange={(e) => onChange({ urgentDays: Number(e.target.value) })}

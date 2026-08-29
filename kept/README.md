@@ -175,6 +175,15 @@ deliberate departure, not an oversight:
   carries a gotcha saying the date shown is the earliest it can be, and
   `test/stores.test.ts` sweeps the real table for any other policy sentence
   that names a start the app does not keep.
+- **Settings were the one thing read off disk unchecked.** Receipts and policy
+  updates have been validated on the way in since a single bad row blanked the
+  app; the preferences beside them were spread straight over the defaults. An
+  `urgentDays` that is a word, or a negative, makes every comparison against
+  it false — so a receipt five days from its deadline renders *relaxed*, grey
+  and unremarkable, and the week-ahead alert never fires for anything, ever.
+  The app's whole job, switched off by a value nothing was looking at. Read
+  field by field now, so one unreadable preference does not discard the three
+  beside it that were fine.
 - **Restoring a backup undid a refund taken since.** The merge kept every
   local row the file did not mention — that part was deliberate — but let the
   incoming copy win outright for a row on both sides. Export Monday, take the
