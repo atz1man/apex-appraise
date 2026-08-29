@@ -193,3 +193,59 @@ describe('two people signing the same terms at once', () => {
     expect(await prisma.activityEvent.count({ where: { dealId: S.dealId, action: SIGNED } })).toBe(1);
   });
 });
+
+
+/**
+ * An electronic signature is not something the firm can type over.
+ *
+ * `engagement.accept` records acceptance that reached the firm some other way —
+ * an email, a phone call, a wet signature by post — which is a real need. What
+ * it must not do is REPLACE a signature the client already gave. It rewrote
+ * `acceptedBy` and `acceptedAt` and left the signature block alone, so one row
+ * asserted two different acceptances at once:
+ *
+ *   acceptedBy   Someone At The Firm     (typed, just now)
+ *   signedName   Jane Marchmont          (signed, with the IP it came from)
+ *
+ * Same rule `approved-immutable` states for an approved appraisal: a thing that
+ * has been signed off is not edited in place.
+ */
+describe('recording acceptance over a signature', () => {
+  const issued = async (label: string) => {
+    const S = await makeTenant(label);
+    await callerFor(S.principal).engagement.save({ dealId: S.dealId, terms: terms() } as never);
+    await callerFor(S.principal).engagement.issue({ dealId: S.dealId } as never);
+    const row = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    return { S, token: row.signToken! };
+  };
+
+  it('is refused once the client has signed, and leaves the signature intact', async () => {
+    const { S, token } = await issued('Overtype');
+    await anonymous().engagement.sign({ token, name: 'Jane Marchmont', agreed: true } as never);
+
+    await expect(
+      callerFor(S.principal).engagement.accept({ dealId: S.dealId, acceptedBy: 'Someone At The Firm' } as never),
+    ).rejects.toThrow(/signed electronically/i);
+
+    const after = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    expect(after.acceptedBy, 'the typed name replaced the signatory').toBe('Jane Marchmont');
+    expect(after.signedName).toBe('Jane Marchmont');
+    // the two records of who accepted must not diverge
+    expect(after.acceptedBy).toBe(after.signedName);
+    expect(after.acceptedAt?.getTime()).toBe(after.signedAt?.getTime());
+  });
+
+  it('still records acceptance that arrived some other way', async () => {
+    // the case this procedure exists for: issued, never signed electronically,
+    // accepted by email or post. Refusing that would break a real workflow.
+    const { S } = await issued('ByPost');
+    const out = (await callerFor(S.principal).engagement.accept({
+      dealId: S.dealId,
+      acceptedBy: 'Jane Marchmont (by post)',
+    } as never)) as { status: string; acceptedBy: string | null };
+    expect(out.status).toBe('ACCEPTED');
+    expect(out.acceptedBy).toBe('Jane Marchmont (by post)');
+    const after = await prisma.engagementTerms.findFirstOrThrow({ where: { dealId: S.dealId } });
+    expect(after.signedAt, 'no electronic signature was invented').toBeNull();
+  });
+});

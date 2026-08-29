@@ -332,6 +332,30 @@ export const engagementRouter = router({
       });
       if (!row || row.status === 'DRAFT')
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Issue the terms before recording acceptance.' });
+      /**
+       * An electronic signature is not something the firm can type over.
+       *
+       * This procedure is for acceptance reaching the firm by some other route —
+       * an email, a phone call, a wet signature returned by post — and that is a
+       * real need. What it must not do is REPLACE a signature the client already
+       * gave. It rewrote `acceptedBy` and `acceptedAt` while leaving
+       * `signedName`, `signedAt`, `signedIp` and `signedUserAgent` untouched, so
+       * one row ended up asserting two different acceptances:
+       *
+       *   acceptedBy   Someone At The Firm     (typed, just now)
+       *   signedName   Jane Marchmont          (signed, with the IP it came from)
+       *
+       * Silently, with nothing in the trail marking the substitution. `238d265`
+       * established what this document is — the record a Red Book valuation's
+       * meaning is measured against — and `approved-immutable` states the rule
+       * this follows: a thing that has been signed off is not edited in place.
+       */
+      if (row.signedAt) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `These terms were signed electronically by ${row.signedName ?? 'the client'} and that signature is the record of acceptance. Re-issue them if a different acceptance needs recording.`,
+        });
+      }
       const updated = await ctx.prisma.engagementTerms.update({
         where: { id: row.id },
         data: { status: 'ACCEPTED', acceptedAt: new Date(), acceptedBy: input.acceptedBy.trim() },
