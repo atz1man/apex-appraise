@@ -17,7 +17,7 @@ entangled. It lifts out into its own repository with a single `git mv`.
 cd kept
 npm install
 npm run dev        # landing page at /, app at /app/
-npm test           # 427 unit tests over the decision logic
+npm test           # 430 unit tests over the decision logic
 npm run typecheck  # strict, noUnusedLocals
 npm run build      # both entries
 ```
@@ -26,7 +26,7 @@ The browser checks need a built preview server:
 
 ```bash
 npm run build && npx vite preview --port 5183 &
-npm run smoke      # 38 end-to-end checks, including a midnight rollover
+npm run smoke      # 39 end-to-end checks, including a midnight rollover
 npm run contrast   # WCAG AA sweep over every rendered text node
 npm run a11y       # axe-core audit of every screen
 npm run layout     # 320px and 402px, adversarial content, empty states, covered buttons
@@ -380,6 +380,18 @@ deliberate departure, not an oversight:
   had changed what the installed app shows. It runs entirely in memory now:
   fully working, resetting to the designed state on every page load, writing
   nothing.
+- **"Copied — paste it anywhere ✓" was shown when the copy had failed.** The
+  reasoning written beside it was that a control which appears dead is worse
+  than one that lies — half right, and the same half this codebase already got
+  wrong once, when `save` swallowed a failed write for the identical reason.
+  `writeText` fails on an insecure origin, which is every deployment of this
+  over plain HTTP, and wherever the permission is refused; the person found
+  out by pasting nothing into a message to a friend. It says which of the two
+  happened now, and a failed copy puts the sentence on screen to be selected.
+  The smoke check was asserting the lie — "is the button saying Copied" passed
+  because it always did — so it drives both outcomes, in contexts that control
+  the clipboard, because that is the only way to test what a screen says
+  about it.
 - **The statutory clocks are exact now, not a floor.** They legally start the
   day the goods reach you, which for a delivered order is not the day you
   paid — so without that date the app could only compute from the order and

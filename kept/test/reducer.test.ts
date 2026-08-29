@@ -14,9 +14,26 @@ const receipt = (id: string): Receipt => ({
 const base = (over: Partial<AppState> = {}): AppState => ({
   version: 1, receipts: [receipt('a'), receipt('b')], updates: [], onboardingSeen: true,
   settings: { ...DEFAULT_SETTINGS }, alertsSent: [],
-  screen: 'home', selId: null, obStep: 0, celebrating: null, shared: false,
+  screen: 'home', selId: null, obStep: 0, celebrating: null, shared: 'no',
   sharedText: null, embedded: false, justDeleted: null,
   ...over,
+});
+
+describe('sharing a win', () => {
+  // It reported success either way, so a refused clipboard rendered as
+  // "Copied — paste it anywhere ✓" and the person found out by pasting
+  // nothing into a message to a friend.
+  it('says it copied when it did', () => {
+    expect(reducer(base(), { type: 'shared', copied: true }, TODAY).shared).toBe('copied');
+  });
+
+  it('says it did not when it did not', () => {
+    expect(reducer(base(), { type: 'shared', copied: false }, TODAY).shared).toBe('failed');
+  });
+
+  it('starts having said nothing', () => {
+    expect(base().shared).toBe('no');
+  });
 });
 
 describe('undoing a delete', () => {

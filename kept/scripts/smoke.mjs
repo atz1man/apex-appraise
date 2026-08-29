@@ -108,9 +108,48 @@ await page.waitForTimeout(600);
 
 results['swipe marks the receipt returned'] = await page.getByText('MONEY BACK').isVisible();
 
-await page.getByRole('button', { name: 'Share the win' }).click();
-await page.waitForTimeout(300);
-results['share confirms'] = await page.getByRole('button', { name: /Copied/ }).isVisible();
+/*
+ * Sharing the win, both ways it can go.
+ *
+ * This check used to be `is the button now saying "Copied"` — which passed
+ * because the button said that whether or not the copy happened. The clipboard
+ * write fails on an insecure origin (every deployment of this over plain HTTP)
+ * and wherever the permission is refused, and the person found out by pasting
+ * nothing into a message to a friend.
+ *
+ * Its own contexts, because the only way to test what the screen says about
+ * the clipboard is to control the clipboard.
+ */
+for (const [label, refuse] of [['confirms a copy that happened', false], ['does not claim one that did not', true]]) {
+  const shareCtx = await browser.newContext({
+    viewport: { width: 402, height: 874 },
+    permissions: refuse ? [] : ['clipboard-write'],
+  });
+  watchOrigins(shareCtx);
+  const sharePage = await shareCtx.newPage();
+  if (refuse) {
+    await sharePage.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: () => Promise.reject(new Error('insecure origin')) },
+        configurable: true,
+      });
+    });
+  }
+  await sharePage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
+  await sharePage.getByRole('button', { name: 'Skip' }).click().catch(() => {});
+  await sharePage.waitForTimeout(300);
+  await sharePage.getByRole('button', { name: /Currys, JBL/ }).click();
+  await sharePage.waitForTimeout(300);
+  await sharePage.getByRole('button', { name: 'Got my money back' }).click();
+  await sharePage.waitForTimeout(700);
+  await sharePage.getByRole('button', { name: 'Share the win' }).click();
+  await sharePage.waitForTimeout(600);
+  const said = await sharePage.locator('main').innerText();
+  const claimsCopied = /Copied — paste it anywhere/.test(said);
+  const showsTheLine = said.includes('Just got £89.00 back from Currys');
+  results[`sharing ${label}`] = refuse ? !claimsCopied && showsTheLine : claimsCopied && !showsTheLine;
+  await shareCtx.close();
+}
 
 // The tab bar floats over every screen; its buttons must stay clickable.
 await page.getByRole('button', { name: 'Back to receipts' }).click();

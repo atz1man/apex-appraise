@@ -173,17 +173,38 @@ export function App() {
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * The sentence the share puts on the clipboard — built here rather than
+   * inside the handler, because the Celebrate screen has to be able to show it
+   * when the copy fails.
+   */
+  const winLine = state.celebrating
+    ? `Just got ${money(state.celebrating.amount)} back from ${state.celebrating.store} — kept. reminded me before the window shut.`
+    : '';
+
   const shareWin = async () => {
-    const line = state.celebrating
-      ? `Just got ${money(state.celebrating.amount)} back from ${state.celebrating.store} — kept. reminded me before the window shut.`
-      : '';
+    const line = winLine;
+    /*
+     * Say which of the two things happened.
+     *
+     * It confirmed either way, on the reasoning that a control which appears
+     * dead is worse than one that lies. Half right, and the same half this
+     * codebase already got wrong once: `save` swallowed a failed write for the
+     * same reason, and the fix was to say so rather than to stay quiet.
+     *
+     * `writeText` fails on an insecure origin — which is every deployment of
+     * this over plain HTTP — and wherever the permission is refused. "Copied,
+     * paste it anywhere" is then simply untrue, and the person finds out by
+     * pasting nothing into a message to a friend.
+     */
+    let copied = false;
     try {
       await navigator.clipboard.writeText(line);
+      copied = true;
     } catch {
-      // Clipboard permission can be refused; the button still confirms so the
-      // user is not left tapping a control that appears dead.
+      // Nowhere to report it but the screen, which is what the caller does.
     }
-    dispatch({ type: 'shared' });
+    dispatch({ type: 'shared', copied });
   };
 
   return (
@@ -297,6 +318,7 @@ export function App() {
           store={state.celebrating.store}
           recovered={recovered}
           shared={state.shared}
+          line={winLine}
           onShare={shareWin}
           onDone={() => dispatch({ type: 'go', screen: 'home' })}
         />

@@ -7,12 +7,14 @@ interface Props {
   amount: Pence;
   store: string;
   recovered: Pence;
-  shared: boolean;
+  shared: 'no' | 'copied' | 'failed';
+  /** The sentence itself, so a failed copy can still be read and selected. */
+  line: string;
   onShare: () => void;
   onDone: () => void;
 }
 
-export function Celebrate({ amount, store, recovered, shared, onShare, onDone }: Props) {
+export function Celebrate({ amount, store, recovered, shared, line, onShare, onDone }: Props) {
   return (
     // Bottom padding clears the floating tab bar. The design drew this screen
     // with the same 40px inset every full-bleed screen has, which puts "Back to
@@ -47,8 +49,23 @@ export function Celebrate({ amount, store, recovered, shared, onShare, onDone }:
           onClick={onShare}
           style={{ padding: 16, textAlign: 'center', background: color.yellow, border: `1.5px solid ${color.ink}`, borderRadius: 999, fontWeight: 700, fontSize: 15, boxShadow: shadow.hard }}
         >
-          {shared ? 'Copied — paste it anywhere ✓' : 'Share the win'}
+          {shared === 'copied' ? 'Copied — paste it anywhere ✓' : shared === 'failed' ? 'Copy it from here' : 'Share the win'}
         </Pressable>
+        {/* A refused clipboard used to render as "Copied ✓". It fails on any
+            insecure origin and wherever the permission is denied, and the
+            person found out by pasting nothing into a message. The sentence
+            itself is the honest fallback: it is right there to select. */}
+        {shared === 'failed' && (
+          <p
+            role="status"
+            style={{
+              margin: 0, padding: '12px 14px', background: color.white, border: `1.5px solid ${color.border}`,
+              borderRadius: 14, fontSize: 13.5, lineHeight: 1.5, color: color.bodyStrong, userSelect: 'all',
+            }}
+          >
+            {line}
+          </p>
+        )}
         <Pressable onClick={onDone} style={{ padding: 14, textAlign: 'center', fontWeight: 700, fontSize: 14, color: color.muted }}>
           Back to receipts
         </Pressable>

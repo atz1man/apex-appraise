@@ -24,7 +24,12 @@ export interface AppState extends KeptState {
   obStep: number;
   /** The refund the celebrate screen is showing; null when it is not showing one. */
   celebrating: { amount: number; store: string } | null;
-  shared: boolean;
+  /**
+   * What happened when the win was shared. Not a boolean, because "the copy
+   * failed" and "it has not been tried" are different things to say — and the
+   * button said "Copied ✓" for both.
+   */
+  shared: 'no' | 'copied' | 'failed';
 }
 
 export type Action =
@@ -45,7 +50,7 @@ export type Action =
   | { type: 'alerted'; keys: string[] }
   | { type: 'feed'; updates: PolicyUpdate[] }
   | { type: 'settings'; patch: Partial<Settings> }
-  | { type: 'shared' };
+  | { type: 'shared'; copied: boolean };
 
 export function reducer(state: AppState, action: Action, today: Date): AppState {
   switch (action.type) {
@@ -76,7 +81,7 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
         ),
         screen: 'celebrate',
         celebrating: { amount: r.amount, store: r.store },
-        shared: false,
+        shared: 'no',
         selId: null,
       };
     }
@@ -173,7 +178,7 @@ export function reducer(state: AppState, action: Action, today: Date): AppState 
       // than lost.
       return { ...state, alertsSent: [...new Set([...state.alertsSent, ...action.keys])] };
     case 'shared':
-      return { ...state, shared: true };
+      return { ...state, shared: action.copied ? 'copied' : 'failed' };
   }
 }
 
@@ -244,7 +249,7 @@ export function useApp() {
         selId: null,
         obStep: 0,
         celebrating: null,
-        shared: false,
+        shared: 'no',
       };
     },
   );
