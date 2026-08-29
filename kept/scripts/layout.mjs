@@ -201,7 +201,7 @@ async function sweep(width, seedState, label, steps, { blockFonts = false, expec
   page.on('pageerror', (e) => failures.push({ label, width, kind: 'pageerror', detail: e.message }));
   await page.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
   if (seedState) {
-    await seedBeforeBoot(ctx, page, seedState, expectKind, `${label} · seeding`, width);
+    await seedBeforeBoot(page, seedState, expectKind, `${label} · seeding`, width);
   }
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Skip' }).click().catch(() => {});
@@ -217,13 +217,12 @@ async function sweep(width, seedState, label, steps, { blockFonts = false, expec
 }
 
 /*
- * Seeding, done where the app cannot undo it.
+ * Seeding — and the call that was missing from it.
  *
- * This used to be `page.evaluate(seed)` followed by a reload, and the write
- * did not survive the same tick: the app is already running, its persistence
- * effect fires, and the hydrated demo state goes back over the seed before the
- * reload reads it. Measured directly — read straight back after the evaluate,
- * localStorage already held `seed_currys … seed_ikea` again.
+ * `seedAdversarial` and `wipeTo` return a STRING of a function expression, and
+ * this was `page.evaluate(thatString)`. Playwright evaluates a string as an
+ * EXPRESSION: `() => { … }` evaluates to a function, which is then thrown
+ * away. The seed never ran. Not once, not intermittently — never.
  *
  * So three of this file's five state dimensions were never rendering their own
  * data. "long content", "no receipts" and "all returned" each swept the same
@@ -231,11 +230,11 @@ async function sweep(width, seedState, label, steps, { blockFonts = false, expec
  * was real; the STATE was not, which is the version of this that is hardest to
  * see, because nothing about the output looks wrong.
  *
- * An init script runs before the page's own scripts on the next navigation, so
- * the app boots from the seeded state instead of racing it. Registered after
- * the first load rather than before it, because the transforms read what is
- * already there — `wipeTo('returned')` marks the demo receipts returned, and
- * on a context that had never booted there would be nothing to mark.
+ * Measured three ways before it was believed, because the first explanation
+ * for it was wrong: passing the same body as a FUNCTION runs, passing it as a
+ * string does not, and passing the string with `()` after it does. The nearby
+ * `SEED_MORE` in a11y.mjs and contrast.mjs is a real function, so those sweeps
+ * were never affected — checked rather than assumed.
  */
 /*
  * What each seeded dimension has to be true of, said independently.
@@ -255,8 +254,11 @@ const EXPECTED = {
   returned: ['every receipt returned', (rs) => rs.length > 0 && rs.every((r) => r.status === 'returned')],
 };
 
-async function seedBeforeBoot(ctx, page, seedState, expectKind, label, width) {
-  await ctx.addInitScript({ content: `(${seedState})();` });
+async function seedBeforeBoot(page, seedState, expectKind, label, width) {
+  // The parentheses are the fix. Everything else here is the check that it
+  // worked, because a seed that silently does nothing is what this file just
+  // spent three state dimensions on.
+  await page.evaluate(`(${seedState})();`);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
 
@@ -435,13 +437,8 @@ const bigTextFailures = [];
     /*
      * And the same screen with long content in it, in a context of its own.
      *
-     * Seeded on a FRESH page rather than the one above, and that is not
-     * tidiness. Writing localStorage under a running app races the app's own
-     * persistence: measured, the write landed and the live React state wrote
-     * five demo receipts back over it before the reload, so the check examined
-     * the seeded library and passed. It reported a clean sweep of a screen it
-     * never rendered — which is the failure this file exists to prevent, found
-     * because the mutation that should have failed it did not.
+     * On a page of its own, so the seed is the first thing this context has
+     * ever held rather than a change made to a library already on screen.
      *
      * Big text and long words are two pressures and the defect was in the
      * combination; neither alone showed it. A price is one unbreakable token,
@@ -458,7 +455,7 @@ const bigTextFailures = [];
     const longCtx = await big.newContext({ viewport: { width, height: 780 } });
     const longPage = await longCtx.newPage();
     await longPage.goto(`${ORIGIN}/app/`, { waitUntil: 'networkidle' });
-    await seedBeforeBoot(longCtx, longPage, seedAdversarial(ADVERSARIAL), 'adversarial', 'long content with the text turned up · seeding', width);
+    await seedBeforeBoot(longPage, seedAdversarial(ADVERSARIAL), 'adversarial', 'long content with the text turned up · seeding', width);
     await longPage.waitForTimeout(500);
     await longPage.getByRole('button', { name: 'Skip' }).click({ timeout: 2000 }).catch(() => {});
     await longPage.waitForTimeout(400);

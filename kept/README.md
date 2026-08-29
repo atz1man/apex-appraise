@@ -1382,25 +1382,27 @@ there. Both mutations fail it.
 content, no receipts, all returned, and the webfont blocked. Three of them had
 never rendered their own data.
 
-Each seeded with `page.evaluate(seed)` and then reloaded, and the write did not
-survive the same tick — the app is already running, its persistence effect
-fires, and the hydrated demo state goes back over the seed before the reload
-reads it. Measured by reading storage straight back after the evaluate: it
-already held `seed_currys … seed_ikea` again. So "long content", "no receipts"
-and "all returned" each swept the same five demo receipts under a different
-label, and passed. Every check inside them was real; the *state* was not, which
-is the version of this that is hardest to see, because nothing about the output
-looks wrong.
+`seedAdversarial` and `wipeTo` return a **string** of a function expression,
+and the call site was `page.evaluate(thatString)`. Playwright evaluates a
+string as an *expression*: `() => { … }` evaluates to a function, which is then
+thrown away. **The seed never ran.** Not intermittently — never. So "long
+content", "no receipts" and "all returned" each swept the same five demo
+receipts under a different label, and passed. Every check inside them was real;
+the *state* was not, which is the version of this that is hardest to see,
+because nothing about the output looks wrong.
 
 Found by accident, and worth saying how: a new check had a mutation that should
 have failed it and did not. Chasing that — rather than adjusting the check —
 led to the seeding.
 
-An init script runs before the page's own scripts on the next navigation, so
-the app now boots *from* the seeded state instead of racing it. Registered
-after the first load rather than before it, because the transforms read what is
-already there: `all returned` marks the demo receipts returned, and on a
-context that had never booted there would be nothing to mark.
+The first explanation for it was wrong, which is worth recording too. It looked
+like a race with the app's own persistence, and that story fitted the evidence
+right up until the evidence was taken properly: passing the same body as a
+**function** runs, passing it as a **string** does not, and passing the string
+with `()` after it does. The nearby `SEED_MORE` in `a11y.mjs` and
+`contrast.mjs` is a real function and survives five runs out of five, so those
+sweeps were never affected — checked rather than assumed. The parentheses are
+the whole fix.
 
 **And the guard for it was itself the same mistake, first time round.** It had
 the seed record what it wrote and compared that against the state after boot —
