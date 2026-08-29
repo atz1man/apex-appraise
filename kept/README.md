@@ -181,7 +181,7 @@ deliberate departure, not an oversight:
   which is the single thing this app must not do, and collides the React keys
   in three lists on the way. The restore path was already safe (the merge
   matches by id); the app's own store was not, and it is the store that
-  produced the corrupt row  exists to survive.
+  produced the corrupt row `hydrate` exists to survive.
 - **Settings were the one thing read off disk unchecked.** Receipts and policy
   updates have been validated on the way in since a single bad row blanked the
   app; the preferences beside them were spread straight over the defaults. An
