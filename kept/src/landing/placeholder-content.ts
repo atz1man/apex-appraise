@@ -17,7 +17,7 @@ export const SOCIAL_PROOF_IS_PLACEHOLDER = true;
 
 export const STATS = [
   { value: '£1.4M+', label: 'recovered by kept users' },
-  { value: '4.8 ★', label: '2,300 App Store ratings' },
+  { value: '4.8 ★', label: '2,300 ratings' },
   { value: '£61', label: 'average return saved' },
 ] as const;
 
