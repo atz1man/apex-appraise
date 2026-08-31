@@ -71,13 +71,22 @@ export interface CostRollup {
    */
   unallocated: number | null;
   /**
-   * £ withheld from contractors until the works are accepted.
+   * £ actually withheld from contractors so far.
    *
-   * Real money the firm owes and a builder is chasing. It was worked out on the
-   * cost monitor screen AND again in the contractor list on the server, one
-   * edit away from the two disagreeing about what is owed.
+   * Real money the firm owes and a builder is chasing — so it is what has been
+   * DEDUCTED, which can only have happened out of a payment already made. See
+   * `retentionOn` for the rule and what it replaced.
    */
   retentionHeld: number;
+  /**
+   * £ that will have been withheld once the whole contract is certified.
+   *
+   * The forward-looking figure — the firm's eventual retention liability. This
+   * is what `retentionHeld` used to hold, which is why it is kept rather than
+   * dropped: it is a genuinely useful number, it was simply under the wrong
+   * heading on a panel of to-date figures.
+   */
+  retentionAtCompletion: number;
   /** payment certificates issued across the job */
   certificates: number;
   /**
@@ -95,7 +104,10 @@ export interface CostRollup {
 /** What one contractor is owed, withheld and certified across their packages. */
 export interface ContractorTotals {
   contractValue: number;
+  /** £ withheld from this contractor so far — deducted from what they have been paid. */
   retention: number;
+  /** £ that will be withheld from them once their packages are fully certified. */
+  retentionAtCompletion: number;
   certificates: number;
 }
 
@@ -103,19 +115,55 @@ export interface ContractorTotals {
  * The same rule per contractor as `costRollup` applies per deal.
  *
  * Separate function, one source: the contractor list on the server used to
- * carry its own copy of `committed × retentionPct`, so a change to how
- * retention is calculated would have moved one screen and not the other.
+ * carry its own copy of the retention rule, so a change to how retention is
+ * calculated would have moved one screen and not the other.
  */
 export function contractorTotals(packages: CostPackageLike[]): ContractorTotals {
   return {
     contractValue: packages.reduce((a, p) => a + p.committed, 0),
-    retention: retentionOf(packages),
+    retention: retentionOn(packages, (p) => p.spent),
+    retentionAtCompletion: retentionOn(packages, (p) => p.committed),
     certificates: packages.reduce((a, p) => a + (p.certificates ?? 0), 0),
   };
 }
 
-const retentionOf = (packages: CostPackageLike[]) =>
-  packages.reduce((a, p) => a + p.committed * ((p.retentionPct ?? 0) / 100), 0);
+/**
+ * Retention accrues as work is CERTIFIED, not when a contract is signed.
+ *
+ * It was `committed × retentionPct` — the retention percentage of the whole
+ * contract sum, from the day the package was created. That is the amount that
+ * will be held when the job finishes, not the amount held now, and the screen
+ * printed it under "Retention held" on a panel whose every other line is a
+ * to-date figure: build programme, spend drawn, certificates issued.
+ *
+ * Under a JCT interim-certificate regime the employer deducts the percentage
+ * from each valuation of work properly executed, so nothing is withheld from a
+ * contractor who has not been paid. Measured on the demo workspace, Harbour
+ * Reach:
+ *
+ *     reported "Retention held"          £407,500
+ *     deducted from certified payments   £283,850
+ *
+ * £123,650 of liability the firm did not owe, 44% over. The clearest single
+ * line is External works: £80,000 under contract, £0 paid, ZERO certificates
+ * issued — and the contractor card showed "Retention £4,000" in amber beside
+ * "Certificates 0", money the page said was being withheld from a builder who
+ * had never been paid a penny.
+ *
+ * `spent` is the certified value ("£ certified and paid"; `syncXero` writes the
+ * ledger's paid figure into it). Whether that is the gross valuation or the
+ * payment net of the deduction moves the answer by the retention percentage OF
+ * the retention percentage — about 0.25% at a 5% rate — which is not worth
+ * modelling on data neither this app nor the ledger distinguishes, and is two
+ * orders below the error being fixed here.
+ *
+ * NOT capped at `retentionAtCompletion`. Certifying past the contract sum means
+ * variations raised it, and £30,000 genuinely withheld is a liability the firm
+ * owes whatever the original figure said — a cap would understate it to keep
+ * two numbers tidy.
+ */
+const retentionOn = (packages: CostPackageLike[], value: (p: CostPackageLike) => number) =>
+  packages.reduce((a, p) => a + value(p) * ((p.retentionPct ?? 0) / 100), 0);
 
 export function costRollup(packages: CostPackageLike[], baseline: CostBaseline): CostRollup {
   const sum = (pick: (p: CostPackageLike) => number) => packages.reduce((a, p) => a + pick(p), 0);
@@ -131,7 +179,8 @@ export function costRollup(packages: CostPackageLike[], baseline: CostBaseline):
     forecast,
     appraisedBuild,
     contingency,
-    retentionHeld: retentionOf(packages),
+    retentionHeld: retentionOn(packages, (p) => p.spent),
+    retentionAtCompletion: retentionOn(packages, (p) => p.committed),
     certificates: sum((p) => p.certificates ?? 0),
     // null rather than 0 when there is nothing to divide by: "nobody has costed
     // this" and "nothing has been drawn" are different sentences

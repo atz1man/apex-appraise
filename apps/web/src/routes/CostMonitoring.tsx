@@ -136,6 +136,7 @@ export default function CostMonitoring() {
   const weightedProgress = rollup?.weightedProgressPct ?? 0;
   const drawdown = rollup?.drawdownPct ?? 0;
   const retentionHeld = rollup?.retentionHeld ?? 0;
+  const retentionAtCompletion = rollup?.retentionAtCompletion ?? 0;
   const certificates = rollup?.certificates ?? 0;
 
   // photo log grouped by week commencing, newest first
@@ -424,9 +425,21 @@ export default function CostMonitoring() {
                       })}
                     </div>
                   </div>
+                  {/*
+                    * Two retention figures, because they answer two questions
+                    * and this line used to answer the wrong one. "Held" is what
+                    * has been deducted from payments already certified — the
+                    * liability the firm owes today, which belongs on a panel of
+                    * to-date figures. "At completion" is the whole-contract
+                    * amount that used to sit under this heading.
+                    */}
                   <div className="flex justify-between text-[12.5px] text-ink-2b border-t border-border-faint pt-2.5">
                     <span>Retention held</span>
                     <span className="fig font-semibold text-ink">{fM(retentionHeld)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11.5px] text-ink-3">
+                    <span>At completion</span>
+                    <span className="fig font-semibold">{fM(retentionAtCompletion)}</span>
                   </div>
                   <div className="flex justify-between text-[12.5px] text-ink-2b">
                     <span>Certificates issued</span>
@@ -506,6 +519,9 @@ export default function CostMonitoring() {
                       {(
                         [
                           ['Contract', c.contractValue > 0 ? fM(c.contractValue) : '—', undefined],
+                          // held so far, not the contract's eventual total: a
+                          // contractor with no certificates has had nothing
+                          // withheld, and this card showed them owed retention
                           ['Retention', c.retention > 0 ? fM(c.retention) : '—', statusTokens.amber.text],
                           ['Certificates', String(c.certificates), undefined],
                         ] as Array<[string, string, string | undefined]>
