@@ -9,11 +9,13 @@ import { assertCanAddDeal } from '../entitlements.js';
 import {
   aggregateExposure,
   computeAppraisal,
+  costRollup,
   monthsBetween,
   postcodeArea,
   reconcileCash,
   spendAgainstProgramme,
   testCovenants,
+  type CostPackageLike,
 } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { emitWebhook } from '../webhook-delivery.js';
@@ -96,7 +98,12 @@ export const dealsRouter = router({
     const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
       ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       currentAppraisals(ctx.prisma.appraisal, orgId),
-      ctx.prisma.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
+      ctx.prisma.costPackage.findMany({
+        where: { orgId },
+        // spent and forecast are read so the packages can be handed to the
+        // engine whole rather than re-derived here — see costBy below
+        select: { dealId: true, committed: true, budget: true, spent: true, forecast: true, progressPct: true, retentionPct: true },
+      }),
       ctx.prisma.orgPolicy.findUnique({ where: { orgId } }),
       // the bank feed, where one exists — cash beats a proxy built from invoices
       ctx.prisma.bankAccount.findMany({
@@ -119,18 +126,39 @@ export const dealsRouter = router({
       minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
     };
     /**
-     * Progress is weighted by BUDGET, not averaged across packages. A 2%-complete
-     * groundworks package and a 2%-complete £5m frame package are not equally
-     * informative, and a plain mean lets a trivial package drag the number.
+     * The packages, grouped by deal and rolled up BY THE ENGINE.
+     *
+     * This used to do its own weighting — each package's budget times its
+     * progress, accumulated here and divided at the point of use — with
+     * `cost-report.ts` doing the same thing under `weightedProgressPct`, and
+     * `public-api.ts` doing it a third time. Three implementations of one rule, and
+     * the argument FOR the rule written out twice as well: the comment here and
+     * the comment there both explained that a 2%-complete groundworks package
+     * and a 2%-complete £5m frame package are not equally informative.
+     *
+     * They print on different surfaces — the engine's copy drives the cost
+     * monitor's build-programme bar, this one drove the funding pack's
+     * overspending verdict — so a change to the weighting basis would have
+     * moved one and not the other, and the pack would have contradicted the
+     * screen it says it agrees with. `one-engine-sweep` now asks this of the
+     * whole tree rather than leaving it to be found again.
      */
-    const costBy = new Map<string, { drawn: number; budget: number; weighted: number }>();
+    const byPackages = new Map<string, CostPackageLike[]>();
     for (const p of packages) {
-      const cur = costBy.get(p.dealId) ?? { drawn: 0, budget: 0, weighted: 0 };
-      const budget = Number(p.budget) / 100;
-      cur.drawn += Number(p.committed) / 100;
-      cur.budget += budget;
-      cur.weighted += budget * (p.progressPct ?? 0);
-      costBy.set(p.dealId, cur);
+      const list = byPackages.get(p.dealId) ?? [];
+      list.push({
+        budget: P(p.budget),
+        committed: P(p.committed),
+        spent: P(p.spent),
+        forecast: P(p.forecast),
+        progressPct: p.progressPct,
+        retentionPct: p.retentionPct,
+      });
+      byPackages.set(p.dealId, list);
+    }
+    const costBy = new Map<string, ReturnType<typeof costRollup>>();
+    for (const [dealId, list] of byPackages) {
+      costBy.set(dealId, costRollup(list, { appraisedBuild: null }));
     }
     /**
      * Newest-first from `currentAppraisals`, first-wins here — so a portfolio
@@ -149,7 +177,7 @@ export const dealsRouter = router({
         const r = computeAppraisal(appraisalRowToEngineInput(a));
         const cost = costBy.get(d.id);
         const cash = reconcileCash({
-          committed: cost?.drawn ?? 0,
+          committed: cost?.committed ?? 0,
           transactions: cashBy.get(d.id) as never,
         });
         return {
@@ -178,7 +206,9 @@ export const dealsRouter = router({
             // only where there is something to measure: a deal with no cost
             // packages has no works to compare money against, and inventing a
             // 0%-complete reading would report every such deal as underspending
-            cost && cost.budget > 0
+            // the engine returns null for the weighting when there is nothing
+            // costed to weight by; that null IS the "nothing to compare" case
+            cost && cost.weightedProgressPct != null
               ? spendAgainstProgramme({
                   constructionTotal: r.build + r.fees + r.cont,
                   periodMonths: r.period,
@@ -187,8 +217,8 @@ export const dealsRouter = router({
                     a.startYear && a.startMonth ? monthsBetween({ year: a.startYear, month: a.startMonth }, new Date()) : 0,
                   // works are certified against what has actually been PAID once
                   // a bank feed exists; invoiced-not-paid is a payables position
-                  actualToDate: cash.drawnSource === 'bank' ? cash.paid : cost.drawn,
-                  progressPct: cost.weighted / cost.budget,
+                  actualToDate: cash.drawnSource === 'bank' ? cash.paid : cost.committed,
+                  progressPct: cost.weightedProgressPct,
                 })
               : null,
           covenants: testCovenants(

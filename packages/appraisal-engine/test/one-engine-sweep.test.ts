@@ -38,6 +38,30 @@ const RULES: Array<{ what: string; use: string; re: RegExp }> = [
     use: 'analysedPsf()',
     re: /Math\.round\(\s*mv\s*\/\s*[\w.]*nia\b/i,
   },
+  {
+    /**
+     * The third, and the first this sweep found rather than confirmed.
+     *
+     * Progress across a job is weighted by what each package is WORTH — a
+     * £900k package at 10% beside a £100k package at 100% is a job barely
+     * started, and averaging the percentages calls it 55%. `cost-report.ts`
+     * owns that as `weightedProgressPct`. `deals.exposure` carried its own
+     * copy, and so did `/api/v1/exposure`: three implementations, and the
+     * argument FOR the rule written out twice in comments as well.
+     *
+     * They print on three surfaces — the cost monitor's build-programme bar,
+     * the funding pack's overspending verdict, and a customer's own
+     * integration — so a change to the weighting basis would have moved one
+     * and left the others contradicting it. Written after routing the other
+     * two through the engine, and verified against the source as it stood
+     * BEFORE that: it finds both offenders unaided.
+     */
+    what: 'progress weighted by what each package is worth',
+    use: 'costRollup().weightedProgressPct',
+    // a money figure multiplied by a progress percentage — the accumulation
+    // step, which is where a hand-rolled weighting always starts
+    re: /[\w.]+\s*\*\s*\(?\s*[\w.]*progressPct/,
+  },
 ];
 
 const sourceFiles = (dir: string): string[] => {

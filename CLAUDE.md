@@ -24,9 +24,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (276; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (277; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (754). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (755). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -137,7 +137,13 @@ the point, so read the failure rather than adding an exemption.
 - `one-engine-sweep` (in `packages/appraisal-engine/test`) — nothing outside the engine
   re-derives a quantity the engine owns. Deliberately narrow: it matches the specific
   derived figures that have a house rule and print on more than one surface
-  (`reportedMarketValue`, `analysedPsf`), not "money maths" in general. Add to its RULES
+  (`reportedMarketValue`, `analysedPsf`, budget-weighted progress), not "money maths" in
+  general. The third rule is the first this sweep FOUND rather than confirmed: written
+  for the copy in `deals.exposure`, it immediately named a second in `public-api.ts` —
+  three implementations of one rule across the cost monitor, the funding pack and a
+  customer's own integration. Verified against the source as it stood before the fix,
+  where it finds both unaided. Note its matcher reads prose too: a comment writing the
+  formula out registers as an offender, so describe the rule in words. Add to its RULES
   when a fourth is found rather than widening the matchers.
 - `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
   is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
