@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (730). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (740). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (90): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -86,6 +86,15 @@ the point, so read the failure rather than adding an exemption.
   Both fetches also set `redirect: 'manual'`: a checked address stops being the address
   reached the moment a 302 is honoured. NOT closed: DNS rebinding, which needs the
   connection pinned to the checked address and so needs undici as a real dependency.
+- `security.ts` batch rule — the rate limiter counts REQUESTS and tRPC batching puts many
+  operations in one, so the 10/min `auth` budget was 10 BATCHES/min. Measured: one request
+  carrying 60 logins was accepted whole and counted once; at maxParamLength 5000 a single
+  request holds ~454. The per-email lockout does NOT cover this — it stops five guesses at
+  one account, and this is one password against thousands of accounts, where no lock trips.
+  A sensitive procedure may not share a batch. The check sits at `preParsing` ON PURPOSE:
+  the limiter answers at onRequest and short-circuits, so a later phase runs only on
+  requests it already counted — registration order does not achieve this, an onRequest hook
+  added after the limiter (or via `after()`) still runs first.
 - `viewer-readonly` — every INTERNAL mutation refuses a VIEWER. The team screen has
   always printed "View" for that role and nothing enforced it: 47 of 87 mutations were
   reachable, including `appraisal.save`, `sales.deleteUnit` and

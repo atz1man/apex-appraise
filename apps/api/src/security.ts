@@ -66,6 +66,66 @@ const SENSITIVE = ['auth.login', 'auth.requestPasswordReset', 'auth.resetPasswor
 
 export const isSensitive = (url: string) => SENSITIVE.some((p) => url.includes(p));
 
+/**
+ * The operation names in a tRPC request, batched or not.
+ *
+ * A batch is one HTTP request whose path is every procedure name joined by
+ * commas — see the maxParamLength note in main.ts, which raised the cap to 5000
+ * characters so a busy page could ask for everything at once.
+ */
+export function operationsIn(url: string): string[] {
+  const path = url.split('?')[0] ?? '';
+  const after = path.indexOf('/trpc/');
+  if (after < 0) return [];
+  /**
+   * Decoded BEFORE the split, not after. `%2C` is a comma, so
+   * `auth.login%2Cauth.login` is two operations wearing one name — splitting
+   * first and decoding the pieces sees a single procedure called
+   * "auth.login,auth.login" and waves the batch through.
+   */
+  let raw = path.slice(after + '/trpc/'.length);
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    // a malformed escape is not a path we can reason about; treat it as one
+    // opaque operation rather than guessing at what it meant
+  }
+  return raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/**
+ * A batch may not carry a sensitive procedure alongside anything else.
+ *
+ * The limiter above counts REQUESTS. Batching puts many operations in one
+ * request, so the ten-per-minute budget on `auth.login` was ten BATCHES per
+ * minute, and each batch could hold as many logins as the path had room for.
+ * Measured against a real instance: one request carrying sixty logins was
+ * accepted whole and counted once, and the same address then sent a further two
+ * hundred and forty inside the same minute. At the 5000-character path limit a
+ * single request holds about four hundred and fifty of them — a control written
+ * to allow ten attempts a minute allowing roughly four and a half thousand.
+ *
+ * The per-email lockout in `auth/password.ts` is not the answer to this and was
+ * never meant to be: it stops five guesses against ONE account. The attack this
+ * opens is the other shape — one password against thousands of DIFFERENT
+ * accounts, where no address is tried twice and no lock ever trips. The
+ * volumetric bucket is the only thing standing in front of that, which is
+ * exactly why it must not be multipliable.
+ *
+ * Refusing beats charging the batch its true cost. A login arrives as a single
+ * user action and the browser's batch link sends it alone; sixty of them in one
+ * request is not traffic any client of ours produces, so there is nothing to
+ * meter — it is malformed intent, and saying so is simpler to state, simpler to
+ * test, and cannot be tuned wrong.
+ */
+export const batchesSensitive = (url: string): boolean => {
+  const ops = operationsIn(url);
+  return ops.length > 1 && ops.some((op) => SENSITIVE.some((s) => op.includes(s)));
+};
+
 export async function registerSecurity(app: FastifyInstance) {
   const origins = allowedOrigins();
   await app.register(cors, {
@@ -124,5 +184,38 @@ export async function registerSecurity(app: FastifyInstance) {
       // how close they are to the limit
       message: 'Too many requests — try again shortly',
     }),
+  });
+
+  /**
+   * `preParsing`, and the choice of phase is the whole point.
+   *
+   * A refused batch must cost the sender their budget. If it is free they can
+   * send them without limit and map the rule out for nothing, which turns a
+   * control into a target. That means this check has to run AFTER the limiter
+   * has counted the request.
+   *
+   * Registration order does not achieve it. `register` is deferred and
+   * `addHook` is immediate, so an `onRequest` added on the line below
+   * `await app.register(rateLimit, …)` still runs first — and so does one added
+   * through `after()`. Measured, with both: the eleventh refused batch from a
+   * single address still came back 400 rather than 429.
+   *
+   * The lifecycle settles it where ordering could not. The limiter answers at
+   * `onRequest` and short-circuits, so nothing at a later phase runs on a
+   * request it refused — measured directly: a limited request logs the
+   * onRequest hooks and never reaches preParsing. Sitting here therefore
+   * guarantees the count has happened, and does it without depending on which
+   * plugin was registered first. It also refuses before the body is read, so a
+   * large batch payload is never parsed.
+   */
+  app.addHook('preParsing', async (req, reply, payload) => {
+    if (!batchesSensitive(req.url)) return payload;
+    await reply.code(400).send({
+      statusCode: 400,
+      error: 'Bad Request',
+      // no counts, no thresholds — the same reasoning as the 429 above
+      message: 'Sign-in and account procedures must be sent one per request.',
+    });
+    return payload;
   });
 }
