@@ -8,7 +8,7 @@ import { AI_ACTOR } from '../ai-disclosure.js';
 import { INTEGRATION_PROVIDERS } from '@apex/types';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
-import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
+import { SELF_SERVE_PROVIDERS } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
 import { assertOwned } from '../auth/owned.js';
@@ -1109,12 +1109,26 @@ export const integrationsRouter = router({
       where: { orgId: ctx.principal.orgId },
       orderBy: { provider: 'asc' },
     });
-    // config (credentials) never leaves the server — expose only whether keys are set
-    return rows.map(({ config, ...row }) => ({
-      ...row,
-      hasCredentials: config !== '{}' && config !== '',
-      selfServe: row.provider in SELF_SERVE_PROVIDERS ? SELF_SERVE_PROVIDERS[row.provider as SelfServeProvider] : null,
-    }));
+    return {
+      // config (credentials) never leaves the server — expose only whether keys are set
+      connections: rows.map(({ config, ...row }) => ({
+        ...row,
+        hasCredentials: config !== '{}' && config !== '',
+      })),
+      /**
+       * Whether a provider takes the workspace's own API key is a fact about
+       * the PROVIDER, and it used to be attached to the row — so it existed
+       * only for a provider this workspace happened to have a row for. That was
+       * survivable while a query backfilled a row for everything; it is not now.
+       * Companies House is not in the demo seed and was never in the seed of any
+       * workspace that registered before it was added, so the credentials drawer
+       * — the only way to give this product a Companies House key — simply did
+       * not open, and Connect fell through to the demo connect instead.
+       *
+       * Caught by `e2e/screens.spec.ts`, which opens that drawer.
+       */
+      selfServe: SELF_SERVE_PROVIDERS as Record<string, { fields: ReadonlyArray<{ key: string; label: string }>; signupUrl: string } | undefined>,
+    };
   }),
 
   /**

@@ -96,8 +96,41 @@ describe('listing integrations', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('CONNECTED');
     // and it appears in the list, which is what the screen reads
-    const listed = (await callerFor(A.principal).integrations.list()) as Array<{ provider: string }>;
-    expect(listed.map((r) => r.provider)).toContain('Ordnance Survey');
+    const listed = (await callerFor(A.principal).integrations.list()) as {
+      connections: Array<{ provider: string }>;
+      selfServe: Record<string, unknown>;
+    };
+    expect(listed.connections.map((r) => r.provider)).toContain('Ordnance Survey');
+  });
+
+  /**
+   * Whether a provider takes the workspace's own API key travels with the
+   * CATALOGUE, not with a row.
+   *
+   * It used to be attached to each row, so it existed only for a provider the
+   * workspace happened to have a row for — survivable only while the query
+   * backfilled a row for everything. Companies House is not in the demo seed,
+   * and was in no seed of any workspace that registered before it was added, so
+   * removing the backfill left the credentials drawer — the only way to give
+   * this product a Companies House key — unable to open at all. CI caught it in
+   * `e2e/screens.spec.ts`; this is the API-side pin, because a browser test is
+   * a slow way to learn the shape of a response.
+   */
+  it('says which providers take a key, for a workspace with no rows at all', async () => {
+    await prisma.integrationConnection.deleteMany({ where: { orgId: A.orgId } });
+    const listed = (await callerFor(A.principal).integrations.list()) as {
+      connections: unknown[];
+      selfServe: Record<string, { fields: Array<{ key: string; label: string }>; signupUrl: string } | undefined>;
+    };
+    expect(listed.connections, 'the fixture is not actually empty, so this proves nothing').toHaveLength(0);
+    expect(
+      listed.selfServe['Companies House'],
+      'a workspace with no rows cannot be told Companies House takes a key — the drawer never opens',
+    ).toBeTruthy();
+    expect(listed.selfServe['Companies House']!.fields.map((f) => f.label)).toEqual(['API key']);
+    expect(listed.selfServe['EPC Register']).toBeTruthy();
+    // and a provider that does NOT take a key is absent, or every card would open a drawer
+    expect(listed.selfServe['HM Land Registry']).toBeFalsy();
   });
 
   /**

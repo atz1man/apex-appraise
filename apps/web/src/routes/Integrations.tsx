@@ -94,7 +94,16 @@ function rel(d: Date | string): string {
 export default function Integrations() {
   const toast = useToast();
   const utils = trpc.useUtils();
-  const { data: rows, isLoading } = trpc.integrations.list.useQuery();
+  const { data, isLoading } = trpc.integrations.list.useQuery();
+  const rows = data?.connections;
+  /**
+   * Whether a provider takes the workspace's own API key — a fact about the
+   * PROVIDER, read from the catalogue rather than from a row. It used to be
+   * `row.selfServe`, so it existed only where a row happened to exist, and a
+   * workspace with no Companies House row could not open the drawer that is the
+   * only way to give this product a Companies House key.
+   */
+  const selfServe = data?.selfServe;
   const connect = trpc.integrations.connect.useMutation({ onSuccess: () => utils.integrations.list.invalidate() });
   // self-serve key flow: drawer with the provider's fields, validated live on save
   const [credProvider, setCredProvider] = useState<string | null>(null);
@@ -236,7 +245,7 @@ export default function Integrations() {
                               size="sm"
                               className="min-h-10 sm:min-h-0"
                               loading={pending}
-                              onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                              onClick={() => (selfServe?.[item.provider] ? setCredProvider(item.provider) : connect.mutate(item.provider))}
                             >
                               Manage
                             </Button>
@@ -250,7 +259,7 @@ export default function Integrations() {
                             size="sm"
                             className="min-h-10 sm:min-h-0"
                             loading={pending}
-                            onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                            onClick={() => (selfServe?.[item.provider] ? setCredProvider(item.provider) : connect.mutate(item.provider))}
                           >
                             Connect
                           </Button>
@@ -268,7 +277,7 @@ export default function Integrations() {
       {/* self-serve key drawer — validated live before it's stored */}
       {(() => {
         const row = credProvider ? byProvider.get(credProvider) : undefined;
-        const spec = row?.selfServe;
+        const spec = credProvider ? selfServe?.[credProvider] : undefined;
         if (!credProvider || !spec) return null;
         const isConnected = row?.status === 'CONNECTED';
         const valid = spec.fields.every((f) => credFields[f.key]?.trim());
