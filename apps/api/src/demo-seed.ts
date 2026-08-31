@@ -465,14 +465,27 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       data: { orgId: org.id, dealId: northgate, name, category, ext, sizeBytes: BigInt(sizeBytes), extraction, buyerVisible, addedById: ao.id },
     });
   }
-  // buyer-visible docs live on the buyer's own development (Harbour Reach)
+  /**
+   * Buyer-visible docs live on the buyer's own development (Harbour Reach), and
+   * belong to ONE plot.
+   *
+   * Their names always said so — "Reservation pack — Plot 1", "Contract of sale
+   * — Plot 1 (engrossment)" — but the rows carried only a dealId, and the portal
+   * selected by deal. On a scheme with ten plots that is another private
+   * individual's conveyancing file in every buyer's portal. `unitId` is what
+   * makes the name true, and `buyerUnitId` above is the same plot the demo buyer
+   * signs in as.
+   */
   const buyerDocs: Array<[string, string, string, number]> = [
     ['Reservation pack — Plot 1.pdf', 'Legal', 'pdf', 380_000],
     ['Contract of sale — Plot 1 (engrossment).pdf', 'Legal', 'pdf', 640_000],
   ];
   for (const [name, category, ext, sizeBytes] of buyerDocs) {
     await prisma.document.create({
-      data: { orgId: org.id, dealId: harbourReach, name, category, ext, sizeBytes: BigInt(sizeBytes), extraction: 'STORED', buyerVisible: true, addedById: ao.id },
+      data: {
+        orgId: org.id, dealId: harbourReach, unitId: buyerUnitId, name, category, ext,
+        sizeBytes: BigInt(sizeBytes), extraction: 'STORED', buyerVisible: true, addedById: ao.id,
+      },
     });
   }
   const activityRows: Array<[string, string, string]> = [

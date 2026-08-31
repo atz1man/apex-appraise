@@ -253,8 +253,19 @@ export const buyerRouter = router({
       },
     });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+    /**
+     * THIS buyer's documents, not the development's.
+     *
+     * This was `dealId`, so every buyer-visible document on the scheme appeared
+     * in every buyer's portal. On the demo workspace those are "Reservation pack
+     * — Plot 1.pdf" and "Contract of sale — Plot 1 (engrossment).pdf", on a deal
+     * with ten plots: plot 2's buyer would have read another private
+     * individual's contract of sale. Latent only because nothing in the product
+     * could set `buyerVisible` at all until `documents.shareWithBuyer` — which
+     * is why that procedure takes a unit rather than a flag.
+     */
     const docs = await ctx.prisma.document.findMany({
-      where: { dealId: unit.dealId, orgId: ctx.principal.orgId, buyerVisible: true },
+      where: { unitId: unit.id, orgId: ctx.principal.orgId, buyerVisible: true },
     });
     const payments: Array<{ id: string; kind: string; amount: bigint; status: string; paidAt: Date | null }> =
       await ensurePayments(ctx.prisma, ctx.principal.orgId, unit);
@@ -359,8 +370,14 @@ export const buyerRouter = router({
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const unit = await ctx.prisma.unit.findFirst({ where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId } });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+    /**
+     * Scoped the same way as the list, and separately rather than by trusting
+     * it: `signedAt` is ONE column, so a buyer signing a document shared with
+     * the whole development would have marked it signed in every other buyer's
+     * portal too — a signature attributed to people who never gave one.
+     */
     const doc = await ctx.prisma.document.findFirst({
-      where: { id: input, dealId: unit.dealId, orgId: ctx.principal.orgId, buyerVisible: true },
+      where: { id: input, unitId: unit.id, orgId: ctx.principal.orgId, buyerVisible: true },
     });
     if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
     const signed = await ctx.prisma.document.update({ where: { id: doc.id }, data: { signedAt: new Date() } });

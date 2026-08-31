@@ -4,6 +4,7 @@ import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { useToast } from '../components/Toast';
 import { n0 } from '../lib/format';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
@@ -95,6 +96,7 @@ type AskEntry = { q: string; status: 'ok' | 'demo' | 'no-docs'; answer?: string;
 export default function DataRoom() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  const toast = useToast();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
 
   const [folder, setFolder] = useState('all');
@@ -111,6 +113,17 @@ export default function DataRoom() {
       utils.documents.activity.invalidate(dealId);
       setDraft({ name: '', category: folder === 'all' ? 'Architectural' : folder });
       setFormOpen(false);
+    },
+  });
+  /** the plots a document can be shared with — the buyer picker's options */
+  const { data: unitsData } = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
+  const units = unitsData?.units ?? [];
+  const shareWithBuyer = trpc.documents.shareWithBuyer.useMutation({
+    onSuccess: (r) => {
+      utils.documents.list.invalidate();
+      // the access panel counts what buyers can reach, so it moves with this
+      utils.documents.access.invalidate();
+      toast.success(r.buyerVisible ? 'Shared with the buyer' : 'No longer shared with a buyer');
     },
   });
   const setExtraction = trpc.documents.setExtraction.useMutation({
@@ -336,6 +349,7 @@ export default function DataRoom() {
                 <div style={{ flex: 1.2 }}>Type</div>
                 <div style={{ flex: 1 }}>Added</div>
                 <div style={{ flex: 1 }} className="text-right">Size</div>
+                <div style={{ flex: 1.4 }} className="text-right">Buyer</div>
                 <div style={{ flex: 1.2 }} className="text-right">Status</div>
               </div>
               {docs.map((d) => {
@@ -365,6 +379,37 @@ export default function DataRoom() {
                     {/* an expected document has no size, because it has no file */}
                     <div className="fig text-right text-[11.5px] font-medium text-ink-3" style={{ flex: 1 }}>
                       {d.extraction === 'AWAITED' ? '—' : fmtBytes(d.sizeBytes)}
+                    </div>
+                    {/*
+                      * Which plot's buyer sees this file, if any.
+                      *
+                      * `buyerVisible` existed from the first migration and
+                      * NOTHING could set it — every document creator left it
+                      * false and no procedure toggled it, so a firm paying for
+                      * "Buyer + investor portals" had a buyer whose Documents to
+                      * sign panel could only ever read "Nothing waiting for your
+                      * signature". It takes a PLOT rather than a checkbox
+                      * because the portal used to select by deal: a reservation
+                      * pack for plot 1 is not plot 7's business, and one
+                      * `signedAt` column cannot hold ten people's signatures.
+                      */}
+                    <div className="flex justify-end" style={{ flex: 1.4 }}>
+                      {d.extraction === 'AWAITED' ? (
+                        <span className="text-[11.5px] text-ink-3">—</span>
+                      ) : (
+                        <select
+                          aria-label={`Share ${d.name} with a buyer`}
+                          className="max-w-full text-[11.5px] bg-sunken border border-border-std rounded-[7px] px-1.5 py-1 text-ink-2b disabled:opacity-50"
+                          disabled={shareWithBuyer.isPending || !units.length}
+                          value={d.buyerVisible ? (d.unitId ?? '') : ''}
+                          onChange={(e) => shareWithBuyer.mutate({ id: d.id, unitId: e.target.value || null })}
+                        >
+                          <option value="">Not shared</option>
+                          {units.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <div className="flex justify-end" style={{ flex: 1.2 }}>
                       {d.extraction === 'AWAITED' ? (

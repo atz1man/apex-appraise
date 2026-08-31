@@ -530,6 +530,80 @@ export const documentsRouter = router({
       return updated;
     }),
 
+  /**
+   * Share a document with one plot's buyer, or stop sharing it.
+   *
+   * `Document.buyerVisible` has existed all along and NOTHING in the product
+   * could set it. Every creator — the upload route, `documents.expect`, the EPC
+   * link, the workspace importer — leaves it at the schema default of false, and
+   * no procedure toggled it. Only `demo-seed.ts` ever wrote true.
+   *
+   * So "Buyer + investor portals" sits on the Growth column of the pricing page,
+   * a firm invites a buyer, and that buyer's "Documents to sign" panel reads
+   * "Nothing waiting for your signature" forever, because no document on the
+   * platform can be offered to them. Exactly the shape the portal LOGINS were in
+   * before they could be created: a paid feature with no way to switch on.
+   * `ops.access` compounded it by reporting `visibleDocuments` to the firm as the
+   * honest measure of what buyers reach — a figure that could only ever be zero.
+   *
+   * IT TAKES A UNIT, and that is the point rather than a convenience. Documents
+   * are keyed on the deal, and `portal.myUnit` selected every buyerVisible
+   * document on it. Fixing visibility WITHOUT this would have opened a hole
+   * rather than closed one: on the demo workspace the two buyer-visible files
+   * are "Reservation pack — Plot 1.pdf" and "Contract of sale — Plot 1
+   * (engrossment).pdf", on a development with ten plots. Invite plot 2's buyer
+   * and they would read another private individual's contract of sale, and
+   * `portal.sign` — scoped to the deal too — would let them sign it. `signedAt`
+   * is a single column, so their signature would then mark that contract signed
+   * in plot 1's own portal.
+   *
+   * A document offered to a buyer is offered to A buyer. Sharing with nobody
+   * clears the unit as well, so a file cannot keep a stale owner while dark.
+   */
+  shareWithBuyer: internalProcedure
+    .input(z.object({ id: z.string(), unitId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      /**
+       * A placeholder is not a document. `documents.expect` raises an AWAITED
+       * row for a file the deal is still waiting for, and offering one to a
+       * buyer would put a name and a Review & sign button in their portal over
+       * nothing at all — the same reason `setExtraction` refuses it.
+       */
+      if (input.unitId && doc.extraction === 'AWAITED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'That document has not been received yet — upload the file before sharing it with a buyer.',
+        });
+      }
+      let unit: { id: string; name: string } | null = null;
+      if (input.unitId) {
+        // the unit is a THIRD input, and it must be this firm's and on THIS deal
+        const found = await ctx.prisma.unit.findFirst({
+          where: { id: input.unitId, orgId: ctx.principal.orgId, dealId: doc.dealId },
+          select: { id: true, name: true },
+        });
+        if (!found) throw new TRPCError({ code: 'NOT_FOUND', message: 'That plot is not on this deal.' });
+        unit = found;
+      }
+      const updated = await ctx.prisma.document.update({
+        where: { id: doc.id },
+        data: { buyerVisible: unit != null, unitId: unit?.id ?? null },
+      });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: unit ? 'shared a document with a buyer' : 'stopped sharing a document with a buyer',
+          target: unit ? `${doc.name} → ${unit.name}` : doc.name,
+        },
+      });
+      return { id: updated.id, buyerVisible: updated.buyerVisible, unitId: updated.unitId };
+    }),
+
   activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     await assertOwnDeal(ctx, input);
     return ctx.prisma.activityEvent.findMany({

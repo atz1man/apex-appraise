@@ -258,6 +258,7 @@ model Unit {
   /// carries an agreed value.
   updatedAt DateTime @default(now()) @updatedAt
   milestones SalesMilestone[]
+  documents Document[]
 
   @@index([dealId, status])
 }
@@ -364,12 +365,20 @@ model Document {
   sizeBytes BigInt
   url      String @default("")
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
+  // WHICH buyer this is shared with. A document offered to a buyer is offered to
+  // A buyer: `signedAt` is one column, so a row shared across a development
+  // could not have recorded ten people's signatures, and a reservation pack for
+  // plot 1 is not plot 7's business. Null means shared with nobody, which is
+  // what every document is until somebody says otherwise.
+  unitId   String?
+  unit     Unit?   @relation(fields: [unitId], references: [id])
   buyerVisible Boolean @default(false)
   signedAt DateTime? // buyer e-sign timestamp (DocuSign in prod)
   addedById String?
   addedAt  DateTime @default(now())
 
   @@index([dealId, category])
+  @@index([unitId])
 }
 
 // Firm-level standing wording: the AI policy note added to reports, and the
