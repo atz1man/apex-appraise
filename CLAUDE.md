@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (740). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (747). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (90): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -216,6 +216,18 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Flex children default `min-width:auto` — clusters need `min-w-0` (+ internal `overflow-x-auto`)
   or they widen the page on phones; e2e guards zero horizontal scroll at 390px.
 - Live-LLM e2e needs `test.setTimeout(120_000)`.
+- Postgres SERIALIZABLE aborts on the POSSIBILITY of a cycle, not a proven one, so two
+  transactions that never touched the same row abort each other under load (SQLSTATE 40001,
+  Prisma P2034). 40001 means RETRY; reading it as "somebody else won the race" tells a user
+  they lost a race nobody entered. Only `appraisal.save`'s first-version path uses
+  Serializable, and it goes through `retryOnSerialisationFailure`. Retrying is safe ONLY
+  because the deciding read is inside the transaction — a retry takes a fresh snapshot and
+  still refuses a genuine winner. SQLite never raises P2034, so tests inject it by wrapping
+  `prisma.$transaction` and matching `isolationLevel === 'Serializable'`.
+- A mutation-test helper that makes the code loop for ever will HANG the run rather than fail
+  it if the injected sleep returns instantly — vitest's timeout never fires because the hot
+  loop starves the timers. Make injected sleeps yield (`setImmediate`) so an unbounded loop
+  fails on the test timeout instead.
 - Undoing a mutation with `git checkout -- <file>` restores HEAD, not the pre-mutation state —
   on a file with uncommitted work it deletes the fix you are testing, and the next mutation runs
   against a file with no guard in it, which reads as a cascade of unrelated failures. Copy the

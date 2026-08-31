@@ -26,7 +26,7 @@ import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
-import { assertUnchanged } from '../optimistic.js';
+import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
 const spendProfileToDb: Record<string, string> = {
@@ -342,29 +342,42 @@ export const appraisalRouter = router({
          * and commit. Serializable is the only level at which "nobody else has
          * one" stays true until this transaction commits.
          */
-        row = await ctx.prisma.$transaction(
-          async (tx) => {
-            const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
-            if (raced) {
-              throw new TRPCError({
-                code: 'CONFLICT',
-                message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+        row = await retryOnSerialisationFailure(() =>
+          ctx.prisma.$transaction(
+            async (tx) => {
+              const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
+              if (raced) {
+                throw new TRPCError({
+                  code: 'CONFLICT',
+                  message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+                });
+              }
+              return tx.appraisal.create({
+                data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
               });
-            }
-            return tx.appraisal.create({
-              data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
-            });
-          },
-          { isolationLevel: 'Serializable' },
+            },
+            { isolationLevel: 'Serializable' },
+          ),
         ).catch((e: unknown) => {
           if (e instanceof TRPCError) throw e;
           /**
            * Postgres aborts the loser of a serialisable conflict rather than
-           * blocking it (SQLSTATE 40001, which Prisma reports as P2034). That is
-           * this invariant working, so it reaches the user as the same refusal
-           * the other two paths give and not as a server fault.
+           * blocking it (SQLSTATE 40001, which Prisma reports as P2034).
+           *
+           * This used to read that abort as proof of a real race. It is not:
+           * SSI aborts on the POSSIBILITY of a cycle, so two saves on two
+           * different deals abort each other under load, and the loser was told
+           * somebody had beaten them to a deal nobody else could see. CI found
+           * it — a browser test created its own deal, saved the first appraisal
+           * on it, and was refused on an id no other test had ever held.
+           *
+           * `retryOnSerialisationFailure` takes the transaction again, which is
+           * what 40001 actually asks for. Reaching here means the retries ran
+           * out, and at that point the refusal is the honest answer: whether the
+           * cause was contention or a real winner, the caller has to reload
+           * either way.
            */
-          if ((e as { code?: string })?.code === 'P2034') {
+          if ((e as { code?: string })?.code === SERIALISATION_FAILURE) {
             throw new TRPCError({
               code: 'CONFLICT',
               message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
