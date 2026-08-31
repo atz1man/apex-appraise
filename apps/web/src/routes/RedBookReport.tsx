@@ -853,13 +853,50 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <Micro>Basis of adjustment</Micro>
-          <Body>
-            Comparables have been adjusted for differences in size, condition, location and date of sale, with the net adjustment applied
-            to each comparable's analysed rate per square foot. Less-adjusted evidence is afforded greater weight in deriving the
-            supported rate. All evidence is drawn from open-market arm's-length transactions verified against HM Land Registry sold-price
-            records and local agency confirmation.
-          </Body>
+          {/*
+            * Printed only where comparables exist, and no longer claiming a
+            * verification nothing records.
+            *
+            * The paragraph was unconditional, so two inches under "No comparable
+            * evidence logged for this deal yet" the same page said "Comparables
+            * have been adjusted for differences in size, condition, location and
+            * date of sale" — describing work done on evidence it had just said
+            * did not exist.
+            *
+            * Its last sentence was worse, and wrong even WITH comparables: "All
+            * evidence is drawn from open-market arm's-length transactions
+            * verified against HM Land Registry sold-price records and local
+            * agency confirmation." `Comparable` has no field that could ever
+            * make that true — address, meta, basePsf and four adjustment
+            * percentages, nothing about where the evidence came from or who
+            * checked it. A comparable typed by hand and one imported by
+            * `sitepack.applyComps` are indistinguishable to this report, and it
+            * asserted Land Registry verification over both. Same shape as the
+            * RICS mark before `Organisation.ricsFirmNumber` existed: a claim the
+            * record cannot support, printed identically whether it is true.
+            *
+            * It also contradicted the valuer's own words. The terms of
+            * engagement carry `sourcesOfInformation`, which the valuer writes and
+            * which says by default that information "is relied upon as accurate
+            * and is not independently verified". The report never printed that
+            * and printed this instead.
+            *
+            * What survives is what the record does hold: the four adjustments
+            * ARE stored per comparable, and each one's provenance is already in
+            * the Evidence column beside it — so the reader is pointed there
+            * rather than given a summary nothing backs.
+            */}
+          {hasComps && (
+            <>
+              <Micro>Basis of adjustment</Micro>
+              <Body>
+                Comparables have been adjusted for differences in size, condition, location and date of sale, with the net adjustment
+                applied to each comparable's analysed rate per square foot. Less-adjusted evidence is afforded greater weight in deriving
+                the supported rate. The source of each comparable is stated against it in the Evidence column above; the nature and
+                source of all information relied on is set out in the terms of engagement.
+              </Body>
+            </>
+          )}
 
           <PageFoot>Page {pageNo.comparables} of {pageTotal} · Comparable schedule</PageFoot>
         </A4Page>
