@@ -212,3 +212,135 @@ describe('consent', () => {
     );
   });
 });
+
+/**
+ * WHICH deal a contribution belongs to.
+ *
+ * `contribute` replaces a deal's previous point for the period, and it matched
+ * on `dealName`. A name is not an identity, and both failures land in a median
+ * OTHER firms read as market evidence — this is the one place in the product
+ * where one workspace's mistake moves another workspace's numbers.
+ */
+describe('replacing a deal’s own contribution', () => {
+  /** an opted-in firm with a saved appraisal on a named deal */
+  const contributor = async (label: string, dealName: string) => {
+    const T = await makeTenant(label);
+    await prisma.organisation.update({ where: { id: T.orgId }, data: { contributesBenchmarks: true } });
+    await prisma.deal.update({ where: { id: T.dealId }, data: { name: dealName } });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId, dealId: T.dealId, label: 'Base', isCurrent: true,
+        units: JSON.stringify([{ label: 'Flats', count: 10, area: 900, cap: 355 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 140 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+    return T;
+  };
+  const pointsFor = (orgId: string) =>
+    prisma.benchmarkPoint.findMany({ where: { orgId, source: 'contributed', metric: 'buildPsf' } });
+
+  it('replaces the same deal rather than stacking a second point', async () => {
+    const T = await contributor('Twice', 'Riverside Phase 1');
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    expect(await pointsFor(T.orgId), 'contributing twice stacked two points for one scheme').toHaveLength(1);
+  });
+
+  /**
+   * The worse of the two failures, and the reason this needed a column rather
+   * than a better string. Renaming matched nothing, so the old point stood
+   * beside the new one — one scheme counted twice, doubling its weight in
+   * everybody else's benchmark. Renaming a deal is ordinary: schemes get their
+   * marketing name after the appraisal.
+   */
+  it('still replaces it after the deal is renamed', async () => {
+    const T = await contributor('Renamed', 'Site off Quay Road');
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    await callerFor(T.principal).deals.update({ id: T.dealId, patch: { name: 'Harbour Quarter' } } as never);
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+
+    const rows = await pointsFor(T.orgId);
+    expect(rows, 'a renamed deal contributed twice — its scheme is double-weighted in the shared median').toHaveLength(1);
+    expect(rows[0]!.dealName, 'the point kept the deal’s old name').toBe('Harbour Quarter');
+  });
+
+  /**
+   * The other direction: two DIFFERENT schemes that happen to share a name.
+   * Under the old rule the second erased the first, so a firm contributing both
+   * was represented in the market by one.
+   */
+  it('does not let one scheme erase another that shares its name', async () => {
+    const T = await contributor('SameName', 'Phase 1');
+    const second = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Phase 1', address: '2 Other Street', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId, dealId: second.id, label: 'Base', isCurrent: true,
+        units: JSON.stringify([{ label: 'Houses', count: 6, area: 1200, cap: 300 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 155 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    await callerFor(T.principal).benchmarks.contribute(second.id as never);
+
+    const rows = await pointsFor(T.orgId);
+    expect(rows, 'one scheme erased another that merely shared its name').toHaveLength(2);
+    // and they are genuinely two different schemes, not one written twice
+    expect(new Set(rows.map((r) => r.dealId)).size).toBe(2);
+    expect(rows[0]!.value).not.toBe(rows[1]!.value);
+  });
+
+  /**
+   * A point contributed before the column existed carries no id. It must still
+   * be replaceable, or the first contribution after this lands duplicates the
+   * very scheme it was meant to replace.
+   */
+  it('still sweeps a point contributed before the deal id existed', async () => {
+    const T = await contributor('Legacy', 'Old Mill');
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    // make the existing points look like pre-migration rows
+    await prisma.benchmarkPoint.updateMany({ where: { orgId: T.orgId }, data: { dealId: null } });
+
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    const rows = await pointsFor(T.orgId);
+    expect(rows, 'a legacy point was un-replaceable and duplicated').toHaveLength(1);
+    expect(rows[0]!.dealId).toBe(T.dealId);
+  });
+
+  /**
+   * And the legacy arm must still be about ONE deal.
+   *
+   * A mutation loosening it to `{ dealId: null }` — sweeping every idless point
+   * this firm has in the period — passed every other case here, because they
+   * all have a single legacy scheme. A firm that contributed two schemes before
+   * the column existed would have had one erased by contributing the other:
+   * the same defect the column was added to fix, wearing the fix's own clothes.
+   */
+  it('sweeps only the legacy point for THIS deal, not every idless one', async () => {
+    const T = await contributor('LegacyPair', 'Mill Lane');
+    const other = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Wharf Street', address: '9 Wharf St', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId, dealId: other.id, label: 'Base', isCurrent: true,
+        units: JSON.stringify([{ label: 'Houses', count: 4, area: 1100, cap: 320 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 165 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    await callerFor(T.principal).benchmarks.contribute(other.id as never);
+    // both now look like pre-migration rows
+    await prisma.benchmarkPoint.updateMany({ where: { orgId: T.orgId }, data: { dealId: null } });
+
+    await callerFor(T.principal).benchmarks.contribute(T.dealId as never);
+    const rows = await pointsFor(T.orgId);
+    expect(rows, 'contributing one scheme erased another firm-mate’s legacy point').toHaveLength(2);
+    expect(rows.map((r) => r.dealName).sort()).toEqual(['Mill Lane', 'Wharf Street']);
+  });
+});

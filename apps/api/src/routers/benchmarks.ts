@@ -293,13 +293,39 @@ export const benchmarksRouter = router({
       ['poc', R.poc],
     ];
 
-    // replace this deal's previous contribution for the period, then write fresh
+    /**
+     * Replace this DEAL's previous contribution for the period, then write fresh.
+     *
+     * The match was on `dealName`, which is not an identity. Two consequences,
+     * both silent and both landing in a median other firms read as market
+     * evidence:
+     *
+     *   - two schemes named the same thing ("Phase 1" is not a rare name) erased
+     *     each other, so a firm contributing both was represented by one;
+     *   - renaming a deal between contributions matched nothing, so the old
+     *     point stood beside the new one and ONE scheme was counted twice.
+     *
+     * The second is the worse of the two: it does not lose a firm's data, it
+     * doubles one scheme's weight in everybody else's benchmark.
+     *
+     * The `dealId: null` arm sweeps points contributed before the column
+     * existed, which would otherwise be un-replaceable and duplicate on the
+     * first contribution after this lands.
+     */
     await ctx.prisma.benchmarkPoint.deleteMany({
-      where: { source: 'contributed', orgId: ctx.principal.orgId, dealName: deal.name, period },
+      where: {
+        source: 'contributed',
+        orgId: ctx.principal.orgId,
+        period,
+        OR: [{ dealId: deal.id }, { dealId: null, dealName: deal.name }],
+      },
     });
     for (const [metric, value] of points) {
       await ctx.prisma.benchmarkPoint.create({
-        data: { region, useClass: deal.assetType, metric, period, value, source: 'contributed', orgId: ctx.principal.orgId, dealName: deal.name },
+        data: {
+          region, useClass: deal.assetType, metric, period, value,
+          source: 'contributed', orgId: ctx.principal.orgId, dealId: deal.id, dealName: deal.name,
+        },
       });
     }
 

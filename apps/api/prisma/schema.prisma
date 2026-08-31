@@ -837,11 +837,20 @@ model BenchmarkPoint {
   // the contributing firm. Null only for illustrative points. Kept so a cohort
   // can count DISTINCT contributors and exclude the reader's own figures.
   orgId    String?
+  // WHICH deal this point came from. A contribution replaces that deal's
+  // previous one for the period, and the replacement used to key on dealName —
+  // which is not an identity. Two schemes called "Phase 1" erased each other's
+  // contribution, and renaming a deal between contributions left the old point
+  // standing beside the new one, double-weighting one scheme in a median other
+  // firms read as market evidence. Nullable because points contributed before
+  // this column existed carry no id, and illustrative points have no deal.
+  dealId   String?
   dealName String? // returned only to the contributing org, never to a cohort reader
   createdAt DateTime @default(now())
 
   @@index([region, useClass, metric])
   @@index([orgId])
+  @@index([dealId])
 }
 
 // ---- Integrations ----
