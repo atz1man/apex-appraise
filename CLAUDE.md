@@ -138,6 +138,20 @@ the point, so read the failure rather than adding an exemption.
   writes on behalf of half these queries and a cache fill is a read remembering its
   answer. Audit-trail writes (`recordAudit`, `activityEvent.create`) are stripped before
   matching, with a case pinning that an audit line cannot hide a real write behind it.
+- Two more rules live beside it in `query-side-effects.test.ts`, because they ask the same
+  kind of question of the same router rather than earning files of their own:
+  **the ADMIN check is written in `adminProcedure` and nowhere else** — `trpc.ts` says why
+  ("a permission check that exists in several places is one edit away from meaning
+  different things in each") and two hand-rolled copies were still sitting in `ops.ts`,
+  making that comment untrue; `uploads.ts` keeps its own because it is a raw Fastify route
+  on a different chain, which is why the sweep walks the router rather than grepping files.
+  And **money leaves the API in POUNDS, from mutations as well as queries** — every `*Out`
+  mapper applies `P()` and `toPence` converts back on the way in, but ten mutations returned
+  the Prisma row, so `arrears` was "123400" from the write and 1234 from the read. It walks
+  the RESPONSE for bigints, because a bigint reaching a client is the defect however the
+  resolver produced it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
+  a fixture that only creates leaves the update path — the one people actually hit —
+  untested, which is how two of these mutations first survived.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`
