@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { planHasFeature } from '@apex/types/plan';
 import { openFor } from './sealed-fields.js';
+import { assertPublicHttpsUrl } from './outbound.js';
 
 /**
  * Outbound webhooks.
@@ -146,6 +147,42 @@ export async function pruneWebhookDeliveries(
  */
 export const CLAIM_LEASE_MS = 60_000;
 
+/**
+ * The real delivery. Exported so the guard on it can be tested directly rather
+ * than through a seam the tests replace — `drainWebhooks` takes an injected
+ * `deliver` in every test it has, so a check living only inside the default
+ * would be exercised by nothing.
+ *
+ * Two rules, and the second matters as much as the first:
+ *
+ * The address is re-checked HERE, not only when the endpoint was created. A
+ * hostname is not a constant: one that resolved to a public address last month
+ * can resolve inside the network today, and an endpoint added before this guard
+ * existed has never been checked at all.
+ *
+ * Redirects are refused. `fetch` follows them by default, so a perfectly public
+ * URL that answers 302 with `Location: https://10.0.0.5/` walks straight past
+ * any check made on the URL we were given — the check would be of an address we
+ * never actually talk to. A webhook receiver has no business redirecting the
+ * delivery of a signed payload anyway; `manual` makes the 3xx an ordinary
+ * non-2xx result, which the retry and failure counting already handle.
+ */
+export async function postWebhook(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+): Promise<{ status: number }> {
+  await assertPublicHttpsUrl(url);
+  const res = await fetch(url, {
+    method: 'POST',
+    body,
+    headers,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+  });
+  return { status: res.status };
+}
+
 export interface EmitOptions {
   /** injected in tests; real callers use fetch */
   deliver?: (url: string, body: string, headers: Record<string, string>) => Promise<{ status: number }>;
@@ -202,12 +239,7 @@ export async function emitWebhook(
  * loop.
  */
 export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}): Promise<{ sent: number; failed: number }> {
-  const deliver =
-    opts.deliver ??
-    (async (url, body, headers) => {
-      const res = await fetch(url, { method: 'POST', body, headers, signal: AbortSignal.timeout(10_000) });
-      return { status: res.status };
-    });
+  const deliver = opts.deliver ?? postWebhook;
 
   const now = opts.now?.() ?? new Date();
 

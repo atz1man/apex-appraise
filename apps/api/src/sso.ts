@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, randomBytes } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { PrismaClient } from '@prisma/client';
+import { assertPublicHttpsUrl } from './outbound.js';
 
 /**
  * Single sign-on, over OIDC.
@@ -25,8 +26,35 @@ export interface OidcTransport {
   }>;
 }
 
-const realTransport: OidcTransport = async (url, init) => {
-  const res = await fetch(url, { ...(init ?? { method: 'GET', headers: {} }), signal: AbortSignal.timeout(15_000) });
+/**
+ * The one place this module actually reaches the network — and it reaches three
+ * different URLs, only the first of which anybody chose deliberately.
+ *
+ * `discover()` fetches the issuer an administrator typed. What it gets back then
+ * supplies `token_endpoint` and `jwks_uri`, and `exchangeCode()` and
+ * `fetchJwks()` fetch THOSE. So the second and third addresses come out of a
+ * document downloaded from the first: an issuer that answers discovery with
+ * `"token_endpoint": "http://169.254.169.254/…"` has this server post to it,
+ * with the firm's client secret in the body. Validating only what the admin
+ * typed would leave the two URLs a stranger supplies unchecked, which is why the
+ * guard is here rather than at the top of discover().
+ *
+ * Requiring a PUBLIC address takes nothing away that ever worked. The same
+ * provider has to serve `authorization_endpoint` to the person's BROWSER — an
+ * identity provider this server can reach and the user cannot was never going to
+ * sign anybody in.
+ *
+ * Redirects are refused for the same reason they are on webhook delivery: an
+ * address that passes the check and then answers 302 is not the address the
+ * request ends at.
+ */
+export const realTransport: OidcTransport = async (url, init) => {
+  await assertPublicHttpsUrl(url);
+  const res = await fetch(url, {
+    ...(init ?? { method: 'GET', headers: {} }),
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15_000),
+  });
   return { status: res.status, json: () => res.json() as Promise<unknown> };
 };
 

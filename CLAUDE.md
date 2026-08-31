@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (655). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (730). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (90): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -75,6 +75,17 @@ the point, so read the failure rather than adding an exemption.
 - `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
+  chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
+  through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because
+  DNS moves and an endpoint added before the guard existed was never checked. It refuses
+  addresses it can prove are private, over BYTES not text (`::ffff:127.0.0.1`,
+  `::ffff:7f00:1` and `2002:7f00:1::` are all loopback). It ALLOWS a name that does not
+  resolve — a name with no answer reaches nothing, and refusing here would make the guard
+  depend on the machine running it having DNS, which is green on a laptop and red in CI.
+  Both fetches also set `redirect: 'manual'`: a checked address stops being the address
+  reached the moment a 302 is honoured. NOT closed: DNS rebinding, which needs the
+  connection pinned to the checked address and so needs undici as a real dependency.
 - `viewer-readonly` — every INTERNAL mutation refuses a VIEWER. The team screen has
   always printed "View" for that role and nothing enforced it: 47 of 87 mutations were
   reachable, including `appraisal.save`, `sales.deleteUnit` and
