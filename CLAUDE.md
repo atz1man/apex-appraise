@@ -220,6 +220,18 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Start the stack from the REPO ROOT. `pnpm dev` inside `apps/web` starts only vite, and the
   browser suite then fails everywhere at once, which reads as a code fault. Also: `pkill -f vite`
   can kill the shell's own process group — check `ps aux | grep -cE '[t]sx|[v]ite'` instead.
+- An e2e that passes LOCALLY and fails in CI: suspect dev-database drift before the code. The dev
+  DB accumulates whatever every past run left behind, and CI seeds fresh. Two real instances, both
+  costing a red build or a wrong diagnosis: (a) `integrations.list` used to backfill a row per
+  provider, so this DB held a Companies House row that no fresh seed creates — a fix that depended
+  on the row NOT existing passed here and failed there; (b) the funding-pack pagination spec failed
+  on 152 positions because the demo workspace had grown to 183 deals from years of e2e runs,
+  against 11 seeded. `cd apps/api && SEED_FORCE=1 npx tsx prisma/seed.ts` restores a CI-like state
+  (plain `seed` REFUSES when organisations already exist, which is the guard working).
+- `tsx watch` exits on a top-level throw and does NOT come back on its own — it restarts on the
+  next file change. Save a file mid-edit that references an import you have not added yet and the
+  API is simply gone, with `vite` still serving: every browser spec then fails at sign-in, which
+  reads as a total regression. `curl -sf localhost:4100/health` before diagnosing.
 - `.env` (repo root, gitignored) holds the Anthropic + Stripe sandbox keys and JWT_SECRET —
   never print or commit them; docker compose reads it automatically. Preserve existing keys
   when editing.
