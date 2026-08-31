@@ -92,6 +92,8 @@ const TENANCY_LABELS: Record<string, string> = {
   leadSource: 'lead source',
   progress: 'milestone',
   stalled: 'stalled flag',
+  // money a tenant owes: moving it is exactly the kind of change a timeline is for
+  arrears: 'arrears',
 };
 
 /** pence → the way a timeline reads it, en-GB, or an em dash for nothing agreed */
@@ -320,6 +322,28 @@ export const salesRouter = router({
         incentive: z.string().nullable().default(null),
         progress: z.number().int().min(0).max(5).default(0),
         stalled: z.boolean().default(false),
+        /**
+         * Rent owed, and the only field here that is OPTIONAL rather than
+         * defaulted.
+         *
+         * `Tenancy.arrears` existed with nothing able to write it. It is read in
+         * three places — the lettings KPI row, a stat card and the drawer, all
+         * coloured green at zero, which is an assertion that nothing is owed —
+         * and it could only ever BE zero outside the demo seed. So a letting
+         * agent could not record that a tenant was behind, and the screen said
+         * so in green.
+         *
+         * Worse, `deleteTenancy` refuses a tenancy carrying arrears with
+         * "Clear or write off the arrears first" — an instruction the product
+         * did not offer. On the demo workspace, Apt 4 carries £1,425 and is
+         * undeletable for ever.
+         *
+         * Optional, not `.default(0)` like its neighbours: this form does not
+         * send arrears when a letting agent edits a name or a lead source, and
+         * a default would silently write off the debt on every save. The
+         * neighbours can default because the form always sends them.
+         */
+        arrears: z.number().min(0).optional(),
         /** the stamp of the tenancy the caller loaded — see upsertUnit above */
         expectedUpdatedAt: z.coerce.date().optional(),
       }),
@@ -327,11 +351,14 @@ export const salesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-      const { id, dealId, ervPcm, agreedRentPcm, expectedUpdatedAt, ...rest } = input;
+      const { id, dealId, ervPcm, agreedRentPcm, arrears, expectedUpdatedAt, ...rest } = input;
       const data = {
         ...rest,
         ervPcm: toPence(ervPcm),
         agreedRentPcm: agreedRentPcm != null && agreedRentPcm > 0 ? toPence(agreedRentPcm) : null,
+        // only when supplied — a missing key leaves the column alone, and the
+        // column is money a tenant owes
+        ...(arrears !== undefined ? { arrears: toPence(arrears) } : {}),
         status: tenancyStatusForProg(input.progress),
         appliedAt: input.progress > 0 ? new Date() : null,
       };

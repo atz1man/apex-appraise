@@ -70,9 +70,11 @@ interface Draft {
   incentive: string;
   statusId: string;
   stalled: boolean;
+  /** lettings only — see the Arrears field below */
+  arrears: number;
 }
 
-const emptyDraft = (): Draft => ({ name: '', spec: '', level: 0, party: '', solicitor: '', appraised: 0, agreed: 0, lead: '', incentive: 'None', statusId: 'AVAILABLE', stalled: false });
+const emptyDraft = (): Draft => ({ name: '', spec: '', level: 0, party: '', solicitor: '', appraised: 0, agreed: 0, lead: '', incentive: 'None', statusId: 'AVAILABLE', stalled: false, arrears: 0 });
 
 const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const fmtFull = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -379,7 +381,7 @@ export default function SalesCrm() {
     setDraft({
       name: sel.name, spec: sel.spec, level: sel.level, party: sel.party ?? '', solicitor: sel.solicitor ?? '',
       appraised: sel.appraised, agreed: sel.agreed ?? 0, lead: sel.lead ?? '', incentive: sel.incentive ?? 'None',
-      statusId: sel.status, stalled: sel.stalled,
+      statusId: sel.status, stalled: sel.stalled, arrears: sel.arrears,
     });
     setEditing(true);
   };
@@ -410,6 +412,7 @@ export default function SalesCrm() {
         ervPcm: draft.appraised,
         agreedRentPcm: draft.agreed > 0 ? draft.agreed : null,
         tenantName: draft.party || null,
+        arrears: draft.arrears,
         expectedUpdatedAt: stampFor(selected),
       });
     } else {
@@ -768,6 +771,24 @@ export default function SalesCrm() {
                 </select>
               </Field>
               <Field label="Incentive"><input className="w-full" value={draft.incentive} onChange={(e) => setDraft({ ...draft, incentive: e.target.value })} /></Field>
+              {/*
+                * Lettings only. `Tenancy.arrears` is read on the KPI row, a stat
+                * card and the drawer — coloured green at zero, which asserts
+                * nothing is owed — and nothing could write it, so it could only
+                * ever BE zero. `sales.deleteTenancy` then refuses a tenancy
+                * carrying arrears with "Clear or write off the arrears first",
+                * an instruction the product did not offer.
+                */}
+              {isRent && (
+                <Field label="Arrears (£)">
+                  <input
+                    type="number"
+                    className="w-full fig"
+                    value={draft.arrears || ''}
+                    onChange={(e) => setDraft({ ...draft, arrears: parseFloat(e.target.value) || 0 })}
+                  />
+                </Field>
+              )}
             </div>
             <div className="flex gap-2.5 mt-1">
               <Button writes className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
