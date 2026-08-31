@@ -99,10 +99,36 @@ export default function SitePack() {
       return next;
     });
 
+  /**
+   * Saving the postcode is a MUTATION, and used to happen inside the lookup.
+   *
+   * `sitePack.get` is a query and it persisted whatever postcode it was passed,
+   * which put a write outside both sweeps that guard writes — measured, a
+   * VIEWER could move a scheme to a different postcode and nothing recorded it.
+   * `deals.update` already takes a postcode, refuses a viewer and records what
+   * changed, so the deal is edited through it and the lookup only reads.
+   */
+  const saveDeal = trpc.deals.update.useMutation({
+    onSuccess: () => {
+      void utils.deals.get.invalidate(dealId);
+      void refetch();
+    },
+  });
+
   const runLookup = () => {
     const pc = postcodeInput.trim();
-    if (pc) setPostcodeOverride(pc);
-    void refetch();
+    if (!pc) {
+      void refetch();
+      return;
+    }
+    setPostcodeOverride(pc);
+    // adopt it onto the deal only when it differs — an unchanged value would
+    // otherwise write an "edited deal details" line every time somebody looked
+    if (pc.toUpperCase() !== (ok?.geo.postcode ?? '').toUpperCase()) {
+      saveDeal.mutate({ id: dealId, patch: { postcode: pc } });
+    } else {
+      void refetch();
+    }
   };
 
   return (

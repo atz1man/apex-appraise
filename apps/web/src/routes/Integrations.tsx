@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { IntegrationProvider } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
@@ -10,7 +11,13 @@ const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']
 type Status = 'CONNECTED' | 'ATTENTION' | 'NOT_CONNECTED';
 
 interface ProviderMeta {
-  provider: string; // DB key
+  /**
+   * The DB key, and the enum `integrations.connect` accepts. Typed rather than
+   * `string` so a card naming a provider the server will not take is a
+   * typecheck failure here rather than a Connect button that 400s in front of a
+   * customer — the two lists were separate copies of the same strings.
+   */
+  provider: IntegrationProvider;
   name: string; // display name (per prototype)
   mark: string;
   desc: string;

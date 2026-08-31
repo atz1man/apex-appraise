@@ -5,6 +5,7 @@ import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
+import { INTEGRATION_PROVIDERS } from '@apex/types';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
@@ -1078,16 +1079,36 @@ export const xeroRouter = router({
 });
 
 export const integrationsRouter = router({
+  /**
+   * A QUERY, which used to write.
+   *
+   * It backfilled a placeholder row for every self-serve provider the org had
+   * none for — inside a read, on every visit to the Integrations screen. Found
+   * by `no-query-writes`, not by reading, and measured against the real router:
+   *
+   *     three concurrent integrations.list() -> Companies House: 2 rows
+   *     one call as a VIEWER                 -> 2 rows created
+   *
+   * Two faults at once. `IntegrationConnection` has no unique key on
+   * (orgId, provider), so concurrent reads each saw the row missing and each
+   * created it — and duplicates matter here because `getIntegrationCreds` and
+   * `saveCredentials` both resolve a provider with `findFirst`: a key saved onto
+   * one row can be read from the other, and the integration reports itself
+   * unconfigured with the key sitting in the table. And a VIEWER — the role the
+   * product prints as "View" — created rows, because `viewer-readonly` asks its
+   * question of mutations and this was declared a query.
+   *
+   * The rows were never needed. The screen already renders a provider it has no
+   * row for as NOT_CONNECTED (`row?.status ?? 'NOT_CONNECTED'`), which is
+   * exactly what a placeholder said. A row is now created when a firm actually
+   * connects or saves a key, on a composite unique key so a double-click cannot
+   * make two.
+   */
   list: internalProcedure.query(async ({ ctx }) => {
-    // Backfill any providers added since this org registered (e.g. Companies House)
-    const existing = await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId } });
-    const missing = Object.keys(SELF_SERVE_PROVIDERS).filter((p) => !existing.some((e) => e.provider === p));
-    for (const provider of missing) {
-      await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider } });
-    }
-    const rows = missing.length
-      ? await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId }, orderBy: { provider: 'asc' } })
-      : existing.sort((a, b) => a.provider.localeCompare(b.provider));
+    const rows = await ctx.prisma.integrationConnection.findMany({
+      where: { orgId: ctx.principal.orgId },
+      orderBy: { provider: 'asc' },
+    });
     // config (credentials) never leaves the server — expose only whether keys are set
     return rows.map(({ config, ...row }) => ({
       ...row,
@@ -1127,6 +1148,9 @@ export const integrationsRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House rejected this key — check it and try again.' });
         }
       }
+      // read first only to word the audit line — the write itself is an upsert on
+      // the composite key, so a double-click through the slow probe above cannot
+      // leave two rows for one provider
       const existing = await ctx.prisma.integrationConnection.findFirst({
         where: { orgId: ctx.principal.orgId, provider: input.provider },
       });
@@ -1137,9 +1161,11 @@ export const integrationsRouter = router({
         // opened by getIntegrationCreds and nowhere else
         config: sealFor('integrationConnection', 'config', ctx.principal.orgId, JSON.stringify(input.fields)),
       };
-      const row = existing
-        ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
-        : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
+      const row = await ctx.prisma.integrationConnection.upsert({
+        where: { orgId_provider: { orgId: ctx.principal.orgId, provider: input.provider } },
+        create: { orgId: ctx.principal.orgId, provider: input.provider, ...data },
+        update: data,
+      });
       // a credential for someone else's service, stored by this firm. `fde80d6`
       // sealed these at rest; who put one there, and when, was still unrecorded.
       // Never the key itself — the provider and the actor are the whole event.
@@ -1178,12 +1204,29 @@ export const integrationsRouter = router({
       return { disconnected: true };
     }),
 
-  connect: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
-    if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
-    const row = await ctx.prisma.integrationConnection.update({
-      where: { id: conn.id },
-      data: { status: 'CONNECTED', lastSync: new Date() },
+  /**
+   * The provider is an ENUM, not a string.
+   *
+   * This took `z.string()` and resolved it with `findFirst`, so an unknown name
+   * found no row and 404'd — the provider was never checked, it merely failed.
+   * `isolation-sweep` relied on that accident: it feeds every procedure another
+   * firm's ids, and this refused them only because no connection row had a cuid
+   * for a provider name. Making `connect` an upsert removed the accident, and
+   * the sweep failed within the same run — a foreign id would have become a
+   * connected "provider". Named set, one copy, shared with the screen.
+   */
+  connect: internalProcedure.input(z.enum(INTEGRATION_PROVIDERS)).mutation(async ({ ctx, input }) => {
+    /**
+     * Upsert, not update-an-existing-row. `list` no longer materialises a
+     * placeholder for every provider, so the row a firm is connecting may not
+     * exist yet — and refusing NOT_FOUND would have made every Connect button
+     * on a provider nobody had touched fail. The composite key is what makes a
+     * double-click harmless.
+     */
+    const row = await ctx.prisma.integrationConnection.upsert({
+      where: { orgId_provider: { orgId: ctx.principal.orgId, provider: input } },
+      create: { orgId: ctx.principal.orgId, provider: input, status: 'CONNECTED', lastSync: new Date() },
+      update: { status: 'CONNECTED', lastSync: new Date() },
     });
     // not an OAuth redirect like `bank.connect` and `xero.connect`, which is why
     // those two are exempt and this is not: it flips a data source ON, and the

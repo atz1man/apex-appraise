@@ -861,6 +861,15 @@ model IntegrationConnection {
   status   String @default("NOT_CONNECTED") // CONNECTED | ATTENTION | NOT_CONNECTED
   lastSync DateTime?
   config   String @default("{}") // provider credentials (JSON) — server-side only, never returned to clients
+
+  // One row per provider per workspace. `integrations.list` used to backfill a
+  // placeholder inside a QUERY, and with no key concurrent reads each created
+  // one — measured, three parallel calls left two Companies House rows. That
+  // matters because `getIntegrationCreds` and `saveCredentials` both resolve a
+  // provider with findFirst, so a key saved onto one row can be read from the
+  // other and the integration reports itself unconfigured with the key in the
+  // table.
+  @@unique([orgId, provider])
 }
 
 /// Public open-data responses, cached so a valuer does not wait on the Land

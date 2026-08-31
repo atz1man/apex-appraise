@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (277; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (778). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (790). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -127,6 +127,17 @@ the point, so read the failure rather than adding an exemption.
 - `token-purpose-sweep` — a token minted for a named purpose cannot sign in. It walks the
   real `DownloadKind` union out of the source, so a sixth kind is covered the day it is
   added, and pins the three PDF routes to a render token of their own.
+- `no-query-writes` — a QUERY may not change a row. Two of the sweeps above filter on
+  `_def.type === 'mutation'` (`viewer-readonly`, `provenance-sweep`), and so does the
+  browser's own guard, so a write placed inside a procedure declared a query is not
+  exempted by anyone's judgement — it is never asked about. Measured: `sitePack.get`
+  persisted whatever postcode it was passed, so a VIEWER moved a scheme to another
+  postcode with zero audit events; `integrations.list` backfilled placeholder rows, so
+  three concurrent reads left two Companies House rows and a VIEWER created rows by
+  looking. It reads the resolver's own source, not helpers it calls — `opendata-cache`
+  writes on behalf of half these queries and a cache fill is a read remembering its
+  answer. Audit-trail writes (`recordAudit`, `activityEvent.create`) are stripped before
+  matching, with a case pinning that an audit line cannot hide a real write behind it.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`
