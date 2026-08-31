@@ -338,10 +338,19 @@ export const salesRouter = router({
          * did not offer. On the demo workspace, Apt 4 carries £1,425 and is
          * undeletable for ever.
          *
-         * Optional, not `.default(0)` like its neighbours: this form does not
-         * send arrears when a letting agent edits a name or a lead source, and
-         * a default would silently write off the debt on every save. The
-         * neighbours can default because the form always sends them.
+         * Optional, not `.default(0)` like its neighbours. A default here would
+         * mean "any caller who does not mention this debt has written it off",
+         * and that is not a thing a money column may say — a script, a future
+         * screen or a partial edit would clear it by omission. A missing key
+         * leaves the column alone.
+         *
+         * Note what this does NOT protect, because it was nearly assumed: the
+         * lettings drawer sends `arrears` on every save, so the guard that keeps
+         * an ordinary edit from wiping the debt is the DRAWER loading the
+         * current figure, not this. Driving a mutation through
+         * `e2e/lettings-arrears.spec.ts` found it — loading 0 into the edit form
+         * passed every other assertion, and changing a tenant's name silently
+         * cleared what they owed. Both halves are now driven, one at each end.
          */
         arrears: z.number().min(0).optional(),
         /** the stamp of the tenancy the caller loaded — see upsertUnit above */
