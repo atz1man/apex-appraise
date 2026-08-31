@@ -288,7 +288,8 @@ export const dealsRouter = router({
         createdBy: ctx.principal.name,
         createdAt: created.createdAt,
       });
-      return created;
+      // through the mapper, like every read of this row — see sales.ts for why
+      return dealOut(created);
     }),
 
   setStage: internalProcedure
@@ -310,7 +311,7 @@ export const dealsRouter = router({
           target: `${input.stage.replace('_', ' / ').toLowerCase()} (figures ${figureStatusForStage[input.stage].toLowerCase()})`,
         },
       });
-      return updated;
+      return dealOut(updated);
     }),
 
   /**
@@ -370,6 +371,6 @@ export const dealsRouter = router({
           },
         });
       }
-      return updated;
+      return dealOut(updated);
     }),
 });

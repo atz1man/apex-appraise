@@ -52,6 +52,21 @@ const tenancyOut = (t: any) => ({
 });
 
 /**
+ * EVERY procedure here returns through one of the two mappers above, mutations
+ * included.
+ *
+ * Money crosses this wire in POUNDS — every `*Out` mapper applies `P()`, and
+ * `toPence` converts back on the way in. These mutations used to return the
+ * Prisma row, so the same field was pounds from a query and raw PENCE from the
+ * mutation that wrote it: `arrears` came back as "123400" beside a
+ * `sales.tenancies` that says 1234. Latent only because today's callers read
+ * `id` and `updatedAt` and then invalidate — a future `onSuccess` reading a
+ * figure would show it a hundred times over, and nothing would raise an error.
+ * `no-raw-money-out` in `query-side-effects.test.ts` now asks this of the
+ * router rather than leaving it to whoever writes the next one.
+ */
+
+/**
  * What changed, in the words the drawer uses.
  *
  * "Provenance on every figure" is one of this product's non-negotiables, and
@@ -196,7 +211,7 @@ export const salesRouter = router({
         if (changed.length) {
           await record(ctx, dealId, `updated plot — ${changed.join(', ')}`, `${updated.name} · agreed ${moneyLabel(updated.agreedValue)}`);
         }
-        return updated;
+        return unitOut(updated);
       }
       const created = await ctx.prisma.unit.create({
         data: {
@@ -218,7 +233,7 @@ export const salesRouter = router({
         },
       });
       await record(ctx, dealId, 'added plot', `${created.name} · appraised ${moneyLabel(created.appraisedValue)}`);
-      return created;
+      return unitOut(created);
     }),
 
   /**
@@ -304,7 +319,7 @@ export const salesRouter = router({
       `advanced milestone to ${SALES_MILESTONES[progress] ?? progress}`,
       `${advanced.name} · deposit held ${moneyLabel(advanced.depositHeld)}`,
     );
-    return advanced;
+    return unitOut(advanced);
   }),
 
   upsertTenancy: internalProcedure
@@ -385,11 +400,11 @@ export const salesRouter = router({
         if (changed.length) {
           await record(ctx, dealId, `updated tenancy — ${changed.join(', ')}`, `${updated.name} · agreed rent ${moneyLabel(updated.agreedRentPcm)} pcm`);
         }
-        return updated;
+        return tenancyOut(updated);
       }
       const created = await ctx.prisma.tenancy.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
       await record(ctx, dealId, 'added tenancy', `${created.name} · ERV ${moneyLabel(created.ervPcm)} pcm`);
-      return created;
+      return tenancyOut(created);
     }),
 
   deleteTenancy: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
@@ -428,6 +443,6 @@ export const salesRouter = router({
       `advanced tenancy to ${LETTING_MILESTONES[progress] ?? progress}`,
       `${advanced.name} · agreed rent ${moneyLabel(advanced.agreedRentPcm)} pcm`,
     );
-    return advanced;
+    return tenancyOut(advanced);
   }),
 });

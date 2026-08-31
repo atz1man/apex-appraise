@@ -194,7 +194,8 @@ export const costRouter = router({
           target: `${row.name} — forecast ${moneyLabel(row.forecast)}`,
         },
       });
-      return row;
+      // through the mapper, like every read of this row — see sales.ts for why
+      return pkgOut(row);
     }),
 
   contractors: internalProcedure.query(async ({ ctx }) => {
@@ -244,7 +245,12 @@ export const costRouter = router({
         target: `${c.name} (${c.trade}) · ${input.hours} hours, week ${weeks.length}`,
         ip: ctx.ip,
       });
-      return updated;
+      // `timesheetRate` is pence on the row and pounds everywhere it is read
+      return {
+        id: updated.id,
+        weeks: J<number[]>(updated.weeks, []),
+        timesheetRate: updated.timesheetRate != null ? P(updated.timesheetRate) : null,
+      };
     }),
 });
 

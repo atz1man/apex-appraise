@@ -264,3 +264,110 @@ describe('the ADMIN check', () => {
     ).rejects.toThrow(/NOT_FOUND|not found/i);
   });
 });
+
+/**
+ * Money crosses this wire in POUNDS, from mutations as well as queries.
+ *
+ * Every `*Out` mapper applies `P()`, and `toPence` converts back on the way in.
+ * Ten mutations returned the Prisma row instead, so the SAME FIELD was pounds
+ * from a query and raw pence from the mutation that wrote it — measured on a
+ * live server, `sales.upsertTenancy` answering `"arrears":"123400"` beside a
+ * `sales.tenancies` that says 1234.
+ *
+ * Latent, not live: today's callers read `id` and `updatedAt` and then
+ * invalidate. But a future `onSuccess` reading a figure would show it a
+ * hundred times over, and nothing anywhere would raise an error — the same
+ * silent-100× shape as `toPence` being skipped, which this suite already pins
+ * on the way in.
+ *
+ * Asked of the RESPONSE rather than of the source, because that is the thing
+ * the rule is about: a bigint reaching a client is the defect, however the
+ * resolver happened to produce it.
+ */
+describe('money leaving the API', () => {
+  /** every bigint in a response, by the path it sits at */
+  const bigintsIn = (value: unknown, path = ''): string[] => {
+    if (typeof value === 'bigint') return [path || '(root)'];
+    if (Array.isArray(value)) return value.flatMap((v, i) => bigintsIn(v, `${path}[${i}]`));
+    if (value && typeof value === 'object' && !(value instanceof Date)) {
+      return Object.entries(value).flatMap(([k, v]) => bigintsIn(v, path ? `${path}.${k}` : k));
+    }
+    return [];
+  };
+
+  it('is pounds from the mutations that write it, not pence', async () => {
+    const T = await makeTenant('MoneyOut');
+    const c = callerFor(T.principal);
+
+    const unit = await c.sales.upsertUnit({
+      dealId: T.dealId, name: 'Plot 9', spec: '2 bed', level: 1, appraisedValue: 450_000, progress: 2,
+    } as never);
+    const tenancy = await c.sales.upsertTenancy({
+      dealId: T.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2, arrears: 1_234,
+    } as never);
+    const pkg = await c.cost.upsertPackage({
+      dealId: T.dealId, name: 'Frame', budget: 900_000, forecast: 950_000,
+    } as never);
+    const deal = await c.deals.create({
+      name: 'Money Out', address: '1 Pence Lane', assetType: 'RESIDENTIAL', gdv: 1_000_000,
+    } as never);
+
+    /**
+     * The UPDATE path as well as the create path, and that distinction is not
+     * decoration: `upsertUnit` and `upsertTenancy` return from two places, and
+     * a fixture that only creates leaves the branch a person uses far more
+     * often completely untested. Measured — mutations reverting the update
+     * return to the raw row passed this test until these three lines existed.
+     */
+    const unitAgain = await c.sales.upsertUnit({
+      id: (unit as { id: string }).id, dealId: T.dealId, name: 'Plot 9', spec: '2 bed', level: 1,
+      appraisedValue: 460_000, progress: 2, expectedUpdatedAt: (unit as { updatedAt: Date }).updatedAt,
+    } as never);
+    const tenancyAgain = await c.sales.upsertTenancy({
+      id: (tenancy as { id: string }).id, dealId: T.dealId, name: 'Apt 9', spec: '2 bed', level: 1,
+      ervPcm: 1_600, progress: 2, arrears: 1_234, expectedUpdatedAt: (tenancy as { updatedAt: Date }).updatedAt,
+    } as never);
+    const pkgAgain = await c.cost.upsertPackage({
+      id: (pkg as { id: string }).id, dealId: T.dealId, forecast: 960_000,
+    } as never);
+
+    for (const [name, res] of [
+      ['upsertUnit (create)', unit],
+      ['upsertUnit (update)', unitAgain],
+      ['upsertTenancy (create)', tenancy],
+      ['upsertTenancy (update)', tenancyAgain],
+      ['upsertPackage (create)', pkg],
+      ['upsertPackage (update)', pkgAgain],
+      ['deals.create', deal],
+    ] as const) {
+      expect(bigintsIn(res), `${name} handed a client raw pence`).toEqual([]);
+    }
+
+    expect((unitAgain as { appraisedValue: number }).appraisedValue, 'the update path returned pence').toBe(460_000);
+    expect((tenancyAgain as { ervPcm: number }).ervPcm).toBe(1_600);
+    expect((pkgAgain as { forecast: number }).forecast).toBe(960_000);
+
+    /**
+     * Discriminating: an empty bigint list is also what a response of `{}`
+     * gives, so pin the VALUE too. 1234 is pounds; 123400 would be the pence
+     * this returned before.
+     */
+    expect((tenancy as { arrears: number }).arrears, 'arrears came back in pence').toBe(1_234);
+    expect((unit as { appraisedValue: number }).appraisedValue).toBe(450_000);
+    expect((pkg as { budget: number }).budget).toBe(900_000);
+    expect((deal as { gdv: number }).gdv).toBe(1_000_000);
+
+    // and the stamp the drawers rely on survived the mapping, or every
+    // optimistic save would start failing
+    expect((unit as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
+    expect((tenancy as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('recognises a raw row when it sees one', () => {
+    // the walker is the whole test; a version that stopped finding bigints
+    // would pass over every offender
+    expect(bigintsIn({ a: 1n })).toEqual(['a']);
+    expect(bigintsIn({ a: { b: [{ c: 2n }] } })).toEqual(['a.b[0].c']);
+    expect(bigintsIn({ a: 1, b: 'x', c: new Date(), d: null })).toEqual([]);
+  });
+});

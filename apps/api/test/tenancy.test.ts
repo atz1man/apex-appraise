@@ -282,9 +282,18 @@ describe('rent a tenant owes', () => {
     const updated = (await callerFor(A.principal).sales.upsertTenancy({
       id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
       arrears: 1_425, expectedUpdatedAt: t.updatedAt,
-    } as never)) as { arrears: bigint };
-    // pence in the column, pounds on the wire
-    expect(Number(updated.arrears), 'arrears could still not be recorded').toBe(142_500);
+    } as never)) as { arrears: number };
+
+    /**
+     * Both representations, pinned separately. The wire speaks POUNDS — every
+     * `*Out` mapper applies `P()` — and the column holds integer PENCE, which
+     * is a non-negotiable of this product. Asserting only one of them would
+     * miss a `toPence` skipped on the way in or a `P()` skipped on the way out,
+     * and either is a silent hundredfold.
+     */
+    expect(updated.arrears, 'arrears could still not be recorded').toBe(1_425);
+    const row = await prisma.tenancy.findUniqueOrThrow({ where: { id: t.id } });
+    expect(Number(row.arrears), 'the column is not integer pence').toBe(142_500);
   });
 
   /**
@@ -306,10 +315,10 @@ describe('rent a tenant owes', () => {
     const after = (await callerFor(A.principal).sales.upsertTenancy({
       id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
       leadSource: 'Rightmove', expectedUpdatedAt: withDebt.updatedAt,
-    } as never)) as { arrears: bigint; leadSource: string | null };
+    } as never)) as { arrears: number; leadSource: string | null };
 
     expect(after.leadSource, 'the edit itself did not land').toBe('Rightmove');
-    expect(Number(after.arrears), 'an unrelated edit wrote off the debt').toBe(90_000);
+    expect(after.arrears, 'an unrelated edit wrote off the debt').toBe(900);
   });
 
   /**
