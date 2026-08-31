@@ -154,3 +154,80 @@ describe('facility covenants', () => {
     expect(e.positions[0]!.covenants.untested).toBe(true);
   });
 });
+
+/**
+ * WHERE each position's `drawn` figure came from, as the book reports it.
+ *
+ * `cash.ts` computes `drawnSource` and states its purpose in as many words:
+ * "The funding pack says which, because a figure derived from invoices and one
+ * taken from a bank statement do not deserve the same confidence." The pack
+ * printed one unconditional sentence over every book — "drawn is committed
+ * spend from cost monitoring" — so a firm that had connected its bank feed sent
+ * its lender a document disclaiming figures it had taken from statements, and a
+ * firm with feeds on some schemes sent one that was wrong about half its rows.
+ *
+ * The pack now reads `drawnSource` (`web/src/lib/drawn-basis.ts` decides what it
+ * says, and is tested at its boundaries there). This is the other end of that
+ * wire: an absent source classifies as the proxy by design, so if this
+ * procedure quietly stopped emitting the field the pack would go back to
+ * printing the old sentence and every test on the browser side would still
+ * pass. The failure would be silent, which is why it is pinned HERE.
+ */
+describe('where the drawn figure came from', () => {
+  it('reports both sources in one book, so a mixed pack can tell its rows apart', async () => {
+    const T = await makeTenant('Feed');
+    await callerFor(T.principal).appraisal.save({ dealId: T.dealId, input: input(), label: 'Base' } as never);
+    // a second scheme in the same firm, appraised, with no account mapped to it
+    const noFeed = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'No Feed', address: '2 Statement Street', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+    await callerFor(T.principal).appraisal.save({ dealId: noFeed.id, input: input(), label: 'Base' } as never);
+
+    const conn = await prisma.bankConnection.create({
+      data: {
+        orgId: T.orgId, institution: 'Test Bank', accessToken: 'x', refreshToken: 'y',
+        expiresAt: new Date(Date.now() + 86_400_000), consentExpiresAt: new Date(Date.now() + 86_400_000),
+        createdById: T.principal.userId,
+      },
+    });
+    const acct = await prisma.bankAccount.create({
+      data: { orgId: T.orgId, connectionId: conn.id, externalId: 'acc-1', name: 'Development', last4: '4321', dealId: T.dealId },
+    });
+    await prisma.bankTransaction.createMany({
+      data: [
+        // a classified facility advance, and money out — the two the pack reports
+        { orgId: T.orgId, accountId: acct.id, externalId: 't1', bookedAt: new Date(), amount: BigInt(400_000_00), description: 'Facility drawdown', classification: 'drawdown' },
+        { orgId: T.orgId, accountId: acct.id, externalId: 't2', bookedAt: new Date(), amount: BigInt(-250_000_00), description: 'Contractor payment', classification: 'cost' },
+        /**
+         * And a credit nobody has said what it is. `cash.ts`: "An unclassified
+         * credit is reported as unclassified, never quietly booked as a
+         * drawdown that would flatter or damn the position." Without this line
+         * the fixture's only credit was already classified, so a `drawn` that
+         * counted every credit gave the same answer and the promise went
+         * untested — measured: the mutation survived.
+         */
+        { orgId: T.orgId, accountId: acct.id, externalId: 't3', bookedAt: new Date(), amount: BigInt(90_000_00), description: 'Transfer in', classification: 'unclassified' },
+      ],
+    });
+
+    const e = (await callerFor(T.principal).deals.exposure()) as {
+      positions: Array<{ dealId: string; drawn: number; paid: number; unclassifiedIn: number; drawnSource: string }>;
+    };
+    const fed = e.positions.find((p) => p.dealId === T.dealId)!;
+    const unfed = e.positions.find((p) => p.dealId === noFeed.id)!;
+
+    expect(fed.drawnSource, 'a scheme with a mapped account was reported as a proxy figure').toBe('bank');
+    expect(unfed.drawnSource, 'a scheme with no account claimed bank evidence').toBe('committed');
+
+    /**
+     * Discriminating: the two assertions above hold if the field were hardcoded
+     * per-deal by some other rule. These pin it to the numbers the source
+     * actually changes — drawn is the classified advance, not committed spend,
+     * and paid is what left the account.
+     */
+    expect(fed.drawn, 'an unclassified credit was booked as a facility drawdown').toBe(400_000);
+    expect(fed.paid).toBe(250_000);
+    expect(fed.unclassifiedIn, 'the unclassified credit went unreported instead').toBe(90_000);
+    expect(unfed.drawn, 'a scheme with no packages and no feed drew something').toBe(0);
+  });
+});

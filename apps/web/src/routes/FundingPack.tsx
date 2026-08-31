@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
+import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
 import { Button, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
 
@@ -69,6 +70,12 @@ export default function FundingPack() {
   const breaching = exposure.positions.filter((p) => (p.covenants?.breaches.length ?? 0) > 0);
   const overdrawn = exposure.positions.filter((p) => p.drawdown?.status === 'overspending');
   const total = pages.length;
+  /**
+   * The pack states where "Drawn" came from instead of asserting one basis for
+   * the whole book — see `drawn-basis.ts` for what it used to say and why that
+   * mattered on a firm that had connected its bank feed.
+   */
+  const basis = drawnBasis(exposure.positions);
 
   /**
    * A pack over no schemes is not a pack.
@@ -111,8 +118,8 @@ export default function FundingPack() {
               <>
                 <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
                   Prepared {fmtLong(today)} from {t.deals} funded {t.deals === 1 ? 'scheme' : 'schemes'}. Facility figures are
-                  recomputed from each scheme's current appraisal, not carried forward from a previous pack; drawn is committed
-                  spend from cost monitoring.
+                  recomputed from each scheme's current appraisal, not carried forward from a previous pack.
+                  {basis.sentence ? ` ${basis.sentence}` : ''}
                 </p>
 
                 <div className="mt-4 grid grid-cols-3 gap-3">
@@ -198,8 +205,10 @@ export default function FundingPack() {
                       )}
                       {overdrawn.map((p) => (
                         <div key={`${p.dealId}-draw`} className="text-[11.5px]">
-                          <b className="font-semibold">{p.name}</b> — {fM(p.drawn)} committed against{' '}
-                          {fM(p.drawdown!.expectedByProgress)} of works
+                          {/* the figure the verdict was actually reached on, under
+                              the word that describes it — see drawn-basis.ts */}
+                          <b className="font-semibold">{p.name}</b> — {fM(p.drawdown!.actualToDate)}{' '}
+                          {drawnAgainstWorksLabel(p.drawnSource)} against {fM(p.drawdown!.expectedByProgress)} of works
                         </div>
                       ))}
                     </div>
@@ -226,7 +235,12 @@ export default function FundingPack() {
                   <div style={{ flex: 0.8, padding: '7px 6px' }}>{p.region}</div>
                   <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.gdv)}</div>
                   <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.facility)}</div>
-                  <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.drawn)}</div>
+                  {/* † only on a mixed book: where every row shares one basis the
+                      methodology note above has already said so */}
+                  <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>
+                    {fM(p.drawn)}
+                    {basis.markRows && p.drawnSource !== 'bank' ? <span className="text-ink-3">&thinsp;†</span> : null}
+                  </div>
                   <div className="text-right font-semibold" style={{ flex: 1.1, padding: '7px 10px' }}>
                     {p.gdv > 0 ? `${Math.round((p.facility / p.gdv) * 100)}%` : '—'}
                   </div>

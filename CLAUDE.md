@@ -24,13 +24,13 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (273; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (276; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (747). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (754). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (90): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
