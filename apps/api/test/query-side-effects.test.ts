@@ -196,3 +196,71 @@ describe('listing integrations', () => {
     );
   });
 });
+
+/**
+ * The ADMIN check, defined once.
+ *
+ * `trpc.ts` says why `adminProcedure` exists, in its own words: "Defined ONCE:
+ * this guard was copied into two routers, and a permission check that exists in
+ * several places is one edit away from meaning different things in each."
+ *
+ * Two copies of it were still sitting in `integrations.saveCredentials` and
+ * `integrations.disconnect` — `internalProcedure` plus a hand-rolled
+ * `role !== 'ADMIN'` — so that comment was not true of the codebase it
+ * describes. No hole, both copies were correct; the fault is that a third
+ * procedure written beside them would have had two patterns to copy and one of
+ * them silently optional.
+ *
+ * Not a new sweep file: this is the same subject as the role guards already
+ * swept here, and asks the router the same way they do.
+ */
+describe('the ADMIN check', () => {
+  it('is written in the procedure builder and nowhere else', async () => {
+    const { appRouter } = await import('../src/router.js');
+    const procedures = (appRouter as unknown as { _def: { procedures: Record<string, { _def: { resolver: unknown } }> } })
+      ._def.procedures;
+
+    const offenders = Object.entries(procedures)
+      .filter(([, p]) => /role\s*!==\s*['"]ADMIN['"]/.test(String(p._def.resolver)))
+      .map(([name]) => name);
+
+    expect(
+      offenders,
+      'these hand-roll the admin check inside the resolver — use `adminProcedure`, which trpc.ts ' +
+        'defines once precisely so this rule cannot come to mean different things in different files',
+    ).toEqual([]);
+  });
+
+  /**
+   * And the matcher has teeth: a list that quietly stopped matching would pass
+   * over the exact thing it was written for.
+   */
+  it('recognises a hand-rolled check when it sees one', () => {
+    const planted = `async ({ ctx }) => { if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN' }); }`;
+    expect(/role\s*!==\s*['"]ADMIN['"]/.test(planted)).toBe(true);
+    const clean = `async ({ ctx }) => ctx.prisma.deal.findMany({ where: { orgId: ctx.principal.orgId } })`;
+    expect(/role\s*!==\s*['"]ADMIN['"]/.test(clean)).toBe(false);
+  });
+
+  /**
+   * The swap must not have changed who is refused. Driven rather than reasoned
+   * about, because "it is the same middleware" is exactly the kind of claim
+   * that is true until an ordering detail makes it false.
+   */
+  it('still refuses a non-admin on the two procedures that were switched', async () => {
+    const analyst = callerFor({ ...A.principal, role: 'ANALYST' });
+    await expect(
+      analyst.integrations.disconnect('Companies House' as never),
+      'an ANALYST reached a procedure that destroys a stored credential',
+    ).rejects.toThrow(/admin/i);
+    await expect(
+      analyst.integrations.saveCredentials({ provider: 'Companies House', fields: { key: 'x' } } as never),
+    ).rejects.toThrow(/admin/i);
+
+    // and an ADMIN is not refused by the guard itself — a rule that stops
+    // everyone is not a rule
+    await expect(
+      callerFor({ ...A.principal, role: 'ADMIN' }).integrations.disconnect('Companies House' as never),
+    ).rejects.toThrow(/NOT_FOUND|not found/i);
+  });
+});

@@ -1136,7 +1136,17 @@ export const integrationsRouter = router({
    * validated against the live upstream before it's accepted, stored
    * server-side only, and the connection flips to CONNECTED.
    */
-  saveCredentials: internalProcedure
+  /**
+   * `adminProcedure`, not `internalProcedure` plus a hand-rolled check.
+   *
+   * The builder's own comment says why it exists: "Defined ONCE: this guard was
+   * copied into two routers, and a permission check that exists in several
+   * places is one edit away from meaning different things in each." Two copies
+   * of it were still sitting in this file, so that comment was not true. The
+   * order is unchanged — `internalProcedure` still refuses a VIEWER and an
+   * expired trial before the role is looked at.
+   */
+  saveCredentials: adminProcedure
     .input(
       z.object({
         provider: z.enum(['EPC Register', 'Companies House']),
@@ -1144,7 +1154,6 @@ export const integrationsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
       const spec = SELF_SERVE_PROVIDERS[input.provider];
       for (const f of spec.fields) {
         if (!input.fields[f.key]?.trim()) throw new TRPCError({ code: 'BAD_REQUEST', message: `${f.label} is required` });
@@ -1195,10 +1204,9 @@ export const integrationsRouter = router({
     }),
 
   /** Remove a self-serve provider's stored key and mark it not connected. */
-  disconnect: internalProcedure
+  disconnect: adminProcedure
     .input(z.enum(['EPC Register', 'Companies House']))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
       const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
       if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
       await ctx.prisma.integrationConnection.update({
