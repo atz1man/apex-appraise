@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CashflowRow } from '@apex/appraisal-engine';
 import { fM, formatSigned } from '../lib/format';
+import { brand, brandInk } from '@apex/ui-tokens';
 
 /** True below 640px — charts swap to a phone-proportioned viewBox so text stays legible. */
 function useNarrow(): boolean {
@@ -16,13 +17,13 @@ function useNarrow(): boolean {
 
 /* ================================================================
    Engine-fed SVG charts — no chart library, design-system colors only.
-   Palette validated (CVD/contrast): revenue #1E7A55, cost #9A6212,
-   profit #1E9E6A; the cumulative J-curve is a single ink line.
+   Palette validated (CVD/contrast): revenue and cost are the series
+   variables, profit is brand-400; the cumulative J-curve is a single ink line.
    ================================================================ */
 
 const REV = 'rgb(var(--series-rev, 31 126 88))';
 const COST = 'rgb(var(--series-cost, 127 68 0))';
-const PROFIT = '#1E9E6A';
+const PROFIT = brand[400];
 const INK = 'rgb(var(--ink, 22 32 27))';
 const GRID = 'rgb(var(--border-std, 236 235 229))';
 const MUTED = 'rgb(var(--ink-3, 154 160 154))';
@@ -379,7 +380,7 @@ export function CostVarianceStrip({
           <div key={p.name} title={`${p.name} · budget ${fM(p.budget)} · forecast ${fM(p.forecast)}`}>
             <div className="flex justify-between text-[11px]">
               <span className="text-ink-2 truncate pr-2">{p.name}</span>
-              <span className="fig font-semibold shrink-0" style={{ color: over ? 'rgb(var(--status-red, 178 58 46))' : '#1E7A55' }}>
+              <span className="fig font-semibold shrink-0" style={{ color: over ? 'rgb(var(--status-red, 178 58 46))' : brandInk }}>
                 {delta === 0 ? 'on plan' : formatSigned(delta)}
               </span>
             </div>

@@ -28,9 +28,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (860). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (117): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (121): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer) plus the `no-raw-hex` sweep. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -56,6 +56,14 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
   still computes to `rgb(255,255,255)`, with `@media print` forcing the body white too. Do NOT
   "tokenise" these — `e2e/contrast.spec.ts` sweeps the report, Red Book and terms routes in BOTH
   themes and is what proves the exception is safe. Everywhere else the rule is absolute.
+  ENFORCED by `web/src/lib/no-raw-hex.test.ts`, which walks every component and route and
+  fails naming each raw literal; the five printed documents are its only exemption, and it
+  asserts each still carries hex so the list cannot go stale. Measured before it existed:
+  205 literals in 29 files, and dark mode is LIVE (`main.tsx` applies the OS preference), so
+  the brand green stroked into icons was drawn at 1.84:1 on dark surfaces. Ink on a themed
+  surface is `brandInk`/`neutral.*` (theme-aware); a fill carrying white is the fixed `brand`
+  ramp with `onFill` on it; a surface that does not theme (a marketing mock, the phone frame,
+  Stripe's form, a Leaflet popup) takes its pair from `fixed`.
 - Typefaces are SELF-HOSTED (`apps/web/public/fonts`, `@font-face` in `src/index.css`) — never
   re-add a Google Fonts `<link>`. A signed valuation is printed server-side, the field app has to
   render offline, and the privacy notice says "Nobody else"; `e2e/typography.spec.ts` enforces it.

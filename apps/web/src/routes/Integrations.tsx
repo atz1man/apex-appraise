@@ -4,6 +4,7 @@ import type { IntegrationProvider } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
+import { neutral } from '@apex/ui-tokens';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -57,7 +58,7 @@ const STATUS_STYLE: Record<Status, { label: string; dot: string; bg: string; col
     dot: 'rgb(var(--status-green, 30 122 85))',
     bg: 'rgb(var(--tint-success-2, 228 241 234))',
     color: 'rgb(var(--status-green, 30 122 85))',
-    border: '#BFE0CD',
+    border: neutral.borderGreenSoft,
     iconBg: 'rgb(var(--tint-success, 236 243 239))',
     iconColor: 'rgb(var(--brand-ink, 20 80 59))',
   },

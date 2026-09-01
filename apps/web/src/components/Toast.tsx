@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { neutral } from '@apex/ui-tokens';
 
 export type ToastKind = 'success' | 'error' | 'info';
 
@@ -27,7 +28,7 @@ let globalPush: ToastApi['push'] | null = null;
 export const toastGlobal = (kind: ToastKind, message: string) => globalPush?.(kind, message);
 
 const KIND_STYLE: Record<ToastKind, { border: string; dot: string }> = {
-  success: { border: '#BFE0CD', dot: 'rgb(var(--status-green, 30 122 85))' },
+  success: { border: neutral.borderGreenSoft, dot: 'rgb(var(--status-green, 30 122 85))' },
   error: { border: 'rgb(var(--status-red-bg, 249 234 231))', dot: 'rgb(var(--status-red, 178 58 46))' },
   info: { border: 'rgb(var(--status-blue-bg, 229 234 246))', dot: 'rgb(var(--status-blue, 45 91 168))' },
 };

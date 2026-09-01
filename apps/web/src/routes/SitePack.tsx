@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap, type MapPin } from '../components/SiteMap';
+import { brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
 
 const CONSTRAINT_LABELS: Record<string, string> = {
   'conservation-area': 'Conservation area',
@@ -301,10 +302,10 @@ export default function SitePack() {
                                     toggle(k);
                                   }}
                                   className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center"
-                                  style={{ background: selected.has(k) ? '#14503B' : '#fff', borderColor: selected.has(k) ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                                  style={{ background: selected.has(k) ? brand[700] : neutral.surface, borderColor: selected.has(k) ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))' }}
                                 >
                                   {selected.has(k) && (
-                                    <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
+                                    <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
                                   )}
                                 </button>
                               </Td>
@@ -349,8 +350,8 @@ export default function SitePack() {
                     ]}
                   />
                   <div className="mt-2 flex gap-4 text-[11px] text-ink-2">
-                    <span className="inline-flex items-center gap-1.5"><Dot color="#14503B" /> Subject site</span>
-                    <span className="inline-flex items-center gap-1.5"><Dot color="#1E9E6A" /> Sold within ~1km</span>
+                    <span className="inline-flex items-center gap-1.5"><Dot color={brandInk} /> Subject site</span>
+                    <span className="inline-flex items-center gap-1.5"><Dot color={brand[400]} /> Sold within ~1km</span>
                   </div>
                 </Panel>
 

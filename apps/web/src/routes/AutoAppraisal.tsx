@@ -6,6 +6,7 @@ import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
 import { Button, Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
 
 // ---------- types ----------
 
@@ -84,7 +85,7 @@ const LOADING_STAGES = [
 ];
 
 const VERDICT_STYLE: Record<Verdict, { dot: string; bg: string }> = {
-  Proceed: { dot: '#7FE3B4', bg: 'rgba(127,227,180,0.2)' },
+  Proceed: { dot: accent[300], bg: 'rgba(127,227,180,0.2)' },
   Caution: { dot: 'rgb(var(--dot-warn, 245 196 81))', bg: 'rgba(245,196,81,0.22)' },
   Decline: { dot: 'rgb(var(--dot-crit, 240 138 124))', bg: 'rgba(240,138,124,0.22)' },
 };
@@ -97,7 +98,7 @@ const CONF_DOT: Record<'high' | 'med' | 'low', string> = {
 
 // ---------- small local pieces ----------
 
-function Sparkle({ size = 16, color = '#fff' }: { size?: number; color?: string }) {
+function Sparkle({ size = 16, color = onFill }: { size?: number; color?: string }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" />
@@ -111,7 +112,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Architectural drawings',
     sub: 'GIA / unit mix',
     icon: (
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H3z" />
       </svg>
     ),
@@ -120,7 +121,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Cost plan',
     sub: 'Build £/ft²',
     icon: (
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 3v18M3 9h18" />
         <rect x="3" y="3" width="18" height="18" rx="2" />
       </svg>
@@ -130,7 +131,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Planning decision',
     sub: 'Use / CIL / S106',
     icon: (
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M7 3h7l4 4v14H7z" />
         <path d="M14 3v4h4" />
       </svg>
@@ -140,7 +141,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
     label: 'Comparables',
     sub: 'GDV £/ft²',
     icon: (
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.1" strokeLinecap="round">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.1" strokeLinecap="round">
         <path d="M5 20v-7M12 20V5M19 20v-9" />
       </svg>
     ),
@@ -447,7 +448,7 @@ export default function AutoAppraisal() {
         }
         right={
           <span className="hidden sm:inline-flex items-center gap-1.5 rounded-[9px] bg-tint-success px-2.5 py-1.5 text-[11.5px] font-semibold text-brand-ink">
-            <Sparkle size={14} color="#14503B" /> AI Development Director
+            <Sparkle size={14} color={brandInk} /> AI Development Director
           </span>
         }
       />
@@ -514,10 +515,10 @@ export default function AutoAppraisal() {
                         >
                           <span
                             className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center shrink-0"
-                            style={{ background: on ? '#14503B' : '#fff', borderColor: on ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                            style={{ background: on ? brand[700] : neutral.surface, borderColor: on ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))' }}
                           >
                             {on && (
-                              <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
+                              <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
                             )}
                           </span>
                           <span className="flex-1 min-w-0">
@@ -626,7 +627,7 @@ export default function AutoAppraisal() {
                   size="sm"
                   onClick={() => setMan({ units: [...manual.units, { label: 'New unit', count: 1, area: 1000, value: 200 }] })}
                 >
-                  <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2.4" strokeLinecap="round">
+                  <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.4" strokeLinecap="round">
                     <path d="M12 6v12M6 12h12" />
                   </svg>
                   Add unit
@@ -670,7 +671,7 @@ export default function AutoAppraisal() {
                 <RateBox prefix="Build £" value={buildRate} onChange={setBuildRate} />
                 <Button onClick={onRunManual} size="lg" className="flex-1" loading={phase === 'loading'}>
                   Run appraisal
-                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
                 </Button>
@@ -738,7 +739,7 @@ export default function AutoAppraisal() {
               )}
 
               {/* headline */}
-              <section className="relative overflow-hidden rounded-panel p-[22px] text-white" style={{ background: 'linear-gradient(155deg,#1B6048,#13503B)' }}>
+              <section className="relative overflow-hidden rounded-panel p-[22px] text-white" style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}>
                 <div className="absolute -top-[26px] -right-[26px] w-[120px] h-[120px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
                 <div className="relative flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -869,7 +870,7 @@ export default function AutoAppraisal() {
                 title={
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-[7px] bg-brand-700 inline-flex items-center justify-center shrink-0">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M8 12h.01M12 12h.01M16 12h.01M21 12a8 8 0 0 1-11.3 7.3L3 21l1.7-6.7A8 8 0 1 1 21 12Z" />
                       </svg>
                     </span>
@@ -883,7 +884,7 @@ export default function AutoAppraisal() {
                       <div key={i} className="flex" style={{ justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                         <div
                           className="max-w-[82%] px-3 py-2 rounded-[12px] text-[12.5px] leading-snug"
-                          style={m.role === 'user' ? { background: '#14503B', color: '#fff' } : { background: 'rgb(var(--canvas, 243 244 241))', color: 'rgb(var(--ink, 22 32 27))' }}
+                          style={m.role === 'user' ? { background: brand[700], color: onFill } : { background: 'rgb(var(--canvas, 243 244 241))', color: 'rgb(var(--ink, 22 32 27))' }}
                         >
                           {m.text}
                         </div>
@@ -908,7 +909,7 @@ export default function AutoAppraisal() {
                     className="flex-none w-[46px] h-10 rounded-[10px] bg-brand-700 hover:bg-brand-600 inline-flex items-center justify-center transition-colors disabled:opacity-50"
                   >
                     {whatIf.isPending ? <Spinner /> : (
-                      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" />
                       </svg>
                     )}
@@ -923,7 +924,7 @@ export default function AutoAppraisal() {
                   {!save.isPending && (
                     <>
                       Open full appraisal
-                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14M13 6l6 6-6 6" />
                       </svg>
                     </>

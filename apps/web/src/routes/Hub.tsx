@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -140,7 +141,7 @@ export default function Hub() {
         {/* dark evergreen hero with live portfolio summary */}
         <section
           className="relative overflow-hidden mt-6 rounded-[22px] p-6 sm:p-8 text-white shadow-dark-card"
-          style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
+          style={{ background: heroGradient }}
         >
           {/* soft accent bloom + hairline top edge give the flat gradient physical depth */}
           <div

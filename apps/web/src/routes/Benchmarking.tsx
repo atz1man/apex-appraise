@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { status as statusTokens, brand } from '@apex/ui-tokens';
+import { accent, brand, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
@@ -668,7 +668,7 @@ export default function Benchmarking() {
                                 key={pt.month}
                                 className="flex-1 rounded-t-[3px]"
                                 title={`${pt.month}: £${Math.round(pt.averagePrice).toLocaleString('en-GB')}`}
-                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? 'rgb(var(--brand-ink, 20 80 59))' : '#AECBBC' }}
+                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? 'rgb(var(--brand-ink, 20 80 59))' : accent.muted3 }}
                               />
                             ))}
                           </div>
@@ -690,7 +690,7 @@ export default function Benchmarking() {
                 >
                   <div className="flex items-center gap-[9px]">
                     <span className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.16)' }}>
-                      <Icon d={SPARKLE} size={15} color="#7FE3B4" strokeWidth={1.6} />
+                      <Icon d={SPARKLE} size={15} color={accent[300]} strokeWidth={1.6} />
                     </span>
                     <span className="text-[13px] font-semibold">Intelligence</span>
                   </div>
@@ -712,7 +712,7 @@ export default function Benchmarking() {
                   </p>
                   <Button to="/board" size="lg" className="mt-3 w-full">
                     Start from benchmark
-                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                   </Button>
                 </section>
               </div>

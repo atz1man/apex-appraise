@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Button } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
 
 const DEMOS: Array<[string, string, string]> = [
   ['Internal team', 'arthur@apexappraise.co.uk', 'Pipeline, appraisals, construction, sales'],
@@ -64,7 +65,7 @@ export default function Login() {
   });
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: heroGradient }}>
       <div className="w-[400px] max-w-[92vw]">
         <div className="flex items-center gap-3 justify-center mb-7">
           <BrandMark size={36} />

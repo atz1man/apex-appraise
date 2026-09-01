@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { brand, brandInk, neutral, status as statusTokens } from '@apex/ui-tokens';
+import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
@@ -33,7 +33,7 @@ const STAGE_ACCENT: Record<string, string> = {
   OFFER: 'rgb(var(--status-blue, 45 91 168))',
   ACQUISITION: 'rgb(var(--status-green, 30 122 85))',
   CONSTRUCTION: 'rgb(var(--brand-ink, 20 80 59))',
-  SALES_LETTING: '#1E9E6A',
+  SALES_LETTING: brand[400],
   COMPLETED: 'rgb(var(--ink-2b, 110 114 105))',
 };
 
@@ -375,7 +375,7 @@ export default function Calendar() {
                 </div>
                 <Button writes className="ml-auto !h-[34px] !px-4" loading={createTask.isPending} disabled={!title.trim() || !dealSel} onClick={submit}>
                   {!createTask.isPending && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
                   )}
                   Add
                 </Button>
@@ -403,7 +403,7 @@ export default function Calendar() {
                             className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
                             style={{ borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))', background: t.done ? brand[700] : neutral.surface }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: t.done ? 1 : 0 }} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: t.done ? 1 : 0 }} aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>
                           </button>
                           <div className="flex-1 min-w-0">
                             <div className="text-[13.5px] font-medium" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>

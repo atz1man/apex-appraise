@@ -6,6 +6,7 @@ import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, 
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
 import { fmtBytes, n0 } from '../lib/format';
+import { brandInk, onFill, personGradients, status as statusTokens } from '@apex/ui-tokens';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
 const FOLDER_ICON = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
@@ -61,19 +62,14 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 /** A stable colour per person, derived from their id — never a random one. */
-const AVATAR_GRADS = [
-  'linear-gradient(135deg,#1E7A55,#14503B)',
-  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
-  'linear-gradient(135deg,#9B79C0,#5E3F86)',
-  'linear-gradient(135deg,#C08A3E,#7A5220)',
-];
+const AVATAR_GRADS = personGradients;
 const gradOf = (id: string) => {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return AVATAR_GRADS[h % AVATAR_GRADS.length];
 };
 
-const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
+const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', statusTokens.blue.dot, 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
 const fmtDay = (d: Date | string) =>
   new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -214,7 +210,7 @@ export default function DataRoom() {
         }
         right={
           <Button onClick={openForm}>
-            <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={15} color="#fff" /></span> Upload
+            <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={15} color={onFill} /></span> Upload
           </Button>
         }
       />
@@ -288,7 +284,7 @@ export default function DataRoom() {
           >
             <div className="flex items-center gap-3.5">
               <div className="w-[42px] h-[42px] rounded-[11px] bg-tint-success flex items-center justify-center shrink-0">
-                {uploading ? <Spinner /> : <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} /></span>}
+                {uploading ? <Spinner /> : <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={20} color={brandInk} strokeWidth={1.9} /></span>}
               </div>
               <div className="flex-1">
                 <div className="text-[13.5px] font-semibold">

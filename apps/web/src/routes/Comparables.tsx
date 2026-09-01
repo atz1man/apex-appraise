@@ -5,12 +5,13 @@ import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
+import { brand, onFill } from '@apex/ui-tokens';
 
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
 const RED = 'rgb(var(--status-red, 178 58 46))';
 const AMBER = 'rgb(var(--status-amber, 154 98 18))';
 const NEUTRAL = 'rgb(var(--inactive, 138 144 138))';
-const PIN = '#1E9E6A';
+const PIN = brand[400];
 
 const adjColor = (v: number) => (v > 0 ? GREEN : v < 0 ? RED : NEUTRAL);
 
@@ -305,7 +306,7 @@ export default function Comparables() {
 
           {/* RIGHT: subject + evidence quality + apply */}
           <aside className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
-            <div className="rounded-card p-5 text-white shadow-rest" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
+            <div className="rounded-card p-5 text-white shadow-rest" style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}>
               <div className="fig text-[10px] font-medium uppercase tracking-[0.7px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Subject</div>
               <div className="mt-1.5 text-[17px] font-semibold">{deal?.name ?? '—'}</div>
               <div className="mt-0.5 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -362,7 +363,7 @@ export default function Comparables() {
                   </div>
                   <Button to={`/deal/${dealId}/appraisal`} size="lg" className="mt-3 w-full">
                     Open appraisal
-                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                   </Button>
                 </div>
               ) : (
@@ -376,7 +377,7 @@ export default function Comparables() {
                   {!apply.isPending && (
                     <>
                       Apply &amp; open appraisal
-                      <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                      <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                     </>
                   )}
                 </Button>

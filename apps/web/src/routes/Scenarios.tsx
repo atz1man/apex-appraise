@@ -5,6 +5,7 @@ import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { brand, onFill } from '@apex/ui-tokens';
 
 const ACCENTS = ['rgb(var(--brand-ink, 20 80 59))', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
@@ -134,8 +135,8 @@ export default function Scenarios() {
     <div className="min-h-screen">
       <style>{`
         input[type=range].scn{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:rgb(var(--border-strong, 230 229 222));outline:none;padding:0;border:none;width:100%;box-shadow:none}
-        input[type=range].scn::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
-        input[type=range].scn::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
+        input[type=range].scn::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:${brand[700]};cursor:pointer;border:2px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,0.3)}
+        input[type=range].scn::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:${brand[700]};cursor:pointer;border:2px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,0.3)}
       `}</style>
       <TopBar
         crumb={

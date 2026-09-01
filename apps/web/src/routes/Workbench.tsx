@@ -4,13 +4,14 @@ import { trpc } from '../lib/trpc';
 import { formatMoneyFull, n0 } from '../lib/format';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, StatCard, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { accent, brand, brandInk, onFill } from '@apex/ui-tokens';
 
 type Weights = { salesComparison: number; cost: number; income: number };
 type ApproachKey = 'sales' | 'cost' | 'income';
 
 const APPROACHES: Array<{ key: ApproachKey; wKey: keyof Weights; label: string; dot: string; sub: string }> = [
   { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: 'rgb(var(--brand-ink, 20 80 59))', sub: 'Supported £/ft² × subject area' },
-  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + build, fees and contingency' },
+  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: brand[400], sub: 'Land + build, fees and contingency' },
   { key: 'income', wKey: 'income', label: 'Income approach', dot: 'rgb(var(--ink-3, 154 160 154))', sub: 'Net rent capitalised at market yield' },
 ];
 
@@ -234,7 +235,7 @@ export default function Workbench() {
       {isSynced && !dismissed && (
         <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 bg-tint-success border-b border-[rgb(var(--border-green-soft,_214_230_221))]">
           <span className="flex-none w-[30px] h-[30px] rounded-[9px] bg-brand-700 flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[12.5px] font-semibold text-brand-ink">Synced from field inspection · {inspectedOn}</div>
@@ -246,7 +247,7 @@ export default function Workbench() {
             onClick={() => setDismissed(true)}
             aria-label="Dismiss"
             className="flex-none w-[26px] h-[26px] rounded-[7px] flex items-center justify-center hover:bg-tint-success-2"
-            style={{ color: '#5E8C76' }}
+            style={{ color: accent.muted1 }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
@@ -268,7 +269,7 @@ export default function Workbench() {
 
         {/* KPI row */}
         <div className="mt-5 flex gap-3 flex-wrap">
-          <div className="flex-[1.4] min-w-[210px] rounded-card px-4 py-3.5 text-white relative overflow-hidden" style={{ background: 'linear-gradient(150deg,#1B6048,#13503B)' }}>
+          <div className="flex-[1.4] min-w-[210px] rounded-card px-4 py-3.5 text-white relative overflow-hidden" style={{ background: `linear-gradient(150deg,${brand[600]},${brand[700]})` }}>
             <div className="absolute rounded-full" style={{ top: -24, right: -24, width: 96, height: 96, background: 'rgba(255,255,255,0.07)' }} />
             <div className="label-mono text-white/65">Market value</div>
             {/**
@@ -370,7 +371,7 @@ export default function Workbench() {
               title="Comparable evidence grid"
               right={
                 <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-ink">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#14503B" aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill={brandInk} aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
                   Auto-adjusted
                 </span>
               }
@@ -457,7 +458,7 @@ export default function Workbench() {
               {rangeLow != null && rangeHigh != null && (
                 <div className="mt-3.5">
                   <div className="relative h-[7px] rounded-[4px] bg-sunken-2">
-                    <div className="absolute top-0 bottom-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: 'linear-gradient(90deg,#1E9E6A,#14503B)' }} />
+                    <div className="absolute top-0 bottom-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
                     <div className="absolute -top-[3px] w-[13px] h-[13px] rounded-full bg-brand-700 border-2 border-surface -translate-x-1/2" style={{ left: `${marker}%`, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
                   </div>
                   <div className="mt-1.5 flex justify-between fig text-[11px] font-medium text-ink-3">

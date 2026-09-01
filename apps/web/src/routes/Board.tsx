@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 import type { StatusKey } from '@apex/ui-tokens';
+import { brand, onFill } from '@apex/ui-tokens';
 
 const STAGES: Array<{ key: string; label: string; accent: string }> = [
   { key: 'SOURCING', label: 'Sourcing', accent: 'rgb(var(--ink-3, 154 160 154))' },
@@ -11,7 +12,7 @@ const STAGES: Array<{ key: string; label: string; accent: string }> = [
   { key: 'OFFER', label: 'Offer / Bid', accent: 'rgb(var(--status-blue, 45 91 168))' },
   { key: 'ACQUISITION', label: 'Acquisition', accent: 'rgb(var(--status-green, 30 122 85))' },
   { key: 'CONSTRUCTION', label: 'Construction', accent: 'rgb(var(--brand-ink, 20 80 59))' },
-  { key: 'SALES_LETTING', label: 'Sales / Letting', accent: '#1E9E6A' },
+  { key: 'SALES_LETTING', label: 'Sales / Letting', accent: brand[400] },
   { key: 'COMPLETED', label: 'Completed', accent: 'rgb(var(--ink-2b, 110 114 105))' },
 ];
 
@@ -106,7 +107,7 @@ export default function Board() {
           </div>
         ) : (
         <div className="mt-5 flex gap-3 flex-wrap">
-          <div className="flex-1 min-w-[150px] rounded-card p-4 text-white shadow-rest" style={{ background: 'linear-gradient(135deg,#1B6048,#14503B)' }}>
+          <div className="flex-1 min-w-[150px] rounded-card p-4 text-white shadow-rest" style={{ background: `linear-gradient(135deg,${brand[600]},${brand[700]})` }}>
             <div className="font-mono uppercase text-[10px] tracking-[1.2px] text-accent-muted-3 font-semibold">Pipeline GDV</div>
             <div className="fig mt-1.5 text-[21px] font-semibold tracking-[-1px] text-accent-300">{R ? fM(R.pipelineGdv) : '—'}</div>
           </div>
@@ -239,7 +240,7 @@ export default function Board() {
                 key={k}
                 onClick={() => setFilter(k)}
                 className="inline-flex items-center rounded-pill border px-3.5 py-1.5 min-h-[40px] sm:min-h-0 text-[12.5px] font-semibold transition-colors"
-                style={on ? { background: '#14503B', color: '#fff', borderColor: 'rgb(var(--brand-ink))' } : { background: 'rgb(var(--surface, 255 255 255))', color: 'rgb(var(--ink-2, 75 81 75))', borderColor: 'rgb(var(--control-border, 139 147 141))' }}
+                style={on ? { background: brand[700], color: onFill, borderColor: 'rgb(var(--brand-ink))' } : { background: 'rgb(var(--surface, 255 255 255))', color: 'rgb(var(--ink-2, 75 81 75))', borderColor: 'rgb(var(--control-border, 139 147 141))' }}
               >
                 {label}
               </button>

@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
+import { brand, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatPct } from '../lib/format';
 import {
@@ -381,7 +381,7 @@ export default function DealOverview() {
                         }
                       >
                         {done ? (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M4 12l5 5L20 7" />
                           </svg>
                         ) : (

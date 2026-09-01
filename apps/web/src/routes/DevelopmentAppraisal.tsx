@@ -25,6 +25,7 @@ import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
+import { accent, brand, brandInk, onFill, status as statusTokens } from '@apex/ui-tokens';
 
 const TABS: Array<[string, string]> = [
   ['general', 'General'],
@@ -242,7 +243,7 @@ export default function DevelopmentAppraisal() {
   const risk = useMemo(() => monteCarlo(input, { iterations: 400, seed: 42 }), [input]);
 
   const isResidual = input.site.mode === 'residual';
-  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: '#7FE3B4', tone: 'rgb(var(--status-green, 30 122 85))' } : R.poc >= 0.1 ? { v: 'Marginal', dot: 'rgb(var(--dot-warn, 245 196 81))', tone: 'rgb(var(--status-amber, 154 98 18))' } : { v: 'Unviable', dot: 'rgb(var(--dot-crit, 240 138 124))', tone: 'rgb(var(--status-red, 178 58 46))' };
+  const viab = R.poc >= 0.17 ? { v: 'Viable', dot: accent[300], tone: 'rgb(var(--status-green, 30 122 85))' } : R.poc >= 0.1 ? { v: 'Marginal', dot: 'rgb(var(--dot-warn, 245 196 81))', tone: 'rgb(var(--status-amber, 154 98 18))' } : { v: 'Unviable', dot: 'rgb(var(--dot-crit, 240 138 124))', tone: 'rgb(var(--status-red, 178 58 46))' };
 
   const startY = input.startYear ?? 2026;
   const startM = input.startMonth ?? 0;
@@ -1370,13 +1371,13 @@ export default function DevelopmentAppraisal() {
                   <Panel title="Capital stack">
                     <div className="flex h-9 rounded-[9px] overflow-hidden border border-border-std">
                       <div style={{ width: `${(stack.senior / stack.total) * 100}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} title="Senior" />
-                      <div style={{ width: `${(stack.mezzanine / stack.total) * 100}%`, background: '#C79A4B' }} title="Mezzanine" />
-                      <div style={{ width: `${(stack.equity / stack.total) * 100}%`, background: '#AECBBC' }} title="Equity + land" />
+                      <div style={{ width: `${(stack.mezzanine / stack.total) * 100}%`, background: statusTokens.amber.dot }} title="Mezzanine" />
+                      <div style={{ width: `${(stack.equity / stack.total) * 100}%`, background: accent.muted3 }} title="Equity + land" />
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-3">
-                      <Kv k={`Senior · ${input.finance.ltcPct}% LTC`} v={fM(stack.senior)} dot="#14503B" />
-                      <Kv k={`Mezz to ${Math.max(mezz?.toPct ?? input.finance.ltcPct, input.finance.ltcPct)}%`} v={stack.mezzanine < 1 ? '—' : fM(stack.mezzanine)} dot="#C79A4B" />
-                      <Kv k="Equity + land" v={fM(stack.equity)} dot="#AECBBC" />
+                      <Kv k={`Senior · ${input.finance.ltcPct}% LTC`} v={fM(stack.senior)} dot={brandInk} />
+                      <Kv k={`Mezz to ${Math.max(mezz?.toPct ?? input.finance.ltcPct, input.finance.ltcPct)}%`} v={stack.mezzanine < 1 ? '—' : fM(stack.mezzanine)} dot={statusTokens.amber.dot} />
+                      <Kv k="Equity + land" v={fM(stack.equity)} dot={accent.muted3} />
                     </div>
                     <div className="mt-2 flex gap-6">
                       <Kv k="Blended debt cost" v={`${stack.blendedRatePct.toFixed(1)}%`} />
@@ -1547,7 +1548,7 @@ export default function DevelopmentAppraisal() {
               right={<Dot color={viab.dot} size={10} />}
             >
               {breakdown.map(([label, val, final]) => (
-                <div key={label} className={`flex justify-between py-[7px] border-t ${final ? 'border-border-std' : 'border-[#F4F4F0]'} first:border-t-0`}>
+                <div key={label} className={`flex justify-between py-[7px] border-t ${final ? 'border-border-std' : 'border-border-faint'} first:border-t-0`}>
                   <span className={final ? 'text-[13px] font-bold text-brand-ink' : 'text-[12px] text-ink-2'}>{label}</span>
                   <span className="fig" style={{ fontWeight: final ? 700 : 500, fontSize: final ? 14 : 12, color: final ? 'rgb(var(--brand-ink, 20 80 59))' : val < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink, 22 32 27))' }}>
                     {formatSigned(val)}
@@ -1661,9 +1662,9 @@ export default function DevelopmentAppraisal() {
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                      style={{ background: t.done ? '#14503B' : 'rgb(var(--surface, 255 255 255))', borderColor: t.done ? '#14503B' : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                      style={{ background: t.done ? brand[700] : 'rgb(var(--surface, 255 255 255))', borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))' }}
                     >
-                      {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
+                      {t.done && <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? 'rgb(var(--ink-3b, 182 181 173))' : 'rgb(var(--ink, 22 32 27))', textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <Avatar initials={t.assignee} size={20} />

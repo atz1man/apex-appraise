@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { Button, Spinner, TopBar } from '../components/ui';
+import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
 
 type Room = { name: string; condition: number; photos: number; notes: string };
 type Weights = { salesComparison: number; cost: number; income: number };
@@ -14,11 +15,7 @@ const defaultRooms = (): Room[] => DEFAULT_ROOM_NAMES.map((name) => ({ name, con
 const DEFAULT_WEIGHTS: Weights = { salesComparison: 60, cost: 20, income: 20 };
 
 /** Photo-placeholder gradients from the design handoff. */
-const THUMBS = [
-  'linear-gradient(150deg,#aebdb2,#7d8f86)',
-  'linear-gradient(150deg,#c4cdd2,#9aa6ad)',
-  'linear-gradient(150deg,#cdbfae,#a59079)',
-];
+const THUMBS = placeholderGradients.stone;
 
 /** Unified native-feel press feedback for the phone UI's ad-hoc buttons (44px touch targets kept in markup). */
 const PRESS = 'transition-all duration-150 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100';
@@ -260,7 +257,7 @@ export default function FieldApp() {
             <h1 className="mt-[3px] text-[27px] font-bold tracking-[-0.6px] leading-tight">Appraisals</h1>
             <div className="mt-0.5 text-[13px] text-ink-2">Good morning, {principal?.name?.split(' ')[0] ?? 'surveyor'}</div>
           </div>
-          <div className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-white text-[14px] font-semibold" style={{ background: 'linear-gradient(135deg,#1E7A55,#14503B)' }}>
+          <div className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-white text-[14px] font-semibold" style={{ background: `linear-gradient(135deg,${brand[500]},${brand[700]})` }}>
             {principal?.initials ?? 'AO'}
           </div>
         </div>
@@ -282,7 +279,7 @@ export default function FieldApp() {
         {indicated > 0 && deal && (
           <div className="mx-[22px] mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[rgb(var(--border-green-soft,_214_230_221))] rounded-[14px] p-3">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
-              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13Z" /></svg>
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill={onFill}><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13Z" /></svg>
             </div>
             <div className="text-[12.5px] leading-[1.45]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               Comparable evidence supports <b className="font-semibold fig">{fM(indicated)}</b> for {deal.name}.
@@ -362,7 +359,7 @@ export default function FieldApp() {
     <>
       <div className="flex-1 overflow-y-auto">
         {/* hero */}
-        <div className="relative h-[248px]" style={{ background: 'linear-gradient(165deg,#b9c6bd 0%,#8fa195 55%,#6d7e74 100%)' }}>
+        <div className="relative h-[248px]" style={{ background: placeholderGradients.scene }}>
           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(10,20,15,0.28) 0%,rgba(10,20,15,0) 32%,rgba(10,20,15,0) 52%,rgba(10,20,15,0.55) 100%)' }} />
           <div className="absolute top-[54px] left-[18px] right-[18px] flex justify-between">
             <BackBtn light onClick={() => setScreen('appraisals')} />
@@ -408,7 +405,7 @@ export default function FieldApp() {
           {summary && comps.length > 0 && nia > 0 && (
             <div className="mt-3.5">
               <div className="relative h-1.5 rounded-[3px] bg-border-std">
-                <div className="absolute top-0 bottom-0 rounded-[3px]" style={{ left: '18%', right: '24%', background: 'linear-gradient(90deg,#1E7A55,#14503B)' }} />
+                <div className="absolute top-0 bottom-0 rounded-[3px]" style={{ left: '18%', right: '24%', background: `linear-gradient(90deg,${brand[500]},${brand[700]})` }} />
                 <div className="absolute left-1/2 -translate-x-1/2 -top-[3px] w-3 h-3 rounded-full bg-brand-700 border-2 border-surface" />
               </div>
               <div className="mt-2 flex justify-between fig text-[11px] font-medium text-ink-2b">
@@ -475,7 +472,7 @@ export default function FieldApp() {
         </div>
         <div className="mt-3 flex items-center gap-2.5">
           <div className="flex-1 h-[7px] rounded-[4px] bg-border-std overflow-hidden">
-            <div className="h-full transition-all" style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#1E7A55,#14503B)' }} />
+            <div className="h-full transition-all" style={{ width: `${pct}%`, background: `linear-gradient(90deg,${brand[500]},${brand[700]})` }} />
           </div>
           <span className="fig text-[11.5px] font-medium text-ink-2">{rated} / {rooms.length} areas</span>
         </div>
@@ -483,7 +480,7 @@ export default function FieldApp() {
 
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
         {/* camera viewfinder */}
-        <div className="relative h-[188px] rounded-[18px] overflow-hidden" style={{ background: 'linear-gradient(160deg,#8a978f,#56635b)' }}>
+        <div className="relative h-[188px] rounded-[18px] overflow-hidden" style={{ background: placeholderGradients.street }}>
           {[
             { top: 12, left: 12, borderTop: '2.5px solid rgba(255,255,255,0.85)', borderLeft: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '3px 0 0 0' },
             { top: 12, right: 12, borderTop: '2.5px solid rgba(255,255,255,0.85)', borderRight: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 3px 0 0' },
@@ -532,7 +529,7 @@ export default function FieldApp() {
                     >
                       <span
                         className="w-[22px] h-[22px] rounded-full transition-all"
-                        style={{ background: on ? '#14503B' : '#fff', border: on ? 'none' : '2px solid rgb(var(--dashed, 218 217 210))' }}
+                        style={{ background: on ? brand[700] : neutral.surface, border: on ? 'none' : '2px solid rgb(var(--dashed, 218 217 210))' }}
                       />
                     </button>
                   );
@@ -546,7 +543,7 @@ export default function FieldApp() {
                 <div key={i} className="flex-1 aspect-square rounded-[11px]" style={{ background: THUMBS[i % THUMBS.length] }} />
               ))}
               <button onClick={snap} aria-label="Add photo" className={`flex-1 aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', maxWidth: 78 }}>
-                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14503B" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
               <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">{rooms[current].photos} photos</span>
             </div>
@@ -606,15 +603,15 @@ export default function FieldApp() {
       </div>
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
         {/* mini map */}
-        <div className="relative h-[174px] rounded-[18px] overflow-hidden" style={{ background: 'linear-gradient(160deg,#e3e9e3,#cdd6d8)' }}>
+        <div className="relative h-[174px] rounded-[18px] overflow-hidden" style={{ background: placeholderGradients.map }}>
           <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(120,140,130,0.18) 1px,transparent 1px),linear-gradient(90deg,rgba(120,140,130,0.18) 1px,transparent 1px)', backgroundSize: '34px 34px' }} />
           <div className="absolute left-0 right-0" style={{ top: 42, height: 14, background: 'rgba(150,168,158,0.4)', transform: 'rotate(-8deg)' }} />
           <div className="absolute left-0 right-0" style={{ top: 104, height: 20, background: 'rgba(150,168,158,0.32)', transform: 'rotate(5deg)' }} />
           <div className="absolute" style={{ top: 74, left: 172 }}>
-            <div className="w-[30px] h-[30px] rounded-full bg-brand-700 flex items-center justify-center text-white" style={{ border: '3px solid #fff', boxShadow: '0 4px 10px rgba(20,30,25,0.3)' }}>{STAR}</div>
+            <div className="w-[30px] h-[30px] rounded-full bg-brand-700 flex items-center justify-center text-white" style={{ border: `3px solid ${onFill}`, boxShadow: '0 4px 10px rgba(20,30,25,0.3)' }}>{STAR}</div>
           </div>
           {comps.slice(0, PIN_POS.length).map((c, i) => (
-            <div key={c.id} className="absolute w-[18px] h-[18px] rounded-full bg-brand-400" style={{ ...PIN_POS[i], border: '2.5px solid #fff', boxShadow: '0 3px 7px rgba(20,30,25,0.25)' }} />
+            <div key={c.id} className="absolute w-[18px] h-[18px] rounded-full bg-brand-400" style={{ ...PIN_POS[i], border: `2.5px solid ${onFill}`, boxShadow: '0 3px 7px rgba(20,30,25,0.25)' }} />
           ))}
           <div className="absolute bottom-3 left-3 px-2.5 py-[5px] rounded-[8px] fig text-[10px] font-medium bg-white/90 text-brand-ink">
             {comps.length} comp{comps.length === 1 ? '' : 's'} · local evidence
@@ -706,12 +703,12 @@ export default function FieldApp() {
       </div>
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
         {/* hero value */}
-        <div className="relative rounded-[20px] overflow-hidden p-5" style={{ background: 'linear-gradient(155deg,#1B6048 0%,#14503B 60%,#0F4030 100%)' }}>
+        <div className="relative rounded-[20px] overflow-hidden p-5" style={{ background: `linear-gradient(155deg,${brand[600]} 0%,${brand[700]} 60%,${brand[800]} 100%)` }}>
           <div className="absolute rounded-full" style={{ top: -30, right: -30, width: 140, height: 140, background: 'rgba(255,255,255,0.06)' }} />
           <div className="relative flex justify-between items-center">
             <div className="label-mono font-medium text-white/60">Reconciled value</div>
             <span className="flex items-center gap-[5px] px-[9px] py-1 rounded-[8px] bg-white/15">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#7FE3B4' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: accent[300] }} />
               <span className="text-[10px] font-semibold text-white">{conf.label} confidence</span>
             </span>
           </div>
@@ -753,7 +750,7 @@ export default function FieldApp() {
           {(
             [
               ['salesComparison', 'Sales comparison', 'rgb(var(--brand-ink, 20 80 59))'],
-              ['cost', 'Cost approach', '#1E9E6A'],
+              ['cost', 'Cost approach', brand[400]],
               ['income', 'Income approach', 'rgb(var(--ink-3, 154 160 154))'],
             ] as Array<[keyof Weights, string, string]>
           ).map(([key, label, color]) => (
@@ -784,7 +781,7 @@ export default function FieldApp() {
         {comps.length > 0 && summary && (
           <div className="mt-3.5 flex gap-[11px] items-start bg-tint-success border border-[rgb(var(--border-green-soft,_214_230_221))] rounded-[14px] p-[13px]">
             <div className="flex-none w-[26px] h-[26px] rounded-[8px] bg-brand-700 flex items-center justify-center">
-              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill={onFill}><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
             </div>
             <div className="text-[12.5px] leading-[1.45]" style={{ color: 'rgb(var(--ink-green-deep, 30 92 69))' }}>
               {comps.length} comp{comps.length === 1 ? '' : 's'}, avg gross adjustment {summary.avgGrossAdjustment.toFixed(1)}pts — supports a{' '}
@@ -826,7 +823,7 @@ export default function FieldApp() {
             <Spinner />
           ) : (
             <>
-              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17V5a2 2 0 0 1 2-2h10M8 21h10a2 2 0 0 0 2-2V9M16 3l4 4-4 4M20 7H9" /></svg>
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17V5a2 2 0 0 1 2-2h10M8 21h10a2 2 0 0 0 2-2V9M16 3l4 4-4 4M20 7H9" /></svg>
               Send to workbench
             </>
           )}
@@ -905,11 +902,11 @@ export default function FieldApp() {
         {/* iOS device frame */}
         <div
           className="flex-none rounded-[54px] p-[11px]"
-          style={{ background: 'linear-gradient(160deg,#23231f,#100f0d)', boxShadow: '0 32px 64px -22px rgba(20,30,25,0.5), 0 8px 22px rgba(0,0,0,0.16)' }}
+          style={{ background: fixed.deviceFrame, boxShadow: '0 32px 64px -22px rgba(20,30,25,0.5), 0 8px 22px rgba(0,0,0,0.16)' }}
         >
           <div className="relative w-[390px] h-[822px] rounded-[44px] overflow-hidden bg-canvas flex flex-col">
             {/* dynamic island */}
-            <div className="absolute top-[11px] left-1/2 -translate-x-1/2 w-[118px] h-[34px] rounded-[20px] z-30" style={{ background: '#0c0c0a' }} />
+            <div className="absolute top-[11px] left-1/2 -translate-x-1/2 w-[118px] h-[34px] rounded-[20px] z-30" style={{ background: fixed.deviceNotch }} />
             {screens}
           </div>
         </div>

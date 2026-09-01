@@ -5,6 +5,7 @@ import { fM } from '../lib/format';
 import { BrandMark, Icon } from '../components/ui';
 import { TRIAL_DAYS } from '../legal/entity';
 import { PLANS } from '@apex/types/plan';
+import { accent, brand, brandInk, fixed, neutral, onDark, status as statusTokens } from '@apex/ui-tokens';
 
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -101,12 +102,12 @@ function Cta({
   const chrome: Record<string, [string, React.CSSProperties]> = {
     light: [
       'text-brand-800 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-12px_rgba(0,0,0,0.45)]',
-      { background: '#FFFFFF', boxShadow: '0 8px 24px -10px rgba(0,0,0,0.35)' },
+      { background: fixed.white, boxShadow: '0 8px 24px -10px rgba(0,0,0,0.35)' },
     ],
     brand: [
       'text-white hover:[filter:brightness(1.08)] hover:-translate-y-0.5',
       {
-        background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+        background: `linear-gradient(180deg,${brand[600]} 0%,${brand[700]} 100%)`,
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -10px rgba(20,80,59,0.55)',
       },
     ],
@@ -259,7 +260,7 @@ function EngineSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1.5 w-full accent-[#3FD894] cursor-pointer"
+        className="mt-1.5 w-full accent-accent-bright cursor-pointer"
       />
     </div>
   );
@@ -299,7 +300,7 @@ function LiveEngineCard() {
         </div>
         <div>
           <div className="font-mono text-[9.5px] uppercase tracking-[1px] text-white/50">Residual land</div>
-          <div className="fig mt-0.5 text-[16px] font-semibold tracking-[-0.5px]" style={{ color: viable ? '#3FD894' : '#FF8A7A' }}>
+          <div className="fig mt-0.5 text-[16px] font-semibold tracking-[-0.5px]" style={{ color: viable ? onDark.green : onDark.red }}>
             {fM(Math.max(r.residualNet, 0))}
           </div>
         </div>
@@ -489,7 +490,7 @@ function MockRow({ label, value, tone }: { label: string; value: string; tone?: 
   return (
     <div className="flex items-center justify-between text-[13px] text-ink-2">
       <span>{label}</span>
-      <span className="fig text-[13px] font-semibold" style={{ color: tone ?? '#16201B' }}>
+      <span className="fig text-[13px] font-semibold" style={{ color: tone ?? neutral.ink }}>
         {value}
       </span>
     </div>
@@ -501,7 +502,7 @@ function MockRow({ label, value, tone }: { label: string; value: string; tone?: 
 function AppraisalMock() {
   return (
     <MockCard>
-      <div className="rounded-[14px] p-[18px] text-white" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
+      <div className="rounded-[14px] p-[18px] text-white" style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}>
         <div className="label-mono text-white/60">Reconciled · high confidence</div>
         <div className="fig mt-2 text-[34px] font-semibold tracking-[-1.5px]">£1.24m</div>
         <div className="mt-1 text-[12px] text-white/65">residual land value · 42% profit on cost</div>
@@ -547,9 +548,9 @@ function WorkfileMock() {
 
 function CostMock() {
   const trades: Array<[string, number, string, string]> = [
-    ['Substructure', 96, '−£8k', '#1E7A55'],
-    ['Frame & envelope', 71, 'on plan', '#9AA09A'],
-    ['M&E first fix', 38, '+£14k', '#B23A2E'],
+    ['Substructure', 96, '−£8k', brandInk],
+    ['Frame & envelope', 71, 'on plan', neutral.ink3],
+    ['M&E first fix', 38, '+£14k', statusTokens.red.text],
   ];
   return (
     <MockCard>
@@ -683,7 +684,7 @@ function StickyMobileCta({ onTour }: { onTour: () => void }) {
           tabIndex={show ? 0 : -1}
           className="flex-1 inline-flex items-center justify-center h-[48px] rounded-[13px] text-white text-[14.5px] font-semibold active:scale-[0.98] transition-transform motion-reduce:transition-none"
           style={{
-            background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+            background: `linear-gradient(180deg,${brand[600]} 0%,${brand[700]} 100%)`,
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -10px rgba(20,80,59,0.55)',
           }}
         >
@@ -736,7 +737,7 @@ export default function Landing() {
               to="/register"
               className="inline-flex items-center h-[38px] px-[17px] rounded-[11px] text-white text-[13px] font-semibold transition-all duration-200 hover:[filter:brightness(1.08)] active:scale-[0.97] motion-reduce:transition-none"
               style={{
-                background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+                background: `linear-gradient(180deg,${brand[600]} 0%,${brand[700]} 100%)`,
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 6px 16px -8px rgba(20,80,59,0.45)',
               }}
             >
@@ -748,7 +749,7 @@ export default function Landing() {
 
       <main>
       {/* HERO */}
-      <div className="relative text-white overflow-hidden" style={{ background: 'linear-gradient(165deg,#14503B 0%,#0F3528 55%,#0C2A20 100%)' }}>
+      <div className="relative text-white overflow-hidden" style={{ background: `linear-gradient(165deg,${brand[700]} 0%,${brand[900]} 55%,${brand[950]} 100%)` }}>
         <div className="absolute -top-40 -right-32 w-[620px] h-[620px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />
         <div className="absolute -bottom-56 -left-40 w-[520px] h-[520px] rounded-full" style={{ background: 'rgba(255,255,255,0.035)' }} />
         <div className="max-w-[1200px] mx-auto px-5 sm:px-7 pt-20 pb-24 relative">
@@ -926,7 +927,7 @@ export default function Landing() {
       {/* QUOTE */}
       <div id="customers" className="bg-brand-800 text-white">
         <div className="max-w-[900px] mx-auto px-5 sm:px-7 py-[72px] text-center">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="#3FD894" className="opacity-50 mx-auto" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill={accent.bright} className="opacity-50 mx-auto" aria-hidden="true">
             <path d="M10 7L7 12h3v5H4v-7l3-3h3zm10 0l-3 5h3v5h-6v-7l3-3h3z" />
           </svg>
           {/**
@@ -975,7 +976,7 @@ export default function Landing() {
                  not have to guess at a Tailwind class to find one */
               data-plan={key}
               className="rounded-[22px] bg-surface p-7 flex flex-col shadow-rest"
-              style={featured ? { border: '2px solid #14503B', boxShadow: '0 24px 60px -24px rgba(20,80,59,0.35)' } : undefined}
+              style={featured ? { border: `2px solid ${brandInk}`, boxShadow: '0 24px 60px -24px rgba(20,80,59,0.35)' } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[17px] font-bold">{name}</span>
@@ -999,7 +1000,7 @@ export default function Landing() {
                 style={
                   featured
                     ? {
-                        background: 'linear-gradient(180deg,#1B6048,#14503B)',
+                        background: `linear-gradient(180deg,${brand[600]},${brand[700]})`,
                         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 26px -12px rgba(20,80,59,0.55)',
                       }
                     : { border: '1px solid rgba(20,30,25,0.14)' }
@@ -1020,7 +1021,7 @@ export default function Landing() {
       <div id="cta" className={`${WRAP} py-20`}>
         <div
           className="relative overflow-hidden rounded-[24px] px-5 py-12 sm:px-7 sm:py-14 md:p-14 text-center"
-          style={{ background: 'linear-gradient(155deg,#1B6048,#0F3528)' }}
+          style={{ background: `linear-gradient(155deg,${brand[600]},${brand[900]})` }}
         >
           <div className="absolute -top-20 -right-16 w-[300px] h-[300px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />
           <h2 className="relative text-[34px] md:text-[42px] font-bold tracking-[-1.6px] text-white">Run your next deal on Apex.</h2>

@@ -1,6 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
+import { assetTypeTag, avatarGradients, brand, brandInk, brandMarkGradient, onFill, personGradientNone, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
 
@@ -12,7 +12,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
       className="inline-flex items-center justify-center rounded-[8px] shrink-0"
       style={{ width: size, height: size, background: brandMarkGradient }}
     >
-      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 11 12 4l8 7" />
         <path d="M6 10v9h12v-9" />
       </svg>
@@ -239,7 +239,7 @@ export function Avatar({ initials, size = 26 }: { initials: string; size?: numbe
   return (
     <span
       className="inline-flex items-center justify-center rounded-full text-white font-semibold shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: avatarGradients[initials] ?? 'linear-gradient(135deg,#9AA09A,#6E7269)' }}
+      style={{ width: size, height: size, fontSize: size * 0.38, background: avatarGradients[initials] ?? personGradientNone }}
       title={initials}
     >
       {initials}
@@ -261,7 +261,7 @@ const BTN_STYLES: Record<ButtonVariant, string> = {
 const BTN_CHROME: Record<ButtonVariant, React.CSSProperties> = {
   // subtle top-light gradient + inner highlight — tactile, Apple-style primary
   primary: {
-    background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+    background: `linear-gradient(180deg,${brand[600]} 0%,${brand[700]} 100%)`,
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
   },
   secondary: { border: '1px solid rgb(var(--control-border))', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
@@ -369,7 +369,7 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   return (
     <div
       className="inline-flex rounded-[12px] p-[3px] gap-[2px]"
-      // the rail was a hardcoded #EDECE6: a light bar glaring at 15.69:1 against
+      // the rail was a hardcoded light grey: a light bar glaring at 15.69:1 against
       // the dark canvas. Tokenised so it recesses under the panel in both themes.
       style={{ background: 'rgb(var(--toggle-track, 237 236 230))', boxShadow: 'inset 0 1px 2px rgba(20,30,25,0.06)' }}
       role="tablist"
@@ -404,7 +404,7 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   );
 }
 
-export function ProgressBar({ pct, color = '#1E7A55', height = 6 }: { pct: number; color?: string; height?: number }) {
+export function ProgressBar({ pct, color = brandInk, height = 6 }: { pct: number; color?: string; height?: number }) {
   return (
     <div className="rounded-[3px] bg-border-std overflow-hidden" style={{ height }}>
       <div className="h-full rounded-[3px] transition-all" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
@@ -557,7 +557,7 @@ export function Listbox({
             >
               <span className="w-3 shrink-0">
                 {o.value === value && (
-                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1E7A55" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
+                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
                 )}
               </span>
               <span className="truncate">{o.label}</span>

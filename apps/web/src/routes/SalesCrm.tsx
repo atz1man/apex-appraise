@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, brandInk, type StatusKey } from '@apex/ui-tokens';
+import { accent, brand, brandInk, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { SalesVelocityChart } from '../components/charts';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
@@ -699,7 +699,7 @@ export default function SalesCrm() {
                             <span className="fig text-[8px] font-semibold text-brand-ink">{v > 0 ? fM(v) : ''}</span>
                             <div
                               className="w-[70%] rounded-t-[3px]"
-                              style={{ height: `${(v / fcMax) * 72}%`, background: forecast.cumulative || i < 2 ? brand[700] : '#AECBBC' }}
+                              style={{ height: `${(v / fcMax) * 72}%`, background: forecast.cumulative || i < 2 ? brand[700] : accent.muted3 }}
                             />
                             <span className="fig text-[9px] text-ink-3">{months[i].toLocaleDateString('en-GB', { month: 'short' })}</span>
                           </div>
@@ -893,7 +893,7 @@ export default function SalesCrm() {
                                 border: `2px solid ${done ? brand[700] : current ? statusTokens.amber.dot : neutral.dashed}`,
                               }}
                             >
-                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>}
+                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>}
                             </span>
                             {i < names.length - 1 && <span className="w-[2px] flex-1 min-h-[14px]" style={{ background: i < sel.progress - 1 ? brand[700] : neutral.border }} />}
                           </div>

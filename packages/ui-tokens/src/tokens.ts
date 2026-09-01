@@ -49,6 +49,8 @@ export const neutral = {
   crumb: v('crumb', '201 205 200'),
   inactive: v('inactive', '99 103 99'),
   dashed: v('dashed', '218 217 210'),
+  /** the soft green hairline round a success toast or a connected integration */
+  borderGreenSoft: v('border-green-soft', '214 230 221'),
 } as const;
 
 export type StatusKey = 'neutral' | 'amber' | 'blue' | 'green' | 'red' | 'purple';
@@ -76,6 +78,65 @@ export const assetTypeTag: Record<string, { text: string; bg: string }> = {
   COMMERCIAL: { text: v('status-amber', '149 95 17'), bg: v('tag-commercial-bg', '246 236 217') },
   MIXED_USE: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },
 };
+
+/**
+ * Ink on a brand fill. White, and theme-invariant BECAUSE the fill is: the brand
+ * ramp above never changes with the theme, so what is drawn on it must not
+ * either. Not for anything drawn on a themed surface — that is `neutral.ink`.
+ */
+export const onFill = '#FFFFFF';
+
+/**
+ * Fixed colours for surfaces that are drawn, not themed: the light chrome of a
+ * marketing mock, the dark casing of the phone frame, a third party's payment
+ * form that renders on its own white. Each pairs an ink with the surface it is
+ * meant for, so the pair stays legible whichever theme the page around it is in.
+ */
+export const fixed = {
+  white: '#FFFFFF',
+  ink: '#16201B',
+  /** secondary ink on a white that does not theme (a Leaflet popup keeps its own white) */
+  inkMuted: '#5F665F',
+  deviceFrame: 'linear-gradient(160deg,#23231F,#100F0D)',
+  deviceNotch: '#0C0C0A',
+} as const;
+
+/** Data marks on the DARK brand panels (hero, sign-in): the status reds and greens above are tuned for light surfaces. */
+export const onDark = {
+  green: accent.bright,
+  red: '#FF8A7A',
+} as const;
+
+/**
+ * A colour per person, chosen by a stable hash of their id. One palette shared
+ * by every avatar in the product; the same person is the same colour on the
+ * cost monitor and in the data room.
+ */
+export const personGradients = [
+  'linear-gradient(135deg,#1E7A55,#14503B)',
+  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
+  'linear-gradient(135deg,#C79A4B,#8A6420)',
+  'linear-gradient(135deg,#9B79C0,#5E3F86)',
+] as const;
+/** nobody assigned yet */
+export const personGradientNone = 'linear-gradient(135deg,#9AA09A,#6E7269)';
+
+/** Placeholder art where a photograph would go — evergreen for cards, stone for the field app's thumbnails. */
+export const placeholderGradients = {
+  evergreen: [
+    'linear-gradient(150deg,#1E7A55 0%,#14503B 60%,#0F3528 100%)',
+    'linear-gradient(150deg,#5E9C80 0%,#1B6048 55%,#0C2A20 100%)',
+    'linear-gradient(150deg,#7FB99E 0%,#1E7A55 50%,#13402F 100%)',
+  ],
+  stone: [
+    'linear-gradient(150deg,#AEBDB2,#7D8F86)',
+    'linear-gradient(150deg,#C4CDD2,#9AA6AD)',
+    'linear-gradient(150deg,#CDBFAE,#A59079)',
+  ],
+  scene: 'linear-gradient(165deg,#B9C6BD 0%,#8FA195 55%,#6D7E74 100%)',
+  street: 'linear-gradient(160deg,#8A978F,#56635B)',
+  map: 'linear-gradient(160deg,#E3E9E3,#CDD6D8)',
+} as const;
 
 export const avatarGradients: Record<string, string> = {
   AO: 'linear-gradient(135deg,#1E7A55,#14503B)',

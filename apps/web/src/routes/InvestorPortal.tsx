@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { status as statusTokens, brand, brandInk, neutral } from '@apex/ui-tokens';
+import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM, fmtBytes } from '../lib/format';
 import { formatPct } from '@apex/appraisal-engine';
@@ -284,7 +284,7 @@ export default function InvestorPortal() {
                         className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center"
                         style={{ background: statusTokens.amber.text }}
                       >
-                        <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color="#fff" />
+                        <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color={onFill} />
                       </span>
                       <span className="text-[13px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
                         Capital call open

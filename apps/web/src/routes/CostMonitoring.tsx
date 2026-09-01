@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
+import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
@@ -14,20 +14,11 @@ type ContractorDraft = {
 };
 
 /** Contractor avatar gradients — per the design handoff prototype. */
-const GRADS = [
-  'linear-gradient(135deg,#1E7A55,#14503B)',
-  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
-  'linear-gradient(135deg,#C79A4B,#8A6420)',
-  'linear-gradient(135deg,#9B79C0,#5E3F86)',
-];
-const GRAD_NONE = 'linear-gradient(135deg,#9AA09A,#6E7269)';
+const GRADS = personGradients;
+const GRAD_NONE = personGradientNone;
 
 /** Evergreen gradient placeholders for photo cards (no real images). */
-const PHOTO_GRADS = [
-  'linear-gradient(150deg,#1E7A55 0%,#14503B 60%,#0F3528 100%)',
-  'linear-gradient(150deg,#5E9C80 0%,#1B6048 55%,#0C2A20 100%)',
-  'linear-gradient(150deg,#7FB99E 0%,#1E7A55 50%,#13402F 100%)',
-];
+const PHOTO_GRADS = placeholderGradients.evergreen;
 
 const initialsOf = (name: string) =>
   name
@@ -648,7 +639,7 @@ export default function CostMonitoring() {
                           <div className="flex items-end gap-[3px] h-[34px] shrink-0">
                             {spark.length === 0 && <span className="text-[10.5px] text-ink-3b">No weeks logged</span>}
                             {spark.map((h, i) => (
-                              <div key={i} className="w-2 rounded-t-[2px]" style={{ height: `${Math.max(6, (h / maxWk) * 100)}%`, background: i === spark.length - 1 ? brand[500] : '#AECBBC' }} title={`${h} h`} />
+                              <div key={i} className="w-2 rounded-t-[2px]" style={{ height: `${Math.max(6, (h / maxWk) * 100)}%`, background: i === spark.length - 1 ? brand[500] : accent.muted3 }} title={`${h} h`} />
                             ))}
                           </div>
                           <div className="flex gap-4 flex-1">
@@ -700,9 +691,9 @@ export default function CostMonitoring() {
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                      style={{ background: t.done ? brand[700] : '#fff', borderColor: t.done ? brand[700] : neutral.dashed }}
+                      style={{ background: t.done ? brand[700] : neutral.surface, borderColor: t.done ? brand[700] : neutral.dashed }}
                     >
-                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
+                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <span className="fig text-[10.5px]" style={{ color: !t.done && isPastDue(t.due, todayKey) ? statusTokens.red.text : neutral.ink3 }}>{t.due ? firmDay(t.due) : '—'}</span>
