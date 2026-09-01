@@ -2097,6 +2097,26 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
   // the rest of the book go unmentioned
   await expect(panel.getByText(/against a maximum of 20%/)).toHaveCount(breaching);
 
+  /**
+   * And the funding pack, with those breaches on its first sheet, still fits
+   * the sheet. Its page-one budget was a constant that assumed one line in the
+   * Exceptions box; measured here with twelve breach lines, the sheet was
+   * 1,342px against an A4 of 1,123 — the exceptions a lender reads the pack
+   * for were the thing printed off the bottom of it.
+   */
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText(/against a maximum of 20%/).first()).toBeVisible();
+  const withExceptions = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
+      lines: (p[0]!.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0,
+    };
+  });
+  expect(withExceptions.lines).toBe(breaching);
+  expect(withExceptions.overflowing, 'a sheet of the pack overflowed A4 under its own exceptions').toEqual([]);
+
   // clear it: a covenant that cannot be removed is one nobody will risk setting
   await page.goto('/settings');
   await page.getByLabel('Max loan to GDV (%)').fill('');
@@ -2178,6 +2198,39 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
   // than one that overflows, because nothing on the page says so
   expect(long.rows).toBe(40);
   expect(long.totals).toBe(1);
+
+  /**
+   * The boundary forty schemes never reach: a book whose rows exactly fill
+   * a sheet. Thirteen schemes fitted the first sheet's rows and so the sheet
+   * also carried the totals row and the closing note — which had never been
+   * budgeted — and measured 1,153px against an A4 of 1,123. CI found it by
+   * rendering the pack while a neighbouring spec's deals took the demo book
+   * from eleven schemes to twelve, with an overspend line beside them.
+   */
+  await page.unroute('**/trpc/deals.exposure*');
+  await page.route('**/trpc/deals.exposure*', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    const envelope = Array.isArray(body) ? body[0] : body;
+    const data = envelope.result.data.json;
+    const one = data.positions[0];
+    data.positions = Array.from({ length: 13 }, (_, i) => ({ ...one, dealId: `edge-${i}`, name: `Edge ${i + 1}` }));
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await page.waitForTimeout(600);
+  const edge = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
+      rows: p.reduce((a, x) => a + ((x.textContent ?? '').match(/Edge \d+/g)?.length ?? 0), 0),
+      totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
+    };
+  });
+  expect(edge.overflowing, 'a sheet exactly full of rows was also asked to carry the totals and the note').toEqual([]);
+  expect(edge.rows).toBe(13);
+  expect(edge.totals).toBe(1);
 });
 
 /**

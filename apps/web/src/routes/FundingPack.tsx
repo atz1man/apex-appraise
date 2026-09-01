@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useLayoutEffect, useState } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
 import { Button, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
+import { PACK_LAYOUT, paginatePositions } from '../lib/pack-pagination';
 
 /**
  * The funding pack — the book, as a lender receives it.
@@ -28,10 +29,8 @@ const fmtLong = docDate;
  * under-filled page one and overran page two by 62px — the arithmetic looked
  * right and the page did not.
  */
-const ROW_PX = 32;
-const TABLE_HEAD_PX = 34;
-const TOTAL_PX = 36;
-const SUMMARY_PX = 420;
+// the sheet arithmetic lives in lib/pack-pagination.ts, where its boundaries are tested
+const LAYOUT = { ...PACK_LAYOUT, pageContentPx: PAGE_CONTENT_PX };
 
 export default function FundingPack() {
   const { data: exposure, isLoading } = trpc.deals.exposure.useQuery();
@@ -46,17 +45,35 @@ export default function FundingPack() {
    * the ones after it — sizing every page the same would either waste a sheet or
    * overrun the first.
    */
+  /**
+   * Height the arithmetic did not know about, measured off the rendered
+   * sheets. The budget below is close, and three times it has been wrong by
+   * a line: exception lines, the closing note on a sheet that was also full,
+   * and the dagger footnote a mixed book prints. Each was "fixed" by adding
+   * a constant, and the next unbudgeted line was already there. So after
+   * render the sheets are measured, and any that overruns A4 hands its
+   * overrun back as reserve and the pack lays out again — one pass in
+   * practice, bounded to a handful so a pathological book cannot loop.
+   */
+  const [reserve, setReserve] = useState(0);
   const pages = useMemo(() => {
     const positions = exposure?.positions ?? [];
-    if (!positions.length) return [positions];
-    const firstPageRows = Math.max(1, Math.floor((PAGE_CONTENT_PX - SUMMARY_PX - TABLE_HEAD_PX - TOTAL_PX) / ROW_PX));
-    const laterPageRows = Math.max(1, Math.floor((PAGE_CONTENT_PX - TABLE_HEAD_PX - TOTAL_PX) / ROW_PX));
-    const out: (typeof positions)[] = [positions.slice(0, firstPageRows)];
-    for (let i = firstPageRows; i < positions.length; i += laterPageRows) {
-      out.push(positions.slice(i, i + laterPageRows));
-    }
-    return out;
-  }, [exposure]);
+    /**
+     * Page one's budget depends on how many exception lines it carries — one
+     * per covenant breach, one per overspending scheme. It was a constant, and
+     * twelve breach lines put 220px of the pack off the bottom of the sheet.
+     */
+    const exceptionLines =
+      positions.reduce((a, p) => a + (p.covenants?.breaches.length ?? 0), 0) +
+      positions.filter((p) => p.drawdown?.status === 'overspending').length;
+    return paginatePositions(positions, exceptionLines, LAYOUT, reserve);
+  }, [exposure, reserve]);
+  useLayoutEffect(() => {
+    const sheets = Array.from(document.querySelectorAll<HTMLElement>('.a4-page'));
+    // 1122 is the sheet; anything past it is content the page cannot hold
+    const overrun = Math.max(0, ...sheets.map((el) => el.getBoundingClientRect().height - 1122));
+    if (overrun > 0 && reserve < 8 * LAYOUT.rowPx) setReserve((r) => r + Math.ceil(overrun) + 4);
+  }, [pages, reserve]);
 
   if (isLoading || !exposure) {
     return (
@@ -217,6 +234,8 @@ export default function FundingPack() {
               </>
             )}
 
+            {/* a first sheet the exceptions have filled carries no table; the rows start on the next */}
+            {(rows.length > 0 || pi === total - 1) && (
             <div className="mt-4 border border-border-std rounded-[10px] overflow-hidden">
               <div
                 className="flex text-white fig text-[9.5px] font-semibold uppercase"
@@ -259,6 +278,7 @@ export default function FundingPack() {
                 </div>
               )}
             </div>
+            )}
 
             {pi === total - 1 && (
               <p className="mt-3 text-[10px] text-ink-3 leading-snug">
