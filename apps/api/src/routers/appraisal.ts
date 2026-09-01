@@ -26,6 +26,7 @@ import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
+import { feedApproved } from '../benchmark-feed.js';
 import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
@@ -745,8 +746,19 @@ export const appraisalRouter = router({
        * must not wait on someone else's server, nor fail because it is down.
        */
       if (input.decision === 'approve') {
-        const deal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+        const deal = await ctx.prisma.deal.findUniqueOrThrow({
+          where: { id: v.dealId },
+          select: { id: true, name: true, address: true, assetType: true, stage: true },
+        });
         const result = computeAppraisal(appraisalRowToEngineInput(row));
+        /**
+         * The firm's committed position is what the benchmark pool is made of,
+         * and approval is the moment a figure becomes that. Consent is checked
+         * inside the feed; a firm that has not opted in contributes nothing.
+         */
+        await feedApproved(ctx.prisma, ctx.principal.orgId, deal, row, {
+          userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
+        });
         await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.approved', {
           dealId: v.dealId,
           dealName: deal?.name ?? null,

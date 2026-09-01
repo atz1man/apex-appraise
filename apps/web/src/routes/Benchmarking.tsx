@@ -338,8 +338,10 @@ export default function Benchmarking() {
     <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
       <h3 className="text-[13px] font-semibold">Data contribution</h3>
       <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
-        Contributing shares three ratios from an appraisal — build £/ft², GDV £/ft² and profit on cost. Never the address, the
-        client, the deal name or any absolute figure. A cohort is only ever published once{' '}
+        Contributing shares three ratios from each appraisal an administrator approves — build £/ft², GDV £/ft² and profit on
+        cost — automatically at approval, and the out-turn build £/ft² of each scheme marked completed, from certified spend.
+        Nothing enters from a draft. Never the address, the client, the deal name or any absolute figure. A cohort is only
+        ever published once{' '}
         {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
         against your own schemes.
       </p>
@@ -354,9 +356,16 @@ export default function Benchmarking() {
         <span className="text-[11.5px] leading-[1.45] text-ink-2b">
           <span className="font-semibold text-ink">Contribute this workspace's appraisals</span>
           <br />
-          Off by default. Turning it off again withdraws everything already contributed.
+          Off by default. Turning it on contributes every deal already approved; turning it off again withdraws everything already contributed.
         </span>
       </label>
+      {setContribution.data && setContribution.data.enabled && (
+        <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
+          {setContribution.data.contributed > 0
+            ? `${n0(setContribution.data.contributed)} deal${setContribution.data.contributed === 1 ? '' : 's'} with approved figures contributed.`
+            : 'Nothing to contribute yet — the pool takes approved appraisals, and each one will go in as it is approved.'}
+        </div>
+      )}
       {setContribution.data && setContribution.data.withdrawn > 0 && (
         <div className="mt-2 rounded-[8px] bg-sunken px-2.5 py-1.5 text-[11px] text-ink-2b">
           Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
@@ -458,10 +467,12 @@ export default function Benchmarking() {
         ) : (
           <>
             {/* percentile strip cards */}
-            <div className="mt-[18px] grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <div className="mt-[18px] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
               <MetricCard label="Build cost £/ft²" m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
               <MetricCard label="GDV £/ft²" m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
               <MetricCard label="Profit on cost" m={M.poc} scope={scopeShort.toLowerCase()} isPct />
+              {/* what completed schemes actually cost — certified spend over appraised area */}
+              <MetricCard label="Out-turn build £/ft²" m={M.outturnPsf} scope={scopeShort.toLowerCase()} lowerBetter />
             </div>
 
             <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">

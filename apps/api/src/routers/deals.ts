@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { currentAppraisals, currentByDeal } from '../current-appraisal.js';
+import { feedOutturn } from '../benchmark-feed.js';
 import { portfolioRollup } from '@apex/appraisal-engine';
 import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, moneyLabel, toPence } from '../mappers.js';
@@ -310,6 +311,14 @@ export const dealsRouter = router({
           action: 'moved deal to',
           target: `${input.stage.replace('_', ' / ').toLowerCase()} (figures ${figureStatusForStage[input.stage].toLowerCase()})`,
         },
+      });
+      /**
+       * A completed scheme's certified spend is its final account, and its
+       * out-turn build £/ft² is the one figure in construction nobody
+       * publishes. Consent is checked inside the feed.
+       */
+      await feedOutturn(ctx.prisma, ctx.principal.orgId, updated, {
+        userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
       });
       return dealOut(updated);
     }),

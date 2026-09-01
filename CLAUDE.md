@@ -24,9 +24,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (279; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (281; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (823). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (840). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -157,6 +157,20 @@ the point, so read the failure rather than adding an exemption.
   register's writes were added. A new money-carrying mutation has to be added to it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
   a fixture that only creates leaves the update path — the one people actually hit —
   untested, which is how two of these mutations first survived.
+- `benchmark-feed-sweep` — every path that makes a figure the firm's committed position
+  feeds the benchmark pool. The pool used to grow by a Contribute button, one deal at a
+  time, and it contributed the CURRENT appraisal whatever its review state — a draft in a
+  median other firms read as market evidence. Now approval (`appraisal.review`) contributes
+  a version's ratios, completion (`deals.setStage` → COMPLETED) contributes the out-turn
+  build £/ft² from certified spend, and opting in backfills, all through `benchmark-feed.ts`,
+  which checks consent on every event. The sweep classifies resolvers by what they WRITE:
+  the value assigned to `reviewStatus` INSIDE an `update` call, judged in code. Two shapes a
+  token match got wrong: `restore` destructures `reviewStatus: _rs` OUT of a snapshot, and a
+  lookahead placed after `\s*` backtracked past itself and matched the very literal it was
+  written to exclude. It also reads the transpiled resolver, where every literal is
+  double-quoted — a classifier matching `'approved'` saw no approval path at all and would
+  have passed vacuously. The "finds what it is meant to find" case plants a rogue approver,
+  a rogue completer, a submit, and a destructure.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`

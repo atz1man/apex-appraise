@@ -190,6 +190,8 @@ describe('consent', () => {
         dealId: D.dealId,
         label: 'Base',
         isCurrent: true,
+        reviewStatus: 'approved',
+        reviewedAt: new Date(),
         units: JSON.stringify([{ label: 'Flats', count: 10, area: 900, cap: 355 }]),
         trades: JSON.stringify([{ label: 'Shell', rate: 140 }]),
         otherCosts: JSON.stringify([]),
@@ -222,14 +224,14 @@ describe('consent', () => {
  * where one workspace's mistake moves another workspace's numbers.
  */
 describe('replacing a deal’s own contribution', () => {
-  /** an opted-in firm with a saved appraisal on a named deal */
+  /** an opted-in firm with an APPROVED appraisal on a named deal — the pool takes nothing less now */
   const contributor = async (label: string, dealName: string) => {
     const T = await makeTenant(label);
     await prisma.organisation.update({ where: { id: T.orgId }, data: { contributesBenchmarks: true } });
     await prisma.deal.update({ where: { id: T.dealId }, data: { name: dealName } });
     await prisma.appraisal.create({
       data: {
-        orgId: T.orgId, dealId: T.dealId, label: 'Base', isCurrent: true,
+        orgId: T.orgId, dealId: T.dealId, label: 'Base', isCurrent: true, reviewStatus: 'approved', reviewedAt: new Date(),
         units: JSON.stringify([{ label: 'Flats', count: 10, area: 900, cap: 355 }]),
         trades: JSON.stringify([{ label: 'Shell', rate: 140 }]),
         otherCosts: JSON.stringify([]),
@@ -277,7 +279,7 @@ describe('replacing a deal’s own contribution', () => {
     });
     await prisma.appraisal.create({
       data: {
-        orgId: T.orgId, dealId: second.id, label: 'Base', isCurrent: true,
+        orgId: T.orgId, dealId: second.id, label: 'Base', isCurrent: true, reviewStatus: 'approved', reviewedAt: new Date(),
         units: JSON.stringify([{ label: 'Houses', count: 6, area: 1200, cap: 300 }]),
         trades: JSON.stringify([{ label: 'Shell', rate: 155 }]),
         otherCosts: JSON.stringify([]),
@@ -327,7 +329,7 @@ describe('replacing a deal’s own contribution', () => {
     });
     await prisma.appraisal.create({
       data: {
-        orgId: T.orgId, dealId: other.id, label: 'Base', isCurrent: true,
+        orgId: T.orgId, dealId: other.id, label: 'Base', isCurrent: true, reviewStatus: 'approved', reviewedAt: new Date(),
         units: JSON.stringify([{ label: 'Houses', count: 4, area: 1100, cap: 320 }]),
         trades: JSON.stringify([{ label: 'Shell', rate: 165 }]),
         otherCosts: JSON.stringify([]),

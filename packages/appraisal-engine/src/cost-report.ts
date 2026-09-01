@@ -220,3 +220,19 @@ export function costRollup(packages: CostPackageLike[], baseline: CostBaseline):
     unallocated: appraisedBuild - packageBudgets,
   };
 }
+
+/**
+ * Out-turn build cost per square foot: what the scheme ACTUALLY cost to build,
+ * from certified spend, against the floor area that was appraised.
+ *
+ * The one figure in construction nobody publishes and everybody wants — the
+ * appraised rate is a forecast, and the tender sum is a promise, but certified
+ * spend on a completed scheme is what happened. Null rather than zero when
+ * there is no area to divide by or nothing has been certified: a completed
+ * scheme with £0 certified is a scheme whose costs were never recorded here,
+ * not one that was built for nothing.
+ */
+export function outturnBuildPsf(certifiedSpend: number, gia: number): number | null {
+  if (!(gia > 0) || !(certifiedSpend > 0)) return null;
+  return certifiedSpend / gia;
+}

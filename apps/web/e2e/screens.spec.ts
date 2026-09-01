@@ -202,6 +202,9 @@ test.describe('internal screens', () => {
     await page.goto('/benchmarking');
     await expect(page.getByRole('heading', { name: /How your deals compare/ })).toBeVisible();
     await expect(page.getByText('Build cost trend — £/ft²')).toBeVisible();
+    // what completed schemes actually cost, beside what they were appraised at
+    // the card, and the consent panel naming it — either proves the strip is offered
+    await expect(page.getByText('Out-turn build £/ft²').first()).toBeVisible();
   });
 
   test('benchmarking never passes demonstration figures off as market evidence', async ({ page }) => {
