@@ -8,3 +8,11 @@ apps/api/prisma/dev.db*
 apps/web/dist/
 coverage/
 test-results/
+
+# This is a pnpm workspace (see packageManager in package.json). An npm command
+# run from the repo root leaves a package-lock.json behind that lists nothing —
+# measured at 189 bytes, naming the repo and no dependencies — and a stray one
+# invites `npm install` here, which would build a flat node_modules disagreeing
+# with pnpm-lock.yaml. Anchored to the root because that is where the stray
+# appears; a lockfile turning up under apps/ or packages/ should stay VISIBLE.
+/package-lock.json
