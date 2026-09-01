@@ -1,19 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Button } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 
-const DEMOS: Array<[string, string, string]> = [
-  ['Internal team', 'arthur@apexappraise.co.uk', 'Pipeline, appraisals, construction, sales'],
-  ['Investor portal', 'investor@demo.co.uk', 'LP position, cashflows, capital calls'],
-  ['Buyer portal', 'buyer@demo.co.uk', 'Reservation, conveyancing, payments'],
-];
+/**
+ * The demo password is public by design, but only where the demo accounts
+ * exist. This page used to list three demo logins and arrive with the demo
+ * founder's email and "demo" already typed on EVERY deployment — a firm's
+ * production sign-in advertising credentials for accounts the seed had refused
+ * to create (prisma/seed.ts says why), and prefilling a password that was not
+ * theirs. The server now says which demo logins exist, and the page offers and
+ * prefills only those.
+ */
+const DEMO_PASSWORD = 'demo';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('arthur@apexappraise.co.uk');
-  const [password, setPassword] = useState('demo');
+  const demoQ = trpc.auth.demoAccounts.useQuery(undefined, { staleTime: 300_000, retry: 0 });
+  const demos = demoQ.data;
+  // the button waits for that answer: a prefill that lands after the click signs in with nothing
+  const settled = demoQ.isFetched || demoQ.isError;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  // prefill the first demo login once the server has said it exists — and only if nothing has been typed
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !demos?.length) return;
+    prefilled.current = true;
+    setEmail((e) => e || demos[0]!.email);
+    setPassword((p) => p || DEMO_PASSWORD);
+  }, [demos]);
   const [error, setError] = useState('');
   // arriving from a completed reset — say so, or the redirect looks like a failure
   const justReset = new URLSearchParams(window.location.search).get('reset') === '1';
@@ -108,7 +125,7 @@ export default function Login() {
           )}
           {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
           {passwordAllowed && (
-            <Button type="submit" className="w-full" loading={login.isPending}>
+            <Button type="submit" className="w-full" loading={login.isPending} disabled={!settled}>
               Sign in
             </Button>
           )}
@@ -132,25 +149,28 @@ export default function Login() {
               Create your organisation →
             </a>
           </div>
-          <div className="mt-5 border-t border-border-faint pt-4">
-            <div className="label-mono text-ink-3 mb-2">Demo accounts · password “demo”</div>
-            <div className="flex flex-col gap-1.5">
-              {DEMOS.map(([label, mail, desc]) => (
-                <button
-                  key={mail}
-                  type="button"
-                  onClick={() => {
-                    setEmail(mail);
-                    setPassword('demo');
-                  }}
-                  className="text-left rounded-[9px] border border-[rgb(var(--control-border))] px-3 py-2 hover:bg-sunken transition-colors"
-                >
-                  <div className="text-[12.5px] font-semibold">{label}</div>
-                  <div className="text-[11px] text-ink-3">{desc}</div>
-                </button>
-              ))}
+          {/* only where those logins exist — a production sign-in advertises nobody's password */}
+          {!!demos?.length && (
+            <div className="mt-5 border-t border-border-faint pt-4">
+              <div className="label-mono text-ink-3 mb-2">Demo accounts · password “{DEMO_PASSWORD}”</div>
+              <div className="flex flex-col gap-1.5">
+                {demos.map((d) => (
+                  <button
+                    key={d.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(d.email);
+                      setPassword(DEMO_PASSWORD);
+                    }}
+                    className="text-left rounded-[9px] border border-[rgb(var(--control-border))] px-3 py-2 hover:bg-sunken transition-colors"
+                  >
+                    <div className="text-[12.5px] font-semibold">{d.label}</div>
+                    <div className="text-[11px] text-ink-3">{d.blurb}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </form>
       </div>
     </div>
