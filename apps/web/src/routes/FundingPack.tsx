@@ -5,7 +5,8 @@ import { fM, n0 } from '../lib/format';
 import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
 import { Button, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
-import { PACK_LAYOUT, paginatePositions } from '../lib/pack-pagination';
+import { PACK_LAYOUT, paginatePack } from '../lib/pack-pagination';
+import type { CovenantTest, ExposurePosition } from '@apex/appraisal-engine';
 
 /**
  * The funding pack — the book, as a lender receives it.
@@ -32,6 +33,28 @@ const fmtLong = docDate;
 // the sheet arithmetic lives in lib/pack-pagination.ts, where its boundaries are tested
 const LAYOUT = { ...PACK_LAYOUT, pageContentPx: PAGE_CONTENT_PX };
 
+/** one line of the Exceptions box */
+type PackException = { kind: 'breach'; p: ExposurePosition; b: CovenantTest } | { kind: 'overdrawn'; p: ExposurePosition };
+
+/** the one line of an Exceptions box, wherever the sheet it lands on */
+function ExceptionLine({ e }: { e: PackException }) {
+  if (e.kind === 'breach') {
+    return (
+      <div className="pack-line text-[11.5px]">
+        <b className="font-semibold">{e.p.name}</b> — {e.b.label} {e.b.actualPct.toFixed(1)}% against a{' '}
+        {e.b.direction === 'max' ? 'maximum' : 'minimum'} of {e.b.limitPct}%
+      </div>
+    );
+  }
+  return (
+    <div className="pack-line text-[11.5px]">
+      {/* the figure the verdict was actually reached on, under the word that describes it — see drawn-basis.ts */}
+      <b className="font-semibold">{e.p.name}</b> — {fM(e.p.drawdown!.actualToDate)} {drawnAgainstWorksLabel(e.p.drawnSource)} against{' '}
+      {fM(e.p.drawdown!.expectedByProgress)} of works
+    </div>
+  );
+}
+
 export default function FundingPack() {
   const { data: exposure, isLoading } = trpc.deals.exposure.useQuery();
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
@@ -56,24 +79,46 @@ export default function FundingPack() {
    * practice, bounded to a handful so a pathological book cannot loop.
    */
   const [reserve, setReserve] = useState(0);
+  /**
+   * The row and the exception line are budgeted at their measured height for
+   * a name that fits on one line. A long scheme name wraps and the row is
+   * taller, on EVERY sheet — a uniform reserve taken off every sheet for that
+   * starves the sheets it did not happen on (measured: page one down to eight
+   * exception lines from twenty-seven). So the tallest rendered row and line
+   * are read back and the layout uses those; the reserve is left for what the
+   * arithmetic still cannot see.
+   */
+  const [measured, setMeasured] = useState({ rowPx: LAYOUT.rowPx, exceptionLinePx: LAYOUT.exceptionLinePx });
   const pages = useMemo(() => {
     const positions = exposure?.positions ?? [];
     /**
-     * Page one's budget depends on how many exception lines it carries — one
-     * per covenant breach, one per overspending scheme. It was a constant, and
-     * twelve breach lines put 220px of the pack off the bottom of the sheet.
+     * The exception lines, in the order they print: every covenant breach,
+     * then every overspending scheme. Page one's budget used to be a constant
+     * that assumed one line, and twelve breach lines put 220px of the pack off
+     * the bottom of the sheet; then the lines themselves grew past the sheet —
+     * 43 of them on a forty-scheme book — so the box paginates like the table.
      */
-    const exceptionLines =
-      positions.reduce((a, p) => a + (p.covenants?.breaches.length ?? 0), 0) +
-      positions.filter((p) => p.drawdown?.status === 'overspending').length;
-    return paginatePositions(positions, exceptionLines, LAYOUT, reserve);
-  }, [exposure, reserve]);
+    const exceptions: PackException[] = [
+      ...positions.flatMap((p) => (p.covenants?.breaches ?? []).map((b) => ({ kind: 'breach' as const, p, b }))),
+      ...positions.filter((p) => p.drawdown?.status === 'overspending').map((p) => ({ kind: 'overdrawn' as const, p })),
+    ];
+    return paginatePack(positions, exceptions, { ...LAYOUT, ...measured }, reserve);
+  }, [exposure, reserve, measured]);
   useLayoutEffect(() => {
+    const tallest = (selector: string) =>
+      Math.ceil(Math.max(0, ...Array.from(document.querySelectorAll<HTMLElement>(selector)).map((el) => el.getBoundingClientRect().height)));
+    const rowPx = Math.max(measured.rowPx, tallest('.pack-row'));
+    const exceptionLinePx = Math.max(measured.exceptionLinePx, tallest('.pack-line'));
+    // heights only ever grow, so this settles; a sheet laid out for its tallest row cannot then overrun on rows
+    if (rowPx !== measured.rowPx || exceptionLinePx !== measured.exceptionLinePx) {
+      setMeasured({ rowPx, exceptionLinePx });
+      return;
+    }
     const sheets = Array.from(document.querySelectorAll<HTMLElement>('.a4-page'));
     // 1122 is the sheet; anything past it is content the page cannot hold
     const overrun = Math.max(0, ...sheets.map((el) => el.getBoundingClientRect().height - 1122));
     if (overrun > 0 && reserve < 8 * LAYOUT.rowPx) setReserve((r) => r + Math.ceil(overrun) + 4);
-  }, [pages, reserve]);
+  }, [pages, reserve, measured]);
 
   if (isLoading || !exposure) {
     return (
@@ -84,9 +129,8 @@ export default function FundingPack() {
   }
 
   const t = exposure.totals;
-  const breaching = exposure.positions.filter((p) => (p.covenants?.breaches.length ?? 0) > 0);
-  const overdrawn = exposure.positions.filter((p) => p.drawdown?.status === 'overspending');
   const total = pages.length;
+  const anyExceptions = pages.some((s) => s.exceptions.length > 0);
   /**
    * The pack states where "Drawn" came from instead of asserting one basis for
    * the whole book — see `drawn-basis.ts` for what it used to say and why that
@@ -124,7 +168,7 @@ export default function FundingPack() {
     <div className="light min-h-screen bg-frame">
       <style>{PRINT_CSS}</style>
       <div className="a4-canvas flex flex-col items-center gap-6 px-5 pt-7 pb-14">
-        {pages.map((rows, pi) => (
+        {pages.map(({ rows, exceptions, continued }, pi) => (
           <A4Page key={pi}>
             <PageHead
               title={pi === 0 ? 'Portfolio funding pack' : `Portfolio funding pack (${pi + 1} of ${total})`}
@@ -204,7 +248,7 @@ export default function FundingPack() {
                     not find them. */}
                 <div className="mt-3 rounded-[10px] border border-border-std p-2.5">
                   <div className="text-[11px] uppercase tracking-wide text-ink-3">Exceptions</div>
-                  {breaching.length === 0 && overdrawn.length === 0 ? (
+                  {!anyExceptions ? (
                     <div className="mt-1 text-[11.5px] text-ink-2b">
                       {exposure.positions.every((p) => p.covenants?.untested !== false)
                         ? 'No covenants are set, so none are tested. Nothing is drawn ahead of works.'
@@ -212,26 +256,25 @@ export default function FundingPack() {
                     </div>
                   ) : (
                     <div className="mt-1 flex flex-col gap-0.5">
-                      {breaching.map((p) =>
-                        p.covenants!.breaches.map((b) => (
-                          <div key={`${p.dealId}-${b.key}`} className="text-[11.5px]">
-                            <b className="font-semibold">{p.name}</b> — {b.label} {b.actualPct.toFixed(1)}% against a{' '}
-                            {b.direction === 'max' ? 'maximum' : 'minimum'} of {b.limitPct}%
-                          </div>
-                        )),
-                      )}
-                      {overdrawn.map((p) => (
-                        <div key={`${p.dealId}-draw`} className="text-[11.5px]">
-                          {/* the figure the verdict was actually reached on, under
-                              the word that describes it — see drawn-basis.ts */}
-                          <b className="font-semibold">{p.name}</b> — {fM(p.drawdown!.actualToDate)}{' '}
-                          {drawnAgainstWorksLabel(p.drawnSource)} against {fM(p.drawdown!.expectedByProgress)} of works
-                        </div>
+                      {exceptions.map((e) => (
+                        <ExceptionLine key={e.kind === 'breach' ? `${e.p.dealId}-${e.b.key}` : `${e.p.dealId}-draw`} e={e} />
                       ))}
                     </div>
                   )}
                 </div>
               </>
+            )}
+
+            {/* a box the first sheet could not hold goes on, sheet by sheet, before the table */}
+            {continued && (
+              <div className="mt-3 rounded-[10px] border border-border-std p-2.5">
+                <div className="text-[11px] uppercase tracking-wide text-ink-3">Exceptions (continued)</div>
+                <div className="mt-1 flex flex-col gap-0.5">
+                  {exceptions.map((e) => (
+                    <ExceptionLine key={e.kind === 'breach' ? `${e.p.dealId}-${e.b.key}` : `${e.p.dealId}-draw`} e={e} />
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* a first sheet the exceptions have filled carries no table; the rows start on the next */}
@@ -249,7 +292,7 @@ export default function FundingPack() {
                 <div className="text-right" style={{ flex: 1.1, padding: '9px 10px' }}>LTGDV</div>
               </div>
               {rows.map((p) => (
-                <div key={p.dealId} className="flex border-t border-border-faint fig text-[11px]">
+                <div key={p.dealId} className="pack-row flex border-t border-border-faint fig text-[11px]">
                   <div className="font-ui" style={{ flex: 2.4, padding: '7px 10px' }}>{p.name}</div>
                   <div style={{ flex: 0.8, padding: '7px 6px' }}>{p.region}</div>
                   <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.gdv)}</div>

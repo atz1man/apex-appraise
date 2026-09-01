@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PACK_LAYOUT, firstPageRows, laterPageRows, paginatePositions } from './pack-pagination';
+import { PACK_LAYOUT, firstPageRows, laterPageRows, paginatePack, paginatePositions } from './pack-pagination';
 
 /**
  * The funding pack's first sheet budgets for its exceptions. It did not:
@@ -94,7 +94,11 @@ describe('the split', () => {
       const pages = paginatePositions(book(152), lines);
       expect(pages.flat()).toEqual(book(152));
       expect(pages[0]!.length).toBe(firstPageRows(lines));
-      for (const p of pages.slice(1, -1)) expect(p.length).toBe(laterPageRows());
+      // once the exceptions have ended, every full sheet holds the same count;
+      // the sheet the exceptions END on holds fewer, because it carries them too
+      const firstLines = 1 + Math.floor((PACK_LAYOUT.pageContentPx - PACK_LAYOUT.summaryPx) / PACK_LAYOUT.exceptionLinePx);
+      const spill = lines > firstLines ? 1 : 0;
+      for (const p of pages.slice(1 + spill, -1)) expect(p.length).toBe(laterPageRows());
     }
   });
 
@@ -105,5 +109,79 @@ describe('the split', () => {
 
   it('later pages are unaffected by page one’s exceptions', () => {
     expect(paginatePositions(book(100), 12).slice(1, -1).every((p) => p.length === laterPageRows())).toBe(true);
+  });
+});
+
+/**
+ * The Exceptions box paginates. It lived on page one only, and once its lines
+ * alone filled the sheet page one carried no rows — but the lines still had
+ * to fit, and nothing checked that they did. Measured on a forty-scheme book
+ * under a 20% loan-to-GDV limit: 43 breach lines, page one 1,424px against
+ * an A4 sheet of 1,122.
+ */
+describe('the exceptions, across sheets', () => {
+  const L = PACK_LAYOUT;
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `breach ${i + 1}`);
+  const firstLines = 1 + Math.floor((L.pageContentPx - L.summaryPx) / L.exceptionLinePx);
+  const laterLines = Math.floor((L.pageContentPx - L.exceptionBoxPx) / L.exceptionLinePx);
+
+  /** the height a sheet's contents come to, by the same budget the layout uses */
+  const heightOf = (s: { exceptions: unknown[]; rows: unknown[]; continued: boolean }, first: boolean, last: boolean) =>
+    (first ? L.summaryPx + Math.max(0, s.exceptions.length - 1) * L.exceptionLinePx : 0) +
+    (s.continued ? L.exceptionBoxPx + s.exceptions.length * L.exceptionLinePx : 0) +
+    (s.rows.length > 0 || last ? L.tableHeadPx + L.totalPx + s.rows.length * L.rowPx : 0) +
+    (last ? L.notePx : 0);
+
+  it('spills the measured case onto a second sheet instead of off the first', () => {
+    const sheets = paginatePack(book(43), lines(43));
+    expect(sheets[0]!.exceptions).toHaveLength(firstLines);
+    expect(sheets[0]!.rows).toEqual([]);
+    expect(sheets[1]!.continued).toBe(true);
+    expect(sheets[1]!.exceptions).toHaveLength(43 - firstLines);
+    // and the table begins on the sheet the exceptions end on
+    expect(sheets[1]!.rows.length).toBeGreaterThan(0);
+  });
+
+  it('fits every sheet, loses nothing and repeats nothing, at every size', () => {
+    for (const n of [0, 1, 26, 27, 28, 43, 80, 200]) {
+      for (const rows of [0, 1, 5, 40, 152]) {
+        const sheets = paginatePack(book(rows), lines(n));
+        expect(sheets.flatMap((s) => s.exceptions), `${n} lines, ${rows} rows: exceptions`).toEqual(lines(n));
+        expect(sheets.flatMap((s) => s.rows), `${n} lines, ${rows} rows: rows`).toEqual(book(rows));
+        sheets.forEach((s, i) => {
+          expect(heightOf(s, i === 0, i === sheets.length - 1), `${n} lines, ${rows} rows: sheet ${i + 1} overflows`).toBeLessThanOrEqual(L.pageContentPx);
+          // a sheet never carries rows above the end of the exceptions
+          if (s.rows.length > 0) expect(sheets.slice(i + 1).every((t) => t.exceptions.length === 0)).toBe(true);
+        });
+        // a continued box is never on page one, and never empty
+        expect(sheets[0]!.continued).toBe(false);
+        expect(sheets.slice(1).every((s) => s.continued === s.exceptions.length > 0)).toBe(true);
+      }
+    }
+  });
+
+  it('is tight at the boundary: one more line on page one would not fit', () => {
+    const { summaryPx, exceptionLinePx, pageContentPx } = L;
+    expect(summaryPx + (firstLines - 1) * exceptionLinePx).toBeLessThanOrEqual(pageContentPx);
+    expect(summaryPx + firstLines * exceptionLinePx).toBeGreaterThan(pageContentPx);
+    const sheets = paginatePack(book(1), lines(firstLines + 1));
+    expect(sheets[1]!.exceptions).toHaveLength(1);
+  });
+
+  it('fills a later sheet with lines before it starts another', () => {
+    const sheets = paginatePack([], lines(firstLines + laterLines + 1));
+    expect(sheets.map((s) => s.exceptions.length)).toEqual([firstLines, laterLines, 1]);
+  });
+
+  it('terminates under a reserve larger than the sheet', () => {
+    const sheets = paginatePack(book(9), lines(9), L, L.pageContentPx + 100);
+    expect(sheets.flatMap((s) => s.rows)).toEqual(book(9));
+    expect(sheets.flatMap((s) => s.exceptions)).toEqual(lines(9));
+  });
+
+  it('is what paginatePositions has always answered when the lines fit page one', () => {
+    for (const n of [0, 1, 12]) {
+      expect(paginatePack(book(30), lines(n)).map((s) => s.rows)).toEqual(paginatePositions(book(30), n));
+    }
   });
 });

@@ -2111,7 +2111,8 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
     const p = [...document.querySelectorAll('.a4-page')];
     return {
       overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
-      lines: (p[0]!.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0,
+      // across EVERY sheet: a box the first sheet cannot hold goes on to the next
+      lines: p.reduce((a, x) => a + ((x.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0), 0),
     };
   });
   expect(withExceptions.lines).toBe(breaching);

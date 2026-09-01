@@ -34,6 +34,12 @@ export interface PackLayout {
    * Twelve fitted with no slack at all, so one exception line tipped it.
    */
   notePx: number;
+  /**
+   * The chrome of an Exceptions box carried onto a later sheet — its margin,
+   * border, padding and "Exceptions (continued)" heading — before the first
+   * line in it. Measured at 52px, budgeted at 56.
+   */
+  exceptionBoxPx: number;
 }
 
 export const PACK_LAYOUT: PackLayout = {
@@ -44,6 +50,7 @@ export const PACK_LAYOUT: PackLayout = {
   summaryPx: 420,
   exceptionLinePx: 19,
   notePx: 44,
+  exceptionBoxPx: 56,
 };
 
 /**
@@ -79,16 +86,79 @@ export function laterPageRows(L: PackLayout = PACK_LAYOUT, last = false, reserve
  * makes it true.
  */
 export function paginatePositions<T>(positions: T[], exceptionLines: number, L: PackLayout = PACK_LAYOUT, reservePx = 0): T[][] {
-  if (!positions.length) return [positions];
-  if (positions.length <= firstPageRows(exceptionLines, L, true, reservePx)) return [positions];
-  // a sheet that is not the last must leave at least one row for the sheet that is
-  const out: T[][] = [positions.slice(0, Math.min(firstPageRows(exceptionLines, L, false, reservePx), positions.length - 1))];
-  let i = out[0]!.length;
-  while (i < positions.length) {
-    const remaining = positions.length - i;
-    const take = remaining <= laterPageRows(L, true, reservePx) ? remaining : Math.min(laterPageRows(L, false, reservePx), remaining - 1);
-    out.push(positions.slice(i, i + take));
-    i += take;
+  return paginatePack(positions, Array.from({ length: exceptionLines }, (_, i) => i), L, reservePx).map((s) => s.rows);
+}
+
+/** One A4 sheet of the pack: the exception lines it carries, then the position rows. */
+export interface PackSheet<T, E> {
+  exceptions: E[];
+  /** a later sheet's box is headed "Exceptions (continued)" */
+  continued: boolean;
+  rows: T[];
+}
+
+/**
+ * The pack, split into sheets — exceptions first, then the positions.
+ *
+ * The Exceptions box lived on page one and only page one, and grew with the
+ * book: one line per covenant breach, one per overspending scheme. Page one's
+ * row budget shrank to make room, and once the lines alone filled the sheet
+ * it carried no rows at all — but the LINES still had to fit, and nothing
+ * checked that they did. Measured with a forty-scheme book under a 20%
+ * loan-to-GDV limit: 43 breach lines, page one 1,424px against 1,122 — 300px
+ * of the exceptions a lender reads the pack for, printed off the bottom of
+ * the first sheet. The post-render reserve could not help: it reclaims rows,
+ * and there were none left to reclaim.
+ *
+ * So the box paginates like the table does. Page one carries the summary and
+ * as many lines as fit beside it; each later sheet carries a continued box of
+ * as many as fit; and the table starts on the sheet the exceptions end on if
+ * there is room for its head, a row and the totals, else on the next. A sheet
+ * that is not the last always makes progress — a line or a row — so a book
+ * of any size terminates; the reserve then trims whatever the arithmetic
+ * still misses.
+ */
+export function paginatePack<T, E>(positions: T[], exceptions: E[], L: PackLayout = PACK_LAYOUT, reservePx = 0): PackSheet<T, E>[] {
+  const budget = L.pageContentPx - reservePx;
+  // rows that fit in `avail` beside the table head, the totals and, on the closing sheet, the note
+  const rowsIn = (avail: number, last: boolean) => Math.floor((avail - L.tableHeadPx - L.totalPx - (last ? L.notePx : 0)) / L.rowPx);
+  const sheets: PackSheet<T, E>[] = [];
+  let ei = 0;
+  let pi = 0;
+  for (;;) {
+    const first = sheets.length === 0;
+    let avail = budget - (first ? L.summaryPx : 0);
+    let ex: E[] = [];
+    if (ei < exceptions.length) {
+      // the summary budget already holds the box and its first line; a later sheet's box is its own chrome
+      if (!first) avail -= L.exceptionBoxPx;
+      const cap = first ? 1 + Math.floor(avail / L.exceptionLinePx) : Math.max(1, Math.floor(avail / L.exceptionLinePx));
+      const take = Math.min(Math.max(1, cap), exceptions.length - ei);
+      ex = exceptions.slice(ei, ei + take);
+      ei += take;
+      avail -= (first ? Math.max(0, take - 1) : take) * L.exceptionLinePx;
+    }
+    let rows: T[] = [];
+    let closes = false;
+    if (ei >= exceptions.length) {
+      const remaining = positions.length - pi;
+      // a later sheet with nothing else on it always takes a row, or a huge reserve would never terminate
+      const floor = !first && ex.length === 0 ? 1 : 0;
+      // the closing sheet must also hold the table's chrome and the note, even over no rows: a first
+      // sheet the exceptions have filled cannot be the last, however few positions there are
+      closes = remaining <= (floor ? Math.max(floor, rowsIn(avail, true)) : rowsIn(avail, true));
+      if (closes) {
+        rows = positions.slice(pi);
+      } else {
+        // a sheet that is not the last leaves at least one row for the sheet that is
+        rows = positions.slice(pi, pi + Math.max(0, Math.min(Math.max(floor, rowsIn(avail, false)), remaining - 1)));
+      }
+      pi += rows.length;
+    }
+    sheets.push({ exceptions: ex, continued: !first && ex.length > 0, rows });
+    // the book is done only when a sheet CLOSED it — held the totals and the note as
+    // well as whatever was left; a first sheet the exceptions filled to the edge has
+    // placed everything and still needs a sheet after it for the close
+    if (closes) return sheets;
   }
-  return out;
 }
