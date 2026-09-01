@@ -1071,9 +1071,22 @@ export default function RedBookReport() {
                 </>
               ) : (
                 /* no name, no registration number, and no date pretending it was signed */
-                <div className="mt-2.5 text-[12px] leading-[1.5] text-ink-2" style={{ maxWidth: 300 }}>
-                  This report is unsigned. Name the valuer and their RICS registration number in the terms of engagement before it is issued.
-                </div>
+                <>
+                  <div className="mt-2.5 text-[12px] leading-[1.5] text-ink-2" style={{ maxWidth: 300 }}>
+                    This report is unsigned. Name the valuer and their RICS registration number in the terms of engagement before it is issued.
+                  </div>
+                  {/* the figures' verification is about the approved record, not the
+                      signer — an approved version with no valuer named still says
+                      whether its figures hold */}
+                  {check && (
+                    <div
+                      className="mt-1 text-[10.5px] leading-[1.4]"
+                      style={{ maxWidth: 320, color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink3 }}
+                    >
+                      {check.text}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {/* A seal is the strongest form the claim takes on this document, so
