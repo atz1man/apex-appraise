@@ -145,6 +145,8 @@ describe('a credential the rule has not met yet', () => {
     'SsoConnection.clientId': 'an OAuth client id is public by design — it travels in the authorize URL',
     'AuthThrottle.key': 'a lockout key, "login:<email>" — and AuthThrottle has no orgId, so it is not exported',
     'OpenDataCache.key': 'a postcode or coordinate pair, and likewise not org-scoped',
+    'Appraisal.approvalPin':
+      'pinned as in "held fast", not a PIN: the engine version, an input hash and the headline figures a version was approved on. It is the approval record, and a customer taking their data should have it',
   };
 
   it('flags a new column that smells like one', () => {

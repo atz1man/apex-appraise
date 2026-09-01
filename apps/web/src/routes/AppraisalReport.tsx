@@ -8,13 +8,14 @@ import {
   formatMoneyFull,
   formatPct,
 } from '@apex/appraisal-engine';
-import { accent, brand, neutral } from '@apex/ui-tokens';
+import { accent, brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
 import { A4Page, PRINT_CSS, docDate, docDay } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
+import { approvalCheck } from '../lib/approval-check';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
@@ -120,6 +121,12 @@ export default function AppraisalReport() {
   const preparedBy = toe?.valuerName?.trim() || deal?.owner?.name || null;
 
   const input = appr?.input;
+  // whether the signed figure still holds — see lib/approval-check.ts
+  const { data: verification } = trpc.appraisal.verifyApproved.useQuery(
+    { versionId: appr?.id ?? '' },
+    { enabled: !!appr && appr.reviewStatus === 'approved' },
+  );
+  const check = approvalCheck(verification, appr?.reviewStatus === 'approved');
 
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
@@ -649,6 +656,17 @@ export default function AppraisalReport() {
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Effective date</div>
                 <div className="mt-1.5 text-[16px] font-semibold">{dates.report}</div>
               </div>
+              {check && (
+                <div className="col-span-2" data-approval-check={check.tone}>
+                  <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Approved figures</div>
+                  <div
+                    className="mt-1.5 text-[12.5px] leading-[1.45]"
+                    style={{ color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink2 }}
+                  >
+                    {check.text}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-10 rounded-card bg-canvas border border-border-std" style={{ padding: '28px 30px' }}>
               <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Headline result</div>

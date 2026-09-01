@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   annualise,
   autoAppraise,
   buildSpendProfile,
   cilCharge,
   computeAppraisal,
+  ENGINE_VERSION,
   irr,
   jvWaterfall,
   sdltCommercial,
@@ -348,5 +350,45 @@ describe('weightedComparables — matches the prototype grid', () => {
     expect(Math.round(s.supportedPsf)).toBe(237);
     expect(s.range.lo).toBe(223);
     expect(s.range.hi).toBe(249);
+  });
+});
+
+/**
+ * The engine's version means something only if it moves when the figures do.
+ *
+ * `ENGINE_VERSION` is recorded on every approved valuation, and the reports
+ * verify a signed figure against the engine they are rendered with. That is
+ * worthless if a rate rule can change under a constant version. So the golden
+ * fixture's full result — every numeric field, to the penny — is hashed here
+ * against the version. Change the arithmetic and this fails by name; the fix is
+ * to bump `ENGINE_VERSION` and record the new fingerprint beside it, which is
+ * the moment somebody has to say "figures approved under the old version may
+ * now differ", which is the whole point.
+ */
+describe('the engine version', () => {
+  const FINGERPRINTS: Record<string, string> = {
+    '2026.09.1': 'b7e01a11168230857ab84d694e2d8c83ed27efb3ef597ddba9e0e6858e9c3d35',
+  };
+
+  it('is fingerprinted against the golden fixture, so the arithmetic cannot move under it', () => {
+    const R = computeAppraisal(referenceCase, { withCash: true }) as unknown as Record<string, unknown>;
+    const figures = Object.fromEntries(
+      Object.entries(R)
+        .filter(([, v]) => typeof v === 'number')
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, Math.round((v as number) * 100) / 100]),
+    );
+    expect(Object.keys(figures).length, 'the result lost numeric fields — the fingerprint covers less than it did').toBeGreaterThanOrEqual(27);
+    const fp = createHash('sha256').update(JSON.stringify(figures)).digest('hex');
+    expect(FINGERPRINTS[ENGINE_VERSION], `no fingerprint recorded for ENGINE_VERSION ${ENGINE_VERSION}`).toBeDefined();
+    expect(
+      fp,
+      `the golden fixture no longer produces the figures ENGINE_VERSION ${ENGINE_VERSION} was fingerprinted on. `
+        + 'If the change is intended, bump ENGINE_VERSION and record this fingerprint beside it: ' + fp,
+    ).toBe(FINGERPRINTS[ENGINE_VERSION]);
+  });
+
+  it('is a dated string a person can read off a report', () => {
+    expect(ENGINE_VERSION).toMatch(/^\d{4}\.\d{2}\.\d+$/);
   });
 });

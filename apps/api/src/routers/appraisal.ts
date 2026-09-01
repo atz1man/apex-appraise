@@ -27,6 +27,7 @@ import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from 
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
 import { feedApproved } from '../benchmark-feed.js';
+import { pinFor, verify as verifyPin } from '../approval-pin.js';
 import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
@@ -189,6 +190,8 @@ export const appraisalRouter = router({
        */
       reviewStatus: row.reviewStatus,
       reviewedAt: row.reviewedAt,
+      /** the engine that signed it — null for a draft, and for a version approved before pins existed */
+      engineVersion: row.engineVersion,
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,
@@ -199,6 +202,24 @@ export const appraisalRouter = router({
 
   /** PURE — runs the engine for live what-ifs; no persistence. */
   compute: internalProcedure.input(zAppraisalInput).query(({ input }) => fullResult(input)),
+
+  /**
+   * Does a signed figure still hold?
+   *
+   * Re-derives an approved version with the engine in hand and compares it to
+   * what was pinned at approval — the engine version, the inputs, the headline
+   * figures to the penny. The reports call this before printing a version as
+   * approved, and say which of the three moved when one did. Null for a version
+   * approved before pins existed: the report says that too, rather than
+   * inventing a verification it never performed.
+   */
+  verifyApproved: internalProcedure.input(z.object({ versionId: z.string() })).query(async ({ ctx, input }) => {
+    const v = await assertOwned(ctx.prisma.appraisal, input.versionId, ctx.principal.orgId);
+    if (v.reviewStatus !== 'approved') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only an approved version has a signed figure to verify.' });
+    }
+    return verifyPin(v);
+  }),
 
   save: internalProcedure
     .input(
@@ -723,9 +744,20 @@ export const appraisalRouter = router({
        * public `engagement.sign`: the row leaves the decidable state as part of
        * the write, and only the caller who moved it records and emits.
        */
+      /**
+       * The pin travels in the SAME statement as the status. An approval that
+       * records which engine signed it and what the figures were is one write;
+       * two would leave a window in which a version is approved and unpinned,
+       * and `approved-immutable` forbids the second write anyway.
+       */
+      const reviewedAt = new Date();
+      const pin = input.decision === 'approve' ? pinFor(v, reviewedAt) : null;
       const { count } = await ctx.prisma.appraisal.updateMany({
         where: { id: v.id, reviewStatus: 'in_review' },
-        data: { reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt: new Date(), reviewNote: input.note?.trim() || null },
+        data: {
+          reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt, reviewNote: input.note?.trim() || null,
+          ...(pin ? { engineVersion: pin.engineVersion, approvalPin: JSON.stringify(pin) } : {}),
+        },
       });
       if (count !== 1) {
         // somebody else decided first — the same sentence a stale screen gets

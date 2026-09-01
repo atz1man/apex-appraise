@@ -24,17 +24,17 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (281; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (283; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (840). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (852). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (102): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (148, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (150, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
   api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
@@ -171,6 +171,24 @@ the point, so read the failure rather than adding an exemption.
   double-quoted — a classifier matching `'approved'` saw no approval path at all and would
   have passed vacuously. The "finds what it is meant to find" case plants a rogue approver,
   a rogue completer, a submit, and a destructure.
+- `approval-pin-sweep` — every path that approves a version pins it: the engine version
+  that signed it, a sha256 of the canonical inputs and the headline figures to the penny,
+  written in the SAME statement as the status (`approval-pin.ts`). An approved version used
+  to carry no record of which engine produced the figures somebody signed, and the reports
+  recompute from the inputs in the browser with whatever engine ships today — `compare`'s own
+  comment names it: "a cache records what the engine said on the day it was written".
+  `appraisal.verifyApproved` re-derives and reports engine, inputs and figures SEPARATELY,
+  because each has a different remedy, and both reports print the answer under the
+  signature (`lib/approval-check.ts` holds the wording; a bumped engine that still produces
+  the same pennies is a verification, not a warning). Shares its classifier with
+  `benchmark-feed-sweep` through `test/classifiers.ts`.
+- **`ENGINE_VERSION` is fingerprinted** (`packages/appraisal-engine/test/engine.test.ts`): the
+  golden fixture's every numeric output, to the penny, hashed against the version constant.
+  Change any arithmetic — a rate rule, an SDLT band, a rounding — and the build fails naming
+  the new fingerprint; the fix is to bump `ENGINE_VERSION` in `engine.ts` and record the
+  fingerprint beside it. That is the moment somebody has to say "figures approved under the
+  old version may now differ", which is the point: without it the version on a signed
+  valuation would mean nothing. Do NOT update the fingerprint without bumping the version.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`

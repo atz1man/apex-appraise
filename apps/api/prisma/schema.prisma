@@ -172,6 +172,15 @@ model Appraisal {
   income     String? // JSON IncomeInput — held-and-let element valued by the investment method (rent in £/ft²/yr)
   resultCache String?
   narrative  String? // JSON {marketCommentary, valuationRationale, riskCommentary, generatedAt, model}
+  /// Which engine signed this version, written at approval and never after.
+  /// `resultCache` records what the engine said on the day of the SAVE; the
+  /// reports recompute from the inputs with whatever engine ships today, so an
+  /// approved figure could move under its own signature with nothing to say so.
+  engineVersion String?
+  /// JSON ApprovalPin — the engine version, a hash of the canonical inputs and
+  /// the headline figures to the penny, as they stood when approved. What
+  /// `appraisal.verifyApproved` checks a re-derivation against.
+  approvalPin String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

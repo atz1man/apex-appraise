@@ -23,6 +23,7 @@ import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
 import { A4Page as PaperPage, PRINT_CSS, docDate } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
+import { approvalCheck } from '../lib/approval-check';
 
 /** the Red Book sets its own margins — see the note in components/paper.tsx */
 const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
@@ -158,6 +159,36 @@ export default function RedBookReport() {
    */
   const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
   const valuer = valuerFrom(toe);
+  /**
+   * Whether the signed figure still holds. An approved version carries a pin
+   * of the engine that signed it and the figures it signed; this re-derives it
+   * with the engine the API runs today. Asked only of an approved version — a
+   * draft has no signed figure to hold to.
+   */
+  const { data: verification } = trpc.appraisal.verifyApproved.useQuery(
+    { versionId: appr?.id ?? '' },
+    { enabled: !!appr && appr.reviewStatus === 'approved' },
+  );
+  const check = approvalCheck(verification, appr?.reviewStatus === 'approved');
+  /**
+   * The client and the purpose are the terms of engagement's. The cover printed
+   * "Northpoint Building Society · Secured lending — first charge" for every
+   * deal of every firm — on Northgate, whose accepted terms name Halewood Asset
+   * Finance Ltd two pages later. A lender's name on a valuation is who it may
+   * be relied on by; an invented one is a document addressed to nobody.
+   */
+  const termsSaved = !!toe?.saved;
+  const clientName = termsSaved ? String((toe as { clientName?: string | null }).clientName ?? '').trim() : '';
+  const client = clientName
+    ? { name: clientName, sub: toe?.status === 'ACCEPTED' ? 'Under the accepted terms of engagement' : 'Terms of engagement not yet accepted' }
+    : { name: 'Not yet named in the terms of engagement', sub: 'Agree the terms before this report is issued' };
+  const purposeText = termsSaved ? String((toe as { purpose?: string | null }).purpose ?? '').trim() : '';
+  const purpose = purposeText
+    ? {
+        name: purposeText,
+        sub: [(toe as { basisOfValue?: string | null }).basisOfValue, (toe as { interest?: string | null }).interest].filter(Boolean).join(', '),
+      }
+    : { name: 'Not yet stated in the terms of engagement', sub: '' };
   const utils = trpc.useUtils();
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
@@ -457,13 +488,13 @@ export default function RedBookReport() {
             <div className="grid grid-cols-2" style={{ gap: '26px 40px' }}>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Prepared for</div>
-                <div className="mt-1.5 text-[14px] font-semibold">Northpoint Building Society</div>
-                <div className="text-[12.5px] text-ink-2">Secured lending — first charge</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{client.name}</div>
+                <div className="text-[12.5px] text-ink-2">{client.sub}</div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Purpose of valuation</div>
-                <div className="mt-1.5 text-[14px] font-semibold">Mortgage / secured lending</div>
-                <div className="text-[12.5px] text-ink-2">Market Value, vacant possession</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{purpose.name}</div>
+                {purpose.sub && <div className="text-[12.5px] text-ink-2">{purpose.sub}</div>}
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Inspection date</div>
@@ -497,6 +528,17 @@ export default function RedBookReport() {
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Reference</div>
                 <div className="fig mt-1.5 text-[14px] font-semibold">{refCode}</div>
               </div>
+              {check && (
+                <div className="col-span-2" data-approval-check={check.tone}>
+                  <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Approved figures</div>
+                  <div
+                    className="mt-1.5 text-[12.5px] leading-[1.45]"
+                    style={{ color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink2 }}
+                  >
+                    {check.text}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-auto pt-7 border-t border-border-std flex justify-between items-center">
               <div className="text-[11px] text-inactive leading-[1.5]">
@@ -1008,7 +1050,17 @@ export default function RedBookReport() {
                   {valuer.reg && <div className="text-[12px] text-ink-2">{valuer.reg}</div>}
                   <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
                   {dates.signedOff ? (
-                    <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                    <>
+                      <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                      {check && (
+                        <div
+                          className="mt-1 text-[10.5px] leading-[1.4]"
+                          style={{ maxWidth: 320, color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink3 }}
+                        >
+                          {check.text}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     /* the unnamed branch below already refuses to print "a date
                        pretending it was signed"; a version nobody approved is

@@ -18,31 +18,8 @@ type Proc = { _def: { type: 'query' | 'mutation'; resolver?: unknown } };
 const procedures = () => (appRouter as unknown as { _def: { procedures: Record<string, Proc> } })._def.procedures;
 const src = (p: Proc) => String(p._def.resolver ?? '');
 
-/**
- * Writes an appraisal row's `reviewStatus` to something that can be "approved":
- * the literal, or a variable. Not "mentions approved" — `submitForReview` reads
- * the word in its refusal check and writes `in_review`, and matching on the
- * mention flagged it. Quote-agnostic, because the resolver source read at run
- * time has been through the transpiler, which rewrites single-quoted literals
- * as double-quoted; a classifier matching `'approved'` saw no approval path at
- * all and would have passed vacuously.
- */
-/**
- * Only the text INSIDE an update call is read, and only the value written to
- * `reviewStatus` is judged: a literal that is not "approved" is not an approval;
- * a variable might be. Two shapes a token-level match got wrong — `restore`
- * destructures `reviewStatus: _rs` OUT of a snapshot (not a write), and a
- * lookahead placed after `\s*` backtracked past itself and matched the very
- * `in_review` literal it was written to exclude.
- */
-const UPDATE_CALL = /prisma\.appraisal\.(?:update|updateMany)\(([\s\S]{0,800}?)\)\s*;/g;
-const NOT_AN_APPROVAL = /^(?:["'](?:draft|in_review|changes_requested)["']|true|false)$/;
-const approves = (s: string) =>
-  [...s.matchAll(UPDATE_CALL)].some(([, call]) =>
-    [...call!.matchAll(/reviewStatus:\s*([^,}\n]+)/g)].some(([, value]) => !NOT_AN_APPROVAL.test(value!.trim())),
-  );
-/** writes a deal's stage */
-const completes = (s: string) => /prisma\.deal\.update\(/.test(s) && /\bstage:/.test(s);
+
+import { approves, completes } from './classifiers.js';
 
 const API_ROOT = resolve(new URL('..', import.meta.url).pathname);
 const feedSource = () => readFileSync(resolve(API_ROOT, 'src/benchmark-feed.ts'), 'utf8');

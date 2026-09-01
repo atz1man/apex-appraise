@@ -1,4 +1,5 @@
 import type {
+
   AppraisalInput,
   AppraisalResult,
   AutoAppraisalInput,
@@ -23,6 +24,19 @@ import type {
   SensitivityMetric,
   SpendProfileKey,
 } from './types.js';
+
+/**
+ * Which engine produced a figure.
+ *
+ * Bumped whenever ANY figure the engine returns can change — a rate rule, a
+ * rounding convention, an SDLT band. `engine.test.ts` holds a fingerprint of
+ * the golden fixture's full result against this constant, so a change to the
+ * arithmetic that does not bump the version fails the build by name. Every
+ * approved valuation records the version that signed it (`approvalPin` on the
+ * Appraisal row), and the reports verify a signed figure against the engine
+ * they are rendered with before printing it as approved.
+ */
+export const ENGINE_VERSION = '2026.09.1';
 
 const SQFT_PER_SQM = 10.764;
 
