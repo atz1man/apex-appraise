@@ -140,10 +140,26 @@ describe('every mutation that writes back a row somebody was holding', () => {
        * procedures a default makes unsafe, because a default also makes the
        * field read as optional.
        */
-      const defaulted = held.filter(([, f]) => hasDefault(f));
+      /**
+       * Into nested objects as well. `deals.update` and the registers take
+       * `{ id, patch: { … } }`, and a default on a member of `patch` is the
+       * same defect one level down — zod materialises it, the "partial" write
+       * carries it, and a colleague's contact name goes back to ''. The
+       * top-level check alone let exactly that through; measured, by adding
+       * `.default('')` to `investors.update`'s patch and watching this pass.
+       */
+      const defaultedWithin = (f: z.ZodTypeAny): string[] => {
+        const inner = unwrap(f);
+        const d = (inner as unknown as { _def: Record<string, any> })?._def;
+        if (d?.typeName !== 'ZodObject') return [];
+        return Object.entries(d.shape() as Record<string, z.ZodTypeAny>)
+          .filter(([, v]) => hasDefault(v))
+          .map(([k]) => k);
+      };
+      const defaulted = held.flatMap(([k, f]) => (hasDefault(f) ? [k] : defaultedWithin(f).map((m) => `${k}.${m}`)));
       if (defaulted.length) {
         failures.push(
-          `${path}: patch-shaped, but ${defaulted.map(([k]) => k).join(', ')} carry a default — zod materialises those, `
+          `${path}: patch-shaped, but ${defaulted.join(', ')} carry a default — zod materialises those, `
             + 'so the write is a whole-row write again',
         );
         continue;

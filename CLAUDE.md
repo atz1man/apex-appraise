@@ -24,9 +24,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (277; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (279; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (796). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (823). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (97): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -34,7 +34,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (143, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (148, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
   api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
@@ -113,7 +113,10 @@ the point, so read the failure rather than adding an exemption.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp
-  (`assertUnchanged`) or writes only the keys it was given.
+  (`assertUnchanged`) or writes only the keys it was given. Its default check now looks
+  INSIDE a nested `patch` object as well as at the top level: a mutant adding `.default('')`
+  to one member of `investors.update`'s patch survived the top-level check, because zod
+  materialises the key and the "partial" write carries it after all.
 - `secrets-at-rest` — after the real procedures have run, the raw tables are searched for
   the plaintext, so the FIFTH credential column cannot land unsealed.
 - `mail-limiter-sweep` — every procedure a stranger can make send an email is in
@@ -149,7 +152,9 @@ the point, so read the failure rather than adding an exemption.
   mapper applies `P()` and `toPence` converts back on the way in, but ten mutations returned
   the Prisma row, so `arrears` was "123400" from the write and 1234 from the read. It walks
   the RESPONSE for bigints, because a bigint reaching a client is the defect however the
-  resolver produced it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
+  resolver produced it. It is a HAND-PICKED fixture, not a router walk, and that showed:
+  a mutant returning the raw Holding row from `investors.setHolding` survived it until the
+  register's writes were added. A new money-carrying mutation has to be added to it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
   a fixture that only creates leaves the update path — the one people actually hit —
   untested, which is how two of these mutations first survived.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks

@@ -184,6 +184,7 @@ async function runTextSweep(page: Page, browser: Browser, viewport: { width: num
     ['board', '/board'],
     ['calendar', '/calendar'],
     ['benchmarking', '/benchmarking'],
+    ['investors', '/investors'],
     ['integrations', '/integrations'],
     ['settings', '/settings'],
     ['whats-new', '/whats-new'],

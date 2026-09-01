@@ -504,8 +504,10 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     ['Meridian Capital LP', 'MC', 'Lena', 55],
     ['Private — S. Okonkwo', 'SO', 'Sade', 18],
   ];
-  const baseHoldings: Array<[string, number, number, number]> = [
-    ['Harbour Reach', 4_700_000, 0, 0],
+  // the third figure is the deal's recorded IRR; Harbour Reach is still in
+  // construction, so nobody has recorded one and it is null, not zero
+  const baseHoldings: Array<[string, number, number, number | null]> = [
+    ['Harbour Reach', 4_700_000, 0, null],
     ['Old Brewery Quarter', 2_100_000, 2_760_000, 0.231],
     ['Parkstone Mews', 1_600_000, 2_040_000, 0.198],
   ];

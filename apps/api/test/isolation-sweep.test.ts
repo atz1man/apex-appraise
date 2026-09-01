@@ -31,7 +31,7 @@ let B: Tenant;
 const ID_FIELDS = new Set([
   'id', 'dealId', 'versionId', 'fromId', 'toId', 'unitId', 'tenancyId', 'investorId',
   'contractorId', 'packageId', 'documentId', 'paymentId', 'userId', 'memberId',
-  'scenarioId', 'comparableId', 'inspectionId', 'accountId', 'taskId',
+  'scenarioId', 'comparableId', 'inspectionId', 'accountId', 'taskId', 'cashflowId',
 ]);
 
 /**
@@ -189,6 +189,13 @@ beforeAll(async () => {
     data: { orgId: B.orgId, dealId: B.dealId, name: 'B Apt 1', spec: '1-bed', ervPcm: 1_200_00n },
   });
   const investor = await prisma.investor.create({ data: { orgId: B.orgId, name: 'B Capital LP', documents: '[]' } });
+  // a holding and a statement line, so the register's procedures have B's rows to be refused on
+  await prisma.holding.create({
+    data: { investorId: investor.id, dealId: B.dealId, sharePct: 100, committed: 1_000_000_00n },
+  });
+  const cashflow = await prisma.cashflow.create({
+    data: { investorId: investor.id, dealId: B.dealId, kind: 'dist', label: 'B distribution', amount: 50_000_00n, date: new Date() },
+  });
   const contractor = await prisma.contractor.create({ data: { orgId: B.orgId, name: 'B Build Ltd', trade: 'Groundworks', weeks: '[]' } });
   const pkg = await prisma.costPackage.create({
     data: { orgId: B.orgId, dealId: B.dealId, name: 'B Substructure', budget: 100_000_00n, forecast: 100_000_00n, contractorId: contractor.id },
@@ -263,18 +270,37 @@ beforeAll(async () => {
     fromId: version.id,
     toId: version.id,
     accountId: account.id,
+    cashflowId: cashflow.id,
   });
   ROWS.push(...new Set(Object.values(foreign)));
 }, 180_000);
 
 /** a fingerprint of everything B owns, so "untouched" is checkable rather than asserted */
 async function snapshotB() {
-  const [deals, units, tenancies, investors, packages, documents, payments, tasks, comparables, scenarios, inspections, users, appraisals, accounts] =
+  /**
+   * Holdings, cashflows, contractors and photos were NOT in this fingerprint
+   * until the register procedures were written, so "B's data untouched" was
+   * blind to exactly the tables those procedures write.
+   *
+   * Measured with care, because the obvious mutant does not prove it: dropping
+   * the `investor: { orgId }` scope from `deleteCashflow` is caught by the
+   * ACCEPTED list above — the call returns `{ ok: true }` instead of throwing —
+   * so it fails the sweep with or without this fingerprint. The mutant the
+   * fingerprint exists for is the one that refuses for the RIGHT reason having
+   * already done the damage: an unscoped `deleteMany` before the scoped
+   * `findFirst`, so B's line is gone and A is told NOT_FOUND. That one passes
+   * the old fingerprint and fails this one.
+   */
+  const [deals, units, tenancies, investors, holdings, cashflows, contractors, photos, packages, documents, payments, tasks, comparables, scenarios, inspections, users, appraisals, accounts] =
     await Promise.all([
       prisma.deal.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.unit.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.tenancy.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.investor.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
+      prisma.holding.findMany({ where: { investor: { orgId: B.orgId } }, orderBy: { id: 'asc' } }),
+      prisma.cashflow.findMany({ where: { investor: { orgId: B.orgId } }, orderBy: { id: 'asc' } }),
+      prisma.contractor.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
+      prisma.sitePhoto.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.costPackage.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.document.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
       prisma.payment.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
@@ -287,7 +313,7 @@ async function snapshotB() {
       prisma.bankAccount.findMany({ where: { orgId: B.orgId }, orderBy: { id: 'asc' } }),
     ]);
   return JSON.stringify(
-    { deals, units, tenancies, investors, packages, documents, payments, tasks, comparables, scenarios, inspections, users, appraisals, accounts },
+    { deals, units, tenancies, investors, holdings, cashflows, contractors, photos, packages, documents, payments, tasks, comparables, scenarios, inspections, users, appraisals, accounts },
     (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
   );
 }

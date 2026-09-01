@@ -22,6 +22,32 @@ describe('DPI', () => {
   });
 });
 
+describe('the portfolio IRR, now that a firm can record one', () => {
+  it('leaves out a holding whose IRR is null, and counts one recorded as exactly zero', () => {
+    // null is "nobody has said"; 0 is "it returned nothing" — different answers
+    expect(weightedIrr([
+      { committed: 1_000_000, irr: null },
+      { committed: 1_000_000, irr: 0.2 },
+    ])).toBeCloseTo(0.2, 10);
+    expect(weightedIrr([
+      { committed: 1_000_000, irr: 0 },
+      { committed: 1_000_000, irr: 0.2 },
+    ])).toBeCloseTo(0.1, 10);
+  });
+
+  it('counts a recorded loss against the winners rather than dropping it', () => {
+    // +23% on £1m and -40% on £1m is a portfolio at -8.5%, not +23%
+    expect(weightedIrr([
+      { committed: 1_000_000, irr: 0.23 },
+      { committed: 1_000_000, irr: -0.4 },
+    ])).toBeCloseTo(-0.085, 10);
+  });
+
+  it('is null when every holding is unrecorded', () => {
+    expect(weightedIrr([{ committed: 5_000_000, irr: null }])).toBeNull();
+  });
+});
+
 describe('the portfolio IRR', () => {
   it('weights by capital, not by deal count', () => {
     // £3m at 10% and £1m at 30% is 15%, not the 20% a plain average gives
@@ -39,7 +65,7 @@ describe('the portfolio IRR', () => {
      * returned around 20%.
      */
     const withUnrealised = weightedIrr([
-      { committed: 2_585_000, irr: 0 },
+      { committed: 2_585_000, irr: null },
       { committed: 1_155_000, irr: 0.231 },
       { committed: 880_000, irr: 0.198 },
     ]);
@@ -52,7 +78,7 @@ describe('the portfolio IRR', () => {
   });
 
   it('is null when nothing has returned yet, so the page can say so', () => {
-    expect(weightedIrr([{ committed: 1_000_000, irr: 0 }])).toBeNull();
+    expect(weightedIrr([{ committed: 1_000_000, irr: null }])).toBeNull();
     expect(weightedIrr([])).toBeNull();
   });
 
@@ -120,17 +146,11 @@ describe('the portfolio IRR', () => {
   });
 
   /**
-   * The limitation this fix does NOT paper over. `Holding.irr` is
-   * `Float @default(0)`, so a deal that genuinely returned exactly 0.0% cannot
-   * be told apart from one nobody has entered, and is excluded. Pinned here so
-   * the behaviour is a documented consequence of the column rather than a
-   * surprise, and so that making the column nullable one day has a test to
-   * change deliberately.
+   * A test used to sit here pinning the column's limitation: `Holding.irr` was
+   * `Float @default(0)`, so a deal that returned exactly 0.0% could not be told
+   * apart from one nobody had entered and was excluded, "so that making the
+   * column nullable one day has a test to change deliberately". That day is
+   * the register that lets a firm record the figure; the column is nullable,
+   * and the case now lives in the describe above as a zero that COUNTS.
    */
-  it('still cannot see a deal that returned exactly nothing', () => {
-    expect(weightedIrr([
-      { committed: 1_000_000, irr: 0 },
-      { committed: 1_000_000, irr: 0.2 },
-    ])).toBeCloseTo(0.2, 10);
-  });
 });

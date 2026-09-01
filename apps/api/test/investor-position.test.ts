@@ -34,7 +34,7 @@ const asInvestor = () =>
 
 type Position = {
   position: { committed: number; called: number; distributed: number; portfolioIrr: number | null; dpi: number | null };
-  holdings: Array<{ committed: number; irr: number }>;
+  holdings: Array<{ committed: number; irr: number | null }>;
   openCapitalCall: { deal: string | null; label: string; amount: number; due: Date } | null;
 };
 
@@ -74,7 +74,7 @@ describe('the headline figures', () => {
     const other = await makeTenant('New fund');
     const inv = await prisma.investor.create({ data: { orgId: other.orgId, name: 'Fresh LP', sharePct: 100, documents: '[]' } });
     await prisma.holding.create({
-      data: { investorId: inv.id, dealId: other.dealId, sharePct: 100, committed: 1_000_000_00n, called: 0n, distributed: 0n, irr: 0 },
+      data: { investorId: inv.id, dealId: other.dealId, sharePct: 100, committed: 1_000_000_00n, called: 0n, distributed: 0n, irr: null },
     });
     const user = await prisma.user.create({
       data: {

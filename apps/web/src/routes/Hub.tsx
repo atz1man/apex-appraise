@@ -108,7 +108,9 @@ export default function Hub() {
         ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`, 'records'],
         ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field', 'site'],
         ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking', 'appraise'],
-        ['investor', 'Investor portal', 'LP positions, cashflows, capital calls', '/portal/investor', 'sell'],
+        // the register, not the LP's own page: an internal user is not an LP, and
+        // `investors.myPosition` answered them FORBIDDEN
+        ['investor', 'Investors', 'The register — holdings, distributions, capital calls, portal logins', '/investors', 'sell'],
         ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board', 'appraise'],
         ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
       ]

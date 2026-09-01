@@ -68,6 +68,45 @@ const pkgOut = (pk: any) => ({
 });
 
 /**
+ * One shape for a contractor wherever it is read or written back. Money on
+ * the row is pence; it leaves in pounds. The totals are the engine's — it owns
+ * the retention rule, and this file used to keep its own copy of it.
+ */
+const contractorOut = (
+  c: {
+    id: string; name: string; trade: string; status: string; rating: string; nextCert: string; retentionRelease: string;
+    timesheetRate: bigint | null; operatives: number | null; weeks: string;
+  },
+  packages: Array<{ budget: bigint; committed: bigint; spent: bigint; forecast: bigint; retentionPct: number; certificates: number }>,
+) => ({
+  id: c.id,
+  name: c.name,
+  trade: c.trade,
+  status: c.status,
+  rating: c.rating,
+  nextCert: c.nextCert,
+  retentionRelease: c.retentionRelease,
+  timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
+  operatives: c.operatives,
+  weeks: J<number[]>(c.weeks, []),
+  ...contractorTotals(
+    packages.map((pk) => ({
+      budget: P(pk.budget),
+      committed: P(pk.committed),
+      spent: P(pk.spent),
+      forecast: P(pk.forecast),
+      retentionPct: pk.retentionPct,
+      certificates: pk.certificates,
+    })),
+  ),
+});
+
+const CONTRACTOR_LABELS: Record<string, string> = {
+  name: 'name', trade: 'trade', status: 'status', rating: 'rating', nextCert: 'next certificate',
+  retentionRelease: 'retention release', timesheetRate: 'day rate', operatives: 'operatives',
+};
+
+/**
  * The AI Development Director — every language-model touchpoint in this file.
  *
  * Growth and above. Starter buys "Appraisal engine + reports" and the landing
@@ -202,30 +241,127 @@ export const costRouter = router({
     const rows = await ctx.prisma.contractor.findMany({
       where: { orgId: ctx.principal.orgId },
       include: { packages: true },
+      orderBy: { name: 'asc' },
     });
-    return rows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      trade: c.trade,
-      status: c.status,
-      rating: c.rating,
-      nextCert: c.nextCert,
-      retentionRelease: c.retentionRelease,
-      timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
-      operatives: c.operatives,
-      weeks: J<number[]>(c.weeks, []),
-      // the engine owns the retention rule; this used to keep its own copy of it
-      ...contractorTotals(
-        c.packages.map((pk: any) => ({
-          budget: P(pk.budget),
-          committed: P(pk.committed),
-          spent: P(pk.spent),
-          forecast: P(pk.forecast),
-          retentionPct: pk.retentionPct,
-          certificates: pk.certificates,
-        })),
-      ),
-    }));
+    return rows.map((c) => contractorOut(c, c.packages));
+  }),
+
+  /**
+   * The contractor register.
+   *
+   * The cost monitor has always rendered contractors — cards with contract
+   * value, retention, certificates and a weekly timesheet — and every package
+   * row has a dropdown to assign one. Nothing could create one. Outside the
+   * demo seed and the sample-data generator the only writer was
+   * `logTimesheetWeek`, which needs a row to exist first. So on a real
+   * workspace the section read "No contractors in your organisation yet" with
+   * no way past it, and the dropdown on every package was permanently empty.
+   */
+  createContractor: internalProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        trade: z.string().trim().min(1).max(80),
+        status: z.string().trim().max(40).default('On site'),
+        rating: z.string().trim().max(10).default('—'),
+        nextCert: z.string().trim().max(60).default('—'),
+        retentionRelease: z.string().trim().max(60).default('50% at PC'),
+        timesheetRate: z.number().min(0).nullable().default(null), // £/day
+        operatives: z.number().int().min(0).max(1000).nullable().default(null),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.prisma.contractor.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          name: input.name,
+          trade: input.trade,
+          status: input.status,
+          rating: input.rating,
+          nextCert: input.nextCert,
+          retentionRelease: input.retentionRelease,
+          timesheetRate: input.timesheetRate != null ? toPence(input.timesheetRate) : null,
+          operatives: input.operatives,
+          weeks: '[]',
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'added a contractor', target: `${row.name} (${row.trade})`, ip: ctx.ip,
+      });
+      return contractorOut(row, []);
+    }),
+
+  updateContractor: internalProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        patch: z.object({
+          name: z.string().trim().min(2).max(120).optional(),
+          trade: z.string().trim().min(1).max(80).optional(),
+          status: z.string().trim().max(40).optional(),
+          rating: z.string().trim().max(10).optional(),
+          nextCert: z.string().trim().max(60).optional(),
+          retentionRelease: z.string().trim().max(60).optional(),
+          timesheetRate: z.number().min(0).nullable().optional(), // £/day
+          operatives: z.number().int().min(0).max(1000).nullable().optional(),
+        }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await assertOwned(ctx.prisma.contractor, input.id, ctx.principal.orgId);
+      const { timesheetRate, ...rest } = input.patch;
+      const data: Record<string, unknown> = { ...rest };
+      if (timesheetRate !== undefined) data.timesheetRate = timesheetRate != null ? toPence(timesheetRate) : null;
+      const row = await ctx.prisma.contractor.update({ where: { id: existing.id }, data, include: { packages: true } });
+      const changed = Object.entries(CONTRACTOR_LABELS)
+        .filter(([k]) => String((existing as Record<string, unknown>)[k] ?? '') !== String((row as Record<string, unknown>)[k] ?? ''))
+        .map(([, label]) => label);
+      if (changed.length) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: `updated contractor — ${changed.join(', ')}`, target: `${row.name} (${row.trade})`, ip: ctx.ip,
+        });
+      }
+      return contractorOut(row, row.packages);
+    }),
+
+  /**
+   * Refused while a package holds money against them: committed, spent or a
+   * certificate issued is a contract on the record, and the cost report's
+   * retention and certificate figures are derived from those rows. A package
+   * with nothing on it, and a site photo, are merely detached — the photo is
+   * a record of works and outlives the firm that did them.
+   */
+  deleteContractor: internalProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const c = await ctx.prisma.contractor.findFirst({
+      where: { id: input.id, orgId: ctx.principal.orgId },
+      include: { packages: true },
+    });
+    if (!c) throw new TRPCError({ code: 'NOT_FOUND' });
+    const live = c.packages.filter((pk) => pk.committed > 0n || pk.spent > 0n || pk.certificates > 0);
+    if (live.length) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `“${c.name}” cannot be removed — ${live.map((pk) => pk.name).join(', ')} ${live.length === 1 ? 'has' : 'have'} money committed or certified against them. Reassign the package first.`,
+      });
+    }
+    const { count: detachedPackages } = await ctx.prisma.costPackage.updateMany({
+      where: { contractorId: c.id, orgId: ctx.principal.orgId },
+      data: { contractorId: null },
+    });
+    const { count: detachedPhotos } = await ctx.prisma.sitePhoto.updateMany({
+      where: { contractorId: c.id, orgId: ctx.principal.orgId },
+      data: { contractorId: null },
+    });
+    await ctx.prisma.contractor.delete({ where: { id: c.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'removed a contractor',
+      target: `${c.name} (${c.trade})${detachedPackages ? ` · ${detachedPackages} package${detachedPackages === 1 ? '' : 's'} detached` : ''}`,
+      ip: ctx.ip,
+    });
+    return { ok: true, detachedPackages, detachedPhotos };
   }),
 
   logTimesheetWeek: internalProcedure

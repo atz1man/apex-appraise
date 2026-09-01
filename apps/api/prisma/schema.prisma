@@ -791,7 +791,17 @@ model Holding {
   committed  BigInt // pence — 100% LP basis, scale by investor share
   called     BigInt @default(0)
   distributed BigInt @default(0)
-  irr        Float @default(0)
+  /// The deal's recorded IRR as a fraction (0.231 = 23.1%), or null while nobody
+  /// has recorded one. It was `Float @default(0)` with zero as the sentinel for
+  /// "not recorded", which lp.ts named as the column's limitation: a deal that
+  /// genuinely returned 0.0% and a deal nobody had entered were the same value,
+  /// and a recorded LOSS was a real number the portfolio figure had to treat as
+  /// real. The day a firm can record one is the day that stops being latent.
+  irr        Float?
+
+  // one position per investor per deal: `investorPosition` sums holdings, so a
+  // second row for the same deal would double the committed figure an LP reads
+  @@unique([investorId, dealId])
 }
 
 model Cashflow {

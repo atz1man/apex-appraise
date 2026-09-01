@@ -4,8 +4,14 @@ import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui
 import { getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
-import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { useToast } from '../components/Toast';
 import { DealNav } from '../components/DealNav';
+
+type ContractorDraft = {
+  name: string; trade: string; status: string; rating: string; nextCert: string; retentionRelease: string;
+  timesheetRate: string; operatives: string;
+};
 
 /** Contractor avatar gradients — per the design handoff prototype. */
 const GRADS = [
@@ -81,6 +87,93 @@ export default function CostMonitoring() {
     },
   });
   const logWeek = trpc.cost.logTimesheetWeek.useMutation({ onSuccess: () => utils.cost.contractors.invalidate() });
+
+  /**
+   * The contractor register. These cards, and the dropdown on every package
+   * row, rendered contractors for as long as the screen has existed; nothing
+   * could create one, so a real workspace read "No contractors in your
+   * organisation yet" with no way past it.
+   */
+  const toast = useToast();
+  const [contractorSel, setContractorSel] = useState<string | null>(null); // id | 'new' | null
+  const [cDraft, setCDraft] = useState<ContractorDraft | null>(null);
+  const [cRemoving, setCRemoving] = useState(false);
+  const closeContractor = () => {
+    setContractorSel(null);
+    setCDraft(null);
+    setCRemoving(false);
+  };
+  const createContractor = trpc.cost.createContractor.useMutation({
+    onSuccess: (c) => {
+      utils.cost.contractors.invalidate();
+      closeContractor();
+      toast.success(`${c.name} added`);
+    },
+  });
+  const updateContractor = trpc.cost.updateContractor.useMutation({
+    onSuccess: (c) => {
+      utils.cost.contractors.invalidate();
+      closeContractor();
+      toast.success(`${c.name} updated`);
+    },
+  });
+  const deleteContractor = trpc.cost.deleteContractor.useMutation({
+    onSuccess: (res, vars) => {
+      const gone = (contractors ?? []).find((c) => c.id === vars.id);
+      utils.cost.contractors.invalidate();
+      utils.cost.packages.invalidate(dealId);
+      utils.photos.list.invalidate(dealId);
+      closeContractor();
+      toast.success(gone ? `${gone.name} removed` : 'Contractor removed');
+      if (res.detachedPackages > 0 || res.detachedPhotos > 0) {
+        toast.push('info', `${res.detachedPackages} package${res.detachedPackages === 1 ? '' : 's'} and ${res.detachedPhotos} photo${res.detachedPhotos === 1 ? '' : 's'} no longer name a contractor.`);
+      }
+    },
+  });
+  const openContractor = (c: NonNullable<typeof contractors>[number] | 'new') => {
+    setCRemoving(false);
+    if (c === 'new') {
+      setContractorSel('new');
+      setCDraft({ name: '', trade: '', status: 'On site', rating: '', nextCert: '', retentionRelease: '50% at PC', timesheetRate: '', operatives: '' });
+      return;
+    }
+    setContractorSel(c.id);
+    setCDraft({
+      name: c.name, trade: c.trade, status: c.status, rating: c.rating === '—' ? '' : c.rating,
+      nextCert: c.nextCert === '—' ? '' : c.nextCert, retentionRelease: c.retentionRelease,
+      timesheetRate: c.timesheetRate == null ? '' : String(c.timesheetRate), operatives: c.operatives == null ? '' : String(c.operatives),
+    });
+  };
+  /** an update is a patch: only what changed is sent, so a colleague's edit to another field survives */
+  const saveContractor = () => {
+    if (!cDraft) return;
+    const rate = cDraft.timesheetRate.trim() === '' ? null : Number(cDraft.timesheetRate);
+    const ops = cDraft.operatives.trim() === '' ? null : Number(cDraft.operatives);
+    if (contractorSel === 'new') {
+      createContractor.mutate({
+        name: cDraft.name.trim(), trade: cDraft.trade.trim(), status: cDraft.status.trim() || 'On site',
+        rating: cDraft.rating.trim() || '—', nextCert: cDraft.nextCert.trim() || '—',
+        retentionRelease: cDraft.retentionRelease.trim() || '50% at PC', timesheetRate: rate, operatives: ops,
+      });
+      return;
+    }
+    const cur = (contractors ?? []).find((c) => c.id === contractorSel);
+    if (!cur) return;
+    const patch: Parameters<typeof updateContractor.mutate>[0]['patch'] = {};
+    if (cDraft.name.trim() !== cur.name) patch.name = cDraft.name.trim();
+    if (cDraft.trade.trim() !== cur.trade) patch.trade = cDraft.trade.trim();
+    if (cDraft.status.trim() !== cur.status) patch.status = cDraft.status.trim();
+    if ((cDraft.rating.trim() || '—') !== cur.rating) patch.rating = cDraft.rating.trim() || '—';
+    if ((cDraft.nextCert.trim() || '—') !== cur.nextCert) patch.nextCert = cDraft.nextCert.trim() || '—';
+    if (cDraft.retentionRelease.trim() !== cur.retentionRelease) patch.retentionRelease = cDraft.retentionRelease.trim();
+    if (rate !== cur.timesheetRate) patch.timesheetRate = rate;
+    if (ops !== cur.operatives) patch.operatives = ops;
+    if (Object.keys(patch).length === 0) {
+      closeContractor();
+      return;
+    }
+    updateContractor.mutate({ id: cur.id, patch });
+  };
   const addPhoto = trpc.photos.add.useMutation({ onSuccess: () => utils.photos.list.invalidate(dealId) });
   const createTask = trpc.tasks.create.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
@@ -480,11 +573,14 @@ export default function CostMonitoring() {
         <div className="mt-8">
           <div className="flex items-center justify-between mb-3.5 gap-4 flex-wrap">
             <h2 className="text-[17px] font-bold tracking-[-0.4px]">Contractors & actions</h2>
-            <span className="text-[12px] text-ink-3">Contract value, retention, certificates & weekly timesheets per contractor.</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-ink-3">Contract value, retention, certificates & weekly timesheets per contractor.</span>
+              <Button writes size="sm" variant="secondary" onClick={() => openContractor('new')}>Add contractor</Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(contractors ?? []).length === 0 && <div className="col-span-full"><EmptyState>No contractors in your organisation yet.</EmptyState></div>}
+              {(contractors ?? []).length === 0 && <div className="col-span-full"><EmptyState>No contractors in your organisation yet — add one and it can be assigned to any package.</EmptyState></div>}
               {(contractors ?? []).map((c) => {
                 const chip = contractorChip(c.status);
                 const pkgCount = packages.filter((p) => p.contractorId === c.id).length;
@@ -503,7 +599,10 @@ export default function CostMonitoring() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[15px] font-semibold truncate">{c.name}</div>
-                          <StatusChip status={chip.key} label={chip.label} />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <StatusChip status={chip.key} label={chip.label} />
+                            <Button size="sm" variant="ghost" onClick={() => openContractor(c)} ariaLabel={`Edit ${c.name}`}>Edit</Button>
+                          </div>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-3">
                           <span>{c.trade} · {pkgCount === 1 ? '1 package' : `${pkgCount} packages`}</span>
@@ -759,6 +858,64 @@ export default function CostMonitoring() {
           </div>
         </div>
       )}
+
+      {/* ===== Contractor — create / edit / remove ===== */}
+      <Drawer
+        open={!!contractorSel}
+        onClose={closeContractor}
+        width={520}
+        title={contractorSel === 'new' ? 'New contractor' : (contractors ?? []).find((c) => c.id === contractorSel)?.name ?? 'Contractor'}
+      >
+        {cDraft && (
+          <form
+            className="flex flex-col gap-3.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveContractor();
+            }}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Company</span>
+                <input className="w-full" aria-label="Contractor name" value={cDraft.name} onChange={(e) => setCDraft({ ...cDraft, name: e.target.value })} placeholder="Kingsmead Plant Ltd" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Trade</span>
+                <input className="w-full" aria-label="Contractor trade" value={cDraft.trade} onChange={(e) => setCDraft({ ...cDraft, trade: e.target.value })} placeholder="Groundworks" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Status</span>
+                <select className="w-full" aria-label="Contractor status" value={cDraft.status} onChange={(e) => setCDraft({ ...cDraft, status: e.target.value })}>
+                  {['Mobilising', 'On site', 'Off site', 'Complete'].map((o) => <option key={o} value={o}>{o}</option>)}
+                </select></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Rating</span>
+                <input className="w-full fig" aria-label="Contractor rating" value={cDraft.rating} onChange={(e) => setCDraft({ ...cDraft, rating: e.target.value })} placeholder="4.5" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Next certificate</span>
+                <input className="w-full" aria-label="Next certificate" value={cDraft.nextCert} onChange={(e) => setCDraft({ ...cDraft, nextCert: e.target.value })} placeholder="Cert 04 · 02 Jul" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Retention release</span>
+                <input className="w-full" aria-label="Retention release" value={cDraft.retentionRelease} onChange={(e) => setCDraft({ ...cDraft, retentionRelease: e.target.value })} /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Day rate (£, per operative)</span>
+                <input type="number" min={0} className="w-full fig" aria-label="Day rate" value={cDraft.timesheetRate} onChange={(e) => setCDraft({ ...cDraft, timesheetRate: e.target.value })} placeholder="340" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Operatives</span>
+                <input type="number" min={0} className="w-full fig" aria-label="Operatives" value={cDraft.operatives} onChange={(e) => setCDraft({ ...cDraft, operatives: e.target.value })} placeholder="6" /></label>
+            </div>
+            <div className="flex gap-2.5">
+              <Button writes type="submit" className="flex-1" loading={createContractor.isPending || updateContractor.isPending} disabled={cDraft.name.trim().length < 2 || !cDraft.trade.trim()}>
+                {contractorSel === 'new' ? 'Add contractor' : 'Save'}
+              </Button>
+              <Button variant="secondary" type="button" onClick={closeContractor}>Cancel</Button>
+            </div>
+            {contractorSel !== 'new' && (
+              <div className="pt-3 border-t border-border-faint flex items-center gap-2 flex-wrap">
+                {cRemoving ? (
+                  <>
+                    <span className="text-[11.5px] text-ink-2">Refused while a package holds money against them. Empty packages and photos are detached.</span>
+                    <Button writes size="sm" variant="danger" loading={deleteContractor.isPending} onClick={() => contractorSel && deleteContractor.mutate({ id: contractorSel })}>Remove contractor</Button>
+                    <Button size="sm" variant="secondary" type="button" onClick={() => setCRemoving(false)}>Cancel</Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="ghost" type="button" onClick={() => setCRemoving(true)}>Remove contractor…</Button>
+                )}
+              </div>
+            )}
+          </form>
+        )}
+      </Drawer>
     </div>
   );
 }

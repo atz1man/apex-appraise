@@ -50,6 +50,7 @@ const GLOBAL_NAV: Array<[string, string]> = [
   ['/board', 'Pipeline'],
   ['/calendar', 'Calendar'],
   ['/benchmarking', 'Benchmarking'],
+  ['/investors', 'Investors'],
   ['/integrations', 'Integrations'],
   ['/settings', 'Settings'],
 ];
@@ -300,6 +301,8 @@ export function Button({
   loading,
   to,
   className = '',
+  ariaLabel,
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -325,6 +328,10 @@ export function Button({
   /** Renders a react-router Link with identical chrome (client-side nav CTA). */
   to?: string;
   className?: string;
+  /** an accessible name when the visible text repeats across rows ("Edit", "Remove") */
+  ariaLabel?: string;
+  /** a hover explanation; the read-only reason wins when the control is blocked */
+  title?: string;
 }) {
   const blocked = !!writes && isViewOnly(getPrincipal());
   disabled = disabled || blocked;
@@ -337,7 +344,7 @@ export function Button({
   );
   if (to && !disabled && !loading) {
     return (
-      <Link to={to} className={cls} style={BTN_CHROME[variant]}>
+      <Link to={to} className={cls} style={BTN_CHROME[variant]} aria-label={ariaLabel} title={title}>
         {inner}
       </Link>
     );
@@ -349,7 +356,8 @@ export function Button({
       onClick={onClick}
       className={cls}
       style={BTN_CHROME[variant]}
-      title={blocked ? READ_ONLY_MESSAGE : undefined}
+      aria-label={ariaLabel}
+      title={blocked ? READ_ONLY_MESSAGE : title}
     >
       {inner}
     </button>

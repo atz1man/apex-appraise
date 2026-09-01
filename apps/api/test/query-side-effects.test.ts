@@ -331,7 +331,35 @@ describe('money leaving the API', () => {
       id: (pkg as { id: string }).id, dealId: T.dealId, forecast: 960_000,
     } as never);
 
+    /**
+     * The registers, added when a mutant returning the raw Holding row from
+     * `investors.setHolding` SURVIVED this test: a hand-picked fixture covers
+     * what somebody picked, and nobody had picked these.
+     */
+    const investor = await c.investors.create({ name: 'Money LP', sharePct: 50 } as never);
+    const investorAgain = await c.investors.update({ id: (investor as { id: string }).id, patch: { contactFirst: 'Pat' } } as never);
+    const holding = await c.investors.setHolding({
+      investorId: (investor as { id: string }).id, dealId: T.dealId, committed: 2_000_000, called: 500_000,
+    } as never);
+    const holdingAgain = await c.investors.setHolding({ investorId: (investor as { id: string }).id, dealId: T.dealId, irr: 0.1 } as never);
+    const line = await c.investors.recordCashflow({
+      investorId: (investor as { id: string }).id, dealId: T.dealId, kind: 'call', label: 'Drawdown', amount: 500_000, date: new Date(),
+    } as never);
+    const contractor = await c.cost.createContractor({ name: 'Money Build', trade: 'Frame', timesheetRate: 340 } as never);
+    const contractorAgain = await c.cost.updateContractor({ id: (contractor as { id: string }).id, patch: { operatives: 3 } } as never);
+    const register = await c.investors.list();
+    const record = await c.investors.record((investor as { id: string }).id);
+
     for (const [name, res] of [
+      ['investors.create', investor],
+      ['investors.update', investorAgain],
+      ['setHolding (create)', holding],
+      ['setHolding (update)', holdingAgain],
+      ['recordCashflow', line],
+      ['createContractor', contractor],
+      ['updateContractor', contractorAgain],
+      ['investors.list', register],
+      ['investors.record', record],
       ['upsertUnit (create)', unit],
       ['upsertUnit (update)', unitAgain],
       ['upsertTenancy (create)', tenancy],
@@ -356,6 +384,13 @@ describe('money leaving the API', () => {
     expect((unit as { appraisedValue: number }).appraisedValue).toBe(450_000);
     expect((pkg as { budget: number }).budget).toBe(900_000);
     expect((deal as { gdv: number }).gdv).toBe(1_000_000);
+    expect((holding as { committed: number }).committed).toBe(2_000_000);
+    expect((holdingAgain as { called: number }).called, 'the update path returned pence').toBe(500_000);
+    expect((line as { amount: number }).amount, 'a call is held negative and leaves in pounds').toBe(-500_000);
+    expect((contractor as { timesheetRate: number }).timesheetRate).toBe(340);
+    expect((contractorAgain as { timesheetRate: number }).timesheetRate).toBe(340);
+    // the register scales to the share on the way out: £2m × 50%
+    expect((register as Array<{ committed: number }>)[0]!.committed).toBe(1_000_000);
 
     // and the stamp the drawers rely on survived the mapping, or every
     // optimistic save would start failing
