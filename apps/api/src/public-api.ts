@@ -190,6 +190,8 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
               label: appraisal!.label,
               reviewStatus: appraisal!.reviewStatus,
               updatedAt: appraisal!.updatedAt,
+              // the engine that signed an approved version; null until one has
+              engineVersion: appraisal!.engineVersion ?? null,
               gdv: money(result.gdv),
               totalCost: money(result.totalCost),
               profit: money(result.profit),

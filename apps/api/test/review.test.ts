@@ -1,3 +1,4 @@
+import { ENGINE_VERSION } from '@apex/appraisal-engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
@@ -333,6 +334,24 @@ describe('two admins deciding one version at once', () => {
         emitted,
         `round ${round}: a version that is ${after.reviewStatus} announced ${emitted.join(', ') || 'nothing'}`,
       ).toEqual(after.reviewStatus === 'approved' ? ['appraisal.approved'] : []);
+      /**
+       * And the event names what the approval was pinned to. A subscriber
+       * storing a GDV with no engine version and no input hash holds a figure
+       * nothing can ever check; the pin on the row is what `verifyApproved`
+       * checks, so the event carries the same two fields.
+       */
+      if (after.reviewStatus === 'approved') {
+        const payload = JSON.parse(queuedNow.slice(queuedBefore)[0]!.payload) as {
+          data?: { engineVersion?: string; inputHash?: string };
+          engineVersion?: string;
+          inputHash?: string;
+        };
+        const data = payload.data ?? payload;
+        expect(data.engineVersion, `round ${round}: the event does not say which engine signed`).toBe(ENGINE_VERSION);
+        expect(data.inputHash, `round ${round}: the event carries no input hash`).toMatch(/^[0-9a-f]{64}$/);
+        const pinned = JSON.parse(after.approvalPin!) as { inputHash: string };
+        expect(data.inputHash).toBe(pinned.inputHash);
+      }
     }
   });
 

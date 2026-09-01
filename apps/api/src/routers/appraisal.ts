@@ -801,6 +801,15 @@ export const appraisalRouter = router({
           gdv: Math.round(result.gdv * 100) / 100,
           profit: Math.round(result.profit * 100) / 100,
           profitOnCost: result.poc,
+          /**
+           * What the approval was pinned to. A lender's system storing this
+           * event can later ask `verifyApproved` — or recompute from the
+           * inputs it was given — and know whether the figure it holds is the
+           * one the engine of that day produced. Without it the event named a
+           * GDV and nothing that could ever check it.
+           */
+          engineVersion: pin!.engineVersion,
+          inputHash: pin!.inputHash,
         });
 
         /**
