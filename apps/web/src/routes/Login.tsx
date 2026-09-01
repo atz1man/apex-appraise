@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Button } from '../components/ui';
@@ -15,22 +15,31 @@ import { heroGradient } from '@apex/ui-tokens';
  */
 const DEMO_PASSWORD = 'demo';
 
+/** an input error arrives as zod's JSON array; a person gets its first sentence, not the array */
+function plainMessage(message: string): string {
+  if (!message.startsWith('[')) return message;
+  try {
+    const issues = JSON.parse(message) as Array<{ message?: string }>;
+    return issues[0]?.message || 'Check the details you entered.';
+  } catch {
+    return 'Check the details you entered.';
+  }
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const demoQ = trpc.auth.demoAccounts.useQuery(undefined, { staleTime: 300_000, retry: 0 });
   const demos = demoQ.data;
-  // the button waits for that answer: a prefill that lands after the click signs in with nothing
-  const settled = demoQ.isFetched || demoQ.isError;
+  /**
+   * Never prefilled asynchronously. A first version wrote the demo login into
+   * the fields when the answer arrived, and the answer arrived while a person
+   * — or a test — was typing: the field read the address twice, because the
+   * write landed between a select-all and the insert. A field somebody has
+   * focused is theirs. Pressing Sign in with nothing typed resolves the demo
+   * login below; the panel's buttons fill the fields on a click.
+   */
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // prefill the first demo login once the server has said it exists — and only if nothing has been typed
-  const prefilled = useRef(false);
-  useEffect(() => {
-    if (prefilled.current || !demos?.length) return;
-    prefilled.current = true;
-    setEmail((e) => e || demos[0]!.email);
-    setPassword((p) => p || DEMO_PASSWORD);
-  }, [demos]);
   const [error, setError] = useState('');
   // arriving from a completed reset — say so, or the redirect looks like a failure
   const justReset = new URLSearchParams(window.location.search).get('reset') === '1';
@@ -59,7 +68,7 @@ export default function Login() {
     onSuccess: (res) => {
       window.location.href = res.url;
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => setError(plainMessage(e.message)),
   });
 
   /**
@@ -78,7 +87,7 @@ export default function Login() {
       const t = res.principal.principalType;
       navigate(t === 'buyer' ? '/portal/buyer' : t === 'investor' ? '/portal/investor' : '/', { replace: true });
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => setError(plainMessage(e.message)),
   });
 
   return (
@@ -92,12 +101,18 @@ export default function Login() {
         </div>
         <form
           className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             setError('');
+            let creds = { email, password };
+            // nothing typed: sign in as the demo login, if this deployment has one
+            if (!creds.email) {
+              const offered = demos ?? (await demoQ.refetch()).data;
+              if (offered?.[0]) creds = { email: offered[0].email, password: DEMO_PASSWORD };
+            }
             // enter, on an enforced workspace, goes where the only button goes
-            if (!passwordAllowed) ssoStart.mutate({ email });
-            else login.mutate({ email, password });
+            if (!passwordAllowed) ssoStart.mutate({ email: creds.email });
+            else login.mutate(creds);
           }}
         >
           <div className="eyebrow mb-1">Sign in</div>
@@ -125,7 +140,7 @@ export default function Login() {
           )}
           {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
           {passwordAllowed && (
-            <Button type="submit" className="w-full" loading={login.isPending} disabled={!settled}>
+            <Button type="submit" className="w-full" loading={login.isPending}>
               Sign in
             </Button>
           )}

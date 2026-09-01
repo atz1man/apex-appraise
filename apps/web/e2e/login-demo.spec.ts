@@ -11,10 +11,19 @@ import { expect, test } from '@playwright/test';
  * in both states because a page that ignored the answer and kept its list
  * passes the first state on its own.
  */
-test('on a demo workspace the demo logins are offered and the first is prefilled', async ({ page }) => {
+test('on a demo workspace the demo logins are offered, and Sign in with nothing typed is the first of them', async ({ page }) => {
   await page.goto('/login');
   await expect(page.getByText('Demo accounts · password “demo”')).toBeVisible();
-  await expect(page.getByLabel('Email')).toHaveValue('arthur@apexappraise.co.uk');
+  // nothing is written into the fields for you — a field you are typing in is yours
+  await expect(page.getByLabel('Email')).toHaveValue('');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  // and a panel button fills the fields on a click, for a person who wants to see them
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/login');
+  await page.getByRole('button', { name: /Investor portal/ }).click();
+  await expect(page.getByLabel('Email')).toHaveValue('investor@demo.co.uk');
   await expect(page.getByLabel('Password')).toHaveValue('demo');
 });
 
