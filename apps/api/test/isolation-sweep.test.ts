@@ -204,7 +204,7 @@ beforeAll(async () => {
     data: { orgId: B.orgId, dealId: B.dealId, name: 'B pack.pdf', category: 'Legal', ext: 'pdf', sizeBytes: 1_024n },
   });
   const payment = await prisma.payment.create({ data: { orgId: B.orgId, unitId: unit.id, kind: 'Reservation fee', amount: 2_000_00n } });
-  const task = await prisma.task.create({ data: { orgId: B.orgId, dealId: B.dealId, title: 'B task', aspect: 'General' } });
+  const task = await prisma.task.create({ data: { orgId: B.orgId, dealId: B.dealId, title: 'B task', aspect: 'General', assignee: 'BB' } });
   const comparable = await prisma.comparable.create({
     data: { orgId: B.orgId, dealId: B.dealId, address: '1 B Road', basePsf: 400 },
   });

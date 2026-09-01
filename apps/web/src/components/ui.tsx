@@ -113,11 +113,16 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
       {crumb && (
         <>
           <span className="text-ink-3b" aria-hidden="true">/</span>
-          <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px]">{crumb}</span>
+          {/* the crumb is what gives way: it truncates before a screen's own controls are pushed off the header */}
+          <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px] min-w-[60px]">{crumb}</span>
         </>
       )}
       {internal && (
-        <nav className="ml-5 hidden lg:flex items-center gap-1" aria-label="Global">
+        /* from 1400px, not lg: below that the seven labels left the deal screens' own
+           controls — Save, Export, Versions — scrolled out of sight behind a hidden
+           scrollbar (measured: the appraisal's Save button 18px past the header at
+           1280). Below it the Hub, one click on the lockup, carries the same links. */
+        <nav className="ml-5 hidden min-[1400px]:flex shrink-0 items-center gap-1" aria-label="Global">
           {GLOBAL_NAV.map(([to, label]) => (
             <NavLink
               key={to}
@@ -134,7 +139,9 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
           ))}
         </nav>
       )}
-      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+      {/* on a phone the slot still scrolls (the header is 390px wide and a screen's controls
+          are not); from lg it is its full width and the crumb gives way instead */}
+      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none] lg:flex-none lg:overflow-visible">
         {viewOnly && (
           <span className="flex-none" title="Your account has view-only access to this workspace. An administrator can change your role under Settings → Team.">
             <StatusChip status="neutral" label="View only" />

@@ -773,7 +773,7 @@ model Task {
   deal    Deal   @relation(fields: [dealId], references: [id])
   title   String
   aspect  String
-  assignee String @default("AO") // initials
+  assignee String // a member’s initials — the demo founder’s used to be the default for every firm
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())

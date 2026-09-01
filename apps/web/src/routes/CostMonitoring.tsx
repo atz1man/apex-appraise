@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
-import { getToken, trpc } from '../lib/trpc';
+import { getPrincipal, getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
 import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
@@ -174,7 +174,10 @@ export default function CostMonitoring() {
   // ---- local UI state ----
   const [hoursDraft, setHoursDraft] = useState<Record<string, string>>({});
   const [taskDraft, setTaskDraft] = useState('');
-  const [taskWho, setTaskWho] = useState('AO');
+  // the firm's real members, defaulting to whoever is raising the action — not the demo firm's initials
+  const { data: members } = trpc.org.members.useQuery();
+  const assignees = useMemo(() => Array.from(new Set((members ?? []).map((m) => m.initials))), [members]);
+  const [taskWho, setTaskWho] = useState(getPrincipal()?.initials ?? '');
   const [photoCap, setPhotoCap] = useState('');
   const [photoCid, setPhotoCid] = useState('');
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -702,9 +705,9 @@ export default function CostMonitoring() {
                 ))}
                 {(tasks ?? []).length === 0 && <EmptyState>No cost-monitoring actions yet — raise one below.</EmptyState>}
               </div>
-              <div className="mt-2.5 flex gap-1.5 items-center">
+              <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
-                  className="flex-1 min-w-0"
+                  className="flex-1 min-w-[140px]"
                   placeholder="Raise an action…"
                   value={taskDraft}
                   onChange={(e) => setTaskDraft(e.target.value)}
@@ -715,7 +718,7 @@ export default function CostMonitoring() {
                     }
                   }}
                 />
-                {['AO', 'DW', 'MV'].map((w) => (
+                {assignees.map((w) => (
                   <button key={w} aria-pressed={taskWho === w} onClick={() => setTaskWho(w)} className="rounded-full shrink-0 cursor-pointer" style={{ outline: taskWho === w ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>

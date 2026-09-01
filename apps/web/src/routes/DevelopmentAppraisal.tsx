@@ -289,7 +289,16 @@ export default function DevelopmentAppraisal() {
   const createTask = trpc.tasks.create.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const [newTask, setNewTask] = useState('');
-  const [newWho, setNewWho] = useState('AO');
+  /**
+   * Who a task can be given to: the workspace's real members, defaulting to
+   * whoever is raising it. This was `['AO', 'DW', 'MV', 'PA']` — the demo
+   * firm's people, offered to every firm on the platform, with the first of
+   * them as the default assignee of every task raised anywhere.
+   */
+  const { data: members } = trpc.org.members.useQuery();
+  const assignees = useMemo(() => Array.from(new Set((members ?? []).map((m) => m.initials))), [members]);
+  const myInitials = getPrincipal()?.initials ?? '';
+  const [newWho, setNewWho] = useState(myInitials);
 
   /** A DCF is a cross-check, so it starts from conventional UK settings. */
   const DEFAULT_DCF: DcfInput = {
@@ -1672,9 +1681,11 @@ export default function DevelopmentAppraisal() {
                 ))}
                 {(tasks ?? []).length === 0 && <div className="text-[11.5px] text-ink-3b py-2">No tasks for this aspect yet.</div>}
               </div>
-              <div className="mt-2.5 flex gap-1.5">
+              {/* wraps: a firm's team is as long as it is, and a row that cannot wrap pushed
+                  the whole page past the viewport by the width of its last avatar */}
+              <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
-                  className="flex-1"
+                  className="flex-1 min-w-[140px]"
                   placeholder={`Add ${aspect.toLowerCase()} task…`}
                   value={newTask}
                   onChange={(e) => setNewTask(e.target.value)}
@@ -1685,7 +1696,7 @@ export default function DevelopmentAppraisal() {
                     }
                   }}
                 />
-                {['AO', 'DW', 'MV', 'PA'].map((w) => (
+                {assignees.map((w) => (
                   <button key={w} aria-label={`Assign new task to ${w}`} aria-pressed={newWho === w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid rgb(var(--brand-ink, 20 80 59))' : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>

@@ -471,18 +471,37 @@ export const tasksRouter = router({
       });
     }),
 
+  /**
+   * A task is assigned to a MEMBER of the firm.
+   *
+   * The assignee defaulted to `'AO'` here and in the column, and the two
+   * pickers that call this offered `['AO', 'DW', 'MV', 'PA']` — the demo
+   * firm's people, spelled out in the component. Measured on a fresh tenant
+   * whose only member is its owner: every task raised without naming anybody
+   * was assigned to "AO", who does not exist in that firm, and the picker
+   * offered three more who do not either. The default is now whoever raised
+   * it, and initials nobody in the firm has are refused rather than stored as
+   * a name that will never resolve. Internal members only: a buyer's or an
+   * investor's login is not a colleague a to-do can be handed to.
+   */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().default('AO'), due: z.string().optional() }))
+    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), due: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      const assignee = input.assignee ?? ctx.principal.initials;
+      const member = await ctx.prisma.user.findFirst({
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: assignee },
+        select: { id: true },
+      });
+      if (!member) throw new TRPCError({ code: 'BAD_REQUEST', message: `“${assignee}” is not a member of this workspace.` });
       return ctx.prisma.task.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
           title: input.title,
           aspect: input.aspect,
-          assignee: input.assignee,
+          assignee,
           due: input.due ? new Date(input.due) : new Date(Date.now() + 7 * 86400e3),
         },
       });
