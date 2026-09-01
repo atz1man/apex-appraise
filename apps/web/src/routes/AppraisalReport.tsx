@@ -16,6 +16,7 @@ import { ShareLinks } from '../components/ShareLinks';
 import { A4Page, PRINT_CSS, docDate, docDay } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
 import { approvalCheck } from '../lib/approval-check';
+import { valuerFrom } from '../lib/valuer';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
@@ -117,8 +118,11 @@ export default function AppraisalReport() {
    */
   const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
   const preparedFor = toe?.clientName?.trim() || null;
-  // a name from the terms already carries its own post-nominals if the valuer has any
-  const preparedBy = toe?.valuerName?.trim() || deal?.owner?.name || null;
+  // a name from the terms already carries its own post-nominals if the valuer
+  // has any — and only SAVED terms name one; see lib/valuer.ts for what an
+  // unsaved draft would otherwise put here
+  const valuer = valuerFrom(toe);
+  const preparedBy = valuer.named ? valuer.name : deal?.owner?.name || null;
 
   const input = appr?.input;
   // whether the signed figure still holds — see lib/approval-check.ts

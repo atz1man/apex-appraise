@@ -24,6 +24,7 @@ import { ShareLinks } from '../components/ShareLinks';
 import { A4Page as PaperPage, PRINT_CSS, docDate } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
 import { approvalCheck } from '../lib/approval-check';
+import { valuerFrom } from '../lib/valuer';
 
 /** the Red Book sets its own margins — see the note in components/paper.tsx */
 const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
@@ -39,28 +40,6 @@ import { namedModel } from '../lib/ai-model';
 /* ------------------------------------------------------------------ */
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
 /* ------------------------------------------------------------------ */
-
-
-/**
- * The valuer signing this report.
- *
- * This was a hardcoded name and RICS registration number — "Dana Whitlock MRICS,
- * No. 1148207" — printed in both signature blocks of every Red Book valuation
- * this platform produced, for every firm. A Red Book valuation is a signed
- * professional document: the valuer's name and registration number are the whole
- * of its authority and where its liability attaches, and that number may well
- * belong to a real registered valuer who has never seen the property.
- *
- * The valuer is the one NAMED IN THE TERMS OF ENGAGEMENT for the instruction —
- * the person the client agreed would carry it out. Where the terms do not name
- * one, the report says so and prints no credentials, because an unsigned
- * valuation is a fixable state and a falsely signed one is not.
- */
-const valuerFrom = (toe?: { valuerName?: string | null; valuerReg?: string | null } | null) => {
-  const name = toe?.valuerName?.trim() ?? '';
-  const reg = toe?.valuerReg?.trim() ?? '';
-  return name ? { named: true as const, name, reg } : { named: false as const, name: '', reg: '' };
-};
 
 /** RICS Red Book definition of Market Value (VPS 4). */
 const MV_DEFINITION =
@@ -158,6 +137,26 @@ export default function RedBookReport() {
    * the reader opened the file.
    */
   const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The valuer signing this report.
+   *
+   * This was a hardcoded name and RICS registration number — "Dana Whitlock MRICS,
+   * No. 1148207" — printed in both signature blocks of every Red Book valuation
+   * this platform produced, for every firm. A Red Book valuation is a signed
+   * professional document: the valuer's name and registration number are the whole
+   * of its authority and where its liability attaches, and that number may well
+   * belong to a real registered valuer who has never seen the property.
+   *
+   * The valuer is the one NAMED IN THE TERMS OF ENGAGEMENT for the instruction —
+   * the person the client agreed would carry it out. Where the terms do not name
+   * one, the report says so and prints no credentials, because an unsigned
+   * valuation is a fixable state and a falsely signed one is not.
+   *
+   * And named from SAVED terms only. `engagement.get` answers an unsaved draft
+   * prefilled with the signed-in user and the firm's house registration text,
+   * and reading the valuer off that named a different valuer for each person
+   * who opened the page — see lib/valuer.ts, which now holds the rule.
+   */
   const valuer = valuerFrom(toe);
   /**
    * Whether the signed figure still holds. An approved version carries a pin
