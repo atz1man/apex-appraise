@@ -188,7 +188,7 @@ beforeAll(async () => {
   const tenancyRow = await prisma.tenancy.create({
     data: { orgId: B.orgId, dealId: B.dealId, name: 'B Apt 1', spec: '1-bed', ervPcm: 1_200_00n },
   });
-  const investor = await prisma.investor.create({ data: { orgId: B.orgId, name: 'B Capital LP', documents: '[]' } });
+  const investor = await prisma.investor.create({ data: { orgId: B.orgId, name: 'B Capital LP' } });
   // a holding and a statement line, so the register's procedures have B's rows to be refused on
   await prisma.holding.create({
     data: { investorId: investor.id, dealId: B.dealId, sharePct: 100, committed: 1_000_000_00n },

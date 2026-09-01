@@ -35,7 +35,7 @@ beforeAll(async () => {
   A = await makeTenant('Portals');
 
   const mkInvestor = async (name: string) => {
-    const inv = await prisma.investor.create({ data: { orgId: A.orgId, name, documents: '[]' } });
+    const inv = await prisma.investor.create({ data: { orgId: A.orgId, name } });
     const user = await prisma.user.create({
       data: { orgId: A.orgId, email: `${name}@lp.test`, password: 'x', name, initials: 'LP', role: 'VIEWER', principalType: 'investor', investorId: inv.id },
     });

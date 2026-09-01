@@ -382,6 +382,11 @@ model Document {
   unitId   String?
   unit     Unit?   @relation(fields: [unitId], references: [id])
   buyerVisible Boolean @default(false)
+  // Shared with the deal's investors — every LP holding in the deal, since an
+  // investor pack is one document for the whole syndicate. Deal-level on
+  // purpose where the buyer flag is plot-level: a buyer's contract is one
+  // person's business, a quarterly report is not.
+  investorVisible Boolean @default(false)
   signedAt DateTime? // buyer e-sign timestamp (DocuSign in prod)
   addedById String?
   addedAt  DateTime @default(now())
@@ -787,7 +792,6 @@ model Investor {
   sharePct Float @default(100) // of the LP base
   holdings Holding[]
   cashflows Cashflow[]
-  documents String // JSON {name, date, size}[]
 }
 
 model Holding {

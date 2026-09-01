@@ -267,6 +267,23 @@ export default function BuyerPortal() {
                               PDF
                             </span>
                             <span className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{d.name}</span>
+                            {/*
+                              * The document itself. "Review & sign" stood beside a
+                              * name with nothing to open — an e-signature on an
+                              * unread contract is the thing the flow exists to
+                              * prevent. Where the firm holds no file, no link.
+                              */}
+                            {d.url && (
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="shrink-0 text-[12px] font-medium text-brand-ink hover:underline"
+                                aria-label={`Read ${d.name}`}
+                              >
+                                Read
+                              </a>
+                            )}
                             {isSigned ? (
                               <StatusChip status="green" label="SIGNED" />
                             ) : (

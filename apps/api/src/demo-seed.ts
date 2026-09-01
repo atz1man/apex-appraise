@@ -466,6 +466,24 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     });
   }
   /**
+   * What the syndicate may read. The investor portal's Documents panel used to
+   * be a JSON list of names on the investor row with no file behind any of
+   * them; it now lists the documents flagged on the deals the LP holds in, and
+   * the demo LP holds in Harbour Reach.
+   */
+  const investorDocs: Array<[string, string, string, number]> = [
+    ['Q2 2026 investor report — Harbour Reach.pdf', 'Finance', 'pdf', 1_200_000],
+    ['Drawdown notice 4 — Harbour Reach.pdf', 'Finance', 'pdf', 220_000],
+  ];
+  for (const [name, category, ext, sizeBytes] of investorDocs) {
+    await prisma.document.create({
+      data: {
+        orgId: org.id, dealId: harbourReach, name, category, ext, sizeBytes: BigInt(sizeBytes),
+        extraction: 'STORED', investorVisible: true, addedById: ao.id,
+      },
+    });
+  }
+  /**
    * Buyer-visible docs live on the buyer's own development (Harbour Reach), and
    * belong to ONE plot.
    *
@@ -513,16 +531,7 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
   ];
   const investorIds: string[] = [];
   for (const [name, initials, contactFirst, sharePct] of investorRows) {
-    const inv = await prisma.investor.create({
-      data: {
-        orgId: org.id, name, initials, contactFirst, sharePct,
-        documents: JSON.stringify([
-          { name: 'Q2 2026 investor report.pdf', date: '2026-06-30', size: '1.2 MB' },
-          { name: 'LPA — Brookfield JV II.pdf', date: '2025-09-12', size: '3.4 MB' },
-          { name: 'Distribution notice — OBQ.pdf', date: '2026-05-14', size: '220 KB' },
-        ]),
-      },
-    });
+    const inv = await prisma.investor.create({ data: { orgId: org.id, name, initials, contactFirst, sharePct } });
     investorIds.push(inv.id);
     for (const [dealName, committed, distributed, irr] of baseHoldings) {
       await prisma.holding.create({

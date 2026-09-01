@@ -5,7 +5,7 @@ import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
-import { n0 } from '../lib/format';
+import { fmtBytes, n0 } from '../lib/format';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
 const FOLDER_ICON = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
@@ -75,13 +75,6 @@ const gradOf = (id: string) => {
 
 const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
-function fmtBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
-
 const fmtDay = (d: Date | string) =>
   new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 
@@ -118,6 +111,14 @@ export default function DataRoom() {
   /** the plots a document can be shared with — the buyer picker's options */
   const { data: unitsData } = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
   const units = unitsData?.units ?? [];
+  const shareWithInvestors = trpc.documents.shareWithInvestors.useMutation({
+    onSuccess: (r) => {
+      utils.documents.list.invalidate();
+      utils.documents.activity.invalidate(dealId);
+      utils.documents.access.invalidate();
+      toast.success(r.investorVisible ? 'Shared with investors' : 'No longer shared with investors');
+    },
+  });
   const shareWithBuyer = trpc.documents.shareWithBuyer.useMutation({
     onSuccess: (r) => {
       utils.documents.list.invalidate();
@@ -343,12 +344,13 @@ export default function DataRoom() {
           ) : (
             <div className="bg-surface border border-border-strong rounded-card overflow-hidden shadow-rest">
               <div className="overflow-x-auto">
-              <div className="min-w-[560px]">
+              <div className="min-w-[640px]">
               <div className="flex label-mono text-ink-3 border-b border-border-std" style={{ padding: '12px 18px' }}>
                 <div style={{ flex: 3 }}>Name</div>
                 <div style={{ flex: 1.2 }}>Type</div>
                 <div style={{ flex: 1 }}>Added</div>
                 <div style={{ flex: 1 }} className="text-right">Size</div>
+                <div style={{ flex: 1 }} className="text-right">Investors</div>
                 <div style={{ flex: 1.4 }} className="text-right">Buyer</div>
                 <div style={{ flex: 1.2 }} className="text-right">Status</div>
               </div>
@@ -393,6 +395,31 @@ export default function DataRoom() {
                       * pack for plot 1 is not plot 7's business, and one
                       * `signedAt` column cannot hold ten people's signatures.
                       */}
+                    {/*
+                      * Whether the deal's investors see this file. Deal-level
+                      * where the buyer control is plot-level: an investor
+                      * report is one document for the whole syndicate.
+                      */}
+                    <div className="flex justify-end" style={{ flex: 1 }}>
+                      {d.extraction === 'AWAITED' ? (
+                        <span className="text-[11.5px] text-ink-3">—</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          aria-label={`Share ${d.name} with investors`}
+                          className="w-4 h-4 cursor-pointer disabled:opacity-50"
+                          disabled={shareWithInvestors.isPending}
+                          // shows the choice while the write is in flight, so the box does not
+                          // snap back for the refetch and read as a refusal
+                          checked={
+                            shareWithInvestors.isPending && shareWithInvestors.variables?.id === d.id
+                              ? shareWithInvestors.variables.visible
+                              : d.investorVisible
+                          }
+                          onChange={(e) => shareWithInvestors.mutate({ id: d.id, visible: e.target.checked })}
+                        />
+                      )}
+                    </div>
                     <div className="flex justify-end" style={{ flex: 1.4 }}>
                       {d.extraction === 'AWAITED' ? (
                         <span className="text-[11.5px] text-ink-3">—</span>
@@ -470,7 +497,9 @@ export default function DataRoom() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] font-medium truncate">{inv.name}</div>
-                    <div className="text-[10.5px] text-ink-3">Investor · holds in this deal</div>
+                    <div className="text-[10.5px] text-ink-3">
+                      Investor · {n0(accessQ.data!.investorDocuments)} shared document{accessQ.data!.investorDocuments === 1 ? '' : 's'}
+                    </div>
                   </div>
                   <span className="fig text-[10px] font-medium text-ink-3">{inv.permission}</span>
                 </div>

@@ -31,7 +31,7 @@ const analyst = (t: Tenant) => callerFor({ ...t.principal, role: 'ANALYST' });
 /** A workspace with an investor and a reserved unit to invite against. */
 async function fixture(t: Tenant) {
   const investor = await prisma.investor.create({
-    data: { orgId: t.orgId, name: 'Fischer Capital', initials: 'FC', sharePct: 25, contactFirst: 'Lena', documents: '[]' },
+    data: { orgId: t.orgId, name: 'Fischer Capital', initials: 'FC', sharePct: 25, contactFirst: 'Lena' },
   });
   const unit = await prisma.unit.create({
     data: {

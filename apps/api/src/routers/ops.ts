@@ -551,7 +551,7 @@ export const documentsRouter = router({
     const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
 
-    const [members, holdings, buyerVisibleCount] = await Promise.all([
+    const [members, holdings, buyerVisibleCount, investorVisibleCount] = await Promise.all([
       ctx.prisma.user.findMany({
         where: { orgId: ctx.principal.orgId, principalType: 'internal' },
         select: { id: true, name: true, initials: true, role: true },
@@ -562,6 +562,7 @@ export const documentsRouter = router({
         select: { investor: { select: { id: true, name: true, initials: true, orgId: true } } },
       }),
       ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, buyerVisible: true } }),
+      ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, investorVisible: true } }),
     ]);
 
     // an investor reaches the deal through a holding, and only through one
@@ -584,7 +585,13 @@ export const documentsRouter = router({
         permission: m.role === 'ADMIN' ? 'Full' : m.role === 'VIEWER' ? 'View' : 'Edit',
         you: m.id === ctx.principal.userId,
       })),
+      /**
+       * An investor's "View" is of the documents shared with investors, not of
+       * the room — the same honesty the buyer line below keeps, so the count
+       * travels with the names.
+       */
       investors: investors.map((inv) => ({ id: inv.id, name: inv.name, initials: inv.initials, permission: 'View' })),
+      investorDocuments: investorVisibleCount,
       /**
        * Buyers are counted, not named: a buyer sees only the documents flagged
        * for them, so listing them beside people with full access would overstate
@@ -745,6 +752,53 @@ export const documentsRouter = router({
         },
       });
       return { id: updated.id, buyerVisible: updated.buyerVisible, unitId: updated.unitId };
+    }),
+
+  /**
+   * Share a document with the deal's investors, or stop.
+   *
+   * The investor portal had a Documents panel from the first prototype, fed
+   * from `Investor.documents` — a JSON list of {name, date, size} on the
+   * investor row. Nothing but the demo seed ever wrote to it; the register that
+   * creates investors wrote `'[]'`; and no file was ever behind an entry, so
+   * the panel drew a download icon beside each name that downloaded nothing.
+   * An LP reading "Q2 2026 investor report.pdf · 1.2 MB" was reading a string.
+   *
+   * It is now a flag on the DOCUMENT, beside the buyer's, and the portal lists
+   * the flagged documents of every deal the investor holds in, each with the
+   * same signed file URL the data room uses. Deal-level rather than per
+   * investor: a quarterly report or a distribution notice is one document for
+   * the whole syndicate, where a buyer's contract of sale is one person's.
+   *
+   * A placeholder is refused for the reason `shareWithBuyer` gives — a name
+   * over nothing is the defect this replaces.
+   */
+  shareWithInvestors: internalProcedure
+    .input(z.object({ id: z.string(), visible: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (input.visible && doc.extraction === 'AWAITED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'That document has not been received yet — upload the file before sharing it with investors.',
+        });
+      }
+      const updated = await ctx.prisma.document.update({
+        where: { id: doc.id },
+        data: { investorVisible: input.visible },
+      });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: input.visible ? 'shared a document with investors' : 'stopped sharing a document with investors',
+          target: doc.name,
+        },
+      });
+      return { id: updated.id, investorVisible: updated.investorVisible };
     }),
 
   activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {

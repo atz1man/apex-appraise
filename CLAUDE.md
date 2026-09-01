@@ -26,15 +26,15 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (283; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (852). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (860). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (113): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (117): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer). The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (150, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (152, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
   api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
@@ -64,6 +64,14 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
   exception is Stripe's payment form, which must see a card number. `e2e/third-party.spec.ts`
   fails the build if a page contacts anyone else.
 - Provenance on every figure (extraction citations, audit events).
+- A report names a valuer ONLY from saved terms of engagement (`web/src/lib/valuer.ts`).
+  `engagement.get` answers an unsaved draft prefilled with the signed-in user and the firm's
+  house registration text, and reading the valuer off that named a different valuer for each
+  person who opened the page. Measured: 8 of 12 deals on the demo workspace.
+- A portal never offers a document it cannot open: sharing is a flag on the DOCUMENT
+  (`buyerVisible` per plot, `investorVisible` per deal), and every portal link is the data
+  room's file URL signed for the viewer. `Investor.documents` (a JSON list of names with no
+  file behind any of them) is gone.
 
 ## Mechanical guards (whole-codebase sweeps)
 

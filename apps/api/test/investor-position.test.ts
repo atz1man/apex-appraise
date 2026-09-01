@@ -44,7 +44,7 @@ beforeAll(async () => {
   resetDatabase();
   T = await makeTenant('Fund');
   const inv = await prisma.investor.create({
-    data: { orgId: T.orgId, name: 'Meridian Capital LP', sharePct: 55, documents: '[]' },
+    data: { orgId: T.orgId, name: 'Meridian Capital LP', sharePct: 55 },
   });
   investorId = inv.id;
   // one realised deal, one still in construction with no IRR recorded
@@ -72,7 +72,7 @@ describe('the headline figures', () => {
 
   it('say nothing rather than a number when nothing has been drawn', async () => {
     const other = await makeTenant('New fund');
-    const inv = await prisma.investor.create({ data: { orgId: other.orgId, name: 'Fresh LP', sharePct: 100, documents: '[]' } });
+    const inv = await prisma.investor.create({ data: { orgId: other.orgId, name: 'Fresh LP', sharePct: 100 } });
     await prisma.holding.create({
       data: { investorId: inv.id, dealId: other.dealId, sharePct: 100, committed: 1_000_000_00n, called: 0n, distributed: 0n, irr: null },
     });
@@ -131,7 +131,7 @@ describe('the capital call panel', () => {
   });
 
   it('never shows one investor’s notice to another', async () => {
-    const other = await prisma.investor.create({ data: { orgId: T.orgId, name: 'Rival LP', sharePct: 20, documents: '[]' } });
+    const other = await prisma.investor.create({ data: { orgId: T.orgId, name: 'Rival LP', sharePct: 20 } });
     await prisma.cashflow.create({
       data: { investorId, dealId: T.dealId, kind: 'call', label: 'Meridian only', amount: -100_000_00n, date: inDays(20) },
     });

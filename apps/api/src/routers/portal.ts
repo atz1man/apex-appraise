@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { signFileUrl } from '../uploads.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { depositSchedule, dpi, weightedIrr } from '@apex/appraisal-engine';
 import { randomBytes } from 'node:crypto';
@@ -13,7 +14,47 @@ import { demoFallbacksAllowed } from '../demo-mode.js';
 import { intentFor, intentSucceeded, settlePayment } from '../payments.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
-async function investorPosition(prisma: any, investorId: string, orgId: string) {
+/**
+ * @param viewerUserId whose session signs the file links — the LP's own on the
+ *   portal, the internal user's when the register previews a position. The
+ *   file route checks the token's user against the file's firm, so a link
+ *   signed for one cannot be replayed by the other.
+ */
+/** the deals this investor holds in — the only deals whose documents they may read */
+const holdings_dealIds = (inv: { holdings: Array<{ dealId: string }> }) => inv.holdings.map((h) => h.dealId);
+
+/**
+ * The documents shared with investors across the deals held, newest first.
+ *
+ * Scoped by the FIRM as well as by the deals: a holding row names a deal, and
+ * the register refuses a deal of another firm, but a row is a row — the
+ * document query does not trust it. The URL is signed for whoever is looking,
+ * for the same reason the data room signs its own: a link opened in a new tab
+ * sends no bearer header. Metadata-only rows (a document the firm listed but
+ * holds no file for) come back with an empty URL, and the portal prints them
+ * without a link rather than a link to nothing.
+ */
+async function sharedDocuments(prisma: any, orgId: string, dealIds: string[], viewerUserId: string) {
+  if (dealIds.length === 0) return [];
+  const docs: Array<{
+    id: string; name: string; ext: string; sizeBytes: bigint; url: string; addedAt: Date; deal: { name: string };
+  }> = await prisma.document.findMany({
+    where: { orgId, dealId: { in: dealIds }, investorVisible: true },
+    select: { id: true, name: true, ext: true, sizeBytes: true, url: true, addedAt: true, deal: { select: { name: true } } },
+    orderBy: { addedAt: 'desc' },
+  });
+  return docs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    ext: d.ext,
+    dealName: d.deal.name,
+    sizeBytes: Number(d.sizeBytes),
+    addedAt: d.addedAt,
+    url: signFileUrl(d.url, viewerUserId),
+  }));
+}
+
+async function investorPosition(prisma: any, investorId: string, orgId: string, viewerUserId: string) {
   const inv = await prisma.investor.findFirst({
     where: { id: investorId, orgId },
     include: {
@@ -94,7 +135,7 @@ async function investorPosition(prisma: any, investorId: string, orgId: string) 
       amount: share(P(c.amount)),
       date: c.date,
     })),
-    documents: J<Array<{ name: string; date: string; size: string }>>(inv.documents, []),
+    documents: await sharedDocuments(prisma, orgId, holdings_dealIds(inv), viewerUserId),
     openCapitalCall: openCall
       ? {
           deal: openCallDeal?.name ?? null,
@@ -212,7 +253,7 @@ export const investorsRouter = router({
       };
     });
   }),
-  get: internalProcedure.input(z.string()).query(({ ctx, input }) => investorPosition(ctx.prisma, input, ctx.principal.orgId)),
+  get: internalProcedure.input(z.string()).query(({ ctx, input }) => investorPosition(ctx.prisma, input, ctx.principal.orgId, ctx.principal.userId)),
 
   /** The investor's own rows, unscaled and with ids, for the register's editors. */
   record: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
@@ -248,7 +289,6 @@ export const investorsRouter = router({
           initials: initialsOf(input.name),
           contactFirst: input.contactFirst,
           sharePct: input.sharePct,
-          documents: '[]',
         },
       });
       await recordAudit(ctx.prisma, {
@@ -493,7 +533,7 @@ export const investorsRouter = router({
   /** Investor portal: strictly the logged-in investor's own position. */
   myPosition: investorPortalProcedure.query(({ ctx }) => {
     if (!ctx.principal.investorId) throw new TRPCError({ code: 'FORBIDDEN' });
-    return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId);
+    return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId, ctx.principal.userId);
   }),
 
   /**
@@ -644,7 +684,19 @@ export const buyerRouter = router({
       },
       development: { name: unit.deal.name, address: unit.deal.address },
       milestones: unit.milestones.map((m) => ({ name: m.name, index: m.index, done: m.done, date: m.date })),
-      documentsToSign: docs.map((d) => ({ id: d.id, name: d.name, signed: d.signedAt != null, signedAt: d.signedAt })),
+      /**
+       * With the file behind it. The panel offered "Review & sign" on a document
+       * the buyer had no way to open — a signature on an unread contract is the
+       * one thing an e-sign flow exists to prevent. Signed for this buyer, like
+       * the data room's own links; empty where the firm holds no file.
+       */
+      documentsToSign: docs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        signed: d.signedAt != null,
+        signedAt: d.signedAt,
+        url: signFileUrl(d.url, ctx.principal.userId),
+      })),
       payments: payments.map((p: any): { id: string; kind: string; amount: number; paid: boolean; date: Date | null } => ({
         id: p.id,
         kind: p.kind,
