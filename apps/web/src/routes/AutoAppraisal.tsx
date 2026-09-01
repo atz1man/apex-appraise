@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { AutoAppraisalResult } from '@apex/appraisal-engine';
 import type { Extraction } from '@apex/types';
@@ -7,6 +7,7 @@ import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
 import { Button, Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
+import { manualDefaultsFor, manualIsRunnable, type ManualState, type ManualUnit } from '../lib/auto-defaults';
 
 // ---------- types ----------
 
@@ -23,59 +24,12 @@ interface RunState {
   sourceNote: string;
 }
 
-interface ManualUnit {
-  label: string;
-  count: number;
-  area: number;
-  value: number;
-}
 
-interface ManualState {
-  scheme: string;
-  address: string;
-  assetType: string;
-  planningStatus: string;
-  units: ManualUnit[];
-  efficiency: number;
-  profFee: number;
-  contingency: number;
-  targetProfit: number;
-  asking: number;
-  cilPerSqm: number;
-  s106: number;
-  agent: number;
-  legal: number;
-  acq: number;
-  finance: { ltc: number; rate: number; period: number; sales: number; arrFee: number };
-}
-
-// ---------- prototype state (copy verbatim) ----------
+// ---------- the worked example the AI panel discloses ----------
 
 const SAMPLE_NOTES =
   'Planning ref 7/2025/0412 — GRANTED. Demolition of existing warehouse and erection of 6no. B2/B8 trade counter units with ancillary mezzanine offices, Holdenhurst Road, Bournemouth BH8 8EW. Total consented floorspace 36,200 sq ft GIA. Conditions: standard pre-commencement; S106 contribution £150,000 (highways). CIL charging rate £40 per sqm.\n\nCost plan summary: shell, core & fit-out £105/ft². Programme 18 months + 3 month sales.\n\nComparables: trade counter capital values £230–£250/ft²; B8 warehouse £160–£170/ft²; mezzanine offices £200–£215/ft². Asking land price £400,000. Target profit 20% of GDV. Senior debt 60% LTC at 7.5% pa.';
 
-const DEFAULT_MANUAL: ManualState = {
-  scheme: 'Northgate Trade & Industrial Park',
-  address: 'Holdenhurst Road, Bournemouth BH8 8EW',
-  assetType: 'B2 / B8 Industrial',
-  planningStatus: 'Full consent granted — standard conditions',
-  units: [
-    { label: 'Trade counter units', count: 6, area: 2500, value: 290 },
-    { label: 'B8 warehouse', count: 1, area: 18000, value: 195 },
-    { label: 'Mezzanine offices', count: 1, area: 3200, value: 240 },
-  ],
-  efficiency: 90,
-  profFee: 11,
-  contingency: 5,
-  targetProfit: 20,
-  asking: 400000,
-  cilPerSqm: 40,
-  s106: 150000,
-  agent: 1.5,
-  legal: 0.5,
-  acq: 1.8,
-  finance: { ltc: 60, rate: 7.5, period: 18, sales: 3, arrFee: 1.5 },
-};
 
 const LOADING_STAGES = [
   'Reading planning & documents',
@@ -260,7 +214,17 @@ export default function AutoAppraisal() {
       else if (next.size < 4) next.add(id);
       return next;
     });
-  const [manual, setManual] = useState<ManualState>(DEFAULT_MANUAL);
+  /**
+   * The manual form starts from THIS deal — name, address, asset type — and
+   * from nothing that is a fact about a scheme. It started from the demo
+   * scheme, on every deal; see lib/auto-defaults.ts. Seeded once the deal
+   * record arrives, and never over something the person has typed.
+   */
+  const [manual, setManual] = useState<ManualState>(() => manualDefaultsFor(null));
+  const touched = useRef(false);
+  useEffect(() => {
+    if (deal && !touched.current) setManual(manualDefaultsFor(deal));
+  }, [deal]);
   const [run, setRun] = useState<RunState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
@@ -277,10 +241,18 @@ export default function AutoAppraisal() {
     return () => clearInterval(t);
   }, [phase]);
 
-  const setMan = (patch: Partial<ManualState>) => setManual((s) => ({ ...s, ...patch }));
-  const setFin = (patch: Partial<ManualState['finance']>) => setManual((s) => ({ ...s, finance: { ...s.finance, ...patch } }));
-  const setUnit = (i: number, patch: Partial<ManualUnit>) =>
+  const setMan = (patch: Partial<ManualState>) => {
+    touched.current = true;
+    setManual((s) => ({ ...s, ...patch }));
+  };
+  const setFin = (patch: Partial<ManualState['finance']>) => {
+    touched.current = true;
+    setManual((s) => ({ ...s, finance: { ...s.finance, ...patch } }));
+  };
+  const setUnit = (i: number, patch: Partial<ManualUnit>) => {
+    touched.current = true;
     setManual((s) => ({ ...s, units: s.units.map((u, j) => (j === i ? { ...u, ...patch } : u)) }));
+  };
 
   // ---- AI extraction run: real documents + notes ----
   const onGenerate = async () => {
@@ -310,7 +282,7 @@ export default function AutoAppraisal() {
 
   // ---- manual run: build an Extraction from the form, compute server-side ----
   const onRunManual = async () => {
-    if (phase === 'loading') return;
+    if (phase === 'loading' || !manualIsRunnable(manual)) return;
     const m = manual;
     const extraction: Extraction = {
       // manual entry is the user's own scheme, never the worked example
@@ -591,7 +563,7 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
-                      aria-label={`${u.label} number of units`}
+                      aria-label={`${u.label || `Unit ${i + 1}`} number of units`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 0.8 }}
                       value={u.count}
@@ -599,7 +571,7 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
-                      aria-label={`${u.label} area sq ft`}
+                      aria-label={`${u.label || `Unit ${i + 1}`} area sq ft`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1.1 }}
                       value={u.area}
@@ -607,7 +579,7 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
-                      aria-label={`${u.label} price per sq ft`}
+                      aria-label={`${u.label || `Unit ${i + 1}`} price per sq ft`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1 }}
                       value={u.value}
@@ -625,7 +597,7 @@ export default function AutoAppraisal() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => setMan({ units: [...manual.units, { label: 'New unit', count: 1, area: 1000, value: 200 }] })}
+                  onClick={() => setMan({ units: [...manual.units, { label: '', count: 1, area: 0, value: 0 }] })}
                 >
                   <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.4" strokeLinecap="round">
                     <path d="M12 6v12M6 12h12" />
@@ -669,7 +641,14 @@ export default function AutoAppraisal() {
 
               <div className="flex items-center gap-3 flex-wrap">
                 <RateBox prefix="Build £" value={buildRate} onChange={setBuildRate} />
-                <Button onClick={onRunManual} size="lg" className="flex-1" loading={phase === 'loading'}>
+                <Button
+                  onClick={onRunManual}
+                  size="lg"
+                  className="flex-1"
+                  loading={phase === 'loading'}
+                  disabled={!manualIsRunnable(manual)}
+                  title={manualIsRunnable(manual) ? undefined : 'Add a unit with a count, an area and a £/ft² first'}
+                >
                   Run appraisal
                   <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14M13 6l6 6-6 6" />
