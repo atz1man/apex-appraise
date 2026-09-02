@@ -93,14 +93,14 @@ describe('from nothing to an LP reading their own position, without the seed', (
 
     const h = (await analyst(A).investors.setHolding({
       investorId, dealId: A.dealId, committed: 2_000_000, called: 1_000_000, distributed: 300_000,
-    })) as { committed: number; called: number; irr: number | null; sharePct: number };
+    })) as { committed: number; called: number; irr: number | null };
     // pounds out, whatever the row holds
     expect(h.committed).toBe(2_000_000);
     expect(h.called).toBe(1_000_000);
     // no IRR was recorded, so none is claimed
     expect(h.irr).toBeNull();
-    // the share defaults to the investor's own
-    expect(h.sharePct).toBe(55);
+    // the share is the investor's — a holding carries none of its own
+    expect(h).not.toHaveProperty('sharePct');
 
     await analyst(A).investors.recordCashflow({
       investorId, dealId: A.dealId, kind: 'dist', label: 'Profit distribution', amount: 300_000, date: inDays(-10),
@@ -180,7 +180,7 @@ describe('one position per investor per deal', () => {
 
   it('the database holds that even if the procedure did not', async () => {
     await expect(
-      prisma.holding.create({ data: { investorId, dealId: A.dealId, sharePct: 55, committed: 1n } }),
+      prisma.holding.create({ data: { investorId, dealId: A.dealId, committed: 1n } }),
     ).rejects.toThrow(/unique/i);
   });
 

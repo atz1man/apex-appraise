@@ -191,7 +191,7 @@ beforeAll(async () => {
   const investor = await prisma.investor.create({ data: { orgId: B.orgId, name: 'B Capital LP' } });
   // a holding and a statement line, so the register's procedures have B's rows to be refused on
   await prisma.holding.create({
-    data: { investorId: investor.id, dealId: B.dealId, sharePct: 100, committed: 1_000_000_00n },
+    data: { investorId: investor.id, dealId: B.dealId, committed: 1_000_000_00n },
   });
   const cashflow = await prisma.cashflow.create({
     data: { investorId: investor.id, dealId: B.dealId, kind: 'dist', label: 'B distribution', amount: 50_000_00n, date: new Date() },

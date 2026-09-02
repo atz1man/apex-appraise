@@ -191,12 +191,11 @@ const investorOut = (i: { id: string; name: string; initials: string; sharePct: 
 });
 
 const holdingOut = (h: {
-  id: string; investorId: string; dealId: string; sharePct: number; committed: bigint; called: bigint; distributed: bigint; irr: number | null;
+  id: string; investorId: string; dealId: string; committed: bigint; called: bigint; distributed: bigint; irr: number | null;
 }) => ({
   id: h.id,
   investorId: h.investorId,
   dealId: h.dealId,
-  sharePct: h.sharePct,
   committed: P(h.committed),
   called: P(h.called),
   distributed: P(h.distributed),
@@ -215,7 +214,7 @@ const cashflowOut = (c: { id: string; investorId: string; dealId: string | null;
 
 const INVESTOR_LABELS: Record<string, string> = { name: 'name', contactFirst: 'contact', sharePct: 'share' };
 const HOLDING_LABELS: Record<string, string> = {
-  sharePct: 'share', committed: 'committed', called: 'called', distributed: 'distributed', irr: 'recorded IRR',
+  committed: 'committed', called: 'called', distributed: 'distributed', irr: 'recorded IRR',
 };
 
 /** money on a holding means a statement has gone out; the row is then a record, not a draft */
@@ -377,7 +376,6 @@ export const investorsRouter = router({
       z.object({
         investorId: z.string(),
         dealId: z.string(),
-        sharePct: z.number().min(0).max(100).optional(),
         committed: z.number().min(0).optional(), // £, 100% LP basis
         called: z.number().min(0).optional(),
         distributed: z.number().min(0).optional(),
@@ -394,7 +392,6 @@ export const investorsRouter = router({
         where: { investorId_dealId: { investorId: investor.id, dealId: deal.id } },
       });
       const patch: Record<string, unknown> = {};
-      if (input.sharePct !== undefined) patch.sharePct = input.sharePct;
       if (input.committed !== undefined) patch.committed = toPence(input.committed);
       if (input.called !== undefined) patch.called = toPence(input.called);
       if (input.distributed !== undefined) patch.distributed = toPence(input.distributed);
@@ -421,7 +418,6 @@ export const investorsRouter = router({
           data: {
             investorId: investor.id,
             dealId: deal.id,
-            sharePct: input.sharePct ?? investor.sharePct,
             committed: toPence(input.committed),
             called: toPence(input.called ?? 0),
             distributed: toPence(input.distributed ?? 0),

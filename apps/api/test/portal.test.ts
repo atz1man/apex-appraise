@@ -39,7 +39,7 @@ beforeAll(async () => {
     const user = await prisma.user.create({
       data: { orgId: A.orgId, email: `${name}@lp.test`, password: 'x', name, initials: 'LP', role: 'VIEWER', principalType: 'investor', investorId: inv.id },
     });
-    await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, sharePct: 25, committed: 1_000_000_00 } });
+    await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, committed: 1_000_000_00 } });
     return { userId: user.id, investorId: inv.id };
   };
   const mkBuyer = async (name: string) => {

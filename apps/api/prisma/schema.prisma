@@ -800,8 +800,11 @@ model Holding {
   investor   Investor @relation(fields: [investorId], references: [id])
   dealId     String
   deal       Deal @relation(fields: [dealId], references: [id])
-  sharePct   Float
-  committed  BigInt // pence — 100% LP basis, scale by investor share
+  // pence, on the 100% LP basis. The LP's share is the INVESTOR's `sharePct`,
+  // one figure for every pooled amount they read — a holding carried a share
+  // of its own that nothing ever read while the API accepted and audited a
+  // change to it, and it went stale the moment the investor's was edited.
+  committed  BigInt
   called     BigInt @default(0)
   distributed BigInt @default(0)
   /// The deal's recorded IRR as a fraction (0.231 = 23.1%), or null while nobody

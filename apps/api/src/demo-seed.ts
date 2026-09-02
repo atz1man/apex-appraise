@@ -536,7 +536,7 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     for (const [dealName, committed, distributed, irr] of baseHoldings) {
       await prisma.holding.create({
         data: {
-          investorId: inv.id, dealId: deals[dealName], sharePct,
+          investorId: inv.id, dealId: deals[dealName],
           committed: p(committed), called: p(committed * 0.82), distributed: p(distributed), irr,
         },
       });

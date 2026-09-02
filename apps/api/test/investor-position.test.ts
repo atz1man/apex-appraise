@@ -49,7 +49,7 @@ beforeAll(async () => {
   investorId = inv.id;
   // one realised deal, one still in construction with no IRR recorded
   await prisma.holding.create({
-    data: { investorId: inv.id, dealId: T.dealId, sharePct: 55, committed: 2_100_000_00n, called: 1_722_000_00n, distributed: 1_800_000_00n, irr: 0.231 },
+    data: { investorId: inv.id, dealId: T.dealId, committed: 2_100_000_00n, called: 1_722_000_00n, distributed: 1_800_000_00n, irr: 0.231 },
   });
   const user = await prisma.user.create({
     data: {
@@ -74,7 +74,7 @@ describe('the headline figures', () => {
     const other = await makeTenant('New fund');
     const inv = await prisma.investor.create({ data: { orgId: other.orgId, name: 'Fresh LP', sharePct: 100 } });
     await prisma.holding.create({
-      data: { investorId: inv.id, dealId: other.dealId, sharePct: 100, committed: 1_000_000_00n, called: 0n, distributed: 0n, irr: null },
+      data: { investorId: inv.id, dealId: other.dealId, committed: 1_000_000_00n, called: 0n, distributed: 0n, irr: null },
     });
     const user = await prisma.user.create({
       data: {

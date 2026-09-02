@@ -41,7 +41,7 @@ beforeAll(async () => {
   B = await makeTenant('Bravo');
   const inv = await prisma.investor.create({ data: { orgId: A.orgId, name: 'Alpha Capital LP', sharePct: 40 } });
   await prisma.user.update({ where: { id: A.investorPrincipal.userId }, data: { investorId: inv.id } });
-  await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, sharePct: 40, committed: 1_000_000_00 } });
+  await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, committed: 1_000_000_00 } });
   lp = { investorId: inv.id, userId: A.investorPrincipal.userId };
 }, 120_000);
 
@@ -86,7 +86,7 @@ describe('documents shared with investors', () => {
     expect(before.documents.map((d) => d.id), 'a document on a deal the LP does not hold in was visible').not.toContain(doc.id);
 
     // and a holding is what admits them
-    await prisma.holding.create({ data: { investorId: lp.investorId, dealId: other.id, sharePct: 10, committed: 100_000_00 } });
+    await prisma.holding.create({ data: { investorId: lp.investorId, dealId: other.id, committed: 100_000_00 } });
     const after = (await callerFor(lpPrincipal()).investors.myPosition()) as Position;
     expect(after.documents.map((d) => d.id)).toContain(doc.id);
   });
@@ -99,7 +99,7 @@ describe('documents shared with investors', () => {
      */
     const theirs = await fileDoc(B.orgId, B.dealId, 'Bravo investor pack.pdf');
     await callerFor(B.principal).documents.shareWithInvestors({ id: theirs.id, visible: true } as never);
-    await prisma.holding.create({ data: { investorId: lp.investorId, dealId: B.dealId, sharePct: 10, committed: 100_000_00 } });
+    await prisma.holding.create({ data: { investorId: lp.investorId, dealId: B.dealId, committed: 100_000_00 } });
     const pos = (await callerFor(lpPrincipal()).investors.myPosition()) as Position;
     expect(pos.documents.map((d) => d.name), 'another firm’s document reached this LP').not.toContain('Bravo investor pack.pdf');
     await prisma.holding.deleteMany({ where: { investorId: lp.investorId, dealId: B.dealId } });
