@@ -2053,7 +2053,16 @@ test('the board states the book’s debt exposure and its largest concentration'
  * is half of what is being tested.
  */
 test('covenants are judged only once the firm sets them, and can be cleared again', async ({ page }) => {
-  test.setTimeout(90_000);
+  /**
+   * 120s, not 90s: eight page loads, five of them carrying the exposure of the
+   * whole book, plus three one-second settles. Twice in CI the 90s test budget
+   * ran out at the funding pack's own load — the last load, not a slow one —
+   * with the other worker busy beside it, and both times the same spec was
+   * green locally and on the next commit. The budget is the test's, so the
+   * timeout reads as "the pack never rendered" when it means "the seven loads
+   * before it took 88 seconds".
+   */
+  test.setTimeout(120_000);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -2188,7 +2197,9 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
       pages: p.length,
       overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
       feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]),
-      rows: p.reduce((a, x) => a + ((x.textContent ?? '').match(/Scheme \d+/g)?.length ?? 0), 0),
+      // TABLE rows only: the exceptions box names a scheme too, and a covenant a
+      // neighbouring test left set turned forty rows into eighty "Scheme N"s
+      rows: p.reduce((a, x) => a + [...x.querySelectorAll('.pack-row')].filter((r) => /Scheme \d+/.test(r.textContent ?? '')).length, 0),
       totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
     };
   });
@@ -2225,7 +2236,7 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
     const p = [...document.querySelectorAll('.a4-page')];
     return {
       overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
-      rows: p.reduce((a, x) => a + ((x.textContent ?? '').match(/Edge \d+/g)?.length ?? 0), 0),
+      rows: p.reduce((a, x) => a + [...x.querySelectorAll('.pack-row')].filter((r) => /Edge \d+/.test(r.textContent ?? '')).length, 0),
       totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
     };
   });
