@@ -71,3 +71,31 @@ test('forty breaches print on as many sheets as they need, every one of them', a
   expect(pack.totals).toBe(1);
   expect(pack.feet).toEqual(Array.from({ length: pack.pages }, (_, i) => `Page ${i + 1} of ${pack.pages}`));
 });
+
+/**
+ * A pack that could not be built says so. `isLoading || !exposure` was true of
+ * a failed read as well as a pending one, so a failed exposure read spun for
+ * ever — in CI that read as "the pack never rendered", and a person printing
+ * one was told nothing at all.
+ */
+test('a pack whose exposure read fails says so, and offers to try again', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  let fail = true;
+  await page.route('**/trpc/deals.exposure*', async (route) => {
+    if (!fail) return route.continue();
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { json: { message: 'exposure could not be computed', code: -32603, data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 500 } } } }),
+    });
+  });
+  await page.goto('/portfolio/pack');
+  await expect(page.getByText('The funding pack could not be built')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('pack-error')).toContainText('exposure could not be computed');
+  fail = false;
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText('Portfolio funding pack').first()).toBeVisible();
+});

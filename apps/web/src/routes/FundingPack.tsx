@@ -3,7 +3,7 @@ import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
-import { Button, Spinner } from '../components/ui';
+import { Button, EmptyState, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
 import { PACK_LAYOUT, paginatePack } from '../lib/pack-pagination';
 import type { CovenantTest, ExposurePosition } from '@apex/appraisal-engine';
@@ -56,7 +56,7 @@ function ExceptionLine({ e }: { e: PackException }) {
 }
 
 export default function FundingPack() {
-  const { data: exposure, isLoading } = trpc.deals.exposure.useQuery();
+  const { data: exposure, isLoading, error, refetch } = trpc.deals.exposure.useQuery();
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
 
   const firmName = org?.name ?? 'Apex Appraise';
@@ -120,6 +120,21 @@ export default function FundingPack() {
     if (overrun > 0 && reserve < 8 * LAYOUT.rowPx) setReserve((r) => r + Math.ceil(overrun) + 4);
   }, [pages, reserve, measured]);
 
+  /**
+   * A pack that could not be built says so. It used to spin for ever on a
+   * failed exposure read — `isLoading || !exposure` is true of an error too —
+   * which in the browser suite read as "the pack never rendered" and told a
+   * person printing one nothing at all.
+   */
+  if (error) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-frame p-6">
+        <EmptyState title="The funding pack could not be built" cta={<Button onClick={() => refetch()}>Try again</Button>}>
+          <span data-testid="pack-error">{error.message}</span>
+        </EmptyState>
+      </div>
+    );
+  }
   if (isLoading || !exposure) {
     return (
       <div className="min-h-screen grid place-items-center bg-frame">
