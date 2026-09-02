@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
+import { workingDeal } from '../lib/working-deal';
 
 const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
 const USE_CLASSES: Array<[string, string]> = [
@@ -212,7 +213,7 @@ export default function Benchmarking() {
   const optedIn = setContribution.isPending
     ? (setContribution.variables?.enabled ?? contribQ.data?.optedIn ?? false)
     : (contribQ.data?.optedIn ?? false);
-  const effectiveContribId = contribDealId || dealsQ.data?.deals.find((d) => d.name.startsWith('Northgate'))?.id || dealsQ.data?.deals[0]?.id || '';
+  const effectiveContribId = contribDealId || workingDeal(dealsQ.data?.deals)?.id || '';
 
   const M = metricsQ.data;
   const trend = trendQ.data?.series ?? [];

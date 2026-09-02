@@ -5,6 +5,7 @@ import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
 import { neutral } from '@apex/ui-tokens';
+import { workingDeal } from '../lib/working-deal';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -137,7 +138,7 @@ export default function Integrations() {
     },
   });
   const deals = dealsData?.deals ?? [];
-  const effectiveDealId = syncDealId || deals.find((d) => d.name.startsWith('Northgate'))?.id || deals[0]?.id || '';
+  const effectiveDealId = syncDealId || workingDeal(deals)?.id || '';
 
   const byProvider = new Map((rows ?? []).map((r) => [r.provider, r]));
   const connected = (rows ?? []).filter((r) => r.status === 'CONNECTED').length;

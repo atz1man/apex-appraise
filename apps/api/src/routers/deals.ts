@@ -58,6 +58,26 @@ export const dealsRouter = router({
         include: { owner: { select: { initials: true, name: true } } },
         orderBy: { probability: 'desc' },
       });
+      /**
+       * When each deal was last WORKED, so a screen can tell which one the firm
+       * is on. The row's own `updatedAt` moves only when the row does — a task
+       * raised, a document filed or a comparable added on a deal never touches
+       * it — and the mutations that matter write an audit event carrying the
+       * deal's id (`provenance-sweep` names the dozen that do not, and why), so
+       * the latest of those is the honest answer and the row's stamp is the
+       * floor beneath it. Scoped to the firm: an event
+       * is evidence only from the firm that wrote it.
+       */
+      const worked = await ctx.prisma.activityEvent.groupBy({
+        by: ['dealId'],
+        where: { orgId: ctx.principal.orgId, dealId: { in: deals.map((d) => d.id) } },
+        _max: { at: true },
+      });
+      const lastEvent = new Map(worked.map((w) => [w.dealId, w._max.at]));
+      const lastWorkedAt = (d: { id: string; updatedAt: Date }) => {
+        const ev = lastEvent.get(d.id);
+        return ev && ev.getTime() > d.updatedAt.getTime() ? ev : d.updatedAt;
+      };
       const rollup = portfolioRollup(
         deals.map((d) => ({
           gdv: P(d.gdv),
@@ -67,7 +87,7 @@ export const dealsRouter = router({
           stage: d.stage,
         })),
       );
-      return { deals: deals.map(dealOut), rollup };
+      return { deals: deals.map((d) => ({ ...dealOut(d), lastWorkedAt: lastWorkedAt(d) })), rollup };
     }),
 
   get: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {

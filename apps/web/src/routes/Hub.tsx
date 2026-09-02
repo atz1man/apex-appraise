@@ -4,6 +4,7 @@ import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
+import { workingDeal } from '../lib/working-deal';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -89,7 +90,8 @@ export default function Hub() {
       navigate(`/deal/${res.dealId}`);
     },
   });
-  const flagship = data?.deals.find((d) => d.name.startsWith('Northgate')) ?? data?.deals[0];
+  // the deal the firm is on — `lib/working-deal.ts` says how that is decided
+  const flagship = workingDeal(data?.deals);
   // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
   const TOOL_TINTS: Record<string, string> = {
     appraise: 'bg-tint-success text-brand-ink',
