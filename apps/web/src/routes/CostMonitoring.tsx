@@ -166,6 +166,13 @@ export default function CostMonitoring() {
     updateContractor.mutate({ id: cur.id, patch });
   };
   const addPhoto = trpc.photos.add.useMutation({ onSuccess: () => utils.photos.list.invalidate(dealId) });
+  const removePhoto = trpc.photos.remove.useMutation({
+    onSuccess: () => {
+      utils.photos.list.invalidate(dealId);
+      // the lightbox is showing the row that no longer exists
+      setLightbox(null);
+    },
+  });
   const createTask = trpc.tasks.create.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
 
@@ -833,14 +840,44 @@ export default function CostMonitoring() {
                   {lightbox.contractor ?? 'No contractor'} · {firmDate(lightbox.takenAt)}
                 </div>
               </div>
-              <button
-                aria-label="Close"
-                className="shrink-0 w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
-                style={{ background: 'rgba(255,255,255,0.1)' }}
-                onClick={() => setLightbox(null)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
+              <div className="shrink-0 flex items-center gap-2">
+                {/*
+                  Remove lives HERE, not on the card in the grid: the card is
+                  itself a button that opens this view, and a button inside a
+                  button is neither valid nor reachable by keyboard. It is also
+                  the right place to ask — you are looking at the photo you are
+                  about to delete.
+
+                  `add` was the only write until now, so a photo taken on the
+                  wrong site, or of something that should never have been
+                  uploaded, stayed on the deal for good. These come off a phone,
+                  on site, from whoever is standing there.
+                */}
+                <button
+                  aria-label={`Remove ${lightbox.caption}`}
+                  title="Remove this photo"
+                  className="w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.1)' }}
+                  disabled={removePhoto.isPending}
+                  onClick={() => {
+                    if (confirm(`Remove “${lightbox.caption}” from the site log? The audit trail keeps a record that it was removed.`)) {
+                      removePhoto.mutate(lightbox.id);
+                    }
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+                <button
+                  aria-label="Close"
+                  className="w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.1)' }}
+                  onClick={() => setLightbox(null)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             {lightbox.url ? (
               <img src={lightbox.url} alt={lightbox.caption} className="max-h-[70vh] w-full object-contain bg-black" />

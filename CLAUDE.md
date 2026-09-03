@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (888). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (174): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -125,6 +125,17 @@ procedure or a model without satisfying them fails CI with a message naming your
 the point, so read the failure rather than adding an exemption.
 
 - `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
+- `crud-completeness` — what a firm can create, a firm can remove. Measured across the whole
+  router: FIVE entities had a create-shaped mutation and nothing that removed one —
+  comparables, scenarios, photos, tasks and deals — while `sales` and `investors` beside them
+  already had `deleteUnit`, `deleteTenancy`, `delete`, `removeHolding` and `deleteCashflow`,
+  so deleting properly is this product's own convention and those five were omissions. What
+  made them matter is what the only alternative WAS: a comparable could be withdrawn only by
+  overwriting it with a different property, while the row went on carrying weight in the
+  supported £/ft²; a task could be retired only by ticking it, which claims the work
+  happened. `deals` stays exempt ON PURPOSE and the exemption says why — it is the root of
+  everything else and one carrying a signed valuation is a professional record, so archive
+  vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
