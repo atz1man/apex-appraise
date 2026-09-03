@@ -658,6 +658,12 @@ model OrgPolicy {
 
   aiPolicy String @default("")
 
+  /// Which jurisdiction's vocabulary and floor-area unit this firm's screens and
+  /// reports use — a REGIONS code from @apex/types/regions. Words and units only:
+  /// money is always pounds, and no arithmetic changes with it. Defaults to GB,
+  /// which is what every existing workspace has been reading all along.
+  region String @default("GB")
+
   // Facility covenants, firm-wide. NULLABLE ON PURPOSE: an unset limit is not
   // tested, because a breach measured against a threshold nobody agreed to is an
   // accusation rather than a finding.

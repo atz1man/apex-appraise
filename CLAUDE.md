@@ -24,13 +24,13 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (283; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (288; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (880). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (883). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (153): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (164): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income) plus the `no-raw-hex` and `asset-classes` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region) plus the `no-raw-hex` and `asset-classes` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -45,7 +45,21 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 - The LLM NEVER computes financials — it extracts inputs only; the deterministic engine computes.
 - One shared calculation engine for every surface (screen, export, report, portal).
-- UK conventions: £, RICS, SDLT, CIL, GIA/NIA, en-GB dates.
+- UK conventions: £, RICS, SDLT, CIL, GIA/NIA, en-GB dates. A firm outside the UK can change
+  the WORDS and the UNIT — nothing else. `@apex/types/regions` holds a profile per region
+  (GB/US/AU): yield ↔ cap rate, GDV ↔ gross sellout ↔ GRV, net rent ↔ NOI, SDLT ↔ transfer tax
+  ↔ stamp duty, CIL ↔ impact fees ↔ developer contributions, and ft² ↔ m². It is stored on
+  `OrgPolicy.region` and read through `web/src/lib/region.ts` (`useUnits()`); the conversion
+  itself is the engine's (`areaIn`/`ratePerAreaIn`/`formatArea`/`formatRatePerArea` in
+  `format.ts`, over the one `SQFT_PER_SQM` the CIL charge uses). Money NEVER changes — every
+  figure is in pounds in every region — and neither does any arithmetic. Two things a region
+  cannot claim, and both are asserted: `landTaxModelled` is true only for GB, because
+  `sdltCommercial` is England & NI statute and a UK-band figure must not print under a local
+  name; and `redBook` is true only for GB. In square feet every conversion is the identity
+  with no rounding, so a British firm's stored figures and printed strings are untouched.
+  NOT localised, deliberately: the marketing site (`Landing.tsx`), the sample planning notice
+  in `AutoAppraisal.tsx`, and the server-drafted narrative — that text is written by the model
+  under a UK prompt, and localising it is a change to `drafter`, not to a label.
 - Money stored as integer pence in the DB.
 - Design tokens only — no raw hex in components (tokens come from `@apex/ui-tokens`) — with one
   deliberate exception: the PRINTED documents (`AppraisalReport`, `RedBookReport`, `TermsDocument`,

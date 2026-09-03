@@ -243,6 +243,11 @@ export * from './plan.js';
  * `@apex/types/asset-classes`) so the browser can read it without zod.
  */
 export * from './asset-classes.js';
+/**
+ * What a jurisdiction calls things — terminology and floor-area units behind a
+ * firm-level region setting. Words and units only; money stays in pounds.
+ */
+export * from './regions.js';
 
 /**
  * The data providers a workspace can connect.

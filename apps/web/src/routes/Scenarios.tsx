@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetrics as Metrics } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
+import { useUnits, type RegionUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -14,10 +15,18 @@ const RED = 'rgb(var(--status-red, 178 58 46))';
 
 type LeverKey = 'blendedPsf' | 'buildPsf' | 'gia' | 'targetProfitPct';
 
-const LEVERS: Array<{ key: LeverKey; label: string; min: number; max: number; step: number; fmt: (v: number) => string }> = [
-  { key: 'blendedPsf', label: 'Blended £/ft²', min: 180, max: 280, step: 5, fmt: (v) => `£${Math.round(v)}` },
-  { key: 'buildPsf', label: 'Build £/ft²', min: 85, max: 160, step: 5, fmt: (v) => `£${Math.round(v)}` },
-  { key: 'gia', label: 'GIA (ft²)', min: 16_000, max: 34_000, step: 500, fmt: (v) => n0(v) },
+/**
+ * The levers, in the firm's own unit.
+ *
+ * The VALUES stay in square feet — they are the engine's inputs and the slider
+ * ranges are calibrated in them — and only the label and the printed figure
+ * change. Converting the range too would move every slider's stops, which is a
+ * different scheme rather than the same one described differently.
+ */
+const leversFor = (U: RegionUnits): Array<{ key: LeverKey; label: string; min: number; max: number; step: number; fmt: (v: number) => string }> => [
+  { key: 'blendedPsf', label: `Blended £/${U.unit}`, min: 180, max: 280, step: 5, fmt: (v) => `£${U.rateNum(v)}` },
+  { key: 'buildPsf', label: `Build £/${U.unit}`, min: 85, max: 160, step: 5, fmt: (v) => `£${U.rateNum(v)}` },
+  { key: 'gia', label: `GIA (${U.unit})`, min: 16_000, max: 34_000, step: 500, fmt: (v) => U.areaNum(v) },
   { key: 'targetProfitPct', label: 'Target profit %', min: 12, max: 28, step: 1, fmt: (v) => `${v}%` },
 ];
 
@@ -48,6 +57,9 @@ const OUTPUT_ROWS: Array<{ label: string; key: keyof Metrics; fmt: (v: number) =
 const cellBorder = { borderLeft: '1px solid rgb(var(--border-faint, 240 239 233))' } as const;
 
 export default function Scenarios() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
+  const LEVERS = leversFor(U);
   const { dealId = '' } = useParams();
   const navigate = useNavigate();
   const utils = trpc.useUtils();

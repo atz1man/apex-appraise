@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
+import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar } from '../components/ui';
 import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
 
@@ -119,6 +120,8 @@ const netAdjColor = (pts: number) => (pts > 0 ? 'rgb(var(--status-green, 30 122 
 // ---------- main ----------
 
 export default function FieldApp() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 560px)');
@@ -378,7 +381,7 @@ export default function FieldApp() {
         <div className="flex bg-surface border-b border-border-std py-[15px] px-1.5">
           {(
             [
-              [nia > 0 ? n0(nia) : '—', 'NIA ft²'],
+              [nia > 0 ? U.areaNum(nia) : '—', `NIA ${U.unit}`],
               [appraisal ? n0(appraisal.input.units.reduce((a, u) => a + u.count, 0)) : '—', 'Units'],
               [`${Math.round(deal.roc * 100)}%`, 'RoC'],
               [`${deal.probability}%`, 'Prob.'],
@@ -647,7 +650,7 @@ export default function FieldApp() {
                 <div className="mt-3 flex items-end justify-between">
                   <div>
                     <div className="label-mono text-ink-3 font-normal">BASE</div>
-                    <div className="fig text-[16px] font-semibold">£{n0(c.basePsf)}<span className="text-[11px] text-ink-3">/ft²</span></div>
+                    <div className="fig text-[16px] font-semibold">£{U.rateNum(c.basePsf)}<span className="text-[11px] text-ink-3">/{U.unit}</span></div>
                   </div>
                   <div className="text-center">
                     <div className="label-mono text-ink-3 font-normal">NET ADJ</div>
@@ -655,7 +658,7 @@ export default function FieldApp() {
                   </div>
                   <div className="text-right">
                     <div className="label-mono text-ink-3 font-normal">ADJUSTED</div>
-                    <div className="fig text-[16px] font-semibold text-brand-ink">£{n0(adj?.adjustedPsf ?? c.basePsf)}<span className="text-[11px] text-ink-3">/ft²</span></div>
+                    <div className="fig text-[16px] font-semibold text-brand-ink">£{U.rateNum(adj?.adjustedPsf ?? c.basePsf)}<span className="text-[11px] text-ink-3">/{U.unit}</span></div>
                   </div>
                 </div>
               </div>
@@ -667,7 +670,7 @@ export default function FieldApp() {
       {/* summary + tab bar */}
       <div className="flex-none bg-surface/95 border-t border-border-std" style={{ backdropFilter: 'blur(18px)' }}>
         <div className="flex items-center justify-between px-[22px] py-3 border-b border-border-faint">
-          <span className="text-[12px] text-ink-2b">{comps.length} comps · supported £{n0(supported)}/ft²</span>
+          <span className="text-[12px] text-ink-2b">{comps.length} comps · supported {U.rate(supported)}</span>
           <span className="flex items-baseline gap-[7px]">
             <span className="text-[11px] text-ink-3">Indicated</span>
             <span className="fig text-[16px] font-semibold text-brand-ink">{indicated > 0 ? formatMoneyFull(indicated) : '—'}</span>

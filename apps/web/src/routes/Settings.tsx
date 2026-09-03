@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
+import { DEFAULT_REGION, REGION_PROFILES, REGIONS, regionProfile, type Region } from '@apex/types/regions';
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
@@ -943,6 +944,7 @@ function DataPrivacyPanel() {
 /** Firm-level standing wording used by new terms of engagement and the reports. */
 type PolicyForm = {
   aiPolicy: string;
+  region: Region;
   toePurpose: string;
   toeOtherUsers: string;
   toeInterest: string;
@@ -1083,7 +1085,43 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
         ) : undefined
       }
     >
-      <div className="text-[13.5px] font-semibold">AI policy note</div>
+      {/*
+        Words and units, not money. A firm working outside the UK reads "cap
+        rate" rather than "yield" and quotes floor areas in square metres; every
+        figure stays in pounds and nothing is computed differently. The two
+        notes below are the honest limits of that, and they are stated here
+        rather than discovered on a certificate.
+      */}
+      <div className="text-[13.5px] font-semibold">Region</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        Which jurisdiction&rsquo;s vocabulary and floor-area unit your screens and reports use. Money is always in pounds
+        and no figure is calculated differently.
+      </div>
+      <select
+        className="mt-2.5 text-[12.5px]"
+        aria-label="Region"
+        disabled={!isAdmin}
+        value={form.region ?? DEFAULT_REGION}
+        onChange={(e) => set('region', e.target.value)}
+      >
+        {REGIONS.map((r) => (
+          <option key={r} value={r}>{REGION_PROFILES[r].label}</option>
+        ))}
+      </select>
+      {!regionProfile(form.region).landTaxModelled && (
+        <div className="mt-2 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+          {regionProfile(form.region).terms.landTax} is not calculated for this region — the acquisition duty in an
+          appraisal follows England &amp; Northern Ireland SDLT bands. Override it on the deal.
+        </div>
+      )}
+      {!regionProfile(form.region).redBook && (
+        <div className="mt-2 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+          The valuation certificate is drafted to the RICS Red Book and names a RICS Registered Valuer. Changing the
+          region changes the wording around the figures, not the standard the report is written to.
+        </div>
+      )}
+
+      <div className="mt-5 border-t border-border-std pt-4 text-[13.5px] font-semibold">AI policy note</div>
       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         Added to the AI-use disclosure in every report, after the standing statement. Use it for your own commitments —
         how AI-assisted text is reviewed, where your full policy can be read.

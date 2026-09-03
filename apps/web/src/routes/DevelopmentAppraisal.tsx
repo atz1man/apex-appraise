@@ -22,6 +22,7 @@ import { getPrincipal, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { startingIncome, startingIncomeLine } from '../lib/starting-income';
+import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
@@ -47,14 +48,14 @@ const ASPECT: Record<string, string> = {
   finance: 'Finance', site: 'Site purchase', cashflow: 'Cashflow', returns: 'Returns',
 };
 
-const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct' | 'ervPsf' | 'yearsToReview' | 'yieldPct', string> = {
-  count: 'number of tenancies',
-  area: 'area sq ft',
-  rentPsf: 'passing rent per sq ft per year',
-  voidPct: 'void allowance percent',
-  ervPsf: 'estimated rental value per sq ft per year',
-  yearsToReview: 'years to review',
-  yieldPct: 'tenancy yield percent',
+const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct' | 'ervPsf' | 'yearsToReview' | 'yieldPct', (unit: string) => string> = {
+  count: () => 'number of tenancies',
+  area: (unit) => `area ${unit}`,
+  rentPsf: (unit) => `passing rent per ${unit} per year`,
+  voidPct: () => 'void allowance percent',
+  ervPsf: (unit) => `estimated rental value per ${unit} per year`,
+  yearsToReview: () => 'years to review',
+  yieldPct: () => 'tenancy yield percent',
 };
 
 const PRESETS: Record<string, number[]> = {
@@ -65,10 +66,16 @@ const PRESETS: Record<string, number[]> = {
 
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const UNIT_COL_ARIA: Record<'count' | 'area' | 'cap', string> = {
-  count: 'number of units',
-  area: 'area sq ft',
-  cap: 'price per sq ft',
+/**
+ * Column labels for a screen reader, which take the firm's unit like every
+ * other label on the page. A field showing square metres that announces itself
+ * as "area sq ft" is a worse defect than the visible one, because nobody sighted
+ * ever sees it.
+ */
+const UNIT_COL_ARIA: Record<'count' | 'area' | 'cap', (unit: string) => string> = {
+  count: () => 'number of units',
+  area: (unit) => `area ${unit}`,
+  cap: (unit) => `price per ${unit}`,
 };
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -157,6 +164,12 @@ export default function DevelopmentAppraisal() {
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: firm } = trpc.org.firm.useQuery();
+  /**
+   * Floor areas, rates and the words for them, in the firm's own jurisdiction.
+   * Words and units only — every figure below is in pounds either way, and the
+   * engine computes the same thing wherever the firm is.
+   */
+  const U = useUnits();
   const { data: saved, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   /**
    * The version this page is holding.
@@ -438,7 +451,7 @@ export default function DevelopmentAppraisal() {
               variant="secondary"
               className="hidden sm:inline-flex"
               onClick={() =>
-                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel })
+                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
               }
             >
               Export .xlsx
@@ -513,8 +526,8 @@ export default function DevelopmentAppraisal() {
                         <tr>
                           <th className="label-mono text-ink-3 text-left pb-2">Unit type</th>
                           <th className="label-mono text-ink-3 text-right pb-2 w-16">No.</th>
-                          <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
-                          <th className="label-mono text-ink-3 text-right pb-2 w-24">£/ft²</th>
+                          <th className="label-mono text-ink-3 text-right pb-2 w-24">Area {U.unit}</th>
+                          <th className="label-mono text-ink-3 text-right pb-2 w-24">£/{U.unit}</th>
                           <th className="label-mono text-ink-3 text-right pb-2 w-24">Value</th>
                           <th className="w-8" />
                         </tr>
@@ -530,9 +543,13 @@ export default function DevelopmentAppraisal() {
                                 <input
                                   type="number"
                                   className="w-full text-right fig"
-                                  aria-label={`${u.label} ${UNIT_COL_ARIA[k]}`}
-                                  value={u[k]}
-                                  onChange={(e) => set({ units: input.units.map((x, j) => (j === i ? { ...x, [k]: parseFloat(e.target.value) || 0 } : x)) })}
+                                  aria-label={`${u.label} ${UNIT_COL_ARIA[k](U.unitSpoken)}`}
+                                  value={k === 'area' ? U.areaField(u.area) : k === 'cap' ? U.rateField(u.cap) : u.count}
+                                  onChange={(e) => {
+                                    const typed = parseFloat(e.target.value) || 0;
+                                    const v = k === 'area' ? U.areaFromField(typed) : k === 'cap' ? U.rateFromField(typed) : typed;
+                                    set({ units: input.units.map((x, j) => (j === i ? { ...x, [k]: v } : x)) });
+                                  }}
                                 />
                               </td>
                             ))}
@@ -552,9 +569,9 @@ export default function DevelopmentAppraisal() {
                       </div>
                     ) : null}
                     <div className="mt-3 flex gap-6 border-t border-border-std pt-3">
-                      <Kv k="NIA" v={`${n0(R.nia)} ft²`} />
-                      <Kv k="GIA (via efficiency)" v={`${n0(R.gia)} ft²`} />
-                      <Kv k="GDV" v={fM(R.gdv)} tone="rgb(var(--brand-ink, 20 80 59))" />
+                      <Kv k="NIA" v={U.area(R.nia)} />
+                      <Kv k="GIA (via efficiency)" v={U.area(R.gia)} />
+                      <Kv k={U.terms.gdv} v={fM(R.gdv)} tone="rgb(var(--brand-ink, 20 80 59))" />
                     </div>
                   </Panel>
                   <Panel title="Efficiency & disposal">
@@ -633,7 +650,7 @@ export default function DevelopmentAppraisal() {
                           }
                           right={
                             <div className="flex items-center gap-2">
-                              <span className="fig text-[11.5px] text-ink-2">{fM(calc.gdv)} · {n0(calc.nia)} ft²</span>
+                              <span className="fig text-[11.5px] text-ink-2">{fM(calc.gdv)} · {U.area(calc.nia)}</span>
                               <Button variant="secondary" size="sm" onClick={() => setPhases(phases.filter((_, j) => j !== i))}>Remove</Button>
                             </div>
                           }
@@ -657,8 +674,8 @@ export default function DevelopmentAppraisal() {
                                 <tr>
                                   <th className="label-mono text-ink-3 text-left pb-2">Unit type</th>
                                   <th className="label-mono text-ink-3 text-right pb-2 w-16">No.</th>
-                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
-                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">£/ft²</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">Area {U.unit}</th>
+                                  <th className="label-mono text-ink-3 text-right pb-2 w-24">£/{U.unit}</th>
                                   <th className="label-mono text-ink-3 text-right pb-2 w-24">Value</th>
                                   <th className="w-8" />
                                 </tr>
@@ -679,9 +696,13 @@ export default function DevelopmentAppraisal() {
                                         <input
                                           type="number"
                                           className="w-full text-right fig"
-                                          aria-label={`${ph.name} ${u.label} ${UNIT_COL_ARIA[k]}`}
-                                          value={u[k]}
-                                          onChange={(e) => setPhase(i, { units: ph.units.map((x, j) => (j === ui ? { ...x, [k]: parseFloat(e.target.value) || 0 } : x)) })}
+                                          aria-label={`${ph.name} ${u.label} ${UNIT_COL_ARIA[k](U.unitSpoken)}`}
+                                          value={k === 'area' ? U.areaField(u.area) : k === 'cap' ? U.rateField(u.cap) : u.count}
+                                          onChange={(e) => {
+                                            const typed = parseFloat(e.target.value) || 0;
+                                            const v = k === 'area' ? U.areaFromField(typed) : k === 'cap' ? U.rateFromField(typed) : typed;
+                                            setPhase(i, { units: ph.units.map((x, j) => (j === ui ? { ...x, [k]: v } : x)) });
+                                          }}
                                         />
                                       </td>
                                     ))}
@@ -719,9 +740,9 @@ export default function DevelopmentAppraisal() {
                             <div className="label-mono text-ink-3 mb-2">Cost overrides — blank inherits the scheme</div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div className="block">
-                                <span className="label-mono text-ink-3 block mb-1">Build rate (£/ft²)</span>
+                                <span className="label-mono text-ink-3 block mb-1">Build rate (£/{U.unit})</span>
                                 <div className="fig text-[15px] font-semibold h-[38px] flex items-center">
-                                  £{Math.round(calc.buildRate)}
+                                  £{U.rateNum(calc.buildRate)}
                                   <span className="ml-2 label-mono text-ink-3">{ph.trades?.length ? 'phase rates' : 'scheme rates'}</span>
                                 </div>
                               </div>
@@ -790,12 +811,12 @@ export default function DevelopmentAppraisal() {
                                       <input
                                         type="number"
                                         className="w-20 text-right fig"
-                                        aria-label={`${ph.name} ${t.label} rate per sq ft`}
-                                        value={t.rate}
-                                        onChange={(e) => setPhase(i, { trades: ph.trades!.map((x, j) => (j === ti ? { ...x, rate: parseFloat(e.target.value) || 0 } : x)) })}
+                                        aria-label={`${ph.name} ${t.label} rate per ${U.unitSpoken}`}
+                                        value={U.rateField(t.rate)}
+                                        onChange={(e) => setPhase(i, { trades: ph.trades!.map((x, j) => (j === ti ? { ...x, rate: U.rateFromField(parseFloat(e.target.value) || 0) } : x)) })}
                                       />
                                     ) : (
-                                      <span className="fig w-20 text-right text-[12.5px] text-ink-2">£{t.rate}</span>
+                                      <span className="fig w-20 text-right text-[12.5px] text-ink-2">£{U.rateField(t.rate)}</span>
                                     )}
                                     {own && (
                                       <TimingFields
@@ -828,7 +849,7 @@ export default function DevelopmentAppraisal() {
                                     + Add trade
                                   </Button>
                                   <span className="fig text-[11.5px] text-ink-2">
-                                    £{Math.round(calc.buildRate)}/ft² · construction {fM(calc.build)}
+                                    {U.rate(calc.buildRate)} · construction {fM(calc.build)}
                                   </span>
                                 </div>
                               ) : (
@@ -881,7 +902,7 @@ export default function DevelopmentAppraisal() {
                             <div className="mt-2 text-[11px] text-ink-3 leading-snug">
                               Timing here runs from the phase's own first month on site, not the project's. Phase total{' '}
                               <span className="fig font-semibold">{fM(calc.cost + calc.otherTotal)}</span> at{' '}
-                              <span className="fig font-semibold">£{Math.round(calc.buildRate)}/ft²</span>.
+                              <span className="fig font-semibold">{U.rate(calc.buildRate)}</span>.
                             </div>
                           </div>
                         </Panel>
@@ -937,10 +958,10 @@ export default function DevelopmentAppraisal() {
                             <tr>
                               <th className="label-mono text-ink-3 text-left pb-2">Tenancy / space</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-16">No.</th>
-                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Area ft²</th>
-                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Rent £/ft²</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Area {U.unit}</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">Rent £/{U.unit}</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-20">Void %</th>
-                              <th className="label-mono text-ink-3 text-right pb-2 w-24">ERV £/ft²</th>
+                              <th className="label-mono text-ink-3 text-right pb-2 w-24">ERV £/{U.unit}</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-20">Review yrs</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-20">Yield %</th>
                               <th className="label-mono text-ink-3 text-right pb-2 w-28">Rent £/yr</th>
@@ -958,9 +979,12 @@ export default function DevelopmentAppraisal() {
                                     <input
                                       type="number"
                                       className="w-full text-right fig"
-                                      aria-label={`${l.label} ${RENT_COL_ARIA[k]}`}
-                                      value={k === 'voidPct' ? l.voidPct ?? 0 : l[k]}
-                                      onChange={(e) => setLine(i, { [k]: parseFloat(e.target.value) || 0 })}
+                                      aria-label={`${l.label} ${RENT_COL_ARIA[k](U.unitSpoken)}`}
+                                      value={k === 'area' ? U.areaField(l.area) : k === 'rentPsf' ? U.rateField(l.rentPsf) : k === 'voidPct' ? l.voidPct ?? 0 : l[k]}
+                                      onChange={(e) => {
+                                        const typed = parseFloat(e.target.value) || 0;
+                                        setLine(i, { [k]: k === 'area' ? U.areaFromField(typed) : k === 'rentPsf' ? U.rateFromField(typed) : typed });
+                                      }}
                                     />
                                   </td>
                                 ))}
@@ -970,10 +994,14 @@ export default function DevelopmentAppraisal() {
                                     <input
                                       type="number"
                                       className="w-full text-right fig"
-                                      aria-label={`${l.label} ${RENT_COL_ARIA[k]}`}
-                                      placeholder={k === 'ervPsf' ? String(l.rentPsf) : k === 'yieldPct' ? String(inc.yieldPct) : '—'}
-                                      value={l[k] ?? ''}
-                                      onChange={(e) => setLine(i, { [k]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                      aria-label={`${l.label} ${RENT_COL_ARIA[k](U.unitSpoken)}`}
+                                      placeholder={k === 'ervPsf' ? String(U.rateField(l.rentPsf)) : k === 'yieldPct' ? String(inc.yieldPct) : '—'}
+                                      value={k === 'ervPsf' ? (l.ervPsf == null ? '' : U.rateField(l.ervPsf)) : l[k] ?? ''}
+                                      onChange={(e) => {
+                                        if (e.target.value === '') return setLine(i, { [k]: undefined });
+                                        const typed = parseFloat(e.target.value) || 0;
+                                        setLine(i, { [k]: k === 'ervPsf' ? U.rateFromField(typed) : typed });
+                                      }}
                                     />
                                   </td>
                                 ))}
@@ -987,9 +1015,9 @@ export default function DevelopmentAppraisal() {
                         </table>
                       </div>
                       <div className="mt-3 flex gap-6 flex-wrap border-t border-border-std pt-3">
-                        <Kv k="Lettable area" v={`${n0(R.income.totalArea)} ft²`} />
+                        <Kv k="Lettable area" v={U.area(R.income.totalArea)} />
                         <Kv k="Gross rent" v={`${formatSigned(R.income.grossRent)} pa`} />
-                        <Kv k="Blended rent" v={`£${R.income.blendedRentPsf.toFixed(2)}/ft²`} />
+                        <Kv k="Blended rent" v={U.rate(R.income.blendedRentPsf, 2)} />
                       </div>
                     </Panel>
 
@@ -1004,7 +1032,7 @@ export default function DevelopmentAppraisal() {
                       }
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <NumField label="All-risks yield" suffix="%" value={inc.yieldPct} step={0.05} onChange={(v) => setIncome({ yieldPct: v })} />
+                        <NumField label={U.terms.allRisksYield} suffix="%" value={inc.yieldPct} step={0.05} onChange={(v) => setIncome({ yieldPct: v })} />
                         <NumField label="Purchaser's costs" suffix="%" value={inc.purchaserCostsPct ?? 6.8} step={0.1} onChange={(v) => setIncome({ purchaserCostsPct: v })} />
                         <NumField label="Non-recoverables" suffix="% of rent" value={inc.nonRecoverablePct} step={0.5} onChange={(v) => setIncome({ nonRecoverablePct: v })} />
                         <NumField label="Fixed deductions" suffix="£/yr" value={inc.annualDeductions ?? 0} onChange={(v) => setIncome({ annualDeductions: v })} />
@@ -1027,7 +1055,7 @@ export default function DevelopmentAppraisal() {
                           ['Void allowance', -R.income.voidAllowance],
                           ['Non-recoverables', -R.income.nonRecoverable],
                           ['Fixed deductions', -R.income.deductions],
-                          ['Net rent (NOI)', R.income.netRent, 'sub'],
+                          [U.terms.netRent, R.income.netRent, 'sub'],
                           ...(R.income.lines.some((l) => l.isReversionary)
                             ? ([
                                 ['Term — passing rent', R.income.lines.reduce((a, l) => a + l.termValue, 0)],
@@ -1072,7 +1100,7 @@ export default function DevelopmentAppraisal() {
                             <Kv k="Equivalent yield" v={formatPct(R.income.equivalentYield, 2)} />
                           </>
                         )}
-                        <Kv k="Capital value" v={`£${Math.round(R.income.capitalValuePsf)}/ft²`} />
+                        <Kv k="Capital value" v={U.rate(R.income.capitalValuePsf)} />
                         <Kv k="Share of GDV" v={formatPct(R.gdv > 0 ? R.investmentValue / R.gdv : 0, 0)} />
                       </div>
                       <div className="mt-3 text-[11px] text-ink-3 leading-snug">
@@ -1097,7 +1125,7 @@ export default function DevelopmentAppraisal() {
                           <NumField label="Hold" suffix="years" step={1} value={dcfIn.holdYears} onChange={(v) => setDcf({ holdYears: Math.max(1, Math.round(v)) })} />
                           <NumField label="Rental growth" suffix="% pa" step={0.25} value={dcfIn.rentalGrowthPct} onChange={(v) => setDcf({ rentalGrowthPct: v })} />
                           <NumField label="Discount rate" suffix="%" step={0.25} value={dcfIn.discountRatePct} onChange={(v) => setDcf({ discountRatePct: v })} />
-                          <NumField label="Exit yield" suffix="%" step={0.05} value={dcfIn.exitYieldPct} onChange={(v) => setDcf({ exitYieldPct: v })} />
+                          <NumField label={U.terms.exitYield} suffix="%" step={0.05} value={dcfIn.exitYieldPct} onChange={(v) => setDcf({ exitYieldPct: v })} />
                           <NumField label="Sale costs" suffix="%" step={0.05} value={dcfIn.exitCostsPct ?? 0} onChange={(v) => setDcf({ exitCostsPct: v })} />
                           <NumField label="Review cycle" suffix="years" step={1} value={dcfIn.reviewCycleYears ?? 5} onChange={(v) => setDcf({ reviewCycleYears: Math.max(1, Math.round(v)) })} />
                         </div>
@@ -1290,9 +1318,9 @@ export default function DevelopmentAppraisal() {
                       <input
                         type="number"
                         className="w-20 text-right fig"
-                        aria-label={`${t.label} rate per sq ft`}
-                        value={t.rate}
-                        onChange={(e) => set({ trades: input.trades.map((x, j) => (j === i ? { ...x, rate: parseFloat(e.target.value) || 0 } : x)) })}
+                        aria-label={`${t.label} rate per ${U.unit}`}
+                        value={U.rateField(t.rate)}
+                        onChange={(e) => set({ trades: input.trades.map((x, j) => (j === i ? { ...x, rate: U.rateFromField(parseFloat(e.target.value) || 0) } : x)) })}
                       />
                       <span className="fig w-20 text-right text-[12px] text-ink-2">{fM(t.rate * R.gia)}</span>
                       <TimingFields
@@ -1307,7 +1335,7 @@ export default function DevelopmentAppraisal() {
                     <NumField label="Contingency" suffix="%" value={input.contingencyPct} onChange={(v) => set({ contingencyPct: v })} />
                   </div>
                   <div className="mt-3 flex gap-6">
-                    <Kv k="Build rate" v={`£${Math.round(R.buildRate)}/ft²`} tone="rgb(var(--brand-ink, 20 80 59))" />
+                    <Kv k="Build rate" v={U.rate(R.buildRate)} tone="rgb(var(--brand-ink, 20 80 59))" />
                     <Kv k="All-in construction" v={fM(R.build + R.fees + R.cont)} />
                   </div>
                 </Panel>
@@ -1315,7 +1343,7 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'other' && (
                 <Panel
-                  title="Other costs — S106, CIL, PM, surveys"
+                  title={`Other costs — ${U.terms.planningObligation}, ${U.terms.infraLevy}, PM, surveys`}
                   right={<Button variant="secondary" size="sm" onClick={() => set({ otherCosts: [...input.otherCosts, { label: 'New cost', amount: 0 }] })}>+ Add cost</Button>}
                 >
                   {input.otherCosts.map((o, i) => (
@@ -1338,7 +1366,7 @@ export default function DevelopmentAppraisal() {
                   ))}
                   <div className="mt-2 text-[11px] text-ink-3 leading-snug">
                     Start month and duration control when each line is spent. Leave them and the line follows the scheme
-                    profile across the build; set 1 month for a lump such as an S106 payment on implementation.
+                    profile across the build; set 1 month for a lump such as a {U.terms.planningObligation} payment on implementation.
                   </div>
                   <div className="mt-3 border-t border-border-std pt-3">
                     <Kv k="Other costs total" v={fM(R.otherTotal)} tone="rgb(var(--brand-ink, 20 80 59))" />
@@ -1430,7 +1458,7 @@ export default function DevelopmentAppraisal() {
                   />
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {!isResidual && <NumField label="Fixed land price" suffix="£" value={input.site.landFixed} onChange={(v) => set({ site: { ...input.site, landFixed: v } })} />}
-                    <NumField label="Acquisition costs" suffix="% — SDLT, legal, agent" value={input.site.acqPct} onChange={(v) => set({ site: { ...input.site, acqPct: v } })} />
+                    <NumField label="Acquisition costs" suffix={`% — ${U.terms.landTax}, legal, agent`} value={input.site.acqPct} onChange={(v) => set({ site: { ...input.site, acqPct: v } })} />
                     {isResidual && <NumField label="Target profit on GDV" suffix="%" value={input.targetProfitOnGdvPct} onChange={(v) => set({ targetProfitOnGdvPct: v })} />}
                   </div>
                   <div className="mt-4 flex gap-6 flex-wrap border-t border-border-std pt-3">
@@ -1501,7 +1529,7 @@ export default function DevelopmentAppraisal() {
                       steps={[
                         ['Build', R.build],
                         ['Fees & cont.', R.fees + R.cont],
-                        ['CIL · S106', R.otherTotal],
+                        [`${U.terms.infraLevy} · ${U.terms.planningObligation}`, R.otherTotal],
                         ['Finance', R.finance],
                         ['Sale costs', R.saleCosts],
                         ['Land', R.landGross],

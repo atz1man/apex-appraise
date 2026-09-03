@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { computeAppraisal, depositsHeldAt, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
+import { DEFAULT_REGION, REGIONS } from '@apex/types/regions';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
@@ -270,6 +271,8 @@ export const orgRouter = router({
     const row = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
     return {
       aiPolicy: row?.aiPolicy ?? '',
+      // words and units only — see @apex/types/regions
+      region: row?.region ?? DEFAULT_REGION,
       toePurpose: row?.toePurpose ?? '',
       toeOtherUsers: row?.toeOtherUsers ?? '',
       toeInterest: row?.toeInterest ?? '',
@@ -295,6 +298,13 @@ export const orgRouter = router({
     .input(
       z.object({
         aiPolicy: z.string().max(1200),
+        /**
+         * The jurisdiction whose vocabulary and floor-area unit this firm reads.
+         * An enum, not a free string: it selects a profile, and an unknown code
+         * would silently fall back to the UK on every screen while the settings
+         * panel showed whatever was typed.
+         */
+        region: z.enum(REGIONS),
         toePurpose: z.string().max(1000),
         toeOtherUsers: z.string().max(1000),
         toeInterest: z.string().max(600),

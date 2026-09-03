@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
+import { useUnits } from '../lib/region';
 import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 import { workingDeal } from '../lib/working-deal';
@@ -78,6 +79,8 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
 }
 
 export default function Hub() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const navigate = useNavigate();
   const principal = getPrincipal();
   const utils = trpc.useUtils();
@@ -103,7 +106,7 @@ export default function Hub() {
     ? [
         ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
         ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],
-        ['comps', 'Comparables', 'Adjustment grid → supported £/ft²', `/deal/${flagship.id}/comparables`, 'appraise'],
+        ['comps', 'Comparables', `Adjustment grid → supported £/${U.unit}`, `/deal/${flagship.id}/comparables`, 'appraise'],
         ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`, 'appraise'],
         ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`, 'site'],
         ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`, 'sell'],

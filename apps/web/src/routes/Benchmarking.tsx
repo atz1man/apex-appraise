@@ -5,6 +5,7 @@ import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
+import { useUnits } from '../lib/region';
 import { ASSET_CLASSES, assetLabel } from '@apex/types/asset-classes';
 
 const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
@@ -171,6 +172,11 @@ function MetricCard({
 }
 
 export default function Benchmarking() {
+  /**
+   * The pool holds £/ft², as every contributing firm's engine produced it. What
+   * a reader sees is their own unit — the cohort is the same evidence either way.
+   */
+  const U = useUnits();
   const [region, setRegion] = useState('South West');
   const [useClass, setUseClass] = useState('INDUSTRIAL');
 
@@ -340,8 +346,9 @@ export default function Benchmarking() {
     <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
       <h3 className="text-[13px] font-semibold">Data contribution</h3>
       <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
-        Contributing shares three ratios from each appraisal an administrator approves — build £/ft², GDV £/ft² and profit on
-        cost — automatically at approval, and the out-turn build £/ft² of each scheme marked completed, from certified spend.
+        Contributing shares three ratios from each appraisal an administrator approves — build £/{U.unit}, {U.terms.gdv} £/{U.unit}{' '}
+        and profit on cost — automatically at approval, and the out-turn build £/{U.unit} of each scheme marked completed, from
+        certified spend.
         Nothing enters from a draft. Never the address, the client, the deal name or any absolute figure. A cohort is only
         ever published once{' '}
         {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
@@ -470,11 +477,11 @@ export default function Benchmarking() {
           <>
             {/* percentile strip cards */}
             <div className="mt-[18px] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
-              <MetricCard label="Build cost £/ft²" m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
-              <MetricCard label="GDV £/ft²" m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
+              <MetricCard label={`Build cost £/${U.unit}`} m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
+              <MetricCard label={`${U.terms.gdv} £/${U.unit}`} m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
               <MetricCard label="Profit on cost" m={M.poc} scope={scopeShort.toLowerCase()} isPct />
               {/* what completed schemes actually cost — certified spend over appraised area */}
-              <MetricCard label="Out-turn build £/ft²" m={M.outturnPsf} scope={scopeShort.toLowerCase()} lowerBetter />
+              <MetricCard label={`Out-turn build £/${U.unit}`} m={M.outturnPsf} scope={scopeShort.toLowerCase()} lowerBetter />
             </div>
 
             <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
@@ -482,7 +489,7 @@ export default function Benchmarking() {
                 {/* build cost trend */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/ft²</h3>
+                    <h3 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/{U.unit}</h3>
                     {latestCallout && (
                       <div className="text-right">
                         <div className="fig text-[10px] font-medium text-ink-3">Latest quarter with your data</div>
@@ -545,7 +552,7 @@ export default function Benchmarking() {
                                     key={`${o.dealName}-${i}`}
                                     className="absolute left-1/2 w-2.5 h-2.5 rounded-full border-2 border-surface -translate-x-1/2 translate-y-1/2"
                                     style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
-                                    title={`${o.dealName ?? 'Your deal'} — £${Math.round(o.value)}/ft²`}
+                                    title={`${o.dealName ?? 'Your deal'} — ${U.rate(o.value)}`}
                                   >
                                     {/* a floating value label lands wherever the dot is: over the
                                         panel at desktop widths, over the dot's own fill at 390px
@@ -594,8 +601,8 @@ export default function Benchmarking() {
                         <tr>
                           <Th>Deal</Th>
                           <Th>Period</Th>
-                          <Th right>Build £/ft²</Th>
-                          <Th right>GDV £/ft²</Th>
+                          <Th right>Build £/{U.unit}</Th>
+                          <Th right>{U.terms.gdv} £/{U.unit}</Th>
                           <Th right>Profit on cost</Th>
                           <Th right>vs median</Th>
                         </tr>

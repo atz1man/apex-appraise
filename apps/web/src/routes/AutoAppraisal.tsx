@@ -4,6 +4,7 @@ import type { AutoAppraisalResult } from '@apex/appraisal-engine';
 import type { Extraction } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
+import { useUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
@@ -73,7 +74,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
   },
   {
     label: 'Cost plan',
-    sub: 'Build £/ft²',
+    sub: 'Build cost rate',
     icon: (
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 3v18M3 9h18" />
@@ -83,7 +84,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
   },
   {
     label: 'Planning decision',
-    sub: 'Use / CIL / S106',
+    sub: 'Use / levies / obligations',
     icon: (
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M7 3h7l4 4v14H7z" />
@@ -93,7 +94,7 @@ const DOC_TILES: Array<{ label: string; sub: string; icon: JSX.Element }> = [
   },
   {
     label: 'Comparables',
-    sub: 'GDV £/ft²',
+    sub: 'Capital value rate',
     icon: (
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.1" strokeLinecap="round">
         <path d="M5 20v-7M12 20V5M19 20v-9" />
@@ -131,18 +132,21 @@ function TextBox({ label, value, onChange }: { label: string; value: string; onC
 }
 
 function RateBox({ prefix, value, onChange }: { prefix: string; value: number; onChange: (v: number) => void }) {
+  // the rate is held per square foot, as the engine wants it, and typed in the
+  // firm's own unit — see lib/region.ts on why the round trip is the hard part
+  const U = useUnits();
   return (
     <div className="flex-none flex items-center gap-1.5 px-3 h-[42px] border border-border-strong rounded-[11px]">
       <span className="text-[12px] text-ink-2b whitespace-nowrap">{prefix}</span>
       <input
         type="number"
-        aria-label={`${prefix} per ft²`}
+        aria-label={`${prefix} per ${U.unitSpoken}`}
         className="w-[54px] text-right fig text-[13px] font-semibold text-brand-ink"
         style={{ border: 'none', boxShadow: 'none', padding: 0, background: 'transparent' }}
-        value={Number.isFinite(value) ? value : 0}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        value={Number.isFinite(value) ? U.rateField(value) : 0}
+        onChange={(e) => onChange(U.rateFromField(parseFloat(e.target.value) || 0))}
       />
-      <span className="text-[12px] text-ink-3">/ft²</span>
+      <span className="text-[12px] text-ink-3">/{U.unit}</span>
     </div>
   );
 }
@@ -177,6 +181,8 @@ function assetEnum(text: string): Extraction['assetType'] {
 // ---------- screen ----------
 
 export default function AutoAppraisal() {
+  /** floor areas and rates in the firm's own unit, and the words for them */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -398,13 +404,22 @@ export default function AutoAppraisal() {
   const appraisalRows: Array<[string, string, boolean?]> =
     run && ind && x
       ? [
-          [`Build · £${Math.round(run.buildPerSqft)}/ft²`, fM(ind.build)],
+          [`Build · ${U.rate(run.buildPerSqft)}`, fM(ind.build)],
           ['Professional fees', fM(ind.fees)],
           ['Contingency', fM(ind.cont)],
           ['Finance', fM(ind.finance)],
-          ['CIL', ind.cil > 0 ? fM(ind.cil) : '—'],
-          ['S106', x.s106 > 0 ? fM(x.s106) : '—'],
-          ['SDLT (on land)', fM(ind.sdlt)],
+          [U.terms.infraLevy, ind.cil > 0 ? fM(ind.cil) : '—'],
+          [U.terms.planningObligation, x.s106 > 0 ? fM(x.s106) : '—'],
+          /*
+           * The bands are England & Northern Ireland statute. Outside the UK the
+           * duty is real and this product does not model it, so the row names the
+           * local one and says where the figure came from rather than presenting a
+           * UK number under a local name.
+           */
+          [
+            U.profile.landTaxModelled ? `${U.terms.landTax} (on land)` : `${U.terms.landTax} (on land, at UK SDLT bands)`,
+            fM(ind.sdlt),
+          ],
           ['VAT', 'Opted — neutral', true],
         ]
       : [];
@@ -548,8 +563,8 @@ export default function AutoAppraisal() {
                 <div className="flex label-mono text-ink-3 px-0.5 pb-1.5">
                   <div style={{ flex: 2.2 }}>Use / unit</div>
                   <div className="text-right" style={{ flex: 0.8 }}>No.</div>
-                  <div className="text-right" style={{ flex: 1.1 }}>Area</div>
-                  <div className="text-right" style={{ flex: 1 }}>£/ft²</div>
+                  <div className="text-right" style={{ flex: 1.1 }}>Area {U.unit}</div>
+                  <div className="text-right" style={{ flex: 1 }}>£/{U.unit}</div>
                   <div className="w-[22px] shrink-0" />
                 </div>
                 {manual.units.map((u, i) => (
@@ -571,19 +586,19 @@ export default function AutoAppraisal() {
                     />
                     <input
                       type="number"
-                      aria-label={`${u.label || `Unit ${i + 1}`} area sq ft`}
+                      aria-label={`${u.label || `Unit ${i + 1}`} area ${U.unitSpoken}`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1.1 }}
-                      value={u.area}
-                      onChange={(e) => setUnit(i, { area: parseFloat(e.target.value) || 0 })}
+                      value={U.areaField(u.area)}
+                      onChange={(e) => setUnit(i, { area: U.areaFromField(parseFloat(e.target.value) || 0) })}
                     />
                     <input
                       type="number"
-                      aria-label={`${u.label || `Unit ${i + 1}`} price per sq ft`}
+                      aria-label={`${u.label || `Unit ${i + 1}`} price per ${U.unitSpoken}`}
                       className="min-w-0 h-8 px-1.5 text-right fig text-[12px] rounded-[7px]"
                       style={{ flex: 1 }}
-                      value={u.value}
-                      onChange={(e) => setUnit(i, { value: parseFloat(e.target.value) || 0 })}
+                      value={U.rateField(u.value)}
+                      onChange={(e) => setUnit(i, { value: U.rateFromField(parseFloat(e.target.value) || 0) })}
                     />
                     <button
                       aria-label={`Remove ${u.label}`}
@@ -613,8 +628,8 @@ export default function AutoAppraisal() {
                 <NumBox label="Efficiency %" value={manual.efficiency} onChange={(v) => setMan({ efficiency: v })} />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
-                <NumBox label="CIL £/sqm" value={manual.cilPerSqm} onChange={(v) => setMan({ cilPerSqm: v })} />
-                <NumBox label="S106 £" value={manual.s106} onChange={(v) => setMan({ s106: v })} />
+                <NumBox label={`${U.terms.infraLevy} £/sqm`} value={manual.cilPerSqm} onChange={(v) => setMan({ cilPerSqm: v })} />
+                <NumBox label={`${U.terms.planningObligation} £`} value={manual.s106} onChange={(v) => setMan({ s106: v })} />
               </div>
 
               <MicroLabel>Revenue &amp; land</MicroLabel>
@@ -647,7 +662,7 @@ export default function AutoAppraisal() {
                   className="flex-1"
                   loading={phase === 'loading'}
                   disabled={!manualIsRunnable(manual)}
-                  title={manualIsRunnable(manual) ? undefined : 'Add a unit with a count, an area and a £/ft² first'}
+                  title={manualIsRunnable(manual) ? undefined : `Add a unit with a count, an area and a £/${U.unit} first`}
                 >
                   Run appraisal
                   <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -667,7 +682,8 @@ export default function AutoAppraisal() {
               <EmptyState icon={<Sparkle size={30} color="rgb(var(--crumb, 201 205 200))" />}>
                 <div className="text-[16px] font-bold text-ink">Your appraisal will appear here</div>
                 <div className="mt-1 max-w-[380px] text-[13px] text-ink-3 leading-relaxed">
-                  GIA, GDV, build, finance, VAT, SDLT, CIL, profit, planning risk and an investment recommendation — generated from your documents.
+                  GIA, {U.terms.gdv}, build, finance, VAT, {U.terms.landTax}, {U.terms.infraLevy}, profit, planning risk and an
+                  investment recommendation — generated from your documents.
                 </div>
               </EmptyState>
             </Panel>
@@ -711,7 +727,8 @@ export default function AutoAppraisal() {
                   </div>
                   <div className="mt-1 text-[12px] text-ink-2">
                     AI extraction isn't configured on this server, so the scheme, areas and values below come from the built-in
-                    sample — only the S106, CIL and asking figures were read from what you pasted. Use <b>Manual entry</b> to
+                    sample — only the {U.terms.planningObligation}, {U.terms.infraLevy} and asking figures were read from what
+                    you pasted. Use <b>Manual entry</b> to
                     appraise your own scheme.
                   </div>
                 </section>
@@ -738,14 +755,14 @@ export default function AutoAppraisal() {
                 <div className="relative mt-4 flex gap-2.5">
                   <HeadlineStat label="Residual land value" value={formatSigned(ind.residualNet)} />
                   <HeadlineStat label="Profit on cost" value={ind.roc != null ? formatPct(ind.roc, 0) : '—'} />
-                  <HeadlineStat label="GDV" value={fM(ind.gdv)} />
+                  <HeadlineStat label={U.terms.gdv} value={fM(ind.gdv)} />
                 </div>
               </section>
 
               {/* extracted accommodation */}
               <Panel
                 title="Extracted accommodation"
-                right={<span className="fig text-[11px] text-ink-3">{n0(ind.gia)} ft² GIA · {n0(ind.nia)} ft² NIA</span>}
+                right={<span className="fig text-[11px] text-ink-3">{U.area(ind.gia)} GIA · {U.area(ind.nia)} NIA</span>}
               >
                 <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px]">
@@ -753,8 +770,8 @@ export default function AutoAppraisal() {
                     <tr>
                       <Th>Use / unit</Th>
                       <Th right>No.</Th>
-                      <Th right>Area ft²</Th>
-                      <Th right>£/ft²</Th>
+                      <Th right>Area {U.unit}</Th>
+                      <Th right>£/{U.unit}</Th>
                       <Th right>Value</Th>
                     </tr>
                   </thead>
@@ -770,8 +787,8 @@ export default function AutoAppraisal() {
                           </span>
                         </Td>
                         <Td right fig>{u.count}</Td>
-                        <Td right fig>{n0(u.area)}</Td>
-                        <Td right fig>£{u.value}</Td>
+                        <Td right fig>{U.areaNum(u.area)}</Td>
+                        <Td right fig>£{U.rateNum(u.value)}</Td>
                         <Td right fig className="font-semibold" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>{fM(u.count * u.area * u.value)}</Td>
                       </tr>
                     ))}

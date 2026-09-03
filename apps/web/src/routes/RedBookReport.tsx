@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   DEFAULT_PURCHASER_COSTS_PCT,
   analysedPsf,
+  areaIn,
   capitaliseIncome,
   computeAppraisal,
   discountedCashflow,
@@ -14,6 +15,7 @@ import {
   type IncomeInput,
 } from '@apex/appraisal-engine';
 import { assetClass } from '@apex/types/asset-classes';
+import { useUnits } from '../lib/region';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
@@ -54,7 +56,6 @@ const GENERAL_ASSUMPTIONS = [
   'All necessary planning consents and building regulation approvals have been obtained.',
 ];
 
-const SQFT_PER_SQM = 10.764;
 
 /** every date this document prints is in the firm's time — see paper.tsx */
 const fmtLong = docDate;
@@ -425,6 +426,13 @@ export default function RedBookReport() {
    * recorded beside each entry rather than in whoever last typed this table.
    */
   const asset = assetClass(deal?.assetType ?? 'RESIDENTIAL');
+  /**
+   * Floor areas and the words for them, in the firm's own jurisdiction. The
+   * RICS wording around them does NOT move: the Red Book is a global standard
+   * and a certificate that quoted VPS 4 in one paragraph and abandoned it in
+   * the next would be worth nothing.
+   */
+  const U = useUnits();
 
   /**
    * Weights follow the scheme. A held-and-let element carrying most of the GDV
@@ -585,8 +593,9 @@ export default function RedBookReport() {
           <div className="mt-2.5 grid grid-cols-2" style={{ gap: '0 36px' }}>
             <SummaryRow k="Tenure" v="Freehold" />
             <SummaryRow k="Property type" v={asset?.reportLabel ?? deal?.assetType ?? '—'} />
-            <SummaryRow k="Gross internal area" v={`${n0(R.gia / SQFT_PER_SQM)} sq m (${n0(R.gia)} sq ft)`} mono />
-            <SummaryRow k="Net internal area" v={`${n0(nia)} sq ft`} mono />
+            {/* both units, always — the certificate is read by people who work in each */}
+            <SummaryRow k="Gross internal area" v={`${n0(areaIn(R.gia, 'm²'))} sq m (${n0(R.gia)} sq ft)`} mono />
+            <SummaryRow k="Net internal area" v={`${U.areaNum(nia)} ${U.unitSpoken}`} mono />
             <SummaryRow k="Units" v={n0(input.units.reduce((a, u) => a + u.count, 0))} mono />
             <SummaryRow k="Efficiency (NIA:GIA)" v={`${input.efficiency}%`} mono />
             <SummaryRow k="Planning status" v={appr.planningStatus ?? 'Not assessed'} />
@@ -653,7 +662,7 @@ export default function RedBookReport() {
           <Micro>1 · Description</Micro>
           <Body>
             The subject comprises {subject.toLowerCase().startsWith('the') ? subject : `${subject}`}, {deal?.address}. The property extends
-            to approximately {n0(R.gia)} sq ft ({n0(R.gia / SQFT_PER_SQM)} sq m) gross internal area, providing {n0(nia)} sq ft of net
+            to approximately {n0(R.gia)} sq ft ({n0(areaIn(R.gia, 'm²'))} sq m) gross internal area, providing {U.areaNum(nia)} {U.unitSpoken} of net
             internal accommodation at a {input.efficiency}% efficiency. The accommodation is scheduled below; construction is of
             conventional specification for its class and the property presents in good order, consistent with the assumptions of the
             current appraisal. Planning status: {(appr.planningStatus ?? 'not assessed').toLowerCase()}.
@@ -664,12 +673,12 @@ export default function RedBookReport() {
             {input.units.slice(0, 6).map((u, i) => (
               <div key={i} className="flex justify-between items-baseline gap-3 py-[9px] border-b border-border-faint">
                 <span className="text-[12.5px] text-ink-2">{u.label}</span>
-                <span className="fig text-[12.5px] font-medium">{u.count} × {n0(u.area)} sq ft</span>
+                <span className="fig text-[12.5px] font-medium">{u.count} × {U.areaNum(u.area)} {U.unitSpoken}</span>
               </div>
             ))}
             <div className="flex justify-between items-baseline gap-3 py-[9px] border-b border-border-faint">
               <span className="text-[12.5px] text-ink-2">Total NIA</span>
-              <span className="fig text-[12.5px] font-semibold" style={{ color: brand[700] }}>{n0(nia)} sq ft</span>
+              <span className="fig text-[12.5px] font-semibold" style={{ color: brand[700] }}>{U.areaNum(nia)} {U.unitSpoken}</span>
             </div>
           </div>
 
@@ -722,7 +731,8 @@ export default function RedBookReport() {
                 {' '}The investment figure values the WHOLE property at the analysed net rate, so that it compares like for like
                 with the other approaches, and is stated on a growth-explicit basis — {input.dcf!.rentalGrowthPct}% rental growth
                 over {input.dcf!.holdYears} years, discounted at {input.dcf!.discountRatePct}% — implying an equated yield of{' '}
-                <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against an all-risks yield of {invYieldPct}%.
+                <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against {U.terms.allRisksYield.startsWith('A') ? 'an' : 'a'}{' '}
+                {U.terms.allRisksYield.toLowerCase()} of {invYieldPct}%.
                 The appraisal report states the same cross-check on the let element alone, so its equated yield differs.
               </>
             )}
@@ -780,7 +790,7 @@ export default function RedBookReport() {
               </div>
               <div className="text-right">
                 <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Analysed rate</div>
-                <div className="fig mt-1 text-[15px] font-semibold">£{n0(psf)} / sq ft</div>
+                <div className="fig mt-1 text-[15px] font-semibold">£{U.rateNum(psf)} / {U.unitSpoken}</div>
               </div>
             </div>
             {range && marker !== null ? (
@@ -828,14 +838,14 @@ export default function RedBookReport() {
             <div className="flex text-white fig text-[10.5px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.5px' }}>
               <div style={{ flex: 2.1, padding: '12px 14px' }}>Address</div>
               <div style={{ flex: 2.2, padding: '12px 8px' }}>Evidence</div>
-              <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Base £/ft²</div>
+              <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Base £/{U.unit}</div>
               <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Net adj</div>
-              <div className="text-right" style={{ flex: 1.2, padding: '12px 14px' }}>Adjusted £/ft²</div>
+              <div className="text-right" style={{ flex: 1.2, padding: '12px 14px' }}>Adjusted £/{U.unit}</div>
             </div>
             {/* subject row */}
             <div className="flex items-center border-b border-border-std fig text-[12px] font-medium" style={{ background: 'rgb(var(--tint-green-soft, 243 248 245))' }}>
               <div className="font-ui text-[12px] font-semibold" style={{ flex: 2.1, padding: '13px 14px', color: brand[700] }}>Subject — {subject}</div>
-              <div className="text-ink-3" style={{ flex: 2.2, padding: '13px 8px' }}>{n0(nia)} ft² NIA</div>
+              <div className="text-ink-3" style={{ flex: 2.2, padding: '13px 8px' }}>{U.area(nia)} NIA</div>
               <div className="text-right text-ink-3" style={{ flex: 1, padding: '13px 8px' }}>—</div>
               <div className="text-right text-ink-3" style={{ flex: 1, padding: '13px 8px' }}>—</div>
               <div className="text-right text-ink-3" style={{ flex: 1.2, padding: '13px 14px' }}>—</div>
@@ -847,11 +857,11 @@ export default function RedBookReport() {
                   <div key={c.address} className="flex items-center fig text-[12px] font-medium" style={{ borderBottom: i === summary.comps.length - 1 ? 'none' : `1px solid ${neutral.borderFaint}` }}>
                     <div className="font-ui text-[12px] font-medium" style={{ flex: 2.1, padding: '13px 14px' }}>{c.address}</div>
                     <div className="font-ui text-[11px] text-ink-2" style={{ flex: 2.2, padding: '13px 8px' }}>{meta}</div>
-                    <div className="text-right" style={{ flex: 1, padding: '13px 8px' }}>£{n0(c.basePsf)}</div>
+                    <div className="text-right" style={{ flex: 1, padding: '13px 8px' }}>£{U.rateNum(c.basePsf)}</div>
                     <div className="text-right" style={{ flex: 1, padding: '13px 8px', color: c.netAdjustment > 0 ? statusTokens.green.text : c.netAdjustment < 0 ? statusTokens.red.text : neutral.ink3 }}>
                       {c.netAdjustment > 0 ? '+' : c.netAdjustment < 0 ? '−' : ''}{Math.abs(c.netAdjustment)}%
                     </div>
-                    <div className="text-right font-semibold" style={{ flex: 1.2, padding: '13px 14px', color: brand[700] }}>£{n0(c.adjustedPsf)}</div>
+                    <div className="text-right font-semibold" style={{ flex: 1.2, padding: '13px 14px', color: brand[700] }}>£{U.rateNum(c.adjustedPsf)}</div>
                   </div>
                 );
               })
@@ -865,7 +875,7 @@ export default function RedBookReport() {
           {hasComps && summary.comps.length > 1 && (
             <div className="mt-4 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px 8px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px', marginBottom: 8 }}>
-                Adjustment ladder — base to adjusted £/ft²
+                Adjustment ladder — base to adjusted £/{U.unit}
               </div>
               <CompsLadder
                 comps={summary.comps.map((c) => ({ address: c.address, basePsf: c.basePsf, adjustedPsf: c.adjustedPsf }))}
@@ -876,8 +886,8 @@ export default function RedBookReport() {
 
           <div className="mt-3.5 flex gap-3">
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
-              <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Supported £/ft²</div>
-              <div className="fig mt-1.5 text-[17px] font-semibold" style={{ letterSpacing: '-0.6px' }}>{hasComps ? `£${n0(summary.supportedPsf)}` : '—'}</div>
+              <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Supported £/{U.unit}</div>
+              <div className="fig mt-1.5 text-[17px] font-semibold" style={{ letterSpacing: '-0.6px' }}>{hasComps ? `£${U.rateNum(summary.supportedPsf)}` : '—'}</div>
             </div>
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Avg net adjustment</div>

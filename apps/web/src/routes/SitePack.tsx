@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import { SQFT_PER_SQM } from '@apex/appraisal-engine';
+import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
@@ -33,6 +35,8 @@ const AMENITY_META: Record<string, [string, string]> = {
 };
 
 export default function SitePack() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const toast = useToast();
   const utils = trpc.useUtils();
@@ -283,7 +287,7 @@ export default function SitePack() {
                           <Th>Address</Th>
                           <Th right>Sold</Th>
                           <Th right>Price</Th>
-                          <Th right>£/ft²</Th>
+                          <Th right>£/{U.unit}</Th>
                           <Th>Type</Th>
                         </tr>
                       </thead>
@@ -326,7 +330,7 @@ export default function SitePack() {
                 )}
                 <div className="mt-3 text-[10.5px] text-ink-3">
                   Contains HM Land Registry data © Crown copyright, licensed under the Open Government Licence v3.0.
-                  £/ft² shown where an EPC floor-area match exists.
+                  £/{U.unit} shown where an EPC floor-area match exists.
                 </div>
               </Panel>
 
@@ -402,7 +406,9 @@ export default function SitePack() {
                               {r.rating || '—'}
                             </span>
                             <span className="flex-1 min-w-0 truncate text-[11.5px] leading-tight">{r.address}</span>
-                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{Math.round(r.floorAreaSqm * 10.764).toLocaleString('en-GB')} ft²</span>
+                            {/* the register states square metres; SQFT_PER_SQM is the engine's,
+                                not a second copy of it — see appraisal-engine/src/format.ts */}
+                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{U.area(r.floorAreaSqm * SQFT_PER_SQM)}</span>
                           </div>
                         ))}
                       </div>
@@ -411,7 +417,7 @@ export default function SitePack() {
                     <div className="text-[12px] text-ink-2 leading-relaxed">
                       {ok.epc.note ?? 'EPC lookups need a free API key.'}
                       <div className="mt-1.5 text-[11px] text-ink-3">
-                        With EPC connected, sold prices gain automatic £/ft² from matched floor areas.
+                        With EPC connected, sold prices gain automatic £/{U.unit} from matched floor areas.
                       </div>
                     </div>
                   )}

@@ -1,5 +1,4 @@
 import type {
-
   AppraisalInput,
   AppraisalResult,
   AutoAppraisalInput,
@@ -24,6 +23,7 @@ import type {
   SensitivityMetric,
   SpendProfileKey,
 } from './types.js';
+import { SQFT_PER_SQM } from './format.js';
 
 /**
  * Which engine produced a figure.
@@ -37,8 +37,6 @@ import type {
  * they are rendered with before printing it as approved.
  */
 export const ENGINE_VERSION = '2026.09.1';
-
-const SQFT_PER_SQM = 10.764;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
 

@@ -20,6 +20,7 @@ import {
   TopBar,
   SPARKLE,
 } from '../components/ui';
+import { useUnits } from '../lib/region';
 import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
@@ -74,6 +75,8 @@ const ICONS: Record<string, string> = {
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 export default function DealOverview() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
 
@@ -201,7 +204,7 @@ export default function DealOverview() {
   const tools: Array<{ icon: string; title: string; desc: string; path: string; count?: string }> = [
     { icon: ICONS.appraisal, title: 'Appraisal', desc: 'Residual, cashflow, finance & returns', path: 'appraisal', count: appraisal ? 'Current saved' : 'Not run yet' },
     { icon: ICONS.auto, title: 'Auto-Appraisal', desc: 'Documents in → appraisal out, AI or manual', path: 'auto' },
-    { icon: ICONS.comps, title: 'Comparables', desc: 'Adjustment grid → supported £/ft²', path: 'comparables', count: plural(counts.comparables, 'comparable') },
+    { icon: ICONS.comps, title: 'Comparables', desc: `Adjustment grid → supported £/${U.unit}`, path: 'comparables', count: plural(counts.comparables, 'comparable') },
     { icon: ICONS.scenarios, title: 'Scenarios', desc: 'Compare scheme options side-by-side', path: 'scenarios', count: plural(counts.scenarios, 'scenario') },
     { icon: ICONS.costs, title: 'Costs', desc: 'Budget vs actual, contractors, photo log', path: 'costs', count: plural(counts.costPackages, 'package') },
     { icon: ICONS.sales, title: 'Sales & lettings', desc: 'Unit tracker, progression, rent roll', path: 'sales', count: plural(counts.units, 'unit') },
