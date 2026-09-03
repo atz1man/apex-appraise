@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
-import { Button, Spinner } from './ui';
+import { Button, Spinner, useDialog } from './ui';
 import { brand, fixed } from '@apex/ui-tokens';
 
 /**
@@ -23,6 +23,8 @@ export function StripePaymentModal({
   onSuccess: () => void;
   onClose: () => void;
 }) {
+  // this dialog is always open while it is mounted — its caller unmounts it
+  const panel = useDialog(true, onClose);
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<Stripe | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
@@ -75,13 +77,31 @@ export function StripePaymentModal({
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" style={{ background: 'rgba(12,18,14,0.5)', backdropFilter: 'blur(3px)' }} onClick={onClose}>
-      <div className="bg-surface rounded-panel shadow-float w-[440px] max-w-full p-6" onClick={(e) => e.stopPropagation()}>
+      {/*
+        Before this it was a card form with no `role`, no Escape and a close
+        button named "×": a screen reader was not told a dialog had opened, and
+        a keyboard user had no way to abandon a payment.
+
+        The trap holds the parent document's own ring. Stripe's card fields are
+        in an IFRAME and keydown does not cross that boundary, so once focus is
+        inside them the browser's tab order takes over — a real limit of the
+        technique, and why the iframe is in the ring rather than pretended away.
+      */}
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${kind} — ${amountLabel}`}
+        tabIndex={-1}
+        className="bg-surface rounded-panel shadow-float w-[440px] max-w-full p-6 outline-none"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between">
           <div>
             <div className="label-mono text-ink-3">{kind}</div>
             <div className="fig text-[22px] font-semibold tracking-[-0.6px] mt-0.5">{amountLabel}</div>
           </div>
-          <button className="text-ink-3 hover:text-ink text-[18px] leading-none" onClick={onClose}>×</button>
+          <button className="text-ink-3 hover:text-ink text-[18px] leading-none" aria-label="Close without paying" onClick={onClose}>×</button>
         </div>
         <div className="mt-4 min-h-[220px]">
           <div ref={mountRef} />

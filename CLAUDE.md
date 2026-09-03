@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (200): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (210): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables` and `page-title` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  `accessible-names`, `icon-tables`, `page-title` and `dialogs` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (167, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (170, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -232,6 +232,20 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `dialogs` (web suite) — every overlay declares `role="dialog"` and `aria-modal`. Measured
+  across the five this app renders: ONE, the marketing page's product tour, did. The
+  primitive the PRODUCT uses — `Drawer`, opened from six screens — declared none of it and
+  managed no focus at all: opening it left focus on the button now behind the backdrop, the
+  first Tab walked out into a page greyed out and unusable, and Escape left focus on `<body>`
+  so the next Tab restarted at the top of the document. The payment dialog had no Escape
+  either — a card form a keyboard user could not abandon. `useDialog` (in `components/ui.tsx`)
+  is the fix for all four at once, and `lib/focus-trap.ts` holds the one decision worth
+  testing at its boundaries: which element Tab reaches at the two ends of the ring, and that
+  focus OUTSIDE the ring is pulled back in, which is the case a person is actually in when
+  they cannot see where their cursor went. The sweep matches a full-viewport fixed element
+  with a backdrop, not every `fixed inset-0` — the field app's full-bleed camera view is not
+  a dialog, and both directions have a fixture, because an exemption list is how a rule stops
+  meaning anything. `e2e/dialogs.spec.ts` is the half that presses Tab.
 - `page-title` (web suite) — every route the app declares names itself in the tab. Measured
   before it existed: 37 routes, ONE `<title>`, set in `index.html` and never touched. Every
   tab, every entry in the back-button menu, every bookmark and every screen-reader

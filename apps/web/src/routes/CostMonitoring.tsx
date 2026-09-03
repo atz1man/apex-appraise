@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getPrincipal, getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
-import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar, useDialog } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { DealNav } from '../components/DealNav';
 
@@ -190,13 +190,14 @@ export default function CostMonitoring() {
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lightbox, setLightbox] = useState<Photo | null>(null);
 
-  // close the photo lightbox on Escape
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setLightbox(null);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [lightbox]);
+  /**
+   * Escape closed it already; what it did not do was keep focus inside, or give
+   * focus back to the photo card the person opened it from. The remove control
+   * lives in here, so Tab walking out of it silently meant a destructive button
+   * sitting behind a backdrop with no way back. `useDialog` does all three.
+   */
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const lightboxPanel = useDialog(lightbox !== null, closeLightbox);
 
   const packages = cost?.packages ?? [];
   const rollup = cost?.rollup;
@@ -829,10 +830,12 @@ export default function CostMonitoring() {
           onClick={() => setLightbox(null)}
         >
           <div
+            ref={lightboxPanel}
             role="dialog"
             aria-modal="true"
             aria-label={lightbox.caption}
-            className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card"
+            tabIndex={-1}
+            className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card outline-none"
             style={{ background: neutral.ink }}
             onClick={(e) => e.stopPropagation()}
           >
