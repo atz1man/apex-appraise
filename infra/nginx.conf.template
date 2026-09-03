@@ -1,6 +1,12 @@
 server {
   listen 80;
   root /usr/share/nginx/html;
+
+  # Optional, and empty in every normal deployment: a glob that matches no files
+  # is not an error in nginx, so this line does nothing unless something is
+  # mounted there. A private demo instance mounts an auth_basic snippet into it
+  # (infra/DEMO.md says how) and gets a password prompt without a code change.
+  include /etc/nginx/demo-auth/*.conf;
   index index.html;
 
   # Compress text assets — the main bundle drops ~70% over the wire

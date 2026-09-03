@@ -26,7 +26,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (283; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (874). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (880). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (141): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -334,7 +334,14 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - A static presence check ("the file mentions `ricsFirmNumber`") passes every mutation when the
   claim appears in three places and only one is unconditional. Delete such a test rather than
   keep it beside a real one — it reads as coverage.
-- Repo is PUBLIC (github.com/atz1man/apex-appraise) so GitHub Actions runs free.
+- Repo is PUBLIC (github.com/atz1man/apex-appraise) so GitHub Actions runs free. Two things
+  follow, both learned from a real instance: (a) a PUBLIC demo (`SEED_DEMO=1`) must hold NO
+  billable key — its logins are published here, in the seed and by the login page, so
+  anyone who reaches the host is an ADMIN of an ENTERPRISE workspace with every AI feature,
+  at 600 req/min and no usage cap; `src/demo-key-guard.ts` warns at boot, and
+  `infra/DEMO.md` has the public-vs-private table. (b) commit with the masked GitHub
+  noreply address — a real address in commit metadata is one unauthenticated API call away
+  and is how sales scrapers get it.
 
 ## Session memory
 

@@ -11,6 +11,7 @@ import { registerHealth } from './health.js';
 import { startRowSweeper } from './row-sweeper.js';
 import { backfillSealedFields } from './sealed-fields.js';
 import { assertKeyUsable } from './secret-box.js';
+import { demoKeyWarning } from './demo-key-guard.js';
 import { registerWebhooks } from './webhooks.js';
 import { registerPublicApi } from './public-api.js';
 import { registerSecurity } from './security.js';
@@ -120,6 +121,16 @@ async function main() {
   // a malformed ENCRYPTION_KEY stops the process here rather than surfacing on
   // the screen of whoever next connects Xero
   assertKeyUsable();
+
+  /**
+   * A demo build holding a billable key is an open spend channel, because the
+   * demo logins are published — see demo-key-guard.ts for the measurement.
+   * Logged at error level on purpose: `warn` is where boot noise goes to die.
+   */
+  {
+    const billable = demoKeyWarning();
+    if (billable) app.log.error({ keys: billable.keys }, billable.msg);
+  }
 
   try {
     const { rows, fields } = await backfillSealedFields(prisma);

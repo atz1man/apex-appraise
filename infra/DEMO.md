@@ -83,6 +83,56 @@ incident.
 not configured, and the other three fall back to deterministic templates. Nothing breaks;
 the most impressive journey just gets quieter.
 
+### The rule: a PUBLIC demo holds no billable key
+
+Learned the hard way on this project. `ANTHROPIC_API_KEY` was set on a demo instance that
+was publicly reachable and whose credentials were in the public README — so anybody who
+read the repo could sign in as an admin and spend the key. The AI procedures are gated on
+the `aiDirector` feature, the seeded workspace is ENTERPRISE and therefore has it, those
+procedures sit in the general rate-limit bucket (600 requests/min per IP), and there is no
+per-org usage cap anywhere in the product. Nothing was actually spent. That was luck.
+
+So the two configurations are:
+
+| Instance | Reachable by | Billable keys |
+|---|---|---|
+| **Public demo** — a link that circulates, credentials in the README | anyone | **none** |
+| **Private demo** — one named tester, behind auth on an unguessable host | that tester | a **spend-capped** key |
+
+The API says so at boot now: with `SEED_DEMO=1` and a billable key present it logs at
+error level naming the variable and the fix (`src/demo-key-guard.ts`). It warns rather
+than refusing, because a private demo with a capped key is the right thing to run — what
+it removes is the silence. A Stripe **test** key does not trigger it; a `sk_live_` one does.
+
+### Putting the private instance behind a password
+
+The web container includes `/etc/nginx/demo-auth/*.conf` — a glob that matches nothing
+in a normal deployment and so does nothing. Mount one file there and the whole site needs
+a password, with no code change:
+
+```bash
+# on the host, once
+htpasswd -cB demo-auth.htpasswd dan          # prompts for a password
+cat > demo-auth.conf <<'CONF'
+auth_basic "Apex Appraise — demo";
+auth_basic_user_file /etc/nginx/demo-auth/demo-auth.htpasswd;
+CONF
+```
+
+Then add to the `web` service in a `docker-compose.override.yml`:
+
+```yaml
+services:
+  web:
+    volumes:
+      - ./demo-auth.conf:/etc/nginx/demo-auth/demo-auth.conf:ro
+      - ./demo-auth.htpasswd:/etc/nginx/demo-auth/demo-auth.htpasswd:ro
+```
+
+Give the tester the URL and that one username and password. It is a blunt instrument — one
+shared credential in front of everything — which is exactly right for a demo and wrong for
+anything else.
+
 ---
 
 ## Before you send the link
@@ -118,6 +168,14 @@ that section.
 ---
 
 ## Resetting between sessions
+
+The reset workflow (`.github/workflows/demo-reset.yml`) is **manual only** — Actions tab,
+Run workflow. It used to fire nightly at 03:00 UTC, which is right for a demo nobody is
+part-way through and wrong the moment somebody is testing it: a tester's afternoon of work
+would vanish overnight with nothing on screen to explain it. Reset between sessions, not
+during one.
+
+To reset the local stack instead:
 
 Dan's testing writes real rows — deals, appraisals, documents, signatures. To hand him a
 clean instance again:
