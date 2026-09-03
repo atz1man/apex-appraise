@@ -54,6 +54,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return (
       <div
         key={t.id}
+        data-testid="toast"
         className="bg-surface rounded-card shadow-float px-4 py-3 flex items-start gap-2.5 animate-slideIn"
         style={{ border: `1px solid ${s.border}` }}
       >

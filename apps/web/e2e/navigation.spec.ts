@@ -86,16 +86,31 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
   await loginInternal(page);
   const id = await northgateId(page);
 
-  // warm the destination: its chunk and its data, so the return renders tall
-  // from the first frame and there is nothing for the browser to clamp
-  await page.goto('/settings');
+  await page.goto(`/deal/${id}/appraisal`);
+  await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
+  // the content, not the chrome — see round 2
   await expect
     .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
     .toBeGreaterThan(1400);
 
-  await page.goto(`/deal/${id}/appraisal`);
-  await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
-  // the content, not the chrome — see round 2
+  /**
+   * Warm the destination IN THE APP, and that qualifier is round four.
+   *
+   * The first attempt warmed Settings with `page.goto('/settings')` before
+   * navigating on. A `goto` is a full page load: it throws away the module
+   * cache and the query cache, so by the time Settings was clicked nothing was
+   * warm and it rendered at exactly 700 again — the same viewport-high skeleton,
+   * reached by a longer route.
+   *
+   * Going there and coming back with `goBack` keeps both caches, because both
+   * hops are client-side. After this, Settings' chunk is loaded and its data is
+   * in the query cache, so the click that matters renders it tall on the first
+   * frame with nothing for the browser to clamp.
+   */
+  await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveTitle('Settings · Apex Appraise');
+  await page.goBack();
+  await expect(page).toHaveTitle('Development appraisal · Apex Appraise');
   await expect
     .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
     .toBeGreaterThan(1400);
