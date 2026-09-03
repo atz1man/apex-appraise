@@ -34,9 +34,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (174): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (178): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes` and `hooks-order` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order` and `route-reachable` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -125,6 +125,17 @@ procedure or a model without satisfying them fails CI with a message naming your
 the point, so read the failure rather than adding an exemption.
 
 - `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
+- `route-reachable` (in the WEB suite) — every screen has a door. The API has had
+  `reachable` for a while ("an unreachable procedure is not dead code, it is a capability we
+  believe we have") and the browser had no equivalent, so the same defect was free to happen
+  one layer up — and had. `/portfolio/pack` and `/docs/api` were complete, tested, working
+  screens that NOTHING linked to; every one of the funding pack's five e2e specs opens it
+  with `page.goto`, which is the tell. Half this app's navigation is TABLE-driven
+  (`GLOBAL_NAV`, `TOOLS`, the Hub grid), so the sweep matches path-shaped literals anywhere
+  rather than only `to=`/`href=` — a JSX-attribute matcher called nine reachable routes
+  orphans. Comments are stripped FIRST, found by mutation: removing the one real link to
+  `/docs/api` left the sweep green because the comment explaining the link still spelled the
+  path, and a route whose only mention is prose about the route is exactly an unreachable one.
 - `crud-completeness` — what a firm can create, a firm can remove. Measured across the whole
   router: FIVE entities had a create-shaped mutation and nothing that removed one —
   comparables, scenarios, photos, tasks and deals — while `sales` and `investors` beside them

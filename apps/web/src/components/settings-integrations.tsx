@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
 import { Button, Panel, PlanLocked, StatusChip } from './ui';
@@ -60,8 +60,17 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
     <Panel title="API keys" right={<StatusChip status={keys?.some((k) => k.live) ? 'green' : 'neutral'} label={`${keys?.filter((k) => k.live).length ?? 0} live`} />}>
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         For your own systems to read this workspace. A key belongs to the firm rather than to a person, so an integration
-        keeps working after whoever set it up has moved on. See{' '}
-        <code className="fig text-[11.5px]">/api/v1</code> for what it can read.
+        keeps working after whoever set it up has moved on.{' '}
+        {/*
+          The documentation for the thing this panel mints keys for. `/docs/api`
+          existed, was complete and was reachable only by typing the URL — the
+          API's own root response cites it and nothing in the app did, so the one
+          screen where somebody is holding a new key had no link to what it opens.
+        */}
+        <Link className="text-brand-ink font-semibold underline underline-offset-2" to="/docs/api">
+          Read the API reference
+        </Link>{' '}
+        for what a key can read.
       </div>
 
       {minted && (

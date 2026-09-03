@@ -118,6 +118,10 @@ export default function Hub() {
         // `investors.myPosition` answered them FORBIDDEN
         ['investor', 'Investors', 'The register — holdings, distributions, capital calls, portal logins', '/investors', 'sell'],
         ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board', 'appraise'],
+        // The lender-facing book — exposure, covenants, exceptions, paginated to
+        // A4. It was complete, tested and reachable only by typing the URL: every
+        // one of its e2e specs opens it with `page.goto`, which is the tell.
+        ['pack', 'Portfolio funding pack', 'The book as a lender receives it — exposure, covenants, exceptions', '/portfolio/pack', 'records'],
         ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
       ]
     : [];
