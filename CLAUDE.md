@@ -28,9 +28,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (883). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (164): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (167): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region) plus the `no-raw-hex` and `asset-classes` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region) plus the `no-raw-hex`, `asset-classes` and `hooks-order` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -160,6 +160,20 @@ the point, so read the failure rather than adding an exemption.
   parameter is named `type` and so is every other one — a third such site needs its own rule
   rather than this one loosened into matching `.replace('_'` everywhere, which deal stages
   would trip on every screen.
+- `hooks-order` (web suite) — no React hook below an early return. React matches hooks
+  between renders BY POSITION, so a component that returns a spinner while its data loads
+  and calls a hook two hundred lines below calls a different number of hooks on its second
+  render than its first: React throws and the component renders as nothing. Measured —
+  `useUnits()` was added to `RedBookReport` beside the value that first uses it, which is
+  below the spinner AND below the refusal for a deal with nothing to value; twenty-one e2e
+  specs went red at once, every Red Book spec there is. Neither typecheck sees it and
+  neither can: `pnpm --filter @apex/web lint` IS `tsc --noEmit`, and hook order is not a
+  type. The usual answer is `eslint-plugin-react-hooks`; this repo runs no eslint, and one
+  rule is cheaper to keep than a linter is to introduce. Narrow on purpose: hook STATEMENTS
+  at the top level of a top-level function only — the first matcher allowed anything
+  between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
+  hook call. Run against the commit before the fix it names the line and the guard that
+  shadows it.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

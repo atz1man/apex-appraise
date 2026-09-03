@@ -119,6 +119,22 @@ export default function RedBookReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * Floor areas and the words for them, in the firm's own jurisdiction. The
+   * RICS wording around them does NOT move: the Red Book is a global standard
+   * and a certificate that quoted VPS 4 in one paragraph and abandoned it in
+   * the next would be worth nothing.
+   *
+   * UP HERE with the other hooks, and that is not tidiness. This page returns
+   * early twice — a spinner while the appraisal loads, and a refusal when there
+   * is nothing to value — and both sit two hundred lines above where this value
+   * is first used. A hook called below them runs on the second render and not
+   * the first, so React throws and the whole certificate renders as nothing.
+   * Twenty-one e2e specs went red on exactly that, and neither typecheck can
+   * see it: `pnpm lint` here is `tsc --noEmit`, and hook ORDER is not a type.
+   * `lib/hooks-order.test.ts` is the rule now.
+   */
+  const U = useUnits();
   // client-facing documents carry the firm's identity, not the product's
   const { data: org } = trpc.org.get.useQuery();
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
@@ -426,13 +442,6 @@ export default function RedBookReport() {
    * recorded beside each entry rather than in whoever last typed this table.
    */
   const asset = assetClass(deal?.assetType ?? 'RESIDENTIAL');
-  /**
-   * Floor areas and the words for them, in the firm's own jurisdiction. The
-   * RICS wording around them does NOT move: the Red Book is a global standard
-   * and a certificate that quoted VPS 4 in one paragraph and abandoned it in
-   * the next would be worth nothing.
-   */
-  const U = useUnits();
 
   /**
    * Weights follow the scheme. A held-and-let element carrying most of the GDV
