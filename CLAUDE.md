@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (182): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (187): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable` and
-  `accessible-names` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  `accessible-names` and `icon-tables` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (160, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (162, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -232,6 +232,22 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `icon-tables` (web suite) — a glyph table keeps no `Record<string, string>` annotation,
+  so the COMPILER checks its keys. The test does not check icon keys itself; it checks that
+  the compiler is still allowed to. With the annotation, `ICONS[anythingAtAll]` types as
+  `string`, a key that does not exist passes `tsc --noEmit`, and `Icon` calls `.split('|')`
+  on `undefined` — which throws inside render, so React unmounts the tree above it and the
+  screen goes blank. Measured: a Hub tile naming `pack` with no `pack` entry took the whole
+  home screen down and failed twenty-one e2e specs, every one of them at the sign-in
+  assertion and none within sight of an icon. Without the annotation the same tile is a
+  build error naming the tile. It keys on the VALUES (a quoted string starting with a move
+  command), not on the name `ICONS`, because the copy nobody thinks to look for is the one
+  called something else. `Icon` itself also tolerates a missing `d` now: the type stops it
+  reaching a build, and this stops a missing 18px glyph ever again costing a screen.
+- `e2e/reachable.spec.ts` — the doors, CLICKED. `route-reachable` proves a link literal
+  exists in the source, which is a weaker claim than it reads as: the commit that added the
+  funding-pack tile passed it, and the tile was the crash above. A link in the source is not
+  a route a user can reach; these two specs sign in, click, and land.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

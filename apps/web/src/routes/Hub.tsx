@@ -7,7 +7,7 @@ import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../
 import { heroGradient } from '@apex/ui-tokens';
 import { workingDeal } from '../lib/working-deal';
 
-const ICONS: Record<string, string> = {
+const ICONS = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
   auto: SPARKLE,
   appraisal: 'M4 4h16v16H4z|M8 12h8|M8 8h8|M8 16h5',
@@ -19,7 +19,21 @@ const ICONS: Record<string, string> = {
   bench: 'M18 20V10|M12 20V4|M6 20v-6',
   investor: 'M12 1v22|M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   integrations: 'M9 3H5a2 2 0 0 0-2 2v4|M15 3h4a2 2 0 0 1 2 2v4|M15 21h4a2 2 0 0 0 2-2v-4|M9 21H5a2 2 0 0 1-2-2v-4',
-};
+  pack: 'M12 2 2 7l10 5 10-5z|M2 12l10 5 10-5|M2 17l10 5 10-5',
+} as const;
+
+/**
+ * The table above carries NO `Record<string, string>` annotation, on purpose.
+ * With one, `ICONS[anything]` is typed `string` and a key that does not exist
+ * reads `undefined` at run time — which `Icon` then calls `.split()` on, so a
+ * missing glyph throws inside render and the WHOLE screen becomes blank.
+ * Measured: the funding-pack tile below was added with no `pack` entry, the Hub
+ * threw, and 21 e2e specs died at the front door — every one of them at
+ * `expect(getByText('Deal tools'))`, none of them anywhere near an icon.
+ * Without the annotation the compiler knows the keys and `pnpm lint` (which is
+ * `tsc --noEmit`) refuses the tile instead.
+ */
+type IconKey = keyof typeof ICONS;
 
 function GettingStarted({ flagshipId }: { flagshipId?: string }) {
   const { data: ob } = trpc.org.onboarding.useQuery(undefined, { staleTime: 30_000 });
@@ -102,7 +116,7 @@ export default function Hub() {
     sell: 'bg-status-blue-bg text-status-blue',
     records: 'bg-status-purple-bg text-status-purple',
   };
-  const dealTools: Array<[string, string, string, string, string]> = flagship
+  const dealTools: Array<[IconKey, string, string, string, string]> = flagship
     ? [
         ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
         ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],

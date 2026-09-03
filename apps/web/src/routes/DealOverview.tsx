@@ -59,7 +59,9 @@ const fmtAt = (d: Date) =>
 
 // ---------- Workfile tool cards ----------
 
-const ICONS: Record<string, string> = {
+// no `Record<string, string>`: see Hub.tsx — an annotated table types a missing
+// key as `string`, and `Icon` then throws on `undefined.split('|')` mid-render.
+const ICONS = {
   appraisal: 'M4 4h16v16H4z|M8 12h8|M8 8h8|M8 16h5',
   auto: SPARKLE,
   comps: 'M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z|M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
@@ -70,7 +72,7 @@ const ICONS: Record<string, string> = {
   workbench: 'M3 3h7v7H3z|M14 3h7v7h-7z|M14 14h7v7h-7z|M3 14h7v7H3z',
   report: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M8 13h8|M8 17h5',
   redbook: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20|M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
-};
+} as const;
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 

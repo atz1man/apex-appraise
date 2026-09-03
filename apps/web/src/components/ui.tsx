@@ -667,10 +667,22 @@ export function Spinner() {
   );
 }
 
+/**
+ * `d` is a `|`-separated list of SVG path data, one `<path>` each.
+ *
+ * The `?? ''` is not defensive typing — the type already says `string`. It is
+ * there because of what happens when something hands this a key its glyph table
+ * does not have: `undefined.split` throws INSIDE render, React unmounts the tree
+ * above it, and the user gets a blank page. Measured: a Hub tile named an icon
+ * with no entry and the entire home screen went white — 21 e2e specs failed at
+ * the sign-in assertion, none of them anywhere near an icon. The typed tables
+ * (see `Hub.tsx`) are what stop that reaching a build; this is what stops a
+ * missing 18px glyph ever again costing a whole screen.
+ */
 export function Icon({ d, size = 16, color = 'currentColor', strokeWidth = 2 }: { d: string; size?: number; color?: string; strokeWidth?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      {d.split('|').map((p, i) => (
+      {(d ?? '').split('|').map((p, i) => (
         <path key={i} d={p} />
       ))}
     </svg>
