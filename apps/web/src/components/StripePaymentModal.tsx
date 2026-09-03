@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
-import { Button, Spinner, useDialog } from './ui';
+import { Button, FormError, Spinner, useDialog } from './ui';
 import { brand, fixed } from '@apex/ui-tokens';
 
 /**
@@ -109,7 +109,7 @@ export function StripePaymentModal({
             <div className="flex justify-center py-10"><Spinner /></div>
           )}
         </div>
-        {error && <div className="mt-2 text-[12px] text-status-red">{error}</div>}
+        {error && <FormError className="mt-2 text-[12px]">{error}</FormError>}
         <Button className="w-full justify-center mt-4" disabled={!ready || busy} onClick={confirm}>
           {busy ? <Spinner /> : `Pay ${amountLabel}`}
         </Button>

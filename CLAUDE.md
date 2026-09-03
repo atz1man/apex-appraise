@@ -34,10 +34,10 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (222): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (228): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive` and `unsaved` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved` and `announcements` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -232,6 +232,24 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `announcements` (web suite) — when this app says something went wrong, it is audible.
+  Measured across the whole browser tree: `role="alert"`, `aria-invalid` and
+  `aria-describedby` appeared in ZERO files, against seventeen places rendering a refusal in
+  red beside the control that caused it. The sharper half is that NINETEEN mutations declare
+  `meta: { inlineError: true }`, which suppresses the toast on the explicit grounds that "the
+  screen shows the error where it happened" — it showed it in a colour, so for those nineteen
+  the red line was not a second channel but the only one. They go through `FormError` now
+  (`components/ui.tsx`), and the sweep matches a red `<div>` whose content is an EXPRESSION:
+  a message that appeared because something happened. Literal red text is left alone — a
+  "Danger zone" heading and an overdue condition in a table are labels, and announcing them
+  on render is the noise that teaches people to ignore the channel. The toasts are the other
+  half and were subtler: each carried `role="status"`, which LOOKS right and is the
+  documented way NOT to be announced, because a live region has to be in the document before
+  the message arrives. Two regions are now mounted empty from startup — assertive for errors,
+  polite for the rest — since `aria-live` is a property of the REGION, not of the card.
+  Comments are stripped before matching, found the same way `route-reachable` found it: the
+  assertion that no per-toast `role="status"` remains matched the comment explaining why it
+  had been removed.
 - `unsaved` (web suite) — a screen that KNOWS its work is unsaved says so before the tab
   closes. Measured before it existed: `beforeunload` appeared nowhere in the source and
   neither did any navigation blocker, while THREE screens track a `dirty` flag and each

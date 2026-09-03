@@ -3,23 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { brand, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatPct } from '../lib/format';
-import {
-  AssetTag,
-  Avatar,
-  Button,
-  Dot,
-  EmptyState,
-  Icon,
-  Panel,
-  ProgressBar,
-  Skeleton,
-  SkeletonRows,
-  Spinner,
-  StatCard,
-  StatusChip,
-  TopBar,
-  SPARKLE,
-} from '../components/ui';
+import { AssetTag, Avatar, Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, SPARKLE, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 import { useUnits } from '../lib/region';
 import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
@@ -309,7 +293,7 @@ export default function DealOverview() {
               <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
                 Cancel
               </Button>
-              {saveDetails.error && <div className="w-full text-[12px] text-status-red">{saveDetails.error.message}</div>}
+              {saveDetails.error && <FormError className="w-full text-[12px]">{saveDetails.error.message}</FormError>}
               <div className="w-full text-[11.5px] text-ink-3">
                 {/* said out loud, because the absence of GDV here is the point */}
                 GDV, profit, equity and return on cost are computed by the appraisal engine and cannot be typed in.
@@ -415,7 +399,7 @@ export default function DealOverview() {
               {setStage.isPending ? <Spinner /> : nextStage ? `Advance stage →` : 'Completed'}
             </Button>
           </div>
-          {setStage.error && <div className="mt-2 text-[11.5px] text-status-red">{setStage.error.message}</div>}
+          {setStage.error && <FormError className="mt-2 text-[11.5px]">{setStage.error.message}</FormError>}
         </Panel>
 
         {/* ===== KPI strip ===== */}

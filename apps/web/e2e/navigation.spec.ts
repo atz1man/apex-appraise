@@ -58,34 +58,44 @@ test('a client-facing tab does not advertise the software', async ({ page }) => 
 
 test('arriving at a page puts you at the top of it', async ({ page }) => {
   /**
-   * Two things this test has to get right, and the first attempt got both
-   * wrong — it ran Hub → appraisal at 1280×720 and failed on its OWN premise
-   * check: the Hub scrolls 79px at that size, so there was never an offset for
-   * anything to reset.
+   * The hardest of these to state honestly, and it took three rounds to work
+   * out why — each one failing on its own premise check rather than on the
+   * assertion, which is the guard doing its job.
    *
-   * The origin and destination must both be genuinely long. The appraisal and
-   * Settings are the two longest screens in the product, so this runs between
-   * them.
+   *   round 1  Hub → appraisal at 1280×720. The Hub scrolls 79px at that size,
+   *            so there was no offset for anything to reset.
+   *   round 2  appraisal → Settings, scrolled as soon as the top bar appeared.
+   *            scrollY came back 4: the page was still a skeleton. The header
+   *            renders long before any row does.
+   *   round 3  the origin scrolled, and the DESTINATION measured 700 — exactly
+   *            the viewport. Settings was a skeleton on arrival, so the browser
+   *            clamped the scroll to zero on its own and the test could not
+   *            tell the code from the clamp.
    *
-   * And the link clicked has to be STICKY. Playwright scrolls a target into
-   * view before clicking it, so a link in the body of the page moves the very
-   * offset being measured. The global nav is sticky and is why the viewport is
-   * 1440 wide — below 1400 the header hides it, deliberately, so the deal
-   * screens' own controls are not pushed off.
+   * Round 3 is the interesting one, because it is a fact about the product and
+   * not just about the test: every route is `lazy()`, so a FIRST visit lands on
+   * something viewport-high and the browser resets the scroll whether we do or
+   * not. The case that needs the code is the second visit — chunk loaded, data
+   * in the query cache, the destination tall from its first render, nothing for
+   * the browser to clamp. Which is also the case a person is actually in when
+   * they move between screens they have been using all afternoon.
+   *
+   * So Settings is warmed first, and the click that matters is the return.
    */
   await page.setViewportSize({ width: 1440, height: 700 });
   await loginInternal(page);
   const id = await northgateId(page);
+
+  // warm the destination: its chunk and its data, so the return renders tall
+  // from the first frame and there is nothing for the browser to clamp
+  await page.goto('/settings');
+  await expect
+    .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
+    .toBeGreaterThan(1400);
+
   await page.goto(`/deal/${id}/appraisal`);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
-
-  /*
-    Wait for the page to have its CONTENT, not merely its header. The first
-    attempt scrolled as soon as the top bar appeared and got scrollY 4 — the
-    appraisal was still a skeleton, so there was nothing to scroll past. The
-    header renders long before the rows do, which makes "the nav is visible" a
-    test of the wrong thing.
-  */
+  // the content, not the chrome — see round 2
   await expect
     .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
     .toBeGreaterThan(1400);
@@ -94,13 +104,17 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
   const left = await page.evaluate(() => window.scrollY);
   expect(left, 'the appraisal is too short at this viewport to leave a scroll offset behind').toBeGreaterThan(200);
 
+  // a STICKY link: Playwright scrolls a target into view before clicking it, so
+  // a link in the body of the page moves the very offset being measured. The
+  // global nav is why the viewport is 1440 — below 1400 the header hides it.
   await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Settings' }).click();
   await expect(page).toHaveTitle('Settings · Apex Appraise');
 
   const arrival = await page.evaluate(() => ({ y: window.scrollY, height: document.body.scrollHeight }));
-  // the destination must be taller than the offset brought to it, or a browser
-  // clamping the scroll would pass this test without the code doing anything
-  expect(arrival.height, 'the destination is too short for this to prove a reset').toBeGreaterThan(left + 700);
+  expect(
+    arrival.height,
+    'the destination was still short on arrival, so a browser clamping the scroll would pass this without the code doing anything',
+  ).toBeGreaterThan(left + 700);
   expect(arrival.y, 'Settings opened part-way down, at the offset left behind by the appraisal').toBe(0);
 });
 

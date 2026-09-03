@@ -4,7 +4,7 @@ import { weightedComparables } from '@apex/appraisal-engine';
 import { assetLabel } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -404,7 +404,7 @@ export default function Comparables() {
                   )}
                 </Button>
               )}
-              {apply.error && <div className="mt-2 text-[11.5px] text-status-red">{apply.error.message}</div>}
+              {apply.error && <FormError className="mt-2 text-[11.5px]">{apply.error.message}</FormError>}
             </Panel>
           </aside>
         </div>

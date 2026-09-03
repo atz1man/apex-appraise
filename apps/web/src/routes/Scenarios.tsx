@@ -4,7 +4,7 @@ import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetr
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { useUnits, type RegionUnits } from '../lib/region';
-import { Button, Dot, EmptyState, Icon, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { brand, onFill } from '@apex/ui-tokens';
 
@@ -366,7 +366,7 @@ export default function Scenarios() {
               Draft risk commentary
             </Button>
           </div>
-          {draftRisk.error && <div className="mt-3 text-[11.5px] text-status-red">{draftRisk.error.message}</div>}
+          {draftRisk.error && <FormError className="mt-3 text-[11.5px]">{draftRisk.error.message}</FormError>}
           {draftRisk.data && (
             <div className="mt-4 pt-4 border-t border-border-faint">
               <p className="text-[13px] text-ink-2 leading-relaxed">{draftRisk.data.commentary}</p>

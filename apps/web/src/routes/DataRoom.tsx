@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
-import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
+import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
 import { fmtBytes, n0 } from '../lib/format';
@@ -303,7 +303,7 @@ export default function DataRoom() {
                     List one you are waiting for
                   </button>
                 </div>
-                {uploadError && <div className="mt-1 text-[11.5px] text-status-red">{uploadError}</div>}
+                {uploadError && <FormError className="mt-1 text-[11.5px]">{uploadError}</FormError>}
               </div>
             </div>
             {formOpen && (
@@ -533,7 +533,7 @@ export default function DataRoom() {
               {!ask.isPending && 'Ask'}
             </Button>
           </div>
-          {ask.error && <div className="mt-2 text-[11.5px] text-status-red">{ask.error.message}</div>}
+          {ask.error && <FormError className="mt-2 text-[11.5px]">{ask.error.message}</FormError>}
           <div className="mt-3 flex flex-col gap-3">
             {askHistory.map((entry, i) => (
               <div key={`${entry.q}-${i}`} className="bg-sunken border border-border-std rounded-[11px] p-3">

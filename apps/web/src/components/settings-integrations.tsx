@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
-import { Button, Panel, PlanLocked, StatusChip } from './ui';
+import { Button, FormError, Panel, PlanLocked, StatusChip } from './ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 /**
@@ -293,7 +293,7 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
               Add endpoint
             </Button>
           </div>
-          {create.error && <div className="text-[11.5px] text-status-red">{create.error.message}</div>}
+          {create.error && <FormError className="text-[11.5px]">{create.error.message}</FormError>}
         </div>
       )}
 

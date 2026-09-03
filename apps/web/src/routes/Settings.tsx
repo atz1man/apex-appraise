@@ -5,7 +5,7 @@ import { DEFAULT_REGION, REGION_PROFILES, REGIONS, regionProfile, type Region } 
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
-import { Avatar, Button, FirmMark, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
@@ -788,7 +788,7 @@ function SecurityPanel() {
         <input className="w-full mb-3" type="password" aria-label="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
         <label className="label-mono text-ink-3 block mb-1">Confirm new password</label>
         <input className="w-full mb-3" type="password" aria-label="Confirm new password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
+        {error && <FormError className="text-[12px] mb-3">{error}</FormError>}
         <Button type="submit" loading={change.isPending} disabled={!current || !next || !confirm}>
           Change password
         </Button>

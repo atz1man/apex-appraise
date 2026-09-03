@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { BrandMark, Button } from '../components/ui';
+import { BrandMark, Button, FormError } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 
 /** Set a new password from an emailed link. The token is single-use and expires in an hour. */
@@ -82,7 +82,7 @@ export default function ResetPassword() {
               />
               <div className="text-[11px] text-ink-3 mb-3">At least 8 characters.</div>
               {mismatch && <div className="text-[12px] text-status-red mb-3">Those two do not match.</div>}
-              {error && <div className="text-[12px] text-status-red mb-3">{error}</div>}
+              {error && <FormError className="text-[12px] mb-3">{error}</FormError>}
               <Button type="submit" className="w-full" loading={reset.isPending} disabled={mismatch}>
                 Set the password
               </Button>

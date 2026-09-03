@@ -692,6 +692,35 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
   );
 }
 
+/**
+ * A message that appears because something went wrong, and is announced.
+ *
+ * Measured across the whole browser tree before this existed: `role="alert"`,
+ * `aria-invalid` and `aria-describedby` appeared in ZERO files, against
+ * seventeen places rendering a refusal in red next to the control that caused
+ * it. For anyone not looking at that corner of the screen the app simply did
+ * nothing — and the sharper half is that nineteen mutations declare
+ * `meta: { inlineError: true }`, which SUPPRESSES the toast on the grounds that
+ * the screen shows the error where it happened. It showed it in a colour.
+ *
+ * `role="alert"` is its own assertive live region and, unlike `role="status"`,
+ * IS announced when the element carrying it is inserted with its text — which
+ * is exactly how these appear. That is why this works as a component and the
+ * toasts needed a persistent region instead.
+ *
+ * `className` is passed through rather than normalised. Four different sizes
+ * are in use for this one thing across fourteen screens, which is worth
+ * tidying and is not what this change is; making every refusal audible should
+ * not also move type around on fourteen screens.
+ */
+export function FormError({ id, children, className = '' }: { id?: string; children: ReactNode; className?: string }) {
+  return (
+    <div id={id} role="alert" className={`text-status-red ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 // ---------- Table ----------
 
 export function Th({ children, right, className = '' }: { children?: ReactNode; right?: boolean; className?: string }) {
