@@ -34,10 +34,10 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (219): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (222): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs` and `destructive` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive` and `unsaved` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -232,6 +232,24 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `unsaved` (web suite) — a screen that KNOWS its work is unsaved says so before the tab
+  closes. Measured before it existed: `beforeunload` appeared nowhere in the source and
+  neither did any navigation blocker, while THREE screens track a `dirty` flag and each
+  PRINTS it — a button reading "Save appraisal" rather than "Saved". The information was on
+  screen and no use was made of it when the work was about to be thrown away: every financial
+  input behind a residual, the Market Value opinion that goes on to the Red Book, and the
+  terms a client will sign. The rule keys on a TRACKED flag (`const [dirty, setDirty] =
+  useState`), which is a distinction and not an exemption — Settings derives a `dirty` by
+  comparing one field to the saved organisation name, which is not work, and computes it
+  below that panel's loading return where a hook could not go anyway. What `useUnsavedWarning`
+  does NOT cover is the commoner case, clicking a link inside the app: `beforeunload` does not
+  fire for that. The reason the document-level click interceptor is not here is measured
+  rather than assumed — Playwright DISMISSES a dialog by default and NO spec in this suite
+  registers a handler, so every existing spec that edits one of these screens and then
+  navigates would silently stay put; `screens.spec.ts` alone holds 49 fills and 163
+  navigations. And the tempting alternative — keep the draft, restore it later — is worse
+  rather than merely bigger: silently putting a valuer's abandoned inputs back into an
+  appraisal means a figure nobody chose to enter can end up under a signature.
 - `destructive` (web suite) — nothing this product destroys goes on one click. Measured over
   every `remove`/`delete` mutation the browser calls: 14 controls, FOUR of which fired
   immediately — a customer's webhook endpoint, the firm's single sign-on configuration (and
