@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (170, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (171, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
