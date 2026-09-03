@@ -34,10 +34,10 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (228): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (235): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved` and `announcements` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements` and `symbol-buttons` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -232,6 +232,23 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `symbol-buttons` (web suite) — a control whose only label is a symbol has no name.
+  `accessible-names` covers what a person TYPES into (`input`, `select`, `textarea`) and says
+  nothing about buttons, which had the same defect in disguise: "×" is a text node, so every
+  "does this control have text?" check passes it, and a screen reader reads "multiplication
+  sign". Three were found BY HAND, one at a time — the drawer's close button (reached from six
+  screens), the payment dialog's, and the toast's — which is this repo's threshold for writing
+  the rule down. It took two corrections and both are recorded in it, because both produce a
+  confident wrong answer rather than an error. The opening tag ends at a brace-depth-zero `>`,
+  not the first one: `onClick={() => …}` contains a `>`, and the naive version cut the tag
+  through the arrow function, found two of the three known offenders and silently missed the
+  toast — the one with an arrow in its handler. And a button whose content interpolates
+  anything is skipped, because stripping the expressions leaves the SEPARATOR: a filter chip
+  rendering `{f.label} · {count}` reported as a symbol-only name, when the dot was never the
+  name but what sat between two of them. Comments become blank LINES rather than vanishing,
+  or every offender is named at a line that drifted up by however much prose sat above it.
+  Verified against the tree as it stood before the fixes, where it names all three unaided,
+  each at its own opening tag.
 - `announcements` (web suite) — when this app says something went wrong, it is audible.
   Measured across the whole browser tree: `role="alert"`, `aria-invalid` and
   `aria-describedby` appeared in ZERO files, against seventeen places rendering a refusal in
