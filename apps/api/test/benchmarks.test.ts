@@ -346,3 +346,149 @@ describe('replacing a deal’s own contribution', () => {
     expect(rows.map((r) => r.dealName).sort()).toEqual(['Mill Lane', 'Wharf Street']);
   });
 });
+
+/**
+ * A figure filed under the wrong region is a wrong number in another firm's
+ * appraisal, because this pool is shared and its medians are read as market
+ * evidence.
+ *
+ * The feed used to answer "South West" for any address it did not recognise —
+ * measured over sixteen addresses, fourteen of them, including Manchester,
+ * Birmingham, Edinburgh, Sydney and a deal with no address at all. These are
+ * the cases where it now declines instead.
+ */
+describe('a deal the pool cannot place', () => {
+  it('contributes nothing, and says so rather than blaming the appraisal', async () => {
+    const T = await makeTenant('Unplaceable');
+    await prisma.organisation.update({ where: { id: T.orgId }, data: { contributesBenchmarks: true } });
+    const deal = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Tower Yard', address: 'George Street, Sydney NSW', postcode: null, assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId,
+        dealId: deal.id,
+        label: 'Base',
+        isCurrent: true,
+        reviewStatus: 'approved',
+        reviewedAt: new Date(),
+        units: JSON.stringify([{ label: 'Flats', count: 10, area: 900, cap: 355 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 140 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+
+    // the refusal names the fix. Before this, both "cannot place it" and "no
+    // areas yet" arrived as the same message, which sent people to look at a
+    // unit schedule that was fine.
+    await expect(callerFor(T.principal).benchmarks.contribute(deal.id as never)).rejects.toThrow(/could not be placed|postcode/i);
+
+    // and NOTHING was written — not a point under a guessed region, not a point
+    // under an empty one
+    expect(await prisma.benchmarkPoint.count({ where: { orgId: T.orgId } })).toBe(0);
+  });
+
+  it('records the skip in the audit trail, so it is not merely silent', async () => {
+    const T = await makeTenant('Unplaceable audit');
+    await prisma.organisation.update({ where: { id: T.orgId }, data: { contributesBenchmarks: true } });
+    const deal = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Nowhere Works', address: 'Somewhere', postcode: null, assetType: 'INDUSTRIAL', stage: 'COMPLETED' },
+    });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId,
+        dealId: deal.id,
+        label: 'Base',
+        isCurrent: true,
+        reviewStatus: 'approved',
+        reviewedAt: new Date(),
+        units: JSON.stringify([{ label: 'Units', count: 4, area: 2000, cap: 220 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 110 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+    await prisma.costPackage.create({
+      data: { orgId: T.orgId, dealId: deal.id, name: 'Shell', budget: 100_000_00n, committed: 100_000_00n, spent: 100_000_00n, forecast: 100_000_00n },
+    });
+
+    const { feedOutturn } = await import('../src/benchmark-feed.js');
+    const fed = await feedOutturn(prisma, T.orgId, deal, { userId: T.principal.userId, name: 'Tester' });
+    expect(fed).toBeNull();
+    expect(await prisma.benchmarkPoint.count({ where: { orgId: T.orgId } })).toBe(0);
+
+    const events = await prisma.activityEvent.findMany({ where: { orgId: T.orgId, dealId: deal.id } });
+    const skip = events.find((e) => e.action === 'benchmark contribution skipped');
+    expect(skip, 'a contribution that silently does nothing is the same defect one step quieter').toBeTruthy();
+    expect(skip!.target).toMatch(/postcode/i);
+  });
+
+  it('still contributes a deal it CAN place, and under the right region', async () => {
+    const T = await makeTenant('Placeable');
+    await prisma.organisation.update({ where: { id: T.orgId }, data: { contributesBenchmarks: true } });
+    const deal = await prisma.deal.create({
+      // Manchester — which the old feed filed under the South West
+      data: { orgId: T.orgId, name: 'Deansgate Block', address: 'Deansgate', postcode: 'M1 4BT', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+    await prisma.appraisal.create({
+      data: {
+        orgId: T.orgId,
+        dealId: deal.id,
+        label: 'Base',
+        isCurrent: true,
+        reviewStatus: 'approved',
+        reviewedAt: new Date(),
+        units: JSON.stringify([{ label: 'Flats', count: 20, area: 750, cap: 420 }]),
+        trades: JSON.stringify([{ label: 'Shell', rate: 180 }]),
+        otherCosts: JSON.stringify([]),
+      },
+    });
+    const res = (await callerFor(T.principal).benchmarks.contribute(deal.id as never)) as { region: string };
+    expect(res.region).toBe('North West');
+    const points = await prisma.benchmarkPoint.findMany({ where: { orgId: T.orgId } });
+    expect(points.length).toBeGreaterThan(0);
+    expect(new Set(points.map((p) => p.region))).toEqual(new Set(['North West']));
+  });
+});
+
+describe('the market index', () => {
+  it('fetches NOTHING for a region it has no slug for, rather than the South West under another name', async () => {
+    /*
+     * `fetchHpi` ended `?? 'south-west'`, so an unrecognised region was answered
+     * with South West average prices carrying the asked-for region's label. A
+     * market index named as somewhere it is not is worse than no index: nothing
+     * on the screen tells the reader which one they are looking at.
+     *
+     * The assertion is that no request is MADE, not that the series comes back
+     * empty — and the difference is the whole test. An earlier version checked
+     * only the empty series, and survived restoring the `?? 'south-west'`
+     * default: with the fallback in place it fetched twelve months of real
+     * South West prices, every request failed in the sandbox, and an empty
+     * series came back for a completely different reason.
+     */
+    const realFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = (async (url: unknown) => {
+      calls.push(String(url));
+      throw new Error('the market index must not be fetched for a region we cannot name');
+    }) as typeof fetch;
+    try {
+      const res = (await callerFor(A.principal).benchmarks.hpi({ region: 'Atlantis' } as never)) as {
+        region: string;
+        series: unknown[];
+      };
+      expect(calls, 'a request was made for a region with no slug').toEqual([]);
+      expect(res.series).toEqual([]);
+      expect(res.region).toBe('Atlantis');
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('has a slug for every cohort the picker offers', async () => {
+    // the picker and the index were separate lists: the picker offered
+    // "Midlands", which the index did not hold and silently served as the South
+    // West. Now both come from the one table, so this cannot drift.
+    const { UK_REGION_NAMES, hpiSlugFor } = await import('@apex/types/uk-regions');
+    for (const name of UK_REGION_NAMES) expect(hpiSlugFor(name), name).toBeTruthy();
+  });
+});

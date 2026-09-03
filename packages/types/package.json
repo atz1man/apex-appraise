@@ -9,9 +9,11 @@
     "./plan": "./src/plan.ts",
     "./api": "./src/api.ts",
     "./asset-classes": "./src/asset-classes.ts",
-    "./regions": "./src/regions.ts"
+    "./regions": "./src/regions.ts",
+    "./uk-regions": "./src/uk-regions.ts"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "@apex/appraisal-engine": "workspace:*"
   }
 }

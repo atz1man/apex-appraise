@@ -190,6 +190,9 @@ importers:
 
   packages/types:
     dependencies:
+      '@apex/appraisal-engine':
+        specifier: workspace:*
+        version: link:../appraisal-engine
       zod:
         specifier: ^3.23.8
         version: 3.25.76

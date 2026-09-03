@@ -780,7 +780,7 @@ export const appraisalRouter = router({
       if (input.decision === 'approve') {
         const deal = await ctx.prisma.deal.findUniqueOrThrow({
           where: { id: v.dealId },
-          select: { id: true, name: true, address: true, assetType: true, stage: true },
+          select: { id: true, name: true, address: true, postcode: true, assetType: true, stage: true },
         });
         const result = computeAppraisal(appraisalRowToEngineInput(row));
         /**

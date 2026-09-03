@@ -191,7 +191,11 @@ describe('opting in', () => {
       data: { orgId: G.orgId, dealId: G.dealId, name: 'Groundworks', budget: 500_000_00n, forecast: 500_000_00n, spent: 400_000_00n },
     });
     const second = await prisma.deal.create({
-      data: { orgId: G.orgId, name: 'Latecomer Quay', address: '2 Latecomer Road', assetType: 'RESIDENTIAL', stage: 'CONSTRUCTION' },
+      // A POSTCODE, because the pool files by region and a deal it cannot place
+      // contributes nothing. This fixture used to carry an invented street and
+      // no postcode, and the feed filed it under the South West along with
+      // everything else it could not read.
+      data: { orgId: G.orgId, name: 'Latecomer Quay', address: '2 Latecomer Road', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'CONSTRUCTION' },
     });
     await approve(G, second.id, 'Signed');
     await prisma.costPackage.create({

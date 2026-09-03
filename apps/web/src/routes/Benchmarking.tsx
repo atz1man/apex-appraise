@@ -7,8 +7,16 @@ import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
 import { useUnits } from '../lib/region';
 import { ASSET_CLASSES, assetLabel } from '@apex/types/asset-classes';
+import { UK_REGION_NAMES } from '@apex/types/uk-regions';
 
-const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
+/**
+ * The cohorts a firm can read, from the one region table.
+ *
+ * Four were offered here, and the feed could produce three of them: "Midlands"
+ * was in this list and unreachable, so its cohort held nothing but illustrative
+ * seed data while every real Midlands scheme was filed under the South West.
+ */
+const REGIONS = UK_REGION_NAMES;
 /**
  * The cohort selector follows the taxonomy — `BenchmarkPoint.useClass` stores
  * a `Deal.assetType`, so an asset class the product can create is a cohort the

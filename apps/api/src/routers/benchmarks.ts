@@ -11,6 +11,7 @@ import {
 import { recordAudit } from '../audit.js';
 import { latestApproved } from '../current-appraisal.js';
 import { METRICS, backfill, consentsToBenchmarks, feedApproved, feedOutturn, type BenchmarkMetric } from '../benchmark-feed.js';
+import { regionForDeal } from '@apex/types/uk-regions';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 
 /**
@@ -291,6 +292,23 @@ export const benchmarksRouter = router({
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Approve an appraisal first — only figures the firm has signed off enter the pool.',
+      });
+    }
+    /**
+     * Where the deal is, asked BEFORE the feed rather than after.
+     *
+     * The feed answers null for a deal it cannot place, and it answers null for
+     * an appraisal with no area or revenue, and until this check existed both
+     * arrived here as "Appraisal has no areas/revenue yet" — a message that
+     * sends somebody to look at a unit schedule that is fine. A refusal that
+     * names the wrong cause is worse than a vague one.
+     */
+    if (regionForDeal(deal) == null) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message:
+          'This deal could not be placed in a UK region, so nothing was contributed — the pool files evidence by region and ' +
+          'a figure filed under the wrong one is a wrong number in another firm\'s appraisal. Add a postcode to the deal.',
       });
     }
     const actor = { userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip };

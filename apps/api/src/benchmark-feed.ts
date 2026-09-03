@@ -1,5 +1,6 @@
 import type { Appraisal, PrismaClient } from '@prisma/client';
 import { computeAppraisal, outturnBuildPsf } from '@apex/appraisal-engine';
+import { regionForDeal } from '@apex/types/uk-regions';
 import { appraisalRowToEngineInput, P } from './mappers.js';
 import { latestApproved } from './current-appraisal.js';
 import { recordAudit } from './audit.js';
@@ -43,12 +44,26 @@ export const OUTTURN_METRIC = 'outturnPsf' as const;
 export const METRICS = [...APPRAISAL_METRICS, OUTTURN_METRIC] as const;
 export type BenchmarkMetric = (typeof METRICS)[number];
 
-const REGION_BY_COUNTY: Array<[RegExp, string]> = [
-  [/dorset|bournemouth|poole|hampshire|devon|somerset|bristol/i, 'South West'],
-  [/london/i, 'London'],
-  [/kent|surrey|sussex|berkshire|oxford/i, 'South East'],
-];
-export const regionFor = (address: string): string => REGION_BY_COUNTY.find(([re]) => re.test(address))?.[1] ?? 'South West';
+/**
+ * Where a deal is, or null.
+ *
+ * This was a regex over the address text with `?? 'South West'` on the end, and
+ * the default is what made it a defect rather than a rough edge. Measured over
+ * sixteen addresses: fourteen filed as South West, among them Manchester,
+ * Leeds, Birmingham, Sheffield, Liverpool, Newcastle, Derby, Edinburgh,
+ * Cardiff, Belfast, Sydney and San Francisco — and a deal with no address at
+ * all. "Midlands" was offered in the cohort picker and the feed could not
+ * produce it, so every Midlands scheme inflated the South West median instead.
+ *
+ * The pool is SHARED. Its medians are read by other firms as market evidence,
+ * so a figure filed under a region it is not in is a wrong number in somebody
+ * else's appraisal, not just a mislabelled row in this one.
+ *
+ * `@apex/types/uk-regions` is the one table now, it prefers the postcode over
+ * the prose, and it answers null when it cannot place a deal — which is the
+ * rule `postcodeArea()` has always followed two packages away.
+ */
+export const regionFor = regionForDeal;
 
 /** "2026-Q3" — the period a point is filed under */
 export const quarterOf = (d: Date): string => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
@@ -62,6 +77,8 @@ export interface FeedDeal {
   id: string;
   name: string;
   address: string;
+  /** preferred over the address for placing the deal — structured, not prose */
+  postcode?: string | null;
   assetType: string;
   stage: string;
 }
@@ -78,6 +95,28 @@ export async function consentsToBenchmarks(prisma: PrismaClient, orgId: string):
 }
 
 /**
+ * Nothing was contributed, and the firm is told why.
+ *
+ * A deal that cannot be placed contributes nothing, which is correct and would
+ * otherwise be SILENT — the same shape of defect as the guess it replaces, one
+ * step quieter. Everything else this module does writes an audit event, so the
+ * refusal writes one too, and it names the fix rather than the fault: a
+ * postcode is what places a deal.
+ */
+async function notPlaced(prisma: PrismaClient, orgId: string, deal: FeedDeal, actor: FeedActor): Promise<null> {
+  await recordAudit(prisma, {
+    orgId,
+    dealId: deal.id,
+    userId: actor.userId,
+    actor: actor.name,
+    ip: actor.ip ?? null,
+    action: 'benchmark contribution skipped',
+    target: 'no UK region could be established from the postcode or the address — add a postcode to contribute',
+  });
+  return null;
+}
+
+/**
  * Replace this DEAL's previous points for the period and the metrics being
  * written, then write fresh. Scoped to the metrics in hand: the approval feed
  * must not erase the out-turn point a completion wrote in the same quarter, and
@@ -90,8 +129,12 @@ async function replacePoints(
   deal: FeedDeal,
   period: string,
   points: Array<[BenchmarkMetric, number]>,
-) {
-  const region = regionFor(deal.address);
+): Promise<string | null> {
+  const region = regionFor(deal);
+  // A point with no region cannot be filed. Nothing is deleted either: the old
+  // points, wherever they were filed, are not made better by removing them on
+  // the way to writing nothing.
+  if (region == null) return null;
   await prisma.benchmarkPoint.deleteMany({
     where: {
       source: 'contributed',
@@ -132,6 +175,7 @@ export async function feedApproved(
     ['poc', R.poc],
   ];
   const region = await replacePoints(prisma, orgId, deal, period, points);
+  if (region == null) return notPlaced(prisma, orgId, deal, actor);
   await recordAudit(prisma, {
     orgId, dealId: deal.id, userId: actor.userId, actor: actor.name, ip: actor.ip ?? null,
     action: 'contributed to benchmark',
@@ -158,6 +202,7 @@ export async function feedOutturn(prisma: PrismaClient, orgId: string, deal: Fee
   if (psf == null) return null;
   const period = quarterOf(new Date());
   const region = await replacePoints(prisma, orgId, deal, period, [[OUTTURN_METRIC, psf]]);
+  if (region == null) return notPlaced(prisma, orgId, deal, actor);
   await recordAudit(prisma, {
     orgId, dealId: deal.id, userId: actor.userId, actor: actor.name, ip: actor.ip ?? null,
     action: 'contributed out-turn to benchmark',
@@ -173,7 +218,7 @@ export async function feedOutturn(prisma: PrismaClient, orgId: string, deal: Fee
 export async function backfill(prisma: PrismaClient, orgId: string, actor: FeedActor): Promise<number> {
   const deals = await prisma.deal.findMany({
     where: { orgId },
-    select: { id: true, name: true, address: true, assetType: true, stage: true },
+    select: { id: true, name: true, address: true, postcode: true, assetType: true, stage: true },
   });
   let fed = 0;
   for (const deal of deals) {

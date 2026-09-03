@@ -32,11 +32,11 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (883). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (888). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (167): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (174): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region) plus the `no-raw-hex`, `asset-classes` and `hooks-order` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes` and `hooks-order` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -105,6 +105,13 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
   `engagement.get` answers an unsaved draft prefilled with the signed-in user and the firm's
   house registration text, and reading the valuer off that named a different valuer for each
   person who opened the page. Measured: 8 of 12 deals on the demo workspace.
+- The benchmark pool files evidence by REGION, and a figure filed under the wrong one is a
+  wrong number in another firm's appraisal — the medians are shared. `@apex/types/uk-regions`
+  is the one table (name, UKHPI slug, postcode areas) and every function in it answers null
+  rather than guessing, which is the rule `postcodeArea()` in the engine has always followed.
+  A deal that cannot be placed contributes NOTHING and the skip is written to the audit
+  trail. Straddling postcode areas (KT, EN, PE, SY, CH, HP…) are left out of the table on
+  purpose: a fuller table bought by assigning them a side would file real schemes wrongly.
 - A portal never offers a document it cannot open: sharing is a flag on the DOCUMENT
   (`buyerVisible` per plot, `investorVisible` per deal), and every portal link is the data
   room's file URL signed for the viewer. `Investor.documents` (a JSON list of names with no
