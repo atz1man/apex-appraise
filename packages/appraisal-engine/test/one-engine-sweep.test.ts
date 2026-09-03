@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -24,7 +24,26 @@ import { describe, expect, it } from 'vitest';
  */
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
-const SEARCHED = ['apps/web/src', 'apps/api/src', 'packages/types/src', 'packages/ui-tokens/src'];
+const SEARCHED = ['apps/web/src', 'apps/api/src', 'packages/types/src', 'packages/ui-tokens/src', 'packages/mcp-server/src'];
+
+/**
+ * Every source tree in the repo except the engine's own.
+ *
+ * Derived, and checked against `SEARCHED` below, because the list above is the
+ * part of this sweep that could quietly stop being true: a new package is added,
+ * nobody thinks to add it here, and the sweep goes on passing over a smaller and
+ * smaller tree while reporting success. The MCP server is exactly that case —
+ * a surface whose whole job is to hand money figures to a model, arriving in a
+ * package that did not exist when this list was written.
+ */
+const everySourceTree = (): string[] =>
+  ['apps', 'packages']
+    .flatMap((group) =>
+      readdirSync(join(ROOT, group))
+        .map((name) => `${group}/${name}/src`)
+        .filter((rel) => existsSync(join(ROOT, rel))),
+    )
+    .filter((rel) => rel !== 'packages/appraisal-engine/src');
 
 const RULES: Array<{ what: string; use: string; re: RegExp }> = [
   {
@@ -87,6 +106,14 @@ describe('one shared calculation engine for every surface', () => {
     expect(files.length, 'the sweep found no source files — the paths have moved').toBeGreaterThan(50);
     expect(files.some((f) => f.endsWith('RedBookReport.tsx'))).toBe(true);
     expect(files.some((f) => f.endsWith('routers/appraisal.ts'))).toBe(true);
+    expect(files.some((f) => f.endsWith('mcp-server/src/server.ts'))).toBe(true);
+  });
+
+  it('sweeps every source tree in the repo, not the ones somebody remembered', () => {
+    expect(
+      everySourceTree().filter((t) => !SEARCHED.includes(t)),
+      'a package this sweep does not look at — add it to SEARCHED, or say in a comment why money maths cannot reach it',
+    ).toEqual([]);
   });
 
   for (const rule of RULES) {

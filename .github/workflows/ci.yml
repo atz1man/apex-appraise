@@ -25,6 +25,8 @@ jobs:
         run: pnpm --filter @apex/api build
       - name: API tests (tenant isolation)
         run: pnpm --filter @apex/api test
+      - name: MCP server tests
+        run: pnpm --filter @apex/mcp-server build && pnpm --filter @apex/mcp-server test
       - name: Typecheck web
         run: pnpm --filter @apex/web lint
       # The heavy dependencies must arrive on demand, not with the screen. A

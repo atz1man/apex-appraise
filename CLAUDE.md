@@ -20,11 +20,17 @@ memory, or commits between the two.
 - `packages/appraisal-engine` — pure TS calculation engine. ALL money maths lives here.
 - `packages/types` — zod schemas shared across web/api.
 - `packages/ui-tokens` — design tokens + Tailwind preset.
+- `packages/mcp-server` — the engine as MCP tools, over stdio. Ten calculation tools that
+  need no workspace and three read-only ones that go through `/api/v1` with an org-scoped
+  key. Runs from source under `tsx`, as the API does in production; `README.md` there holds
+  the client config. NOTHING in it writes, which is why it has no answer to the audit-trail
+  question every mutation in this product must answer — a write tool writes an audit event
+  or it does not ship.
 
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (288; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (883). See the container gotcha below before
   trusting a green run.
@@ -35,6 +41,12 @@ memory, or commits between the two.
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
 - `cd apps/web && npx playwright test` — e2e (160, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
+  in-memory transport with a real client rather than by calling the handlers: what can be
+  wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
+  result the SDK refuses. One case appraises the golden Bournemouth fixture through the
+  server and asserts every headline figure against calling the engine directly, which is
+  the claim the whole package rests on.
 - `cd apps/web && npx tsc --noEmit` — web typecheck (strict, noUnusedLocals).
 - `JWT_SECRET=x POSTGRES_PASSWORD=x docker compose up -d --build` — production stack: nginx :8080 →
   api → Postgres 18. Only :8080 is published outside; api and db bind to loopback.
@@ -43,7 +55,10 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 ## Non-negotiables (from the handoff spec)
 
-- The LLM NEVER computes financials — it extracts inputs only; the deterministic engine computes.
+- The LLM NEVER computes financials — it extracts inputs only; the deterministic engine
+  computes. This is also what `packages/mcp-server` is FOR rather than a caveat on it: the
+  easy MCP server hands a model figures and lets it do the arithmetic, so that one exposes
+  the engine's own entry points and says so in its server instructions, which the tests pin.
 - One shared calculation engine for every surface (screen, export, report, portal).
 - UK conventions: £, RICS, SDLT, CIL, GIA/NIA, en-GB dates. A firm outside the UK can change
   the WORDS and the UNIT — nothing else. `@apex/types/regions` holds a profile per region
@@ -261,7 +276,10 @@ the point, so read the failure rather than adding an exemption.
   routes cannot appear unswept. Note what a grep would have missed: three routes whose path
   sits on the line after a generic type parameter, and two more entirely.
 - `one-engine-sweep` (in `packages/appraisal-engine/test`) — nothing outside the engine
-  re-derives a quantity the engine owns. Deliberately narrow: it matches the specific
+  re-derives a quantity the engine owns. Its directory list is now CHECKED against the
+  repo (`everySourceTree`), because the list was the part that could quietly stop being
+  true: add a package, forget to add it here, and the sweep passes over a smaller tree
+  while reporting success. `packages/mcp-server` was exactly that case. Deliberately narrow: it matches the specific
   derived figures that have a house rule and print on more than one surface
   (`reportedMarketValue`, `analysedPsf`, budget-weighted progress), not "money maths" in
   general. The third rule is the first this sweep FOUND rather than confirmed: written
