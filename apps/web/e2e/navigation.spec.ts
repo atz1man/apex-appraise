@@ -79,6 +79,17 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
   await page.goto(`/deal/${id}/appraisal`);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
 
+  /*
+    Wait for the page to have its CONTENT, not merely its header. The first
+    attempt scrolled as soon as the top bar appeared and got scrollY 4 — the
+    appraisal was still a skeleton, so there was nothing to scroll past. The
+    header renders long before the rows do, which makes "the nav is visible" a
+    test of the wrong thing.
+  */
+  await expect
+    .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
+    .toBeGreaterThan(1400);
+
   await page.evaluate(() => window.scrollTo(0, 600));
   const left = await page.evaluate(() => window.scrollY);
   expect(left, 'the appraisal is too short at this viewport to leave a scroll offset behind').toBeGreaterThan(200);

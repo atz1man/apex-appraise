@@ -93,7 +93,17 @@ test('a distribution and a capital call reach the portal with the LP’s sign an
   const line = page.locator('div', { hasText: label }).filter({ has: page.getByText('CALL') }).first();
   await expect(line).toContainText('£200k');
 
-  // withdraw it again so the demo LP is not left with a demand this test invented
+  /*
+    Withdraw it again so the demo LP is not left with a demand this test
+    invented — and ANSWER the prompt, which is new.
+
+    A capital call is a financial record and used to come off the statement on
+    one click. It is gated now, and Playwright dismisses a dialog by default, so
+    a spec that means to remove something has to say so. This is the only place
+    in the suite that accepts one: everywhere else the default IS the assertion
+    (see `e2e/destructive.spec.ts`).
+  */
+  page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: `Remove line ${label}` }).click();
   await expect(page.getByText('Line removed')).toBeVisible();
   await expect(page.getByText(label)).toHaveCount(0);
