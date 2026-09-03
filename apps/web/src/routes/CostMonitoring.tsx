@@ -714,6 +714,7 @@ export default function CostMonitoring() {
               </div>
               <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
+                  aria-label="Raise a cost-monitoring action"
                   className="flex-1 min-w-[140px]"
                   placeholder="Raise an action…"
                   value={taskDraft}
@@ -755,6 +756,7 @@ export default function CostMonitoring() {
             </div>
             <div className="flex items-center gap-2 bg-surface border border-border-strong rounded-[12px] p-2 pl-3 flex-wrap">
               <input
+                aria-label="Photo caption"
                 className="w-44 h-8 py-0 border-none shadow-none px-0 !bg-transparent"
                 placeholder="Caption…"
                 value={photoCap}
@@ -769,6 +771,7 @@ export default function CostMonitoring() {
               </select>
               <input type="date" className="h-8 py-0 fig text-[11.5px]" aria-label="Photo date" value={photoDate} onChange={(e) => setPhotoDate(e.target.value)} />
               <input
+                aria-label="Choose a site photo to upload"
                 ref={photoFileRef}
                 type="file"
                 accept="image/*"

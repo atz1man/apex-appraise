@@ -436,14 +436,20 @@ export default function Benchmarking() {
         crumb="Benchmarking & market intelligence"
         right={
           <>
-            <select className="h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
+            {/*
+              Both pickers announced as an unnamed "combo box", so a screen-reader
+              user met two of them side by side with nothing to say which was
+              which. There is no visible label to point at — the design puts them
+              bare in the top bar — so the name is carried here.
+            */}
+            <select aria-label="Region" className="h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
               {REGIONS.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
             </select>
-            <select className="h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
+            <select aria-label="Asset class" className="h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
               {USE_CLASSES.map(([id, label]) => (
                 <option key={id} value={id}>
                   {label}

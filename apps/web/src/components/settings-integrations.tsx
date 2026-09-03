@@ -80,7 +80,13 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
             Only the hash is stored, so nobody, including us, can produce it a second time.
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <input className="flex-1 fig text-[11.5px]" readOnly value={minted.key} onFocus={(e) => e.currentTarget.select()} />
+            <input
+              aria-label="New API key — copy it now, it is not shown again"
+              className="flex-1 fig text-[11.5px]"
+              readOnly
+              value={minted.key}
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(minted.key)}>
               Copy
             </Button>
@@ -226,7 +232,13 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
             Only your server and this row hold it. Lose it and the endpoint has to be replaced.
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <input className="flex-1 fig text-[11.5px]" readOnly value={minted.secret} onFocus={(e) => e.currentTarget.select()} />
+            <input
+              aria-label="New signing secret — copy it now, it is not shown again"
+              className="flex-1 fig text-[11.5px]"
+              readOnly
+              value={minted.secret}
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(minted.secret)}>
               Copy
             </Button>

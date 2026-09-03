@@ -260,6 +260,7 @@ export default function DataRoom() {
 
           {/* dropzone — real uploads; click also opens the metadata-only form */}
           <input
+            aria-label="Choose documents to upload to the data room"
             ref={fileInputRef}
             type="file"
             multiple
@@ -308,6 +309,7 @@ export default function DataRoom() {
             {formOpen && (
               <div className="mt-4 pt-4 border-t border-border-std flex gap-2 items-center flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <input
+                  aria-label="Name of the document you are waiting for"
                   autoFocus
                   className="flex-1"
                   placeholder="Document you are waiting for — e.g. Elemental cost plan v4.xlsx"
@@ -519,6 +521,7 @@ export default function DataRoom() {
           <div className="mt-1 text-[11px] text-ink-3">The AI answers from this deal's uploaded documents only.</div>
           <div className="mt-2.5 flex gap-2">
             <input
+              aria-label="Ask a question of this deal's documents"
               className="flex-1 min-w-0"
               placeholder="e.g. What does the cost plan allow for M&E?"
               maxLength={500}

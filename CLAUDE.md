@@ -34,9 +34,10 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (178): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (182): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order` and `route-reachable` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable` and
+  `accessible-names` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -136,6 +137,19 @@ the point, so read the failure rather than adding an exemption.
   orphans. Comments are stripped FIRST, found by mutation: removing the one real link to
   `/docs/api` left the sweep green because the comment explaining the link still spelled the
   path, and a route whose only mention is prose about the route is exactly an unreachable one.
+- `accessible-names` (WEB suite) — every control a person types into says what it is for. A
+  `placeholder` is NOT a name: it disappears the moment somebody types and fails WCAG 4.1.2
+  on its own, so a form that reads perfectly to a sighted user can be a row of unlabelled
+  boxes to a screen reader. Eleven were, among them BOTH pickers on Benchmarking, which
+  announced as "combo box" twice with nothing to say which was region and which asset class.
+  The matcher took three passes and the two it failed are recorded in it: 48 flagged while
+  counting a `<select>` in a JSDoc comment and every control inside a plain `<label>`; 29
+  while still missing `htmlFor={`…`}` backticks and wrapper COMPONENTS that render the label;
+  eleven real. `LABEL_WRAPPERS` is verified rather than trusted — EVERY declaration of each
+  must render a `<label>`, because `Field` is declared twice and a tree-wide search left the
+  test green on the strength of the other one. Also says what it does NOT prove: removing
+  backtick support survives, because `htmlFor` and `id` are always written in the same style
+  at a site and so still pair up whatever is captured.
 - `crud-completeness` — what a firm can create, a firm can remove. Measured across the whole
   router: FIVE entities had a create-shaped mutation and nothing that removed one —
   comparables, scenarios, photos, tasks and deals — while `sales` and `investors` beside them
