@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (187): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (200): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names` and `icon-tables` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables` and `page-title` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (162, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (167, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -232,6 +232,21 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `page-title` (web suite) — every route the app declares names itself in the tab. Measured
+  before it existed: 37 routes, ONE `<title>`, set in `index.html` and never touched. Every
+  tab, every entry in the back-button menu, every bookmark and every screen-reader
+  announcement on navigation said "Apex Appraise — UK development appraisals, end to end" —
+  WCAG 2.4.2 (Page Titled, Level A) failed on 36 of 37 routes, and a valuer with six tabs
+  open could tell them apart only by clicking each. The table lives in `lib/page-title.ts`
+  and the sweep reads the REAL route table out of `App.tsx` in both directions: a route with
+  no title fails, and a title for a route that has gone fails. It also asserts every FULL
+  title is distinct, since a table drifting back towards shared names is the same defect
+  wearing a table. Two rules the matcher has to get right, both mutation-proven: an exact
+  literal beats a pattern that also fits (`/terms` is the terms of service, `/terms/:token`
+  is a client signing an engagement), and a `:param` takes exactly one segment. The screens
+  a CLIENT reads — both portals and the signing page — carry NO product suffix: a portal
+  already shows the firm's mark rather than ours, and the tab was the one place that rule
+  had not reached.
 - `icon-tables` (web suite) — a glyph table keeps no `Record<string, string>` annotation,
   so the COMPILER checks its keys. The test does not check icon keys itself; it checks that
   the compiler is still allowed to. With the annotation, `ICONS[anythingAtAll]` types as

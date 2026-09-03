@@ -6,8 +6,9 @@ declare module '@tanstack/react-query' {
     mutationMeta: { inlineError?: boolean };
   }
 }
-import { Suspense, lazy, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { titleFor } from './lib/page-title';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -188,16 +189,75 @@ export default function App() {
       }),
   );
   const trpcClient = useMemo(() => makeTrpcClient(), []);
+
+  /**
+   * Everything that has to happen when a person moves between pages, and did
+   * not. A single-page app changes the URL without the browser doing any of
+   * what it does on a real navigation, and nothing here had put any of it back.
+   *
+   * 1. THE TITLE. 37 routes shared one, set in `index.html`. See
+   *    `lib/page-title.ts` for what that cost.
+   *
+   * 2. THE SCROLL. React Router does not reset it and nothing else did either,
+   *    so leaving the foot of a long Settings page for a deal landed you a
+   *    thousand pixels down the deal, past its heading, with no indication you
+   *    had arrived anywhere.
+   *
+   * 3. THE FOCUS. Keyboard focus stayed on the link that had just been
+   *    replaced. The next Tab resumed from a stale position — in practice the
+   *    top of the document — and a screen reader announced nothing at all,
+   *    because for it nothing had happened.
+   *
+   * The focus target is the one element every route shares: the page wrapper
+   * below, which already remounts per pathname. That makes this complete by
+   * construction rather than 37 edits, and gives the skip link one destination.
+   * `focusRef` is skipped on the FIRST render on purpose: `/login` and
+   * `/register` autofocus a field, and stealing that would be a regression
+   * dressed as a fix.
+   */
+  const page = useRef<HTMLDivElement>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    document.title = titleFor(location.pathname);
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+    page.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
+
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
         {/* every screen, because the field app is the one that needs it — see OfflineBanner */}
         <OfflineBanner />
+        {/*
+          WCAG 2.4.1 (Bypass Blocks). Every internal screen opens with a sticky
+          header carrying the brand lockup, a breadcrumb and up to six global
+          links, so a keyboard user reached the actual content of a deal on the
+          ninth Tab, on every screen, every time. Visually hidden until focused,
+          which is the first thing Tab reaches from the top of the document.
+        */}
+        <a
+          href="#page"
+          className="sr-only focus:not-sr-only focus:fixed focus:z-50 focus:top-3 focus:left-3 focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-surface focus:text-ink focus:shadow-float focus:outline focus:outline-2 focus:outline-brand-ink"
+          onClick={(e) => {
+            // an href alone moves the browser's :target, not focus — and this is
+            // exactly the control whose entire purpose is to move focus
+            e.preventDefault();
+            page.current?.focus();
+            window.scrollTo(0, 0);
+          }}
+        >
+          Skip to main content
+        </a>
         {/* a render fault must not leave a blank page — see ErrorBoundary */}
         <ErrorBoundary>
         <Suspense fallback={<Splash />}>
-        <div key={location.pathname} className="page-enter">
+        {/* tabIndex -1: focusable by script and by the skip link, never by Tab */}
+        <div key={location.pathname} id="page" ref={page} tabIndex={-1} className="page-enter outline-none">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
