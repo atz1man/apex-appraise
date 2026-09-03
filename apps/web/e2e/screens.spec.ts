@@ -2146,7 +2146,18 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
  * reach a second page.
  */
 test('the funding pack states the book, its exceptions, and paginates honestly', async ({ page }) => {
-  test.setTimeout(90_000);
+  /**
+   * 120 seconds, as its neighbour has had since `2691344` and for the same
+   * reason. This spec loads the pack repeatedly, and each load renders every
+   * position in the demo workspace — which grows through the run, because the
+   * specs before it create deals there. Measured: it timed out on CI at the
+   * FIRST `waitForSelector`, having spent the whole budget on one render with
+   * the other worker busy beside it, and passed on an immediate re-run of the
+   * same commit with nothing changed. A spec sitting at the edge of its budget
+   * is a red build waiting to happen, and this one reads as "the pack never
+   * rendered" when it means "the pack was slow".
+   */
+  test.setTimeout(120_000);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
