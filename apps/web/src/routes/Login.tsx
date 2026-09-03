@@ -2,17 +2,44 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Button } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
 
-const DEMOS: Array<[string, string, string]> = [
-  ['Internal team', 'arthur@apexappraise.co.uk', 'Pipeline, appraisals, construction, sales'],
-  ['Investor portal', 'investor@demo.co.uk', 'LP position, cashflows, capital calls'],
-  ['Buyer portal', 'buyer@demo.co.uk', 'Reservation, conveyancing, payments'],
-];
+/**
+ * The demo password is public by design, but only where the demo accounts
+ * exist. This page used to list three demo logins and arrive with the demo
+ * founder's email and "demo" already typed on EVERY deployment — a firm's
+ * production sign-in advertising credentials for accounts the seed had refused
+ * to create (prisma/seed.ts says why), and prefilling a password that was not
+ * theirs. The server now says which demo logins exist, and the page offers and
+ * prefills only those.
+ */
+const DEMO_PASSWORD = 'demo';
+
+/** an input error arrives as zod's JSON array; a person gets its first sentence, not the array */
+function plainMessage(message: string): string {
+  if (!message.startsWith('[')) return message;
+  try {
+    const issues = JSON.parse(message) as Array<{ message?: string }>;
+    return issues[0]?.message || 'Check the details you entered.';
+  } catch {
+    return 'Check the details you entered.';
+  }
+}
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('arthur@apexappraise.co.uk');
-  const [password, setPassword] = useState('demo');
+  const demoQ = trpc.auth.demoAccounts.useQuery(undefined, { staleTime: 300_000, retry: 0 });
+  const demos = demoQ.data;
+  /**
+   * Never prefilled asynchronously. A first version wrote the demo login into
+   * the fields when the answer arrived, and the answer arrived while a person
+   * — or a test — was typing: the field read the address twice, because the
+   * write landed between a select-all and the insert. A field somebody has
+   * focused is theirs. Pressing Sign in with nothing typed resolves the demo
+   * login below; the panel's buttons fill the fields on a click.
+   */
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   // arriving from a completed reset — say so, or the redirect looks like a failure
   const justReset = new URLSearchParams(window.location.search).get('reset') === '1';
@@ -41,7 +68,7 @@ export default function Login() {
     onSuccess: (res) => {
       window.location.href = res.url;
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => setError(plainMessage(e.message)),
   });
 
   /**
@@ -60,11 +87,11 @@ export default function Login() {
       const t = res.principal.principalType;
       navigate(t === 'buyer' ? '/portal/buyer' : t === 'investor' ? '/portal/investor' : '/', { replace: true });
     },
-    onError: (e) => setError(e.message),
+    onError: (e) => setError(plainMessage(e.message)),
   });
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: heroGradient }}>
       <div className="w-[400px] max-w-[92vw]">
         <div className="flex items-center gap-3 justify-center mb-7">
           <BrandMark size={36} />
@@ -74,12 +101,18 @@ export default function Login() {
         </div>
         <form
           className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             setError('');
+            let creds = { email, password };
+            // nothing typed: sign in as the demo login, if this deployment has one
+            if (!creds.email) {
+              const offered = demos ?? (await demoQ.refetch()).data;
+              if (offered?.[0]) creds = { email: offered[0].email, password: DEMO_PASSWORD };
+            }
             // enter, on an enforced workspace, goes where the only button goes
-            if (!passwordAllowed) ssoStart.mutate({ email });
-            else login.mutate({ email, password });
+            if (!passwordAllowed) ssoStart.mutate({ email: creds.email });
+            else login.mutate(creds);
           }}
         >
           <div className="eyebrow mb-1">Sign in</div>
@@ -131,25 +164,28 @@ export default function Login() {
               Create your organisation →
             </a>
           </div>
-          <div className="mt-5 border-t border-border-faint pt-4">
-            <div className="label-mono text-ink-3 mb-2">Demo accounts · password “demo”</div>
-            <div className="flex flex-col gap-1.5">
-              {DEMOS.map(([label, mail, desc]) => (
-                <button
-                  key={mail}
-                  type="button"
-                  onClick={() => {
-                    setEmail(mail);
-                    setPassword('demo');
-                  }}
-                  className="text-left rounded-[9px] border border-[rgb(var(--control-border))] px-3 py-2 hover:bg-sunken transition-colors"
-                >
-                  <div className="text-[12.5px] font-semibold">{label}</div>
-                  <div className="text-[11px] text-ink-3">{desc}</div>
-                </button>
-              ))}
+          {/* only where those logins exist — a production sign-in advertises nobody's password */}
+          {!!demos?.length && (
+            <div className="mt-5 border-t border-border-faint pt-4">
+              <div className="label-mono text-ink-3 mb-2">Demo accounts · password “{DEMO_PASSWORD}”</div>
+              <div className="flex flex-col gap-1.5">
+                {demos.map((d) => (
+                  <button
+                    key={d.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(d.email);
+                      setPassword(DEMO_PASSWORD);
+                    }}
+                    className="text-left rounded-[9px] border border-[rgb(var(--control-border))] px-3 py-2 hover:bg-sunken transition-colors"
+                  >
+                    <div className="text-[12.5px] font-semibold">{d.label}</div>
+                    <div className="text-[11px] text-ink-3">{d.blurb}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </form>
       </div>
     </div>

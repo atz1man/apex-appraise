@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   DEFAULT_PURCHASER_COSTS_PCT,
   analysedPsf,
+  areaIn,
   capitaliseIncome,
   computeAppraisal,
   discountedCashflow,
@@ -13,6 +14,8 @@ import {
   toNearestThousand,
   type IncomeInput,
 } from '@apex/appraisal-engine';
+import { assetClass } from '@apex/types/asset-classes';
+import { useUnits } from '../lib/region';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
@@ -23,6 +26,8 @@ import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
 import { A4Page as PaperPage, PRINT_CSS, docDate } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
+import { approvalCheck } from '../lib/approval-check';
+import { valuerFrom } from '../lib/valuer';
 
 /** the Red Book sets its own margins — see the note in components/paper.tsx */
 const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) => (
@@ -39,28 +44,6 @@ import { namedModel } from '../lib/ai-model';
 /*  Print treatment — fixed A4 pages (794×1123) stacked on the canvas  */
 /* ------------------------------------------------------------------ */
 
-
-/**
- * The valuer signing this report.
- *
- * This was a hardcoded name and RICS registration number — "Dana Whitlock MRICS,
- * No. 1148207" — printed in both signature blocks of every Red Book valuation
- * this platform produced, for every firm. A Red Book valuation is a signed
- * professional document: the valuer's name and registration number are the whole
- * of its authority and where its liability attaches, and that number may well
- * belong to a real registered valuer who has never seen the property.
- *
- * The valuer is the one NAMED IN THE TERMS OF ENGAGEMENT for the instruction —
- * the person the client agreed would carry it out. Where the terms do not name
- * one, the report says so and prints no credentials, because an unsigned
- * valuation is a fixable state and a falsely signed one is not.
- */
-const valuerFrom = (toe?: { valuerName?: string | null; valuerReg?: string | null } | null) => {
-  const name = toe?.valuerName?.trim() ?? '';
-  const reg = toe?.valuerReg?.trim() ?? '';
-  return name ? { named: true as const, name, reg } : { named: false as const, name: '', reg: '' };
-};
-
 /** RICS Red Book definition of Market Value (VPS 4). */
 const MV_DEFINITION =
   '“The estimated amount for which an asset or liability should exchange on the valuation date between a willing buyer and a willing seller in an arm’s length transaction, after proper marketing and where the parties had each acted knowledgeably, prudently and without compulsion.”';
@@ -73,7 +56,6 @@ const GENERAL_ASSUMPTIONS = [
   'All necessary planning consents and building regulation approvals have been obtained.',
 ];
 
-const SQFT_PER_SQM = 10.764;
 
 /** every date this document prints is in the firm's time — see paper.tsx */
 const fmtLong = docDate;
@@ -137,6 +119,22 @@ export default function RedBookReport() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * Floor areas and the words for them, in the firm's own jurisdiction. The
+   * RICS wording around them does NOT move: the Red Book is a global standard
+   * and a certificate that quoted VPS 4 in one paragraph and abandoned it in
+   * the next would be worth nothing.
+   *
+   * UP HERE with the other hooks, and that is not tidiness. This page returns
+   * early twice — a spinner while the appraisal loads, and a refusal when there
+   * is nothing to value — and both sit two hundred lines above where this value
+   * is first used. A hook called below them runs on the second render and not
+   * the first, so React throws and the whole certificate renders as nothing.
+   * Twenty-one e2e specs went red on exactly that, and neither typecheck can
+   * see it: `pnpm lint` here is `tsc --noEmit`, and hook ORDER is not a type.
+   * `lib/hooks-order.test.ts` is the rule now.
+   */
+  const U = useUnits();
   // client-facing documents carry the firm's identity, not the product's
   const { data: org } = trpc.org.get.useQuery();
   // AI-use disclosure — derived from the deal's audit trail, printed with the report
@@ -157,7 +155,57 @@ export default function RedBookReport() {
    * the reader opened the file.
    */
   const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
+  /**
+   * The valuer signing this report.
+   *
+   * This was a hardcoded name and RICS registration number — "Dana Whitlock MRICS,
+   * No. 1148207" — printed in both signature blocks of every Red Book valuation
+   * this platform produced, for every firm. A Red Book valuation is a signed
+   * professional document: the valuer's name and registration number are the whole
+   * of its authority and where its liability attaches, and that number may well
+   * belong to a real registered valuer who has never seen the property.
+   *
+   * The valuer is the one NAMED IN THE TERMS OF ENGAGEMENT for the instruction —
+   * the person the client agreed would carry it out. Where the terms do not name
+   * one, the report says so and prints no credentials, because an unsigned
+   * valuation is a fixable state and a falsely signed one is not.
+   *
+   * And named from SAVED terms only. `engagement.get` answers an unsaved draft
+   * prefilled with the signed-in user and the firm's house registration text,
+   * and reading the valuer off that named a different valuer for each person
+   * who opened the page — see lib/valuer.ts, which now holds the rule.
+   */
   const valuer = valuerFrom(toe);
+  /**
+   * Whether the signed figure still holds. An approved version carries a pin
+   * of the engine that signed it and the figures it signed; this re-derives it
+   * with the engine the API runs today. Asked only of an approved version — a
+   * draft has no signed figure to hold to.
+   */
+  const { data: verification } = trpc.appraisal.verifyApproved.useQuery(
+    { versionId: appr?.id ?? '' },
+    { enabled: !!appr && appr.reviewStatus === 'approved' },
+  );
+  const check = approvalCheck(verification, appr?.reviewStatus === 'approved');
+  /**
+   * The client and the purpose are the terms of engagement's. The cover printed
+   * "Northpoint Building Society · Secured lending — first charge" for every
+   * deal of every firm — on Northgate, whose accepted terms name Halewood Asset
+   * Finance Ltd two pages later. A lender's name on a valuation is who it may
+   * be relied on by; an invented one is a document addressed to nobody.
+   */
+  const termsSaved = !!toe?.saved;
+  const clientName = termsSaved ? String((toe as { clientName?: string | null }).clientName ?? '').trim() : '';
+  const client = clientName
+    ? { name: clientName, sub: toe?.status === 'ACCEPTED' ? 'Under the accepted terms of engagement' : 'Terms of engagement not yet accepted' }
+    : { name: 'Not yet named in the terms of engagement', sub: 'Agree the terms before this report is issued' };
+  const purposeText = termsSaved ? String((toe as { purpose?: string | null }).purpose ?? '').trim() : '';
+  const purpose = purposeText
+    ? {
+        name: purposeText,
+        sub: [(toe as { basisOfValue?: string | null }).basisOfValue, (toe as { interest?: string | null }).interest].filter(Boolean).join(', '),
+      }
+    : { name: 'Not yet stated in the terms of engagement', sub: '' };
   const utils = trpc.useUtils();
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
@@ -246,7 +294,7 @@ export default function RedBookReport() {
       <span className="fig text-[11px] font-medium text-ink-3">{refCode}</span>
       <div className="ml-auto flex gap-2">
         {exportable && (
-          <Button
+          <Button writes
             variant="secondary"
             className="print:hidden"
             loading={draftNarrative.isPending}
@@ -385,19 +433,15 @@ export default function RedBookReport() {
   const psf = analysedPsf(mv, nia);
   const avgNetAdj = hasComps ? summary.comps.reduce((a, c) => a + c.netAdjustment, 0) / summary.comps.length : 0;
 
-  const assetLabel: Record<string, string> = {
-    INDUSTRIAL: 'Industrial / trade',
-    RESIDENTIAL: 'Residential dwelling',
-    COMMERCIAL: 'Commercial',
-    MIXED_USE: 'Mixed-use',
-  };
-  const useClass: Record<string, string> = {
-    INDUSTRIAL: 'B2 / B8',
-    RESIDENTIAL: 'C3 — Dwelling',
-    COMMERCIAL: 'E — Commercial',
-    MIXED_USE: 'Sui generis',
-  };
-  const assetType = deal?.assetType ?? 'RESIDENTIAL';
+  /**
+   * Property type and use class come from the taxonomy, which is the only
+   * place either is written down. A certificate that names the wrong use class
+   * is a certificate with a defect in it, and the operated classes are exactly
+   * where the answer stops being obvious — student accommodation and co-living
+   * are sui generis, a care home is C2, a hotel C1 — so the reasoning is
+   * recorded beside each entry rather than in whoever last typed this table.
+   */
+  const asset = assetClass(deal?.assetType ?? 'RESIDENTIAL');
 
   /**
    * Weights follow the scheme. A held-and-let element carrying most of the GDV
@@ -457,13 +501,13 @@ export default function RedBookReport() {
             <div className="grid grid-cols-2" style={{ gap: '26px 40px' }}>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Prepared for</div>
-                <div className="mt-1.5 text-[14px] font-semibold">Northpoint Building Society</div>
-                <div className="text-[12.5px] text-ink-2">Secured lending — first charge</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{client.name}</div>
+                <div className="text-[12.5px] text-ink-2">{client.sub}</div>
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Purpose of valuation</div>
-                <div className="mt-1.5 text-[14px] font-semibold">Mortgage / secured lending</div>
-                <div className="text-[12.5px] text-ink-2">Market Value, vacant possession</div>
+                <div className="mt-1.5 text-[14px] font-semibold">{purpose.name}</div>
+                {purpose.sub && <div className="text-[12.5px] text-ink-2">{purpose.sub}</div>}
               </div>
               <div>
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Inspection date</div>
@@ -497,6 +541,17 @@ export default function RedBookReport() {
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Reference</div>
                 <div className="fig mt-1.5 text-[14px] font-semibold">{refCode}</div>
               </div>
+              {check && (
+                <div className="col-span-2" data-approval-check={check.tone}>
+                  <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Approved figures</div>
+                  <div
+                    className="mt-1.5 text-[12.5px] leading-[1.45]"
+                    style={{ color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink2 }}
+                  >
+                    {check.text}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-auto pt-7 border-t border-border-std flex justify-between items-center">
               <div className="text-[11px] text-inactive leading-[1.5]">
@@ -546,13 +601,14 @@ export default function RedBookReport() {
           <Micro>Subject property summary</Micro>
           <div className="mt-2.5 grid grid-cols-2" style={{ gap: '0 36px' }}>
             <SummaryRow k="Tenure" v="Freehold" />
-            <SummaryRow k="Property type" v={assetLabel[assetType] ?? assetType} />
-            <SummaryRow k="Gross internal area" v={`${n0(R.gia / SQFT_PER_SQM)} sq m (${n0(R.gia)} sq ft)`} mono />
-            <SummaryRow k="Net internal area" v={`${n0(nia)} sq ft`} mono />
+            <SummaryRow k="Property type" v={asset?.reportLabel ?? deal?.assetType ?? '—'} />
+            {/* both units, always — the certificate is read by people who work in each */}
+            <SummaryRow k="Gross internal area" v={`${n0(areaIn(R.gia, 'm²'))} sq m (${n0(R.gia)} sq ft)`} mono />
+            <SummaryRow k="Net internal area" v={`${U.areaNum(nia)} ${U.unitSpoken}`} mono />
             <SummaryRow k="Units" v={n0(input.units.reduce((a, u) => a + u.count, 0))} mono />
             <SummaryRow k="Efficiency (NIA:GIA)" v={`${input.efficiency}%`} mono />
             <SummaryRow k="Planning status" v={appr.planningStatus ?? 'Not assessed'} />
-            <SummaryRow k="Use class" v={useClass[assetType] ?? '—'} />
+            <SummaryRow k="Use class" v={asset?.useClass ?? '—'} />
             <SummaryRow k="EPC rating" v="C (72)" />
             <SummaryRow k="Title number" v="NYK 284119" mono />
           </div>
@@ -615,7 +671,7 @@ export default function RedBookReport() {
           <Micro>1 · Description</Micro>
           <Body>
             The subject comprises {subject.toLowerCase().startsWith('the') ? subject : `${subject}`}, {deal?.address}. The property extends
-            to approximately {n0(R.gia)} sq ft ({n0(R.gia / SQFT_PER_SQM)} sq m) gross internal area, providing {n0(nia)} sq ft of net
+            to approximately {n0(R.gia)} sq ft ({n0(areaIn(R.gia, 'm²'))} sq m) gross internal area, providing {U.areaNum(nia)} {U.unitSpoken} of net
             internal accommodation at a {input.efficiency}% efficiency. The accommodation is scheduled below; construction is of
             conventional specification for its class and the property presents in good order, consistent with the assumptions of the
             current appraisal. Planning status: {(appr.planningStatus ?? 'not assessed').toLowerCase()}.
@@ -626,12 +682,12 @@ export default function RedBookReport() {
             {input.units.slice(0, 6).map((u, i) => (
               <div key={i} className="flex justify-between items-baseline gap-3 py-[9px] border-b border-border-faint">
                 <span className="text-[12.5px] text-ink-2">{u.label}</span>
-                <span className="fig text-[12.5px] font-medium">{u.count} × {n0(u.area)} sq ft</span>
+                <span className="fig text-[12.5px] font-medium">{u.count} × {U.areaNum(u.area)} {U.unitSpoken}</span>
               </div>
             ))}
             <div className="flex justify-between items-baseline gap-3 py-[9px] border-b border-border-faint">
               <span className="text-[12.5px] text-ink-2">Total NIA</span>
-              <span className="fig text-[12.5px] font-semibold" style={{ color: brand[700] }}>{n0(nia)} sq ft</span>
+              <span className="fig text-[12.5px] font-semibold" style={{ color: brand[700] }}>{U.areaNum(nia)} {U.unitSpoken}</span>
             </div>
           </div>
 
@@ -684,7 +740,8 @@ export default function RedBookReport() {
                 {' '}The investment figure values the WHOLE property at the analysed net rate, so that it compares like for like
                 with the other approaches, and is stated on a growth-explicit basis — {input.dcf!.rentalGrowthPct}% rental growth
                 over {input.dcf!.holdYears} years, discounted at {input.dcf!.discountRatePct}% — implying an equated yield of{' '}
-                <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against an all-risks yield of {invYieldPct}%.
+                <b className="font-semibold">{formatPct(invDcf.equatedYield, 2)}</b> against {U.terms.allRisksYield.startsWith('A') ? 'an' : 'a'}{' '}
+                {U.terms.allRisksYield.toLowerCase()} of {invYieldPct}%.
                 The appraisal report states the same cross-check on the let element alone, so its equated yield differs.
               </>
             )}
@@ -742,7 +799,7 @@ export default function RedBookReport() {
               </div>
               <div className="text-right">
                 <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Analysed rate</div>
-                <div className="fig mt-1 text-[15px] font-semibold">£{n0(psf)} / sq ft</div>
+                <div className="fig mt-1 text-[15px] font-semibold">£{U.rateNum(psf)} / {U.unitSpoken}</div>
               </div>
             </div>
             {range && marker !== null ? (
@@ -790,14 +847,14 @@ export default function RedBookReport() {
             <div className="flex text-white fig text-[10.5px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.5px' }}>
               <div style={{ flex: 2.1, padding: '12px 14px' }}>Address</div>
               <div style={{ flex: 2.2, padding: '12px 8px' }}>Evidence</div>
-              <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Base £/ft²</div>
+              <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Base £/{U.unit}</div>
               <div className="text-right" style={{ flex: 1, padding: '12px 8px' }}>Net adj</div>
-              <div className="text-right" style={{ flex: 1.2, padding: '12px 14px' }}>Adjusted £/ft²</div>
+              <div className="text-right" style={{ flex: 1.2, padding: '12px 14px' }}>Adjusted £/{U.unit}</div>
             </div>
             {/* subject row */}
             <div className="flex items-center border-b border-border-std fig text-[12px] font-medium" style={{ background: 'rgb(var(--tint-green-soft, 243 248 245))' }}>
               <div className="font-ui text-[12px] font-semibold" style={{ flex: 2.1, padding: '13px 14px', color: brand[700] }}>Subject — {subject}</div>
-              <div className="text-ink-3" style={{ flex: 2.2, padding: '13px 8px' }}>{n0(nia)} ft² NIA</div>
+              <div className="text-ink-3" style={{ flex: 2.2, padding: '13px 8px' }}>{U.area(nia)} NIA</div>
               <div className="text-right text-ink-3" style={{ flex: 1, padding: '13px 8px' }}>—</div>
               <div className="text-right text-ink-3" style={{ flex: 1, padding: '13px 8px' }}>—</div>
               <div className="text-right text-ink-3" style={{ flex: 1.2, padding: '13px 14px' }}>—</div>
@@ -809,11 +866,11 @@ export default function RedBookReport() {
                   <div key={c.address} className="flex items-center fig text-[12px] font-medium" style={{ borderBottom: i === summary.comps.length - 1 ? 'none' : `1px solid ${neutral.borderFaint}` }}>
                     <div className="font-ui text-[12px] font-medium" style={{ flex: 2.1, padding: '13px 14px' }}>{c.address}</div>
                     <div className="font-ui text-[11px] text-ink-2" style={{ flex: 2.2, padding: '13px 8px' }}>{meta}</div>
-                    <div className="text-right" style={{ flex: 1, padding: '13px 8px' }}>£{n0(c.basePsf)}</div>
+                    <div className="text-right" style={{ flex: 1, padding: '13px 8px' }}>£{U.rateNum(c.basePsf)}</div>
                     <div className="text-right" style={{ flex: 1, padding: '13px 8px', color: c.netAdjustment > 0 ? statusTokens.green.text : c.netAdjustment < 0 ? statusTokens.red.text : neutral.ink3 }}>
                       {c.netAdjustment > 0 ? '+' : c.netAdjustment < 0 ? '−' : ''}{Math.abs(c.netAdjustment)}%
                     </div>
-                    <div className="text-right font-semibold" style={{ flex: 1.2, padding: '13px 14px', color: brand[700] }}>£{n0(c.adjustedPsf)}</div>
+                    <div className="text-right font-semibold" style={{ flex: 1.2, padding: '13px 14px', color: brand[700] }}>£{U.rateNum(c.adjustedPsf)}</div>
                   </div>
                 );
               })
@@ -827,7 +884,7 @@ export default function RedBookReport() {
           {hasComps && summary.comps.length > 1 && (
             <div className="mt-4 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px 8px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px', marginBottom: 8 }}>
-                Adjustment ladder — base to adjusted £/ft²
+                Adjustment ladder — base to adjusted £/{U.unit}
               </div>
               <CompsLadder
                 comps={summary.comps.map((c) => ({ address: c.address, basePsf: c.basePsf, adjustedPsf: c.adjustedPsf }))}
@@ -838,8 +895,8 @@ export default function RedBookReport() {
 
           <div className="mt-3.5 flex gap-3">
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
-              <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Supported £/ft²</div>
-              <div className="fig mt-1.5 text-[17px] font-semibold" style={{ letterSpacing: '-0.6px' }}>{hasComps ? `£${n0(summary.supportedPsf)}` : '—'}</div>
+              <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Supported £/{U.unit}</div>
+              <div className="fig mt-1.5 text-[17px] font-semibold" style={{ letterSpacing: '-0.6px' }}>{hasComps ? `£${U.rateNum(summary.supportedPsf)}` : '—'}</div>
             </div>
             <div className="flex-1 border border-border-strong rounded-[12px]" style={{ padding: '14px 16px' }}>
               <div className="fig text-[10px] font-medium uppercase text-inactive" style={{ letterSpacing: '0.6px' }}>Avg net adjustment</div>
@@ -853,13 +910,50 @@ export default function RedBookReport() {
             </div>
           </div>
 
-          <Micro>Basis of adjustment</Micro>
-          <Body>
-            Comparables have been adjusted for differences in size, condition, location and date of sale, with the net adjustment applied
-            to each comparable's analysed rate per square foot. Less-adjusted evidence is afforded greater weight in deriving the
-            supported rate. All evidence is drawn from open-market arm's-length transactions verified against HM Land Registry sold-price
-            records and local agency confirmation.
-          </Body>
+          {/*
+            * Printed only where comparables exist, and no longer claiming a
+            * verification nothing records.
+            *
+            * The paragraph was unconditional, so two inches under "No comparable
+            * evidence logged for this deal yet" the same page said "Comparables
+            * have been adjusted for differences in size, condition, location and
+            * date of sale" — describing work done on evidence it had just said
+            * did not exist.
+            *
+            * Its last sentence was worse, and wrong even WITH comparables: "All
+            * evidence is drawn from open-market arm's-length transactions
+            * verified against HM Land Registry sold-price records and local
+            * agency confirmation." `Comparable` has no field that could ever
+            * make that true — address, meta, basePsf and four adjustment
+            * percentages, nothing about where the evidence came from or who
+            * checked it. A comparable typed by hand and one imported by
+            * `sitepack.applyComps` are indistinguishable to this report, and it
+            * asserted Land Registry verification over both. Same shape as the
+            * RICS mark before `Organisation.ricsFirmNumber` existed: a claim the
+            * record cannot support, printed identically whether it is true.
+            *
+            * It also contradicted the valuer's own words. The terms of
+            * engagement carry `sourcesOfInformation`, which the valuer writes and
+            * which says by default that information "is relied upon as accurate
+            * and is not independently verified". The report never printed that
+            * and printed this instead.
+            *
+            * What survives is what the record does hold: the four adjustments
+            * ARE stored per comparable, and each one's provenance is already in
+            * the Evidence column beside it — so the reader is pointed there
+            * rather than given a summary nothing backs.
+            */}
+          {hasComps && (
+            <>
+              <Micro>Basis of adjustment</Micro>
+              <Body>
+                Comparables have been adjusted for differences in size, condition, location and date of sale, with the net adjustment
+                applied to each comparable's analysed rate per square foot. Less-adjusted evidence is afforded greater weight in deriving
+                the supported rate. The source of each comparable is stated against it in the Evidence column above; the nature and
+                source of all information relied on is set out in the terms of engagement.
+              </Body>
+            </>
+          )}
 
           <PageFoot>Page {pageNo.comparables} of {pageTotal} · Comparable schedule</PageFoot>
         </A4Page>
@@ -971,7 +1065,17 @@ export default function RedBookReport() {
                   {valuer.reg && <div className="text-[12px] text-ink-2">{valuer.reg}</div>}
                   <div className="text-[12px] text-ink-2">For and on behalf of {firmName}</div>
                   {dates.signedOff ? (
-                    <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                    <>
+                      <div className="fig mt-1.5 text-[11.5px] font-medium text-inactive">Date: {dates.report}</div>
+                      {check && (
+                        <div
+                          className="mt-1 text-[10.5px] leading-[1.4]"
+                          style={{ maxWidth: 320, color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink3 }}
+                        >
+                          {check.text}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     /* the unnamed branch below already refuses to print "a date
                        pretending it was signed"; a version nobody approved is
@@ -983,9 +1087,22 @@ export default function RedBookReport() {
                 </>
               ) : (
                 /* no name, no registration number, and no date pretending it was signed */
-                <div className="mt-2.5 text-[12px] leading-[1.5] text-ink-2" style={{ maxWidth: 300 }}>
-                  This report is unsigned. Name the valuer and their RICS registration number in the terms of engagement before it is issued.
-                </div>
+                <>
+                  <div className="mt-2.5 text-[12px] leading-[1.5] text-ink-2" style={{ maxWidth: 300 }}>
+                    This report is unsigned. Name the valuer and their RICS registration number in the terms of engagement before it is issued.
+                  </div>
+                  {/* the figures' verification is about the approved record, not the
+                      signer — an approved version with no valuer named still says
+                      whether its figures hold */}
+                  {check && (
+                    <div
+                      className="mt-1 text-[10.5px] leading-[1.4]"
+                      style={{ maxWidth: 320, color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink3 }}
+                    >
+                      {check.text}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {/* A seal is the strongest form the claim takes on this document, so

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costRollup } from '../src/cost-report.js';
+import { costRollup, outturnBuildPsf } from '../src/cost-report.js';
 
 /**
  * The cost report, which used to measure the packages against themselves.
@@ -91,5 +91,19 @@ describe('what an overrun costs', () => {
     const r = costRollup(under, { appraisedBuild: 1_000_000, contingency: 50_000 });
     expect(r.variance).toBe(-100_000);
     expect(r.profitImpact).toBe(100_000);
+  });
+});
+
+describe('out-turn build cost', () => {
+  it('is certified spend over the appraised floor area', () => {
+    expect(outturnBuildPsf(6_855_195, 42_000)).toBeCloseTo(163.22, 2);
+  });
+
+  it('is null, not zero, when nothing was certified or there is no area', () => {
+    // a completed scheme with £0 certified had its costs recorded elsewhere,
+    // and £0/ft² in a cohort would drag every other firm's median down
+    expect(outturnBuildPsf(0, 42_000)).toBeNull();
+    expect(outturnBuildPsf(1_000_000, 0)).toBeNull();
+    expect(outturnBuildPsf(-5, 42_000)).toBeNull();
   });
 });

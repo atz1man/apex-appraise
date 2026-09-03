@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CashflowRow } from '@apex/appraisal-engine';
 import { fM, formatSigned } from '../lib/format';
+import { useUnits } from '../lib/region';
+import { brand, brandInk } from '@apex/ui-tokens';
 
 /** True below 640px — charts swap to a phone-proportioned viewBox so text stays legible. */
 function useNarrow(): boolean {
@@ -16,13 +18,13 @@ function useNarrow(): boolean {
 
 /* ================================================================
    Engine-fed SVG charts — no chart library, design-system colors only.
-   Palette validated (CVD/contrast): revenue #1E7A55, cost #9A6212,
-   profit #1E9E6A; the cumulative J-curve is a single ink line.
+   Palette validated (CVD/contrast): revenue and cost are the series
+   variables, profit is brand-400; the cumulative J-curve is a single ink line.
    ================================================================ */
 
 const REV = 'rgb(var(--series-rev, 31 126 88))';
 const COST = 'rgb(var(--series-cost, 127 68 0))';
-const PROFIT = '#1E9E6A';
+const PROFIT = brand[400];
 const INK = 'rgb(var(--ink, 22 32 27))';
 const GRID = 'rgb(var(--border-std, 236 235 229))';
 const MUTED = 'rgb(var(--ink-3, 154 160 154))';
@@ -182,7 +184,7 @@ export function CashflowChart({
 }
 
 /**
- * Sales velocity — cumulative GDV secured over time (step line + area)
+ * Sales velocity — cumulative development value secured over time (step line + area)
  * against the appraised total (dashed reference). Compact, for the rail.
  */
 export function SalesVelocityChart({
@@ -230,7 +232,7 @@ export function SalesVelocityChart({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full select-none"
         role="img"
-        aria-label="Cumulative GDV secured over time against the appraised total"
+        aria-label="Cumulative development value secured over time against the appraised total"
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           if (!cum.length) return;
@@ -287,9 +289,13 @@ export function SalesVelocityChart({
 }
 
 /**
- * Comparable evidence ladder — one row per comp: open dot at the base £/ft²,
- * filled dot at the adjusted £/ft², connected; the concluded (weighted)
- * rate runs as a dashed reference through all rows. Valuation-report standard.
+ * Comparable evidence ladder — one row per comp: open dot at the base rate,
+ * filled dot at the adjusted rate, connected; the concluded (weighted) rate
+ * runs as a dashed reference through all rows. Valuation-report standard.
+ *
+ * Rates come in per square foot, as the engine and the database hold them, and
+ * are printed in the firm's own unit. The scale is unaffected either way — a
+ * unit conversion is a constant multiple — so only the printed numbers move.
  */
 export function CompsLadder({
   comps,
@@ -299,6 +305,7 @@ export function CompsLadder({
   supported: number;
 }) {
   const narrow = useNarrow();
+  const U = useUnits();
   const W = narrow ? 360 : 700;
   const LABEL_W = narrow ? 92 : 170;
   const ROW_H = 30;
@@ -312,11 +319,11 @@ export function CompsLadder({
 
   return (
     <div data-testid="comps-ladder">
-      <svg data-chart="comps-ladder" viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label="Comparable evidence: base and adjusted pounds per square foot per comparable, with the supported rate marked">
+      <svg data-chart="comps-ladder" viewBox={`0 0 ${W} ${H}`} className="w-full select-none" role="img" aria-label={`Comparable evidence: base and adjusted pounds per ${U.unitSpoken} per comparable, with the supported rate marked`}>
         {/* supported reference */}
         <line x1={xOf(supported)} x2={xOf(supported)} y1={TOP - 12} y2={H - 18} stroke={INK} strokeWidth="1.2" strokeDasharray="4 4" />
         <text x={Math.min(xOf(supported) + 6, W - 108)} y={TOP - 12} fontSize="10" className="fig" fontWeight="600" fill={INK}>
-          Supported £{Math.round(supported)}/ft²
+          Supported {U.rate(supported)}
         </text>
         {comps.map((c, i) => {
           const y = TOP + i * ROW_H + ROW_H / 2;
@@ -324,7 +331,7 @@ export function CompsLadder({
           const xa = xOf(c.adjustedPsf);
           return (
             <g key={c.address}>
-              <title>{`${c.address} · base £${Math.round(c.basePsf)} → adjusted £${Math.round(c.adjustedPsf)}/ft²`}</title>
+              <title>{`${c.address} · base £${U.rateNum(c.basePsf)} → adjusted ${U.rate(c.adjustedPsf)}`}</title>
               <text x={0} y={y + 3} fontSize={narrow ? 9 : 10.5} fill="rgb(var(--ink-2, 95 102 95))">
                 {c.address.length > nameLen ? `${c.address.slice(0, nameLen - 1)}…` : c.address}
               </text>
@@ -379,7 +386,7 @@ export function CostVarianceStrip({
           <div key={p.name} title={`${p.name} · budget ${fM(p.budget)} · forecast ${fM(p.forecast)}`}>
             <div className="flex justify-between text-[11px]">
               <span className="text-ink-2 truncate pr-2">{p.name}</span>
-              <span className="fig font-semibold shrink-0" style={{ color: over ? 'rgb(var(--status-red, 178 58 46))' : '#1E7A55' }}>
+              <span className="fig font-semibold shrink-0" style={{ color: over ? 'rgb(var(--status-red, 178 58 46))' : brandInk }}>
                 {delta === 0 ? 'on plan' : formatSigned(delta)}
               </span>
             </div>
@@ -399,7 +406,7 @@ export function CostVarianceStrip({
 }
 
 /**
- * Profit bridge — waterfall from GDV down through every cost block to
+ * Profit bridge — waterfall from development value down through every cost block to
  * developer profit. Deductions share one hue; the two result bars are green.
  */
 export function ProfitBridge({
@@ -411,6 +418,7 @@ export function ProfitBridge({
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const narrow = useNarrow();
+  const U = useUnits();
   const gdv = steps.length ? steps.reduce((a, [, v]) => a + v, profit) : profit;
 
   const W = narrow ? 360 : 720;
@@ -418,7 +426,7 @@ export function ProfitBridge({
   const PAD_T = 26;
   const PAD_B = 34;
   const plotH = H - PAD_T - PAD_B;
-  const bars = [['GDV', gdv, 'start'] as const, ...steps.map(([l, v]) => [l, v, 'ded'] as const), ['Profit', profit, 'end'] as const];
+  const bars = [[U.terms.gdv, gdv, 'start'] as const, ...steps.map(([l, v]) => [l, v, 'ded'] as const), ['Profit', profit, 'end'] as const];
   const slotW = W / bars.length;
   const barW = Math.min(narrow ? 34 : 72, slotW * 0.62);
   const nameLen = narrow ? 7 : 13;

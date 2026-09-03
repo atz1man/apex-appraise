@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
+import { brand, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatPct } from '../lib/format';
 import {
@@ -20,6 +20,7 @@ import {
   TopBar,
   SPARKLE,
 } from '../components/ui';
+import { useUnits } from '../lib/region';
 import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
@@ -74,6 +75,8 @@ const ICONS: Record<string, string> = {
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 export default function DealOverview() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
 
@@ -201,7 +204,7 @@ export default function DealOverview() {
   const tools: Array<{ icon: string; title: string; desc: string; path: string; count?: string }> = [
     { icon: ICONS.appraisal, title: 'Appraisal', desc: 'Residual, cashflow, finance & returns', path: 'appraisal', count: appraisal ? 'Current saved' : 'Not run yet' },
     { icon: ICONS.auto, title: 'Auto-Appraisal', desc: 'Documents in → appraisal out, AI or manual', path: 'auto' },
-    { icon: ICONS.comps, title: 'Comparables', desc: 'Adjustment grid → supported £/ft²', path: 'comparables', count: plural(counts.comparables, 'comparable') },
+    { icon: ICONS.comps, title: 'Comparables', desc: `Adjustment grid → supported £/${U.unit}`, path: 'comparables', count: plural(counts.comparables, 'comparable') },
     { icon: ICONS.scenarios, title: 'Scenarios', desc: 'Compare scheme options side-by-side', path: 'scenarios', count: plural(counts.scenarios, 'scenario') },
     { icon: ICONS.costs, title: 'Costs', desc: 'Budget vs actual, contractors, photo log', path: 'costs', count: plural(counts.costPackages, 'package') },
     { icon: ICONS.sales, title: 'Sales & lettings', desc: 'Unit tracker, progression, rent roll', path: 'sales', count: plural(counts.units, 'unit') },
@@ -298,7 +301,7 @@ export default function DealOverview() {
                 <span className="label-mono text-ink-3">Next milestone</span>
                 <input className="min-w-[200px]" aria-label="Next milestone" value={draft.nextMilestone} onChange={(e) => setDraft({ ...draft, nextMilestone: e.target.value })} />
               </label>
-              <Button type="submit" loading={saveDetails.isPending} disabled={!draft.name.trim() || !draft.address.trim()}>
+              <Button writes type="submit" loading={saveDetails.isPending} disabled={!draft.name.trim() || !draft.address.trim()}>
                 Save details
               </Button>
               <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
@@ -381,7 +384,7 @@ export default function DealOverview() {
                         }
                       >
                         {done ? (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M4 12l5 5L20 7" />
                           </svg>
                         ) : (

@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { formatMoneyFull, n0 } from '../lib/format';
+import { useUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, StatCard, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { accent, brand, brandInk, onFill } from '@apex/ui-tokens';
 
 type Weights = { salesComparison: number; cost: number; income: number };
 type ApproachKey = 'sales' | 'cost' | 'income';
 
 const APPROACHES: Array<{ key: ApproachKey; wKey: keyof Weights; label: string; dot: string; sub: string }> = [
-  { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: 'rgb(var(--brand-ink, 20 80 59))', sub: 'Supported £/ft² × subject area' },
-  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: '#1E9E6A', sub: 'Land + build, fees and contingency' },
+  { key: 'sales', wKey: 'salesComparison', label: 'Sales comparison', dot: 'rgb(var(--brand-ink, 20 80 59))', sub: 'Supported rate × subject area' },
+  { key: 'cost', wKey: 'cost', label: 'Cost approach', dot: brand[400], sub: 'Land + build, fees and contingency' },
   { key: 'income', wKey: 'income', label: 'Income approach', dot: 'rgb(var(--ink-3, 154 160 154))', sub: 'Net rent capitalised at market yield' },
 ];
 
@@ -18,6 +20,8 @@ const adjFmt = (pts: number) => (pts === 0 ? '—' : `${pts > 0 ? '+' : '−'}${
 const adjColor = (pts: number) => (pts > 0 ? 'rgb(var(--status-green, 30 122 85))' : pts < 0 ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--ink-3, 154 160 154))');
 
 export default function Workbench() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
@@ -61,7 +65,7 @@ export default function Workbench() {
   const salesDerived: Derived =
     supportedPsf > 0 && areaNia > 0
       ? { value: Math.round(supportedPsf * areaNia), why: '' }
-      : { value: null, why: 'No supported £/ft² yet — add comparable evidence.' };
+      : { value: null, why: `No supported £/${U.unit} yet — add comparable evidence.` };
   /**
    * Land plus what it costs to put the building there — construction, the
    * professional fees that go with it, and contingency. No depreciation, since
@@ -223,7 +227,7 @@ export default function Workbench() {
                 <Dot color="rgb(var(--status-green, 30 122 85))" /> Synced from field
               </span>
             )}
-            <Button onClick={onSave} loading={save.isPending} disabled={!dirty}>
+            <Button writes onClick={onSave} loading={save.isPending} disabled={!dirty}>
               {dirty ? 'Save valuation' : 'Saved'}
             </Button>
           </>
@@ -234,7 +238,7 @@ export default function Workbench() {
       {isSynced && !dismissed && (
         <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 bg-tint-success border-b border-[rgb(var(--border-green-soft,_214_230_221))]">
           <span className="flex-none w-[30px] h-[30px] rounded-[9px] bg-brand-700 flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[12.5px] font-semibold text-brand-ink">Synced from field inspection · {inspectedOn}</div>
@@ -246,7 +250,7 @@ export default function Workbench() {
             onClick={() => setDismissed(true)}
             aria-label="Dismiss"
             className="flex-none w-[26px] h-[26px] rounded-[7px] flex items-center justify-center hover:bg-tint-success-2"
-            style={{ color: '#5E8C76' }}
+            style={{ color: accent.muted1 }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
@@ -268,7 +272,7 @@ export default function Workbench() {
 
         {/* KPI row */}
         <div className="mt-5 flex gap-3 flex-wrap">
-          <div className="flex-[1.4] min-w-[210px] rounded-card px-4 py-3.5 text-white relative overflow-hidden" style={{ background: 'linear-gradient(150deg,#1B6048,#13503B)' }}>
+          <div className="flex-[1.4] min-w-[210px] rounded-card px-4 py-3.5 text-white relative overflow-hidden" style={{ background: `linear-gradient(150deg,${brand[600]},${brand[700]})` }}>
             <div className="absolute rounded-full" style={{ top: -24, right: -24, width: 96, height: 96, background: 'rgba(255,255,255,0.07)' }} />
             <div className="label-mono text-white/65">Market value</div>
             {/**
@@ -290,22 +294,22 @@ export default function Workbench() {
                 <div className="fig mt-1.5 text-[26px] font-semibold tracking-[-1.4px]">{formatMoneyFull(Math.round(reconciled))}</div>
                 <div className="mt-0.5 text-[11px] text-white/70">
                   {nia > 0
-                    ? `£${n0(reconciled / nia)} / ft² · ${n0(nia)} ft² NIA`
+                    ? `£${U.rateNum(reconciled / nia)} / ${U.unit} · ${U.area(nia)} NIA`
                     : `Weighted across ${contributing.length === 1 ? 'one approach' : `${contributing.length} approaches`}`}
                 </div>
               </>
             )}
           </div>
           <StatCard
-            label="Supported £/ft²"
-            value={summary && comps.length ? `£${n0(summary.supportedPsf)}` : '—'}
+            label={`Supported £/${U.unit}`}
+            value={summary && comps.length ? `£${U.rateNum(summary.supportedPsf)}` : '—'}
             tone="rgb(var(--brand-ink, 20 80 59))"
             sub={`from ${comps.length} comparable${comps.length === 1 ? '' : 's'}`}
           />
           <StatCard
             label="Adjusted range"
-            value={summary && comps.length ? `£${n0(summary.range.lo)}–£${n0(summary.range.hi)}` : '—'}
-            sub="per ft², after adjustment"
+            value={summary && comps.length ? `£${U.rateNum(summary.range.lo)}–£${U.rateNum(summary.range.hi)}` : '—'}
+            sub={`per ${U.unit}, after adjustment`}
           />
           <StatCard
             label="Avg gross adj"
@@ -370,7 +374,7 @@ export default function Workbench() {
               title="Comparable evidence grid"
               right={
                 <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-ink">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#14503B" aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill={brandInk} aria-hidden="true"><path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2Z" /></svg>
                   Auto-adjusted
                 </span>
               }
@@ -391,13 +395,13 @@ export default function Workbench() {
                     <thead>
                       <tr>
                         <Th>Comparable</Th>
-                        <Th right>Base £/ft²</Th>
+                        <Th right>Base £/{U.unit}</Th>
                         <Th right>Size</Th>
                         <Th right>Cond.</Th>
                         <Th right>Date</Th>
                         <Th right>Location</Th>
                         <Th right>Net adj</Th>
-                        <Th right>Adj £/ft²</Th>
+                        <Th right>Adj £/{U.unit}</Th>
                         <Th right>Weight</Th>
                       </tr>
                     </thead>
@@ -410,13 +414,13 @@ export default function Workbench() {
                               <div className="font-semibold text-[12.5px]">{c.address}</div>
                               {c.meta && <div className="text-[11px] text-ink-3">{c.meta}</div>}
                             </Td>
-                            <Td right fig>£{n0(c.basePsf)}</Td>
+                            <Td right fig>£{U.rateNum(c.basePsf)}</Td>
                             <Td right fig style={{ color: adjColor(c.adjSize) }}>{adjFmt(c.adjSize)}</Td>
                             <Td right fig style={{ color: adjColor(c.adjCondition) }}>{adjFmt(c.adjCondition)}</Td>
                             <Td right fig style={{ color: adjColor(c.adjDate) }}>{adjFmt(c.adjDate)}</Td>
                             <Td right fig style={{ color: adjColor(c.adjLocation) }}>{adjFmt(c.adjLocation)}</Td>
                             <Td right fig className="font-semibold" style={{ color: adjColor(r.netAdjustment) }}>{adjFmt(r.netAdjustment)}</Td>
-                            <Td right fig className="font-semibold" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>£{n0(r.adjustedPsf)}</Td>
+                            <Td right fig className="font-semibold" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>£{U.rateNum(r.adjustedPsf)}</Td>
                             <Td right>
                               <span className="inline-flex items-center gap-2 justify-end">
                                 <span className="w-14 h-1.5 rounded-[3px] bg-border-std overflow-hidden inline-block">
@@ -434,8 +438,8 @@ export default function Workbench() {
               )}
               {summary && comps.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border-std flex gap-6 flex-wrap text-[12px] text-ink-2">
-                  <span>Supported <b className="fig text-brand-ink">£{n0(summary.supportedPsf)}/ft²</b></span>
-                  {nia > 0 && <span>× {n0(nia)} ft² NIA → <b className="fig text-brand-ink">{formatMoneyFull(Math.round(summary.supportedPsf * nia))}</b></span>}
+                  <span>Supported <b className="fig text-brand-ink">{U.rate(summary.supportedPsf)}</b></span>
+                  {nia > 0 && <span>× {U.area(nia)} NIA → <b className="fig text-brand-ink">{formatMoneyFull(Math.round(summary.supportedPsf * nia))}</b></span>}
                   <span>Avg gross adjustment <b className="fig" style={{ color: conf.color }}>{avgGross.toFixed(1)}pts</b></span>
                 </div>
               )}
@@ -457,7 +461,7 @@ export default function Workbench() {
               {rangeLow != null && rangeHigh != null && (
                 <div className="mt-3.5">
                   <div className="relative h-[7px] rounded-[4px] bg-sunken-2">
-                    <div className="absolute top-0 bottom-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: 'linear-gradient(90deg,#1E9E6A,#14503B)' }} />
+                    <div className="absolute top-0 bottom-0 rounded-[4px]" style={{ left: '8%', right: '10%', background: `linear-gradient(90deg,${brand[400]},${brand[700]})` }} />
                     <div className="absolute -top-[3px] w-[13px] h-[13px] rounded-full bg-brand-700 border-2 border-surface -translate-x-1/2" style={{ left: `${marker}%`, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
                   </div>
                   <div className="mt-1.5 flex justify-between fig text-[11px] font-medium text-ink-3">
@@ -485,10 +489,10 @@ export default function Workbench() {
               {(
                 [
                   ['Comparables', comps.length ? `${comps.length}` : '—'],
-                  ['Supported £/ft²', summary && comps.length ? `£${n0(summary.supportedPsf)}` : '—'],
-                  ['Adjusted range', summary && comps.length ? `£${n0(summary.range.lo)}–£${n0(summary.range.hi)}` : '—'],
+                  [`Supported £/${U.unit}`, summary && comps.length ? `£${U.rateNum(summary.supportedPsf)}` : '—'],
+                  ['Adjusted range', summary && comps.length ? `£${U.rateNum(summary.range.lo)}–£${U.rateNum(summary.range.hi)}` : '—'],
                   ['Avg gross adjustment', comps.length ? `${avgGross.toFixed(1)}pts` : '—'],
-                  ['Subject NIA', nia > 0 ? `${n0(nia)} ft²` : '—'],
+                  ['Subject NIA', nia > 0 ? U.area(nia) : '—'],
                 ] as Array<[string, string]>
               ).map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2 border-t border-border-faint first:border-t-0 text-[12.5px]">

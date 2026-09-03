@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadStripe, type Stripe, type StripeElements } from '@stripe/stripe-js';
 import { Button, Spinner } from './ui';
+import { brand, fixed } from '@apex/ui-tokens';
 
 /**
  * Card capture via Stripe's Payment Element (PCI never touches our servers).
@@ -39,8 +40,8 @@ export function StripePaymentModal({
         clientSecret,
         appearance: {
           variables: {
-            colorPrimary: '#14503B',
-            colorText: '#16201B',
+            colorPrimary: brand[700],
+            colorText: fixed.ink,
             fontFamily: "'Schibsted Grotesk', system-ui, sans-serif",
             borderRadius: '9px',
           },

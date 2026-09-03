@@ -14,6 +14,7 @@ import {
   sensitivityGrid,
   weightedComparables,
   type AppraisalResult,
+  type AutoAppraisalResult,
 } from '@apex/appraisal-engine';
 import { zAppraisalInput, zExtraction, type Extraction } from '@apex/types';
 import { appraisalRowToEngineInput, J, P, toPence } from '../mappers.js';
@@ -25,7 +26,9 @@ import { recordAudit } from '../audit.js';
 import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from '../share.js';
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
-import { assertUnchanged } from '../optimistic.js';
+import { feedApproved } from '../benchmark-feed.js';
+import { pinFor, verify as verifyPin } from '../approval-pin.js';
+import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
 const spendProfileToDb: Record<string, string> = {
@@ -187,6 +190,8 @@ export const appraisalRouter = router({
        */
       reviewStatus: row.reviewStatus,
       reviewedAt: row.reviewedAt,
+      /** the engine that signed it — null for a draft, and for a version approved before pins existed */
+      engineVersion: row.engineVersion,
       source: row.source,
       planningStatus: row.planningStatus,
       input: engineInput,
@@ -197,6 +202,24 @@ export const appraisalRouter = router({
 
   /** PURE — runs the engine for live what-ifs; no persistence. */
   compute: internalProcedure.input(zAppraisalInput).query(({ input }) => fullResult(input)),
+
+  /**
+   * Does a signed figure still hold?
+   *
+   * Re-derives an approved version with the engine in hand and compares it to
+   * what was pinned at approval — the engine version, the inputs, the headline
+   * figures to the penny. The reports call this before printing a version as
+   * approved, and say which of the three moved when one did. Null for a version
+   * approved before pins existed: the report says that too, rather than
+   * inventing a verification it never performed.
+   */
+  verifyApproved: internalProcedure.input(z.object({ versionId: z.string() })).query(async ({ ctx, input }) => {
+    const v = await assertOwned(ctx.prisma.appraisal, input.versionId, ctx.principal.orgId);
+    if (v.reviewStatus !== 'approved') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only an approved version has a signed figure to verify.' });
+    }
+    return verifyPin(v);
+  }),
 
   save: internalProcedure
     .input(
@@ -341,29 +364,42 @@ export const appraisalRouter = router({
          * and commit. Serializable is the only level at which "nobody else has
          * one" stays true until this transaction commits.
          */
-        row = await ctx.prisma.$transaction(
-          async (tx) => {
-            const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
-            if (raced) {
-              throw new TRPCError({
-                code: 'CONFLICT',
-                message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+        row = await retryOnSerialisationFailure(() =>
+          ctx.prisma.$transaction(
+            async (tx) => {
+              const raced = await currentAppraisal(tx.appraisal, input.dealId, ctx.principal.orgId);
+              if (raced) {
+                throw new TRPCError({
+                  code: 'CONFLICT',
+                  message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+                });
+              }
+              return tx.appraisal.create({
+                data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
               });
-            }
-            return tx.appraisal.create({
-              data: { ...data, orgId: ctx.principal.orgId, dealId: input.dealId, isCurrent: true, label: input.label?.trim() || 'Base' },
-            });
-          },
-          { isolationLevel: 'Serializable' },
+            },
+            { isolationLevel: 'Serializable' },
+          ),
         ).catch((e: unknown) => {
           if (e instanceof TRPCError) throw e;
           /**
            * Postgres aborts the loser of a serialisable conflict rather than
-           * blocking it (SQLSTATE 40001, which Prisma reports as P2034). That is
-           * this invariant working, so it reaches the user as the same refusal
-           * the other two paths give and not as a server fault.
+           * blocking it (SQLSTATE 40001, which Prisma reports as P2034).
+           *
+           * This used to read that abort as proof of a real race. It is not:
+           * SSI aborts on the POSSIBILITY of a cycle, so two saves on two
+           * different deals abort each other under load, and the loser was told
+           * somebody had beaten them to a deal nobody else could see. CI found
+           * it — a browser test created its own deal, saved the first appraisal
+           * on it, and was refused on an id no other test had ever held.
+           *
+           * `retryOnSerialisationFailure` takes the transaction again, which is
+           * what 40001 actually asks for. Reaching here means the retries ran
+           * out, and at that point the refusal is the honest answer: whether the
+           * cause was contention or a real winner, the caller has to reload
+           * either way.
            */
-          if ((e as { code?: string })?.code === 'P2034') {
+          if ((e as { code?: string })?.code === SERIALISATION_FAILURE) {
             throw new TRPCError({
               code: 'CONFLICT',
               message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
@@ -685,10 +721,53 @@ export const appraisalRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Say what needs changing.' });
       }
       const status = input.decision === 'approve' ? 'approved' : 'changes_requested';
-      const row = await ctx.prisma.appraisal.update({
-        where: { id: v.id },
-        data: { reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt: new Date(), reviewNote: input.note?.trim() || null },
+      /**
+       * Compare-and-set. The check above answers a stale screen cheaply; it
+       * cannot be the guard, because it is a read followed by a write.
+       *
+       * Two admins deciding at once both read `in_review`, both passed, and both
+       * wrote. Measured, one approving while the other asked for changes:
+       *
+       *   FINAL STATUS      changes_requested
+       *   DECISION EVENTS   approved an appraisal version |
+       *                     requested changes to an appraisal version
+       *   WEBHOOKS QUEUED   1 appraisal.approved
+       *
+       * So the trail carried two contradictory decisions with nothing saying
+       * which stood, and — worse — `appraisal.approved` was queued to the
+       * subscriber for a version that ended up NOT approved. The comment below
+       * says who is listening: a lender's system watching for the firm's
+       * committed position. Telling it a valuation was signed off when it was
+       * sent back is the one outcome this event must never produce.
+       *
+       * Same shape and same fix as `a0acf31` (three payment paths) and the
+       * public `engagement.sign`: the row leaves the decidable state as part of
+       * the write, and only the caller who moved it records and emits.
+       */
+      /**
+       * The pin travels in the SAME statement as the status. An approval that
+       * records which engine signed it and what the figures were is one write;
+       * two would leave a window in which a version is approved and unpinned,
+       * and `approved-immutable` forbids the second write anyway.
+       */
+      const reviewedAt = new Date();
+      const pin = input.decision === 'approve' ? pinFor(v, reviewedAt) : null;
+      const { count } = await ctx.prisma.appraisal.updateMany({
+        where: { id: v.id, reviewStatus: 'in_review' },
+        data: {
+          reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt, reviewNote: input.note?.trim() || null,
+          ...(pin ? { engineVersion: pin.engineVersion, approvalPin: JSON.stringify(pin) } : {}),
+        },
       });
+      if (count !== 1) {
+        // somebody else decided first — the same sentence a stale screen gets
+        const now = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id }, select: { reviewStatus: true } });
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
+        });
+      }
+      const row = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
@@ -699,8 +778,19 @@ export const appraisalRouter = router({
        * must not wait on someone else's server, nor fail because it is down.
        */
       if (input.decision === 'approve') {
-        const deal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+        const deal = await ctx.prisma.deal.findUniqueOrThrow({
+          where: { id: v.dealId },
+          select: { id: true, name: true, address: true, postcode: true, assetType: true, stage: true },
+        });
         const result = computeAppraisal(appraisalRowToEngineInput(row));
+        /**
+         * The firm's committed position is what the benchmark pool is made of,
+         * and approval is the moment a figure becomes that. Consent is checked
+         * inside the feed; a firm that has not opted in contributes nothing.
+         */
+        await feedApproved(ctx.prisma, ctx.principal.orgId, deal, row, {
+          userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
+        });
         await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.approved', {
           dealId: v.dealId,
           dealName: deal?.name ?? null,
@@ -711,6 +801,15 @@ export const appraisalRouter = router({
           gdv: Math.round(result.gdv * 100) / 100,
           profit: Math.round(result.profit * 100) / 100,
           profitOnCost: result.poc,
+          /**
+           * What the approval was pinned to. A lender's system storing this
+           * event can later ask `verifyApproved` — or recompute from the
+           * inputs it was given — and know whether the figure it holds is the
+           * one the engine of that day produced. Without it the event named a
+           * GDV and nothing that could ever check it.
+           */
+          engineVersion: pin!.engineVersion,
+          inputHash: pin!.inputHash,
         });
 
         /**
@@ -1441,6 +1540,53 @@ const zAutoInputs = z.object({
   buildPerSqft: z.number().positive(),
 });
 
+/**
+ * The screening verdict — and, when there is no asking price, what it can honestly say.
+ *
+ * `rocAtAsking` is the return on cost if you paid the asking price, so the
+ * engine returns null for it whenever no asking price was given: there is no
+ * price to divide by. That null used to be read as `?? 0.2` — twenty per cent,
+ * comfortably over the 0.17 Proceed threshold — and the clause beside it,
+ * `asking === 0`, was satisfied by the very same absence. BOTH halves of the
+ * Proceed test therefore passed because a price was missing, and no unpriced
+ * screen could return anything but Proceed, for any scheme, ever. Measured
+ * before this change, on twelve flats at a £500/ft² build against £200/ft²
+ * values: residual land value minus £4,896,040 — a site you would have to be
+ * PAID nearly five million to take on — came back "Proceed", in green, beside a
+ * Profit on cost of 25.0%. That 25.0% was `targetProfit / (gdv - targetProfit)`,
+ * i.e. 0.20/0.80, a restatement of the target profit percentage and identical
+ * for every unpriced scheme regardless of its economics. The one tool whose
+ * whole job is to say "walk away" structurally could not.
+ *
+ * This is the live path, not a corner: the extraction tool declares `asking` as
+ * nullable, the prompt says "anything the documents do not state: null", and
+ * `numOr(0)` turns that null into zero — so any planning pack that does not
+ * quote a price screened Proceed.
+ *
+ * An unpriced screen is not, however, ungradeable. The residual IS the answer to
+ * "what can I pay for this?", and its SIGN is a conclusion needing neither a
+ * price nor a threshold: at or below zero the scheme does not work at any land
+ * price at all, free land included, so it is a Decline. Above zero the scheme
+ * supports some land price and is worth pursuing at least as far as asking what
+ * they want for it — Proceed, as before. No middle band is invented here: "how
+ * thin is too thin" is a judgement about a particular site, and this function
+ * does not have one to make.
+ *
+ * The priced branch is unchanged, and is now the only branch that reads
+ * `rocAtAsking` and `headroom` — both non-null exactly when a price was given.
+ */
+export function screeningVerdict(
+  r: Pick<AutoAppraisalResult, 'rocAtAsking' | 'headroom' | 'residualNet'>,
+  asking: number,
+): 'Proceed' | 'Caution' | 'Decline' {
+  if (asking <= 0 || r.rocAtAsking === null || r.headroom === null) {
+    return r.residualNet > 0 ? 'Proceed' : 'Decline';
+  }
+  if (r.rocAtAsking >= 0.17 && r.headroom >= 0) return 'Proceed';
+  if (r.rocAtAsking < 0.1 || r.headroom < -asking * 0.1) return 'Decline';
+  return 'Caution';
+}
+
 /** extraction + build rate → engine indicative result (deterministic code, never the LLM) */
 function indicative(extraction: Extraction, buildPerSqft: number) {
   const r = autoAppraise({
@@ -1462,12 +1608,9 @@ function indicative(extraction: Extraction, buildPerSqft: number) {
     acqPct: extraction.acq,
     asking: extraction.asking,
   });
-  const roc = r.rocAtAsking ?? (r.totalCostAtAsking == null && r.gdv > 0 ? r.targetProfit / Math.max(r.gdv - r.targetProfit, 1) : 0);
-  const headroom = r.headroom ?? 0;
-  let verdict: 'Proceed' | 'Caution' | 'Decline' = 'Caution';
-  if ((r.rocAtAsking ?? 0.2) >= 0.17 && (extraction.asking === 0 || headroom >= 0)) verdict = 'Proceed';
-  else if ((r.rocAtAsking ?? 0.2) < 0.1 || (extraction.asking > 0 && headroom < -extraction.asking * 0.1)) verdict = 'Decline';
-  return { ...r, roc, verdict };
+  // `rocAtAsking` is null exactly when no asking price was given, and the screen
+  // renders that null as "—" rather than inventing a return. See screeningVerdict.
+  return { ...r, roc: r.rocAtAsking, verdict: screeningVerdict(r, extraction.asking) };
 }
 
 export const autoAppraisalRouter = router({

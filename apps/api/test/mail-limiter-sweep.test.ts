@@ -44,8 +44,18 @@ const depth = (p: Proc) => (p._def.middlewares ?? []).length;
  * minimum honest — `auth.login` has to be reachable by someone with no account,
  * or nobody could ever sign in.
  */
-const PUBLIC_DEPTH = Math.min(...procedures().map(([, p]) => depth(p)));
-const isPublic = (p: Proc) => depth(p) === PUBLIC_DEPTH;
+/**
+ * Anchored to `auth.login` rather than to the router's minimum: a public
+ * QUERY with no input (`auth.demoAccounts`) carries one middleware fewer than
+ * `.input().mutation()` does, and the day it landed the minimum dropped below
+ * the login and every public procedure stopped counting as public — the sweep
+ * would have reported two escapes and, once "fixed", none. Public is anything
+ * at the login's depth or shallower; the anchor assertion below still holds
+ * the login to being reachable by someone with no account.
+ */
+const LOGIN = procedures().find(([path]) => path === 'auth.login');
+const PUBLIC_DEPTH = LOGIN ? depth(LOGIN[1]) : Math.min(...procedures().map(([, p]) => depth(p)));
+const isPublic = (p: Proc) => depth(p) <= PUBLIC_DEPTH;
 
 const sendsMail = (p: Proc) =>
   typeof p._def.resolver === 'function' && /sendMail\s*\(/.test(String(p._def.resolver));
@@ -60,7 +70,9 @@ describe('the strict rate-limit bucket', () => {
     // the anchor: if signing in needed an account, the baseline would be wrong
     const login = all.find(([path]) => path === 'auth.login');
     expect(login, 'auth.login has moved — the public baseline needs a new anchor').toBeTruthy();
-    expect(isPublic(login![1]), 'auth.login is not at the shallowest depth').toBe(true);
+    expect(isPublic(login![1]), 'auth.login is not at the public depth').toBe(true);
+    // and nothing that needs a session is at or above it — the rule below would otherwise be vacuous
+    expect(all.filter(([path]) => path.startsWith('appraisal.')).every(([, p]) => !isPublic(p))).toBe(true);
   });
 
   it('covers every procedure a stranger can make send an email', () => {

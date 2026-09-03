@@ -50,7 +50,7 @@ export function ShareLinks({ dealId, kind }: { dealId: string; kind: 'appraisal'
               Anyone with the link can read this report as a PDF. It expires after 30 days and you can withdraw it at any
               time.
             </span>
-            <Button
+            <Button writes
               size="sm"
               className="ml-auto"
               loading={create.isPending}
@@ -100,7 +100,7 @@ export function ShareLinks({ dealId, kind }: { dealId: string; kind: 'appraisal'
                     {s.viewCount} {s.viewCount === 1 ? 'open' : 'opens'}
                   </span>
                   {s.state === 'live' && (
-                    <Button
+                    <Button writes
                       size="sm"
                       variant="secondary"
                       loading={revoke.isPending && revoke.variables?.id === s.id}

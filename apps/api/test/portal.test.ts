@@ -35,11 +35,11 @@ beforeAll(async () => {
   A = await makeTenant('Portals');
 
   const mkInvestor = async (name: string) => {
-    const inv = await prisma.investor.create({ data: { orgId: A.orgId, name, documents: '[]' } });
+    const inv = await prisma.investor.create({ data: { orgId: A.orgId, name } });
     const user = await prisma.user.create({
       data: { orgId: A.orgId, email: `${name}@lp.test`, password: 'x', name, initials: 'LP', role: 'VIEWER', principalType: 'investor', investorId: inv.id },
     });
-    await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, sharePct: 25, committed: 1_000_000_00 } });
+    await prisma.holding.create({ data: { investorId: inv.id, dealId: A.dealId, committed: 1_000_000_00 } });
     return { userId: user.id, investorId: inv.id };
   };
   const mkBuyer = async (name: string) => {
@@ -220,5 +220,119 @@ describe('paying without a payment processor', () => {
     await withEnv({ NODE_ENV: 'production', STRIPE_SECRET_KEY: 'sk_test_x' }, async () => {
       expect(await mode()).toBe('live');
     });
+  });
+});
+
+/**
+ * A document offered to a buyer is offered to A buyer.
+ *
+ * `Document.buyerVisible` existed from the first migration and NOTHING in the
+ * product could set it: the upload route, `documents.expect`, the EPC link and
+ * the workspace importer all leave it at the schema default of false, and no
+ * procedure toggled it. Only `demo-seed.ts` ever wrote true. So "Buyer +
+ * investor portals" sat on the Growth column of the pricing page and a firm that
+ * paid for it had a buyer whose "Documents to sign" panel could only ever read
+ * "Nothing waiting for your signature" — the same shape the portal LOGINS were
+ * in before they could be created.
+ *
+ * Fixing that alone would have opened a hole rather than closed one. Documents
+ * are keyed on the DEAL, and `buyer.myUnit` selected every buyerVisible document
+ * on it. On the demo workspace those are "Reservation pack — Plot 1.pdf" and
+ * "Contract of sale — Plot 1 (engrossment).pdf", on a development with ten
+ * plots: plot 2's buyer would have read another private individual's contract of
+ * sale, and `buyer.sign` — scoped to the deal too — would have let them sign it.
+ * `signedAt` is a single column, so that signature would then have shown in plot
+ * 1's own portal as their contract, signed.
+ *
+ * So `documents.shareWithBuyer` takes a unit rather than a flag, and both portal
+ * reads are scoped to it.
+ */
+describe('a document shared with a buyer', () => {
+  const buyerCaller = (b: { userId: string; unitId: string }) =>
+    callerFor(principalFor(b, 'buyer', { buyerUnitId: b.unitId }));
+
+  const makeDoc = (name: string) =>
+    prisma.document.create({
+      data: { orgId: A.orgId, dealId: A.dealId, name, category: 'Legal', ext: 'pdf', sizeBytes: 1000n, extraction: 'STORED' },
+    });
+
+  it('reaches the buyer it was shared with — the panel could not be filled at all before', async () => {
+    const doc = await makeDoc('Reservation pack — Ann.pdf');
+    // nothing shared yet: the state every real workspace was permanently in
+    const before = (await buyerCaller(buyerA).buyer.myUnit()) as { documentsToSign: Array<{ id: string }> };
+    expect(before.documentsToSign.map((d) => d.id), 'a document nobody shared was already visible').not.toContain(doc.id);
+
+    await callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: buyerA.unitId } as never);
+    const after = (await buyerCaller(buyerA).buyer.myUnit()) as { documentsToSign: Array<{ id: string }> };
+    expect(after.documentsToSign.map((d) => d.id), 'sharing a document did not reach the buyer').toContain(doc.id);
+  });
+
+  it('does not reach the other buyer on the same development', async () => {
+    const doc = await makeDoc('Contract of sale — Ann (engrossment).pdf');
+    await callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: buyerA.unitId } as never);
+
+    const seen = (await buyerCaller(buyerB).buyer.myUnit()) as { documentsToSign: Array<{ id: string; name: string }> };
+    expect(
+      seen.documentsToSign.map((d) => d.name),
+      'a buyer was shown another private individual’s contract of sale',
+    ).not.toContain('Contract of sale — Ann (engrossment).pdf');
+  });
+
+  /**
+   * Checked separately from the list rather than assumed to follow it. The two
+   * queries are written independently in `portal.ts`, and it is the SIGN path
+   * that does lasting damage: `signedAt` is one column, so a signature applied
+   * by the wrong buyer is not a peek, it is a signature attributed to somebody
+   * who never gave one, printed in their portal as theirs.
+   */
+  it('cannot be signed by the other buyer, even knowing its id', async () => {
+    const doc = await makeDoc('Deed of covenant — Ann.pdf');
+    await callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: buyerA.unitId } as never);
+
+    await expectDenied('the wrong buyer signing', () => buyerCaller(buyerB).buyer.sign(doc.id as never));
+    const after = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(after.signedAt, 'the wrong buyer’s signature landed on it anyway').toBeNull();
+
+    // and the buyer it belongs to still can — a guard that refuses everyone is not a guard
+    await buyerCaller(buyerA).buyer.sign(doc.id as never);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).signedAt).not.toBeNull();
+  });
+
+  it('stops reaching them when sharing is withdrawn, and keeps no stale owner', async () => {
+    const doc = await makeDoc('Draft transfer — Ann.pdf');
+    await callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: buyerA.unitId } as never);
+    await callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: null } as never);
+
+    const seen = (await buyerCaller(buyerA).buyer.myUnit()) as { documentsToSign: Array<{ id: string }> };
+    expect(seen.documentsToSign.map((d) => d.id)).not.toContain(doc.id);
+    const row = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(row.buyerVisible).toBe(false);
+    expect(row.unitId, 'a document went dark still owned by a plot').toBeNull();
+  });
+
+  /**
+   * `documents.expect` raises a placeholder for a file the deal is still waiting
+   * for. Offering one to a buyer would put a name and a "Review & sign" button
+   * in their portal over nothing at all — the same reason `setExtraction`
+   * refuses to walk an AWAITED row into claiming a file exists.
+   */
+  it('cannot be a document that has not arrived yet', async () => {
+    const placeholder = (await callerFor(A.principal).documents.expect({
+      dealId: A.dealId, name: 'Warranty pack.pdf', category: 'Legal',
+    } as never)) as { id: string };
+    await expect(
+      callerFor(A.principal).documents.shareWithBuyer({ id: placeholder.id, unitId: buyerA.unitId } as never),
+    ).rejects.toThrow(/has not been received yet/i);
+  });
+
+  it('cannot be pointed at a plot on somebody else’s deal', async () => {
+    const B = await makeTenant('OtherFirm');
+    const theirUnit = await prisma.unit.create({
+      data: { orgId: B.orgId, dealId: B.dealId, name: 'Plot X', spec: '2 bed', appraisedValue: 300_000_00 },
+    });
+    const doc = await makeDoc('Site plan.pdf');
+    await expectDenied('sharing with another firm’s plot', () =>
+      callerFor(A.principal).documents.shareWithBuyer({ id: doc.id, unitId: theirUnit.id } as never),
+    );
   });
 });

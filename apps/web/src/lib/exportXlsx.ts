@@ -6,7 +6,10 @@ import {
   rollUpCashflow,
   sensitivityGrid,
 } from '@apex/appraisal-engine';
+import { areaIn, ratePerAreaIn, type AreaUnit } from '@apex/appraisal-engine';
 import type { AppraisalInput, AppraisalResult, JvResult } from '@apex/appraisal-engine';
+import { REGION_PROFILES } from '@apex/types/regions';
+import { unitsFor, type RegionUnits } from './region';
 import type ExcelJSNS from 'exceljs';
 
 /**
@@ -26,6 +29,16 @@ export interface ExportOpts {
   R: AppraisalResult;
   jv: JvResult;
   monthLabel: (idx: number) => string;
+  /**
+   * The firm's floor-area unit and vocabulary, from `lib/region.ts`.
+   *
+   * Optional, defaulting to the United Kingdom, and that default is the whole
+   * point: every existing caller, every existing test and every workbook a
+   * British firm has ever downloaded keeps the identical headings and the
+   * identical numbers. Only a firm that has chosen another region sees anything
+   * move, and what moves is the wording and the unit — never the money.
+   */
+  units?: RegionUnits;
 }
 
 // en-GB money/percent formats — £ with thousands, true reds for negatives
@@ -34,6 +47,37 @@ const FMT_MONEY_PSF = '"£"#,##0.00';
 const FMT_NUM = '#,##0';
 const FMT_PCT = '0.0%';
 const FMT_X = '0.00"×"';
+
+/**
+ * What a cell says when the engine could not compute the figure at all.
+ *
+ * `irr()` returns null when there is no sign change in its bracket — a scheme
+ * that never returns its money has no internal rate of return to find, and the
+ * engine says so rather than guessing. Every screen honours that: the appraisal
+ * report, the deal overview and the development appraisal all print "N/A" or an
+ * em dash. This workbook wrote `?? 0` into a cell formatted `0.0%`, so the one
+ * artefact that leaves the firm — the file that goes to the lender, the LP, the
+ * JV partner — turned "no IRR exists" into the specific, false claim that the
+ * IRR is zero. Measured on a scheme losing £4,500,034: the JV sheet reported
+ * the LP's return as 0.0%, directly beneath a Project IRR of -77.1% that WAS
+ * computed correctly and so earned the column its credibility. That scheme is
+ * the fixture in `exportXlsx.test.ts`, so the figures here are the ones the
+ * committed tests actually produce.
+ *
+ * Text, not a number, and deliberately so. A spreadsheet is not a screen: a
+ * numeric zero in an IRR column is charted, averaged, sorted and compared
+ * against other deals, and a reader has no way to tell it from a real result.
+ * Text cannot silently become the wrong answer to any of those. The wording
+ * matches what the screens already say, so the same appraisal reads the same
+ * either way.
+ *
+ * The percentage format is still applied to these cells unconditionally, which
+ * looks odd and is deliberate: Excel ignores a number format on a text value,
+ * so guarding it changes nothing a reader can see. A conditional whose only
+ * defence would be a test asserting a cosmetic detail is worse than none — the
+ * value is the whole fix.
+ */
+const NOT_COMPUTED = 'N/A';
 
 const BRAND = 'FF14503B';
 const BRAND_TINT = 'FFECF3EF';
@@ -141,6 +185,17 @@ function applyPrintSetup(ws: Ws, firmName: string, dealName: string) {
 
 export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSNS.Workbook> {
   const { dealName, address, input, R, jv, monthLabel } = opts;
+  /** the firm's unit and vocabulary; the United Kingdom when nobody said otherwise */
+  const U = opts.units ?? unitsFor(REGION_PROFILES.GB);
+  /**
+   * Cell values in the firm's unit. Numbers, not strings — a workbook's whole
+   * point is that they are still arithmetic, and the live formulas below
+   * multiply area by rate, so the pair has to be converted together or the
+   * value column stops agreeing with the appraisal.
+   */
+  const AU_ = U.unit as AreaUnit;
+  const cellArea = (sqft: number) => areaIn(sqft, AU_);
+  const cellRate = (perSqft: number) => ratePerAreaIn(perSqft, AU_);
   const firmName = opts.firm?.name ?? 'Apex Appraise';
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
@@ -172,20 +227,20 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   s.columns = [{ width: 34 }, { width: 18 }];
   titleBlock(s, dealName, address, 'Development appraisal summary', 2, firmName);
   headerRow(s, ['Measure', 'Value']);
-  const kpis: Array<[string, number, string]> = [
-    ['Gross development value (GDV)', Math.round(R.gdv), FMT_MONEY],
+  const kpis: Array<[string, number | string, string]> = [
+    [`${U.terms.gdvLong} (${U.terms.gdv})`, Math.round(R.gdv), FMT_MONEY],
     [isResidual ? 'Residual land value (net)' : 'Land value (input)', Math.round(R.residualNet), FMT_MONEY],
     ['Developer profit', Math.round(R.profit), FMT_MONEY],
     ['Total development cost', Math.round(R.totalCost), FMT_MONEY],
     ['Return on cost', R.poc, FMT_PCT],
-    ['Return on GDV', R.rogdv, FMT_PCT],
+    [`Return on ${U.terms.gdv}`, R.rogdv, FMT_PCT],
     ['Return on equity', R.roe, FMT_PCT],
-    ['Project IRR (annualised)', R.cash?.projIrr ?? 0, FMT_PCT],
-    ['Equity IRR (annualised)', R.cash?.eqIrr ?? 0, FMT_PCT],
+    ['Project IRR (annualised)', R.cash?.projIrr ?? NOT_COMPUTED, FMT_PCT],
+    ['Equity IRR (annualised)', R.cash?.eqIrr ?? NOT_COMPUTED, FMT_PCT],
     ['Peak debt / facility', Math.round(R.facility), FMT_MONEY],
     ['Equity required', Math.round(R.equity), FMT_MONEY],
-    ['NIA (sq ft)', Math.round(R.nia), FMT_NUM],
-    ['GIA (sq ft)', Math.round(R.gia), FMT_NUM],
+    [`NIA (${U.unitSpoken})`, Math.round(areaIn(R.nia, U.unit as AreaUnit)), FMT_NUM],
+    [`GIA (${U.unitSpoken})`, Math.round(areaIn(R.gia, U.unit as AreaUnit)), FMT_NUM],
     ['Programme (months, build + sales)', R.period + R.salesMonths, FMT_NUM],
   ];
   for (const [label, value, fmt] of kpis) {
@@ -203,10 +258,10 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   const u = wb.addWorksheet('Unit schedule', { properties: { tabColor: { argb: BRAND } } });
   u.columns = [{ width: 36 }, { width: 9 }, { width: 13 }, { width: 11 }, { width: 16 }];
   titleBlock(u, dealName, address, 'Accommodation schedule — edit counts/areas/rates, values recompute', 5, firmName);
-  headerRow(u, ['Unit type', 'No.', 'Area (sq ft)', '£/sq ft', 'Value']);
+  headerRow(u, ['Unit type', 'No.', `Area (${U.unitSpoken})`, `£/${U.unitSpoken}`, 'Value']);
   const firstUnit = u.rowCount + 1;
   input.units.forEach((unit, i) => {
-    const r = u.addRow([unit.label, unit.count, unit.area, unit.cap, null]);
+    const r = u.addRow([unit.label, unit.count, cellArea(unit.area), cellRate(unit.cap), null]);
     r.eachCell((c) => body(c));
     const rowN = firstUnit + i;
     r.getCell(5).value = { formula: `B${rowN}*C${rowN}*D${rowN}` };
@@ -242,7 +297,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     const ph = wb.addWorksheet('Phases', { properties: { tabColor: { argb: 'FF3C7FB5' } } });
     ph.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 13 }, { width: 11 }, { width: 15 }, { width: 14 }, { width: 16 }];
     titleBlock(ph, dealName, address, 'Phased programme — each phase draws, completes and sells on its own clock', 10, firmName);
-    headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', 'NIA (sq ft)', '£/sq ft', 'Construction', 'Phase costs', 'GDV']);
+    headerRow(ph, ['Phase', 'Starts', 'Build (mo)', 'Sales (mo)', 'Units', `NIA (${U.unitSpoken})`, `£/${U.unitSpoken}`, 'Construction', 'Phase costs', U.terms.gdv]);
     const firstPhase = ph.rowCount + 1;
     R.phases.forEach((p) => {
       const r = ph.addRow([
@@ -251,8 +306,8 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
         p.buildMonths,
         p.salesMonths,
         p.unitCount,
-        Math.round(p.nia),
-        p.buildRate,
+        Math.round(cellArea(p.nia)),
+        cellRate(p.buildRate),
         Math.round(p.cost),
         Math.round(p.otherTotal),
         Math.round(p.gdv),
@@ -285,17 +340,17 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
      * every itemised trade into the construction total.
      */
     if (R.phases.some((p) => p.ownTrades)) {
-      headerRow(ph, ['Trade breakdown (phases pricing off the scheme)', '', '', '', '', '', '£/sq ft', 'Cost', '', '']);
+      headerRow(ph, ['Trade breakdown (phases pricing off the scheme)', '', '', '', '', '', `£/${U.unitSpoken}`, 'Cost', '', '']);
       R.phases.forEach((p) => {
         if (!p.ownTrades) return;
-        const head = ph.addRow([p.name, null, null, null, null, null, p.buildRate, Math.round(p.build), null, null]);
+        const head = ph.addRow([p.name, null, null, null, null, null, cellRate(p.buildRate), Math.round(p.build), null, null]);
         head.eachCell((c) => body(c));
         head.getCell(1).font = { name: 'Arial', size: 10, bold: true };
         head.getCell(7).numFmt = FMT_MONEY_PSF;
         head.getCell(8).numFmt = FMT_MONEY;
         for (let c = 7; c <= 8; c++) head.getCell(c).alignment = { horizontal: 'right' };
         p.trades.forEach((t) => {
-          const r = ph.addRow([`    ${t.label}`, null, null, null, null, null, t.rate, Math.round(t.rate * p.gia), null, null]);
+          const r = ph.addRow([`    ${t.label}`, null, null, null, null, null, cellRate(t.rate), Math.round(t.rate * p.gia), null, null]);
           r.getCell(1).font = { name: 'Arial', size: 9, color: { argb: INK2 } };
           r.getCell(7).numFmt = FMT_MONEY_PSF;
           r.getCell(8).numFmt = FMT_MONEY;
@@ -318,17 +373,17 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     const rr = wb.addWorksheet('Rent roll', { properties: { tabColor: { argb: 'FF1E7A55' } } });
     rr.columns = [{ width: 34 }, { width: 8 }, { width: 12 }, { width: 12 }, { width: 9 }, { width: 12 }, { width: 12 }, { width: 10 }, { width: 15 }];
     titleBlock(rr, dealName, address, 'Investment method — net rent capitalised at the all-risks yield', 9, firmName);
-    headerRow(rr, ['Tenancy / space', 'No.', 'Area (sq ft)', 'Rent £/sq ft', 'Void %', 'ERV £/sq ft', 'Review (yrs)', 'Yield %', 'Rent (£ pa)']);
+    headerRow(rr, ['Tenancy / space', 'No.', `Area (${U.unitSpoken})`, `Rent £/${U.unitSpoken}`, 'Void %', `ERV £/${U.unitSpoken}`, 'Review (yrs)', `${U.terms.yield} %`, 'Rent (£ pa)']);
     const firstRent = rr.rowCount + 1;
     input.income.lines.forEach((l, i) => {
       const calc = I.lines[i];
       const r = rr.addRow([
         l.label,
         l.count,
-        l.area,
-        l.rentPsf,
+        cellArea(l.area),
+        cellRate(l.rentPsf),
         (l.voidPct ?? 0) / 100,
-        l.ervPsf ?? l.rentPsf,
+        cellRate(l.ervPsf ?? l.rentPsf),
         calc?.yearsToReview || null,
         (calc?.yieldUsed ?? input.income!.yieldPct) / 100,
         null,
@@ -384,7 +439,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
       c.border = { bottom: thin };
       if (sub) r.getCell(1).font = { name: 'Arial', size: 10, bold: true };
     });
-    const ncv = rr.addRow(['Investment value in GDV (net of purchaser costs)', null, null, null, null, null, null, null, Math.round(I.netCapitalValue)]);
+    const ncv = rr.addRow([`Investment value in ${U.terms.gdv} (net of purchaser costs)`, null, null, null, null, null, null, null, Math.round(I.netCapitalValue)]);
     ncv.getCell(9).numFmt = FMT_MONEY;
     ncv.getCell(9).alignment = { horizontal: 'right' };
     totalRow(ncv, 9);
@@ -397,7 +452,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
             ['Equivalent yield', I.equivalentYield, FMT_PCT],
           ] as Array<[string, number, string]>)
         : []),
-      ['Capital value £/sq ft', I.capitalValuePsf, FMT_MONEY_PSF],
+      [`Capital value £/${U.unitSpoken}`, ratePerAreaIn(I.capitalValuePsf, U.unit as AreaUnit), FMT_MONEY_PSF],
     ];
     for (const [label, value, fmt] of yieldRows) {
       const row = rr.addRow([label, null, null, null, null, null, null, null, value]);
@@ -495,13 +550,13 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   const lines: Array<[string, number]> = [
     [gdvLabel, Math.round(R.gdv)],
     ['Disposal costs (agent + legal)', -Math.round(R.saleCosts)],
-    [`Construction (£${Math.round(R.buildRate)}/sq ft on GIA)`, -Math.round(R.build)],
+    [`Construction (£${U.rateNum(R.buildRate)}/${U.unitSpoken} on GIA)`, -Math.round(R.build)],
     [`Professional fees (${input.profFeePct}%)`, -Math.round(R.fees)],
     [`Contingency (${input.contingencyPct}%)`, -Math.round(R.cont)],
     ['Other costs (S106, CIL, PM, surveys)', -Math.round(R.otherTotal)],
     ['Finance (rolled-up interest + arrangement)', -Math.round(R.finance)],
     ...(isResidual
-      ? ([[`Developer profit (${input.targetProfitOnGdvPct}% of GDV)`, -Math.round(R.profit)]] as Array<[string, number]>)
+      ? ([[`Developer profit (${input.targetProfitOnGdvPct}% of ${U.terms.gdv})`, -Math.round(R.profit)]] as Array<[string, number]>)
       : ([['Land including acquisition costs', -Math.round(R.landGross)]] as Array<[string, number]>)),
   ];
   const firstLine = ra.rowCount + 1;
@@ -584,12 +639,12 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   jvs.columns = [{ width: 34 }, { width: 16 }, { width: 16 }];
   titleBlock(jvs, dealName, address, `Equity waterfall — ${input.jv?.prefPct ?? 8}% pref, ${input.jv?.promotePct ?? 20}% promote over ${jv.holdYears.toFixed(1)} yrs`, 3, firmName);
   headerRow(jvs, ['Measure', 'LP (investors)', 'GP (developer)']);
-  const jvRows: Array<[string, number, number, string]> = [
+  const jvRows: Array<[string, number | string, number | string, string]> = [
     ['Equity in', Math.round(jv.lp.equity), Math.round(jv.gp.equity), FMT_MONEY],
     ['Profit share', Math.round(jv.lp.profit), Math.round(jv.gp.profit), FMT_MONEY],
     ['Total back', Math.round(jv.lp.total), Math.round(jv.gp.total), FMT_MONEY],
     ['MOIC', jv.lp.moic, jv.gp.moic, FMT_X],
-    ['IRR (annualised MOIC basis)', jv.lp.irr ?? 0, jv.gp.irr ?? 0, FMT_PCT],
+    ['IRR (annualised MOIC basis)', jv.lp.irr ?? NOT_COMPUTED, jv.gp.irr ?? NOT_COMPUTED, FMT_PCT],
   ];
   for (const [label, lp, gp, fmt] of jvRows) {
     const r = jvs.addRow([label, lp, gp]);
@@ -610,7 +665,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   const rs = wb.addWorksheet('Risk & sensitivity', { properties: { tabColor: { argb: 'FF9A6212' } } });
   rs.columns = [{ width: 30 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }];
   titleBlock(rs, dealName, address, 'Sensitivity matrix & Monte Carlo risk — engine-computed', 6, firmName);
-  headerRow(rs, ['Return on cost — build ↓ / GDV →', '−10%', '−5%', 'Base', '+5%', '+10%']);
+  headerRow(rs, [`Return on cost — build ↓ / ${U.terms.gdv} →`, '−10%', '−5%', 'Base', '+5%', '+10%']);
   const grid = sensitivityGrid(input, 'roc');
   const baseRoC = R.poc;
   const GRID_TINTS = { good: 'FFE4F1EA', warn: 'FFF8F0DE', bad: 'FFF9EAE7' };
@@ -652,7 +707,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     v.border = { bottom: thin };
   }
   rs.addRow([]);
-  const rsNote = rs.addRow(['Each sensitivity cell re-runs the full appraisal (incl. monthly finance) at the stated movements; Monte Carlo draws GDV and build multipliers from seeded normal distributions.']);
+  const rsNote = rs.addRow([`Each sensitivity cell re-runs the full appraisal (incl. monthly finance) at the stated movements; Monte Carlo draws ${U.terms.gdv} and build multipliers from seeded normal distributions.`]);
   rsNote.getCell(1).font = { name: 'Arial', size: 8, italic: true, color: { argb: INK2 } };
   rs.views = [{ state: 'frozen', ySplit: 5 }];
 
@@ -663,7 +718,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   headerRow(a, ['Assumption', 'Value']);
   const rows: Array<[string, string]> = [
     ['Site mode', isResidual ? 'Residual — solve land at target profit' : 'Profit — fixed land price'],
-    ['Target profit on GDV', `${input.targetProfitOnGdvPct}%`],
+    [`Target profit on ${U.terms.gdv}`, `${input.targetProfitOnGdvPct}%`],
     ['Acquisition costs', `${input.site.acqPct}% (SDLT, legal, agent bundled)`],
     ['Professional fees / contingency', `${input.profFeePct}% / ${input.contingencyPct}%`],
     ['Disposal — agent / legal', `${input.disposal.agentPct}% / ${input.disposal.legalPct}%`],

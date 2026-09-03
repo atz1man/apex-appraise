@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { J, P, toPence } from '../mappers.js';
+import { signFileUrl } from '../uploads.js';
+import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { depositSchedule, dpi, weightedIrr } from '@apex/appraisal-engine';
 import { randomBytes } from 'node:crypto';
 import { adminProcedure, buyerProcedure, internalProcedure, investorProcedure, requiresFeature, router } from '../trpc.js';
@@ -8,11 +9,52 @@ import { hashPassword } from '../auth/password.js';
 import { initialsOf } from '../names.js';
 import { APP_URL, portalInviteEmail, sendMail } from '../email.js';
 import { recordAudit } from '../audit.js';
+import { assertOwned } from '../auth/owned.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
 import { intentFor, intentSucceeded, settlePayment } from '../payments.js';
 
 /** Investor position scaled to their share — no unit-level buyer PII crosses this boundary. */
-async function investorPosition(prisma: any, investorId: string, orgId: string) {
+/**
+ * @param viewerUserId whose session signs the file links — the LP's own on the
+ *   portal, the internal user's when the register previews a position. The
+ *   file route checks the token's user against the file's firm, so a link
+ *   signed for one cannot be replayed by the other.
+ */
+/** the deals this investor holds in — the only deals whose documents they may read */
+const holdings_dealIds = (inv: { holdings: Array<{ dealId: string }> }) => inv.holdings.map((h) => h.dealId);
+
+/**
+ * The documents shared with investors across the deals held, newest first.
+ *
+ * Scoped by the FIRM as well as by the deals: a holding row names a deal, and
+ * the register refuses a deal of another firm, but a row is a row — the
+ * document query does not trust it. The URL is signed for whoever is looking,
+ * for the same reason the data room signs its own: a link opened in a new tab
+ * sends no bearer header. Metadata-only rows (a document the firm listed but
+ * holds no file for) come back with an empty URL, and the portal prints them
+ * without a link rather than a link to nothing.
+ */
+async function sharedDocuments(prisma: any, orgId: string, dealIds: string[], viewerUserId: string) {
+  if (dealIds.length === 0) return [];
+  const docs: Array<{
+    id: string; name: string; ext: string; sizeBytes: bigint; url: string; addedAt: Date; deal: { name: string };
+  }> = await prisma.document.findMany({
+    where: { orgId, dealId: { in: dealIds }, investorVisible: true },
+    select: { id: true, name: true, ext: true, sizeBytes: true, url: true, addedAt: true, deal: { select: { name: true } } },
+    orderBy: { addedAt: 'desc' },
+  });
+  return docs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    ext: d.ext,
+    dealName: d.deal.name,
+    sizeBytes: Number(d.sizeBytes),
+    addedAt: d.addedAt,
+    url: signFileUrl(d.url, viewerUserId),
+  }));
+}
+
+async function investorPosition(prisma: any, investorId: string, orgId: string, viewerUserId: string) {
   const inv = await prisma.investor.findFirst({
     where: { id: investorId, orgId },
     include: {
@@ -93,7 +135,7 @@ async function investorPosition(prisma: any, investorId: string, orgId: string) 
       amount: share(P(c.amount)),
       date: c.date,
     })),
-    documents: J<Array<{ name: string; date: string; size: string }>>(inv.documents, []),
+    documents: await sharedDocuments(prisma, orgId, holdings_dealIds(inv), viewerUserId),
     openCapitalCall: openCall
       ? {
           deal: openCallDeal?.name ?? null,
@@ -120,18 +162,374 @@ async function investorPosition(prisma: any, investorId: string, orgId: string) 
 const investorPortalProcedure = investorProcedure.use(requiresFeature('portals'));
 const buyerPortalProcedure = buyerProcedure.use(requiresFeature('portals'));
 
+/**
+ * The investor register — the firm's own record of who has money in what.
+ *
+ * Everything below `myPosition` existed and worked: an LP's position page, the
+ * cashflow list, the capital-call panel, the invitation that issues the login.
+ * What did not exist was any way to put an investor on the record. Outside the
+ * demo seed nothing created an Investor, a Holding or a Cashflow row, so on a
+ * real workspace `portalAccess.candidates` returned no investors, the picker on
+ * the Portal access panel was empty, and "Buyer + investor portals" — a Growth
+ * line on the pricing page — could not be given to anyone. Measured on a fresh
+ * tenant: `investors.list` is `[]`, and a walk of every resolver in the router
+ * finds none that writes `prisma.investor.create`.
+ *
+ * Shapes follow the rest of the router. `create` / `update` rather than one
+ * upsert, because an update is a PATCH — only the keys sent are written, so two
+ * people editing different fields both land (the lost-update sweep's rule).
+ * Deletes refuse once money has moved: a distribution or a drawdown on the
+ * record is a statement the LP has been sent, and removing the investor would
+ * remove the only thing it is attached to.
+ */
+const investorOut = (i: { id: string; name: string; initials: string; sharePct: number; contactFirst: string }) => ({
+  id: i.id,
+  name: i.name,
+  initials: i.initials,
+  sharePct: i.sharePct,
+  contactFirst: i.contactFirst,
+});
+
+const holdingOut = (h: {
+  id: string; investorId: string; dealId: string; committed: bigint; called: bigint; distributed: bigint; irr: number | null;
+}) => ({
+  id: h.id,
+  investorId: h.investorId,
+  dealId: h.dealId,
+  committed: P(h.committed),
+  called: P(h.called),
+  distributed: P(h.distributed),
+  irr: h.irr,
+});
+
+const cashflowOut = (c: { id: string; investorId: string; dealId: string | null; kind: string; label: string; amount: bigint; date: Date }) => ({
+  id: c.id,
+  investorId: c.investorId,
+  dealId: c.dealId,
+  kind: c.kind as 'dist' | 'call',
+  label: c.label,
+  amount: P(c.amount),
+  date: c.date,
+});
+
+const INVESTOR_LABELS: Record<string, string> = { name: 'name', contactFirst: 'contact', sharePct: 'share' };
+const HOLDING_LABELS: Record<string, string> = {
+  committed: 'committed', called: 'called', distributed: 'distributed', irr: 'recorded IRR',
+};
+
+/** money on a holding means a statement has gone out; the row is then a record, not a draft */
+const moneyMoved = (h: { called: bigint; distributed: bigint }) => h.called > 0n || h.distributed > 0n;
+
 export const investorsRouter = router({
-  /** Internal team: list + inspect any investor. */
+  /**
+   * Internal team: the register, with each investor's position in one line.
+   * Figures are scaled to the investor's share, as the portal scales them, so
+   * the firm reads the same number the LP reads.
+   */
   list: internalProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.prisma.investor.findMany({ where: { orgId: ctx.principal.orgId } });
-    return rows.map((i) => ({ id: i.id, name: i.name, initials: i.initials, sharePct: i.sharePct, contactFirst: i.contactFirst }));
+    const rows = await ctx.prisma.investor.findMany({
+      where: { orgId: ctx.principal.orgId },
+      include: { holdings: true, _count: { select: { cashflows: true } } },
+      orderBy: { name: 'asc' },
+    });
+    const logins = await ctx.prisma.user.groupBy({
+      by: ['investorId'],
+      where: { orgId: ctx.principal.orgId, principalType: 'investor', investorId: { not: null } },
+      _count: { _all: true },
+    });
+    const loginCount = new Map(logins.map((l) => [l.investorId, l._count._all]));
+    return rows.map((i) => {
+      const sh = i.sharePct / 100;
+      const share = (pence: bigint) => Math.round(P(pence) * sh * 100) / 100;
+      return {
+        ...investorOut(i),
+        holdings: i.holdings.length,
+        cashflows: i._count.cashflows,
+        committed: i.holdings.reduce((a, h) => a + share(h.committed), 0),
+        called: i.holdings.reduce((a, h) => a + share(h.called), 0),
+        distributed: i.holdings.reduce((a, h) => a + share(h.distributed), 0),
+        logins: loginCount.get(i.id) ?? 0,
+      };
+    });
   }),
-  get: internalProcedure.input(z.string()).query(({ ctx, input }) => investorPosition(ctx.prisma, input, ctx.principal.orgId)),
+  get: internalProcedure.input(z.string()).query(({ ctx, input }) => investorPosition(ctx.prisma, input, ctx.principal.orgId, ctx.principal.userId)),
+
+  /** The investor's own rows, unscaled and with ids, for the register's editors. */
+  record: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
+    const inv = await ctx.prisma.investor.findFirst({
+      where: { id: input, orgId: ctx.principal.orgId },
+      include: {
+        holdings: { include: { deal: { select: { name: true } } }, orderBy: { dealId: 'asc' } },
+        cashflows: { orderBy: { date: 'desc' } },
+      },
+    });
+    if (!inv) throw new TRPCError({ code: 'NOT_FOUND' });
+    return {
+      ...investorOut(inv),
+      holdings: inv.holdings.map((h) => ({ ...holdingOut(h), dealName: h.deal.name, moneyMoved: moneyMoved(h) })),
+      cashflows: inv.cashflows.map(cashflowOut),
+    };
+  }),
+
+  create: internalProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        contactFirst: z.string().trim().max(60).default(''),
+        /** of the LP base — every pooled figure is scaled by this before the LP sees it */
+        sharePct: z.number().min(0).max(100).default(100),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.prisma.investor.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          name: input.name,
+          initials: initialsOf(input.name),
+          contactFirst: input.contactFirst,
+          sharePct: input.sharePct,
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'added an investor', target: `${row.name} · ${row.sharePct}% of the LP base`, ip: ctx.ip,
+      });
+      return investorOut(row);
+    }),
+
+  update: internalProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        patch: z.object({
+          name: z.string().trim().min(2).max(120).optional(),
+          contactFirst: z.string().trim().max(60).optional(),
+          sharePct: z.number().min(0).max(100).optional(),
+        }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await assertOwned(ctx.prisma.investor, input.id, ctx.principal.orgId);
+      const data: Record<string, unknown> = { ...input.patch };
+      // the initials follow the name; they are derived, never held
+      if (input.patch.name !== undefined) data.initials = initialsOf(input.patch.name);
+      const row = await ctx.prisma.investor.update({ where: { id: existing.id }, data });
+      const changed = Object.entries(INVESTOR_LABELS)
+        .filter(([k]) => String((existing as Record<string, unknown>)[k] ?? '') !== String((row as Record<string, unknown>)[k] ?? ''))
+        .map(([, label]) => label);
+      if (changed.length) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: `updated investor — ${changed.join(', ')}`, target: `${row.name} · ${row.sharePct}%`, ip: ctx.ip,
+        });
+      }
+      return investorOut(row);
+    }),
+
+  /**
+   * Refused once anything has been called or distributed, or a statement line
+   * exists. Portal logins pointing at the investor go with it — a login whose
+   * every page answers NOT_FOUND is worse than none — and the count is returned
+   * so the screen can say so, as `sales.deleteUnit` does for a buyer.
+   */
+  delete: internalProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const inv = await ctx.prisma.investor.findFirst({
+      where: { id: input.id, orgId: ctx.principal.orgId },
+      include: { holdings: true, _count: { select: { cashflows: true } } },
+    });
+    if (!inv) throw new TRPCError({ code: 'NOT_FOUND' });
+    if (inv.holdings.some(moneyMoved) || inv._count.cashflows > 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `“${inv.name}” cannot be removed — money has been called or distributed on their account. Remove the cashflow lines and clear the holdings first if this record really is wrong.`,
+      });
+    }
+    await ctx.prisma.holding.deleteMany({ where: { investorId: inv.id } });
+    const { count: portalLogins } = await ctx.prisma.user.deleteMany({
+      where: { investorId: inv.id, orgId: ctx.principal.orgId, principalType: 'investor' },
+    });
+    await ctx.prisma.investor.delete({ where: { id: inv.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'removed an investor',
+      target: `${inv.name}${portalLogins ? ` · ${portalLogins} portal login${portalLogins === 1 ? '' : 's'} revoked` : ''}`,
+      ip: ctx.ip,
+    });
+    return { ok: true, portalLogins };
+  }),
+
+  /**
+   * An investor's position in one deal. One row per (investor, deal) — the
+   * schema holds that unique, because `investorPosition` sums holdings and a
+   * second row for the same deal would double the committed figure.
+   *
+   * A PATCH on an existing row: every figure is optional and only what is sent
+   * is written, so recording the deal's IRR when it closes does not re-send a
+   * committed figure the caller was merely holding. On a new row `committed` is
+   * required, and the share defaults to the investor's own.
+   *
+   * `irr` is the deal's REALISED return as the firm records it from the closing
+   * account — typed, not derived. Null clears it; undefined leaves it alone.
+   */
+  setHolding: internalProcedure
+    .input(
+      z.object({
+        investorId: z.string(),
+        dealId: z.string(),
+        committed: z.number().min(0).optional(), // £, 100% LP basis
+        called: z.number().min(0).optional(),
+        distributed: z.number().min(0).optional(),
+        irr: z.number().min(-1).max(10).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // the investor and the deal are two independent inputs; each is checked
+      const investor = await assertOwned(ctx.prisma.investor, input.investorId, ctx.principal.orgId);
+      const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const existing = await ctx.prisma.holding.findUnique({
+        where: { investorId_dealId: { investorId: investor.id, dealId: deal.id } },
+      });
+      const patch: Record<string, unknown> = {};
+      if (input.committed !== undefined) patch.committed = toPence(input.committed);
+      if (input.called !== undefined) patch.called = toPence(input.called);
+      if (input.distributed !== undefined) patch.distributed = toPence(input.distributed);
+      if (input.irr !== undefined) patch.irr = input.irr;
+
+      let row: Parameters<typeof holdingOut>[0];
+      if (existing) {
+        row = await ctx.prisma.holding.update({ where: { id: existing.id }, data: patch });
+        const changed = Object.entries(HOLDING_LABELS)
+          .filter(([k]) => String((existing as Record<string, unknown>)[k] ?? '') !== String((row as Record<string, unknown>)[k] ?? ''))
+          .map(([, label]) => label);
+        if (changed.length) {
+          await recordAudit(ctx.prisma, {
+            orgId: ctx.principal.orgId, dealId: deal.id, userId: ctx.principal.userId, actor: ctx.principal.name,
+            action: `updated holding — ${changed.join(', ')}`,
+            target: `${investor.name} in ${deal.name} · committed ${moneyLabel(row.committed)}`, ip: ctx.ip,
+          });
+        }
+      } else {
+        if (input.committed === undefined) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'A new holding needs a committed amount.' });
+        }
+        row = await ctx.prisma.holding.create({
+          data: {
+            investorId: investor.id,
+            dealId: deal.id,
+            committed: toPence(input.committed),
+            called: toPence(input.called ?? 0),
+            distributed: toPence(input.distributed ?? 0),
+            irr: input.irr ?? null,
+          },
+        });
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, dealId: deal.id, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: 'added a holding', target: `${investor.name} in ${deal.name} · committed ${moneyLabel(row.committed)}`, ip: ctx.ip,
+        });
+      }
+      return holdingOut(row);
+    }),
+
+  removeHolding: internalProcedure
+    .input(z.object({ investorId: z.string(), dealId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const investor = await assertOwned(ctx.prisma.investor, input.investorId, ctx.principal.orgId);
+      const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      const row = await ctx.prisma.holding.findUnique({ where: { investorId_dealId: { investorId: investor.id, dealId: deal.id } } });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      const lines = await ctx.prisma.cashflow.count({ where: { investorId: investor.id, dealId: deal.id } });
+      if (moneyMoved(row) || lines > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${investor.name}'s holding in ${deal.name} cannot be removed — money has been called or distributed on it.`,
+        });
+      }
+      await ctx.prisma.holding.delete({ where: { id: row.id } });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: deal.id, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'removed a holding', target: `${investor.name} in ${deal.name}`, ip: ctx.ip,
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * A statement line: a distribution paid, or a capital call issued.
+   *
+   * Held on the 100% basis with the LP's side of the sign — a call is negative,
+   * as the seed and `investorPosition` already read it — so the caller types a
+   * positive amount and says which it is. A call whose date is still ahead is
+   * an OPEN notice and the portal shows it as a demand; that is a legal demand
+   * for cash under the LPA, which is why this records who issued it.
+   *
+   * Recording a line does not move the holding's `called` / `distributed`
+   * figures. Those are the drawn-to-date totals the firm maintains, and the
+   * statement list has never been a full ledger they reconcile to (lp.ts says
+   * so, and on the demo fixture the lines account for £1.485m of £3.788m
+   * called). Deriving one from the other is a ledger this product does not
+   * yet keep, and quietly summing lines into the total would present a
+   * partial list as a complete one.
+   */
+  recordCashflow: internalProcedure
+    .input(
+      z.object({
+        investorId: z.string(),
+        dealId: z.string().nullable(),
+        kind: z.enum(['dist', 'call']),
+        label: z.string().trim().min(1).max(120),
+        amount: z.number().positive(), // £, 100% basis, sign applied from kind
+        date: z.coerce.date(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const investor = await assertOwned(ctx.prisma.investor, input.investorId, ctx.principal.orgId);
+      const deal = input.dealId
+        ? await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } })
+        : null;
+      if (input.dealId && !deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      const pence = toPence(input.amount);
+      const row = await ctx.prisma.cashflow.create({
+        data: {
+          investorId: investor.id,
+          dealId: deal?.id ?? null,
+          kind: input.kind,
+          label: input.label,
+          amount: input.kind === 'call' ? -pence : pence,
+          date: input.date,
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: deal?.id, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: input.kind === 'call' ? 'issued a capital call' : 'recorded a distribution',
+        target: `${investor.name}${deal ? ` · ${deal.name}` : ''} · ${input.label} · ${moneyLabel(pence)} · ${input.date.toISOString().slice(0, 10)}`,
+        ip: ctx.ip,
+      });
+      return cashflowOut(row);
+    }),
+
+  deleteCashflow: internalProcedure.input(z.object({ cashflowId: z.string() })).mutation(async ({ ctx, input }) => {
+    // Cashflow carries no orgId of its own; it belongs to whoever its investor belongs to
+    const row = await ctx.prisma.cashflow.findFirst({
+      where: { id: input.cashflowId, investor: { orgId: ctx.principal.orgId } },
+      include: { investor: { select: { name: true } } },
+    });
+    if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+    await ctx.prisma.cashflow.delete({ where: { id: row.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, dealId: row.dealId ?? undefined, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: row.kind === 'call' ? 'withdrew a capital call' : 'deleted a distribution line',
+      target: `${row.investor.name} · ${row.label} · ${moneyLabel(row.amount < 0n ? -row.amount : row.amount)}`,
+      ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
 
   /** Investor portal: strictly the logged-in investor's own position. */
   myPosition: investorPortalProcedure.query(({ ctx }) => {
     if (!ctx.principal.investorId) throw new TRPCError({ code: 'FORBIDDEN' });
-    return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId);
+    return investorPosition(ctx.prisma, ctx.principal.investorId, ctx.principal.orgId, ctx.principal.userId);
   }),
 
   /**
@@ -253,8 +651,19 @@ export const buyerRouter = router({
       },
     });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+    /**
+     * THIS buyer's documents, not the development's.
+     *
+     * This was `dealId`, so every buyer-visible document on the scheme appeared
+     * in every buyer's portal. On the demo workspace those are "Reservation pack
+     * — Plot 1.pdf" and "Contract of sale — Plot 1 (engrossment).pdf", on a deal
+     * with ten plots: plot 2's buyer would have read another private
+     * individual's contract of sale. Latent only because nothing in the product
+     * could set `buyerVisible` at all until `documents.shareWithBuyer` — which
+     * is why that procedure takes a unit rather than a flag.
+     */
     const docs = await ctx.prisma.document.findMany({
-      where: { dealId: unit.dealId, orgId: ctx.principal.orgId, buyerVisible: true },
+      where: { unitId: unit.id, orgId: ctx.principal.orgId, buyerVisible: true },
     });
     const payments: Array<{ id: string; kind: string; amount: bigint; status: string; paidAt: Date | null }> =
       await ensurePayments(ctx.prisma, ctx.principal.orgId, unit);
@@ -271,7 +680,19 @@ export const buyerRouter = router({
       },
       development: { name: unit.deal.name, address: unit.deal.address },
       milestones: unit.milestones.map((m) => ({ name: m.name, index: m.index, done: m.done, date: m.date })),
-      documentsToSign: docs.map((d) => ({ id: d.id, name: d.name, signed: d.signedAt != null, signedAt: d.signedAt })),
+      /**
+       * With the file behind it. The panel offered "Review & sign" on a document
+       * the buyer had no way to open — a signature on an unread contract is the
+       * one thing an e-sign flow exists to prevent. Signed for this buyer, like
+       * the data room's own links; empty where the firm holds no file.
+       */
+      documentsToSign: docs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        signed: d.signedAt != null,
+        signedAt: d.signedAt,
+        url: signFileUrl(d.url, ctx.principal.userId),
+      })),
       payments: payments.map((p: any): { id: string; kind: string; amount: number; paid: boolean; date: Date | null } => ({
         id: p.id,
         kind: p.kind,
@@ -359,8 +780,14 @@ export const buyerRouter = router({
     if (!ctx.principal.buyerUnitId) throw new TRPCError({ code: 'FORBIDDEN' });
     const unit = await ctx.prisma.unit.findFirst({ where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId } });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
+    /**
+     * Scoped the same way as the list, and separately rather than by trusting
+     * it: `signedAt` is ONE column, so a buyer signing a document shared with
+     * the whole development would have marked it signed in every other buyer's
+     * portal too — a signature attributed to people who never gave one.
+     */
     const doc = await ctx.prisma.document.findFirst({
-      where: { id: input, dealId: unit.dealId, orgId: ctx.principal.orgId, buyerVisible: true },
+      where: { id: input, unitId: unit.id, orgId: ctx.principal.orgId, buyerVisible: true },
     });
     if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
     const signed = await ctx.prisma.document.update({ where: { id: doc.id }, data: { signedAt: new Date() } });

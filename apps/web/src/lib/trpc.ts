@@ -1,5 +1,6 @@
 import { createTRPCReact } from '@trpc/react-query';
-import { httpBatchLink } from '@trpc/client';
+import { TRPCClientError, httpBatchLink } from '@trpc/client';
+import { READ_ONLY_MESSAGE, isViewOnly, refusedForViewer } from './read-only';
 import superjson from 'superjson';
 import type { AppRouter } from '../../../api/src/router';
 
@@ -39,9 +40,52 @@ export function clearSession() {
   localStorage.removeItem(PRINCIPAL_KEY);
 }
 
+/**
+ * A view-only member's writes stop here, before the network.
+ *
+ * The server already refuses them — see `auth/roles.ts` — so this is not the
+ * security boundary and must never be mistaken for one; anyone can edit their
+ * own browser. It is the only place in the web app that sees ALL ninety-eight
+ * mutations, which makes it the one place a rule about writing can be complete
+ * without being written down ninety-eight times.
+ *
+ * What it buys is honesty and latency: the refusal is instant, carries the same
+ * words the server would have used, and never leaves a form half-submitted
+ * against a request that was doomed. The `writes` prop on Button greys the
+ * control out beforehand; a control nobody has marked yet lands here instead of
+ * on the server, which is a worse experience than being greyed out and a much
+ * better one than a spinner followed by a shrug.
+ */
+const readOnlyLink: Parameters<typeof trpc.createClient>[0]['links'][number] =
+  () =>
+  ({ op, next }) => {
+    if (op.type !== 'mutation' || !refusedForViewer(op.path) || !isViewOnly(getPrincipal())) {
+      return next(op);
+    }
+    /**
+     * The observable is built by hand rather than with tRPC's `observable()`
+     * helper, which lives in `@trpc/server`. That package is not a dependency of
+     * this app and must not become one: it would put the server runtime into the
+     * browser bundle to save four lines. The contract a link returns is small and
+     * stable — subscribe, hand the observer an error, give back an unsubscribe.
+     */
+    const refusal = new TRPCClientError(READ_ONLY_MESSAGE, {
+      // shaped like the server's refusal so everything upstream — toasts, retries,
+      // the query cache — cannot tell the two apart and behave differently
+      result: { error: { code: -32003, message: READ_ONLY_MESSAGE, data: { code: 'FORBIDDEN', httpStatus: 403 } } } as never,
+    });
+    return {
+      subscribe(observer: { error?: (e: unknown) => void }) {
+        observer.error?.(refusal);
+        return { unsubscribe() {} };
+      },
+    } as never;
+  };
+
 export function makeTrpcClient() {
   return trpc.createClient({
     links: [
+      readOnlyLink,
       httpBatchLink({
         url: '/trpc',
         transformer: superjson,

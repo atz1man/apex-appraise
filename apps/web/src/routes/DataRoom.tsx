@@ -4,7 +4,9 @@ import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
-import { n0 } from '../lib/format';
+import { useToast } from '../components/Toast';
+import { fmtBytes, n0 } from '../lib/format';
+import { brandInk, onFill, personGradients, status as statusTokens } from '@apex/ui-tokens';
 
 const UPLOAD_ICON = 'M12 3v13|M8 7l4-4 4 4|M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2';
 const FOLDER_ICON = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';
@@ -60,26 +62,14 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 /** A stable colour per person, derived from their id — never a random one. */
-const AVATAR_GRADS = [
-  'linear-gradient(135deg,#1E7A55,#14503B)',
-  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
-  'linear-gradient(135deg,#9B79C0,#5E3F86)',
-  'linear-gradient(135deg,#C08A3E,#7A5220)',
-];
+const AVATAR_GRADS = personGradients;
 const gradOf = (id: string) => {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return AVATAR_GRADS[h % AVATAR_GRADS.length];
 };
 
-const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', '#3C7FB5', 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
-
-function fmtBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
+const ACTIVITY_DOTS = ['rgb(var(--brand-ink, 20 80 59))', statusTokens.blue.dot, 'rgb(var(--status-purple-dot, 155 121 192))', 'rgb(var(--status-green, 30 122 85))'];
 
 const fmtDay = (d: Date | string) =>
   new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -95,6 +85,7 @@ type AskEntry = { q: string; status: 'ok' | 'demo' | 'no-docs'; answer?: string;
 export default function DataRoom() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
+  const toast = useToast();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
 
   const [folder, setFolder] = useState('all');
@@ -111,6 +102,25 @@ export default function DataRoom() {
       utils.documents.activity.invalidate(dealId);
       setDraft({ name: '', category: folder === 'all' ? 'Architectural' : folder });
       setFormOpen(false);
+    },
+  });
+  /** the plots a document can be shared with — the buyer picker's options */
+  const { data: unitsData } = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
+  const units = unitsData?.units ?? [];
+  const shareWithInvestors = trpc.documents.shareWithInvestors.useMutation({
+    onSuccess: (r) => {
+      utils.documents.list.invalidate();
+      utils.documents.activity.invalidate(dealId);
+      utils.documents.access.invalidate();
+      toast.success(r.investorVisible ? 'Shared with investors' : 'No longer shared with investors');
+    },
+  });
+  const shareWithBuyer = trpc.documents.shareWithBuyer.useMutation({
+    onSuccess: (r) => {
+      utils.documents.list.invalidate();
+      // the access panel counts what buyers can reach, so it moves with this
+      utils.documents.access.invalidate();
+      toast.success(r.buyerVisible ? 'Shared with the buyer' : 'No longer shared with a buyer');
     },
   });
   const setExtraction = trpc.documents.setExtraction.useMutation({
@@ -200,7 +210,7 @@ export default function DataRoom() {
         }
         right={
           <Button onClick={openForm}>
-            <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={15} color="#fff" /></span> Upload
+            <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={15} color={onFill} /></span> Upload
           </Button>
         }
       />
@@ -274,7 +284,7 @@ export default function DataRoom() {
           >
             <div className="flex items-center gap-3.5">
               <div className="w-[42px] h-[42px] rounded-[11px] bg-tint-success flex items-center justify-center shrink-0">
-                {uploading ? <Spinner /> : <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={20} color="#14503B" strokeWidth={1.9} /></span>}
+                {uploading ? <Spinner /> : <span className="inline-flex" aria-hidden="true"><Icon d={UPLOAD_ICON} size={20} color={brandInk} strokeWidth={1.9} /></span>}
               </div>
               <div className="flex-1">
                 <div className="text-[13.5px] font-semibold">
@@ -310,7 +320,7 @@ export default function DataRoom() {
                     <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
                 </select>
-                <Button onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
+                <Button writes onClick={submitDoc} disabled={!draft.name.trim()} loading={addDoc.isPending}>
                   {!addDoc.isPending && 'List as expected'}
                 </Button>
                 <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
@@ -330,12 +340,14 @@ export default function DataRoom() {
           ) : (
             <div className="bg-surface border border-border-strong rounded-card overflow-hidden shadow-rest">
               <div className="overflow-x-auto">
-              <div className="min-w-[560px]">
+              <div className="min-w-[640px]">
               <div className="flex label-mono text-ink-3 border-b border-border-std" style={{ padding: '12px 18px' }}>
                 <div style={{ flex: 3 }}>Name</div>
                 <div style={{ flex: 1.2 }}>Type</div>
                 <div style={{ flex: 1 }}>Added</div>
                 <div style={{ flex: 1 }} className="text-right">Size</div>
+                <div style={{ flex: 1 }} className="text-right">Investors</div>
+                <div style={{ flex: 1.4 }} className="text-right">Buyer</div>
                 <div style={{ flex: 1.2 }} className="text-right">Status</div>
               </div>
               {docs.map((d) => {
@@ -365,6 +377,62 @@ export default function DataRoom() {
                     {/* an expected document has no size, because it has no file */}
                     <div className="fig text-right text-[11.5px] font-medium text-ink-3" style={{ flex: 1 }}>
                       {d.extraction === 'AWAITED' ? '—' : fmtBytes(d.sizeBytes)}
+                    </div>
+                    {/*
+                      * Which plot's buyer sees this file, if any.
+                      *
+                      * `buyerVisible` existed from the first migration and
+                      * NOTHING could set it — every document creator left it
+                      * false and no procedure toggled it, so a firm paying for
+                      * "Buyer + investor portals" had a buyer whose Documents to
+                      * sign panel could only ever read "Nothing waiting for your
+                      * signature". It takes a PLOT rather than a checkbox
+                      * because the portal used to select by deal: a reservation
+                      * pack for plot 1 is not plot 7's business, and one
+                      * `signedAt` column cannot hold ten people's signatures.
+                      */}
+                    {/*
+                      * Whether the deal's investors see this file. Deal-level
+                      * where the buyer control is plot-level: an investor
+                      * report is one document for the whole syndicate.
+                      */}
+                    <div className="flex justify-end" style={{ flex: 1 }}>
+                      {d.extraction === 'AWAITED' ? (
+                        <span className="text-[11.5px] text-ink-3">—</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          aria-label={`Share ${d.name} with investors`}
+                          className="w-4 h-4 cursor-pointer disabled:opacity-50"
+                          disabled={shareWithInvestors.isPending}
+                          // shows the choice while the write is in flight, so the box does not
+                          // snap back for the refetch and read as a refusal
+                          checked={
+                            shareWithInvestors.isPending && shareWithInvestors.variables?.id === d.id
+                              ? shareWithInvestors.variables.visible
+                              : d.investorVisible
+                          }
+                          onChange={(e) => shareWithInvestors.mutate({ id: d.id, visible: e.target.checked })}
+                        />
+                      )}
+                    </div>
+                    <div className="flex justify-end" style={{ flex: 1.4 }}>
+                      {d.extraction === 'AWAITED' ? (
+                        <span className="text-[11.5px] text-ink-3">—</span>
+                      ) : (
+                        <select
+                          aria-label={`Share ${d.name} with a buyer`}
+                          className="max-w-full text-[11.5px] bg-sunken border border-border-std rounded-[7px] px-1.5 py-1 text-ink-2b disabled:opacity-50"
+                          disabled={shareWithBuyer.isPending || !units.length}
+                          value={d.buyerVisible ? (d.unitId ?? '') : ''}
+                          onChange={(e) => shareWithBuyer.mutate({ id: d.id, unitId: e.target.value || null })}
+                        >
+                          <option value="">Not shared</option>
+                          {units.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <div className="flex justify-end" style={{ flex: 1.2 }}>
                       {d.extraction === 'AWAITED' ? (
@@ -425,7 +493,9 @@ export default function DataRoom() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] font-medium truncate">{inv.name}</div>
-                    <div className="text-[10.5px] text-ink-3">Investor · holds in this deal</div>
+                    <div className="text-[10.5px] text-ink-3">
+                      Investor · {n0(accessQ.data!.investorDocuments)} shared document{accessQ.data!.investorDocuments === 1 ? '' : 's'}
+                    </div>
                   </div>
                   <span className="fig text-[10px] font-medium text-ink-3">{inv.permission}</span>
                 </div>
@@ -456,7 +526,7 @@ export default function DataRoom() {
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onAsk()}
             />
-            <Button onClick={onAsk} disabled={question.trim().length < 3} loading={ask.isPending}>
+            <Button writes onClick={onAsk} disabled={question.trim().length < 3} loading={ask.isPending}>
               {!ask.isPending && 'Ask'}
             </Button>
           </div>

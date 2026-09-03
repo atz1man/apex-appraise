@@ -8,13 +8,17 @@ import {
   formatMoneyFull,
   formatPct,
 } from '@apex/appraisal-engine';
-import { accent, brand, neutral } from '@apex/ui-tokens';
+import { accent, brand, neutral, status as statusTokens } from '@apex/ui-tokens';
+import { assetLabel } from '@apex/types/asset-classes';
+import { useUnits } from '../lib/region';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
 import { ShareLinks } from '../components/ShareLinks';
 import { A4Page, PRINT_CSS, docDate, docDay } from '../components/paper';
 import { reportDates } from '../lib/report-dates';
+import { approvalCheck } from '../lib/approval-check';
+import { valuerFrom } from '../lib/valuer';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { openReport } from '../lib/download';
 import { namedModel } from '../lib/ai-model';
@@ -100,6 +104,12 @@ function KvRow({ k, v }: { k: string; v: string }) {
 /* ------------------------------ screen ------------------------------ */
 
 export default function AppraisalReport() {
+  /**
+   * Floor areas, rates and the words for them, in the firm's own jurisdiction.
+   * Words and units only: every figure on this report is in pounds either way,
+   * and the engine computed it the same wherever the firm is.
+   */
+  const U = useUnits();
   const { dealId = '' } = useParams();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
@@ -116,10 +126,19 @@ export default function AppraisalReport() {
    */
   const { data: toe } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
   const preparedFor = toe?.clientName?.trim() || null;
-  // a name from the terms already carries its own post-nominals if the valuer has any
-  const preparedBy = toe?.valuerName?.trim() || deal?.owner?.name || null;
+  // a name from the terms already carries its own post-nominals if the valuer
+  // has any — and only SAVED terms name one; see lib/valuer.ts for what an
+  // unsaved draft would otherwise put here
+  const valuer = valuerFrom(toe);
+  const preparedBy = valuer.named ? valuer.name : deal?.owner?.name || null;
 
   const input = appr?.input;
+  // whether the signed figure still holds — see lib/approval-check.ts
+  const { data: verification } = trpc.appraisal.verifyApproved.useQuery(
+    { versionId: appr?.id ?? '' },
+    { enabled: !!appr && appr.reviewStatus === 'approved' },
+  );
+  const check = approvalCheck(verification, appr?.reviewStatus === 'approved');
 
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
@@ -343,7 +362,7 @@ export default function AppraisalReport() {
       : []),
     { label: 'Less: sale & letting costs', note: formatPct(disposalPct / 100), val: `(${formatMoneyFull(R.saleCosts)})` },
     { label: 'Net development value', val: formatMoneyFull(R.gdv - R.saleCosts), kind: 'sub' },
-    { label: 'Construction cost', note: `£${Math.round(R.buildRate)}/ft²`, val: `(${formatMoneyFull(R.build)})` },
+    { label: 'Construction cost', note: U.rate(R.buildRate), val: `(${formatMoneyFull(R.build)})` },
     { label: 'Professional fees', note: formatPct(input.profFeePct / 100), val: `(${formatMoneyFull(R.fees)})` },
     { label: 'Contingency', note: formatPct(input.contingencyPct / 100), val: `(${formatMoneyFull(R.cont)})` },
     ...input.otherCosts
@@ -391,12 +410,12 @@ export default function AppraisalReport() {
   const deltaLabel = (d: number) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d * 100) + '%';
 
   const assumptions: Array<[string, string]> = [
-    ['Build cost', `£${Math.round(R.buildRate)} / ft² GIA`],
+    ['Build cost', `£${U.rateNum(R.buildRate)} / ${U.unit} GIA`],
     ['Efficiency (NIA:GIA)', `${input.efficiency}%`],
     ['Professional fees', `${input.profFeePct}% of build`],
     ['Contingency', `${input.contingencyPct}% of build`],
     ...(isResidual
-      ? ([['Developer profit target', `${input.targetProfitOnGdvPct}% of GDV`]] as Array<[string, string]>)
+      ? ([['Developer profit target', `${input.targetProfitOnGdvPct}% of ${U.terms.gdv}`]] as Array<[string, string]>)
       : ([['Fixed land price', formatMoneyFull(input.site.landFixed)]] as Array<[string, string]>)),
     ['Finance rate', `${input.finance.ratePct}% pa`],
     ['Loan to cost', `${input.finance.ltcPct}%`],
@@ -404,7 +423,7 @@ export default function AppraisalReport() {
     ['Build programme', `${R.period} months`],
     ['Sales / void period', `${R.salesMonths} months`],
     ['Spend profile', (input.finance.spendProfile ?? 'scurve') === 'scurve' ? 'S-curve' : (input.finance.spendProfile ?? 'scurve')],
-    ['Disposal costs', `${disposalPct.toFixed(1)}% of GDV`],
+    ['Disposal costs', `${disposalPct.toFixed(1)}% of ${U.terms.gdv}`],
     ['Acquisition costs', `${input.site.acqPct}% of land`],
     ...(jv
       ? ([
@@ -575,16 +594,16 @@ export default function AppraisalReport() {
           <div style={{ flex: 2.2, padding: '9px 14px' }}>Phase</div>
           <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>On site</div>
           <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>Units</div>
-          <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£/ft²</div>
+          <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£/{U.unit}</div>
           <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>Construction</div>
-          <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>GDV</div>
+          <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>{U.terms.gdv}</div>
         </div>
         {phases.map((p, i) => (
           <div key={i} className="flex border-t border-border-faint fig text-[11.5px] font-medium">
             <div className="font-ui text-[12px]" style={{ flex: 2.2, padding: '9px 14px' }}>{p.name}</div>
             <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{p.buildMonths} mo</div>
             <div className="text-right" style={{ flex: 0.8, padding: '9px 10px' }}>{p.unitCount}</div>
-            <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£{n0(p.buildRate)}</div>
+            <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>£{U.rateNum(p.buildRate)}</div>
             <div className="text-right" style={{ flex: 1.3, padding: '9px 10px' }}>{formatMoneyFull(p.cost + p.otherTotal)}</div>
             <div className="text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px', color: brand[700] }}>{formatMoneyFull(p.gdv)}</div>
           </div>
@@ -594,7 +613,7 @@ export default function AppraisalReport() {
         <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
           The scheme is delivered in {R.phases!.length} phases over {R.period + R.salesMonths} months, sharing one facility;
           receipts from a completed phase repay it while a later phase is still drawing, holding peak debt to{' '}
-          {formatMoneyFull(R.facility)}. Construction is stated at each phase's own rate — a blended £{n0(R.buildRate)}/ft² of GIA
+          {formatMoneyFull(R.facility)}. Construction is stated at each phase's own rate — a blended {U.rate(R.buildRate)} of GIA
           across the scheme — and includes fees, contingency and any costs booked to that phase. Areas are net internal (NIA);
           gross internal area is derived at the stated {input.efficiency}% efficiency.
         </p>
@@ -649,6 +668,17 @@ export default function AppraisalReport() {
                 <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Effective date</div>
                 <div className="mt-1.5 text-[16px] font-semibold">{dates.report}</div>
               </div>
+              {check && (
+                <div className="col-span-2" data-approval-check={check.tone}>
+                  <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Approved figures</div>
+                  <div
+                    className="mt-1.5 text-[12.5px] leading-[1.45]"
+                    style={{ color: check.tone === 'drift' ? statusTokens.red.text : check.tone === 'unverified' ? statusTokens.amber.text : neutral.ink2 }}
+                  >
+                    {check.text}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-10 rounded-card bg-canvas border border-border-std" style={{ padding: '28px 30px' }}>
               <div className="fig text-[10px] font-medium uppercase text-ink-3" style={{ letterSpacing: '0.8px' }}>Headline result</div>
@@ -662,7 +692,7 @@ export default function AppraisalReport() {
                   <div className="fig mt-1 text-[30px] font-semibold" style={{ letterSpacing: '-1.4px' }}>{Math.round(R.poc * 100)}%</div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-ink-2b">GDV</div>
+                  <div className="text-[12px] text-ink-2b">{U.terms.gdv}</div>
                   <div className="fig mt-1 text-[30px] font-semibold" style={{ letterSpacing: '-1.4px' }}>{fM(R.gdv)}</div>
                 </div>
               </div>
@@ -678,22 +708,22 @@ export default function AppraisalReport() {
         <A4Page>
           <PageHead title="1 · Executive summary" scheme={scheme} />
           <p className="text-[13.5px] leading-[1.65]" style={{ marginTop: 18, color: '#3F463F' }}>
-            This report sets out a development appraisal and investment summary of {scheme}, {deal?.address}, comprising {n0(R.nia)} ft² NIA
-            ({n0(R.gia)} ft² GIA) across {n0(unitRows.reduce((a, u) => a + u.count, 0))} units. On the assumptions set out herein, the scheme
+            This report sets out a development appraisal and investment summary of {scheme}, {deal?.address}, comprising {U.area(R.nia)} NIA
+            ({U.area(R.gia)} GIA) across {n0(unitRows.reduce((a, u) => a + u.count, 0))} units. On the assumptions set out herein, the scheme
             {isResidual
-              ? ` supports a residual land value of ${formatMoneyFull(R.residualNet)} at a target developer profit of ${input.targetProfitOnGdvPct}% of GDV`
+              ? ` supports a residual land value of ${formatMoneyFull(R.residualNet)} at a target developer profit of ${input.targetProfitOnGdvPct}% of ${U.terms.gdv}`
               : ` returns a developer profit of ${formatMoneyFull(R.profit)} against a fixed land price of ${formatMoneyFull(input.site.landFixed)}`}
-            , equivalent to {formatPct(R.poc, 0)} on cost and {formatPct(R.rogdv, 0)} on GDV. Peak debt is {fM(R.facility)} against total
+            , equivalent to {formatPct(R.poc, 0)} on cost and {formatPct(R.rogdv, 0)} on {U.terms.gdv}. Peak debt is {fM(R.facility)} against total
             development costs of {fM(R.totalCost)}. On the evidence available, the scheme is assessed as <b className="font-semibold">{viability}</b>
             {viability === 'viable' ? ' and represents an actionable opportunity.' : viability === 'marginal' ? ' — returns sit below target and warrant further value engineering.' : ' on the current assumptions.'}
           </p>
 
           <div className="mt-6 grid grid-cols-4 gap-3">
-            <Kpi label="GDV" value={fM(R.gdv)} />
+            <Kpi label={U.terms.gdv} value={fM(R.gdv)} />
             <Kpi label="Residual land" value={fM(R.residualNet)} tone={brand[700]} />
             <Kpi label="Profit" value={fM(R.profit)} tone={brand[500]} />
             <Kpi label="Return on cost" value={formatPct(R.poc, 0)} />
-            <Kpi label="Return on GDV" value={formatPct(R.rogdv, 0)} />
+            <Kpi label={`Return on ${U.terms.gdv}`} value={formatPct(R.rogdv, 0)} />
             <Kpi label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr, 0)} />
             <Kpi label="Equity IRR" value={cash.eqIrr == null ? 'N/A' : formatPct(cash.eqIrr, 0)} />
             <Kpi label="Peak debt" value={fM(cash.peak)} />
@@ -701,7 +731,7 @@ export default function AppraisalReport() {
 
           <SectionTitle>Scheme facts</SectionTitle>
           <div className="mt-3 grid grid-cols-2" style={{ gap: '0 40px' }}>
-            <KvRow k="Asset type" v={(deal?.assetType ?? '—').replace('_', ' / ')} />
+            <KvRow k="Asset type" v={deal ? assetLabel(deal.assetType) : '—'} />
             <KvRow k="Pipeline stage" v={(deal?.stage ?? '—').replace('_', ' / ')} />
             <KvRow k="Figure status" v={deal?.figureStatus ?? '—'} />
             <KvRow k="Probability" v={deal ? `${deal.probability}%` : '—'} />
@@ -726,8 +756,8 @@ export default function AppraisalReport() {
                 <div className="flex text-white fig text-[10px] font-semibold uppercase" style={{ background: brand[700], letterSpacing: '0.4px' }}>
                   <div style={{ flex: 2.4, padding: '11px 14px' }}>Use / unit</div>
                   <div className="text-right" style={{ flex: 0.8, padding: '11px 14px' }}>No.</div>
-                  <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>Area ft²</div>
-                  <div className="text-right" style={{ flex: 1, padding: '11px 14px' }}>£/ft²</div>
+                  <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>Area {U.unit}</div>
+                  <div className="text-right" style={{ flex: 1, padding: '11px 14px' }}>£/{U.unit}</div>
                   <div className="text-right" style={{ flex: 1.3, padding: '11px 14px' }}>Value</div>
                 </div>
                 {items.map((it, ii) =>
@@ -750,8 +780,8 @@ export default function AppraisalReport() {
                     <div key={ii} className="flex border-t border-border-faint fig text-[12px] font-medium">
                       <div className="font-ui text-[12.5px]" style={{ flex: 2.4, padding: '10px 14px' }}>{it.row.label}</div>
                       <div className="text-right" style={{ flex: 0.8, padding: '10px 14px' }}>{it.row.count}</div>
-                      <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{n0(it.row.area)}</div>
-                      <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{n0(it.row.rate)}</div>
+                      <div className="text-right" style={{ flex: 1.1, padding: '10px 14px' }}>{U.areaNum(it.row.area)}</div>
+                      <div className="text-right" style={{ flex: 1, padding: '10px 14px' }}>£{U.rateNum(it.row.rate)}</div>
                       <div className="text-right font-semibold" style={{ flex: 1.3, padding: '10px 14px', color: brand[700] }}>
                         {formatMoneyFull(it.row.value)}
                       </div>
@@ -762,9 +792,9 @@ export default function AppraisalReport() {
                     every sheet would read as the scheme's and be wrong on all but one */}
                 {isLast && (
                   <div className="flex bg-sunken fig text-[12.5px] font-semibold" style={{ borderTop: `2px solid ${neutral.border}` }}>
-                    <div className="font-ui" style={{ flex: 2.4, padding: '11px 14px' }}>Gross development value</div>
+                    <div className="font-ui" style={{ flex: 2.4, padding: '11px 14px' }}>{U.terms.gdvLong}</div>
                     <div style={{ flex: 0.8 }} />
-                    <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>{n0(R.nia)}</div>
+                    <div className="text-right" style={{ flex: 1.1, padding: '11px 14px' }}>{U.areaNum(R.nia)}</div>
                     <div style={{ flex: 1 }} />
                     <div className="text-right" style={{ flex: 1.3, padding: '11px 14px', color: brand[700] }}>{formatMoneyFull(R.gdv)}</div>
                   </div>
@@ -780,8 +810,8 @@ export default function AppraisalReport() {
               {isLast && (
                 <>
                   <div className="mt-5 grid grid-cols-3 gap-3">
-                    <Kpi label="Net internal area" value={`${n0(R.nia)} ft²`} />
-                    <Kpi label="Gross internal area" value={`${n0(R.gia)} ft²`} />
+                    <Kpi label="Net internal area" value={U.area(R.nia)} />
+                    <Kpi label="Gross internal area" value={U.area(R.gia)} />
                     <Kpi label="Efficiency (NIA:GIA)" value={`${input.efficiency}%`} />
                   </div>
                   {R.phases?.length ? (
@@ -829,7 +859,7 @@ export default function AppraisalReport() {
               appraisal treats them separately.{' '}
               {(R.phases ?? []).some((p) => !p.ownTrades)
                 ? // only claim there is an inheriting phase when there is one
-                  `Every other phase inherits the scheme's ${input.profFeePct}% fees and ${input.contingencyPct}% contingency at £${n0(input.trades.reduce((a, t) => a + t.rate, 0))}/ft².`
+                  `Every other phase inherits the scheme's ${input.profFeePct}% fees and ${input.contingencyPct}% contingency at ${U.rate(input.trades.reduce((a, t) => a + t.rate, 0))}.`
                 : 'Every phase in this scheme prices its own trades, so no phase carries the scheme rate.'}
             </p>
             {phaseOverrides.shown.map(({ phase, trades }, pi) => {
@@ -840,7 +870,7 @@ export default function AppraisalReport() {
                 <div key={pi} className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 14 }}>
                   <div className="flex text-[11.5px] font-semibold" style={{ background: '#F4F6F4', padding: '8px 14px' }}>
                     <div style={{ flex: 3 }}>{phase.name}</div>
-                    <div className="fig text-right" style={{ flex: 1 }}>£{n0(phase.buildRate)}/ft²</div>
+                    <div className="fig text-right" style={{ flex: 1 }}>{U.rate(phase.buildRate)}</div>
                     <div className="fig text-right" style={{ flex: 1.4 }}>{formatMoneyFull(phase.build)}</div>
                   </div>
                   {trades.map((t, ti) => (
@@ -887,7 +917,7 @@ export default function AppraisalReport() {
                   <div className="font-ui text-ink-3 text-[11px]" style={{ flex: 1.6 }}>
                     {p.ownTrades ? 'own trades' : 'scheme rate'}
                   </div>
-                  <div className="text-right" style={{ flex: 1 }}>£{n0(p.buildRate)}/ft²</div>
+                  <div className="text-right" style={{ flex: 1 }}>{U.rate(p.buildRate)}</div>
                   <div className="text-right" style={{ flex: 1.4 }}>{formatMoneyFull(p.cost)}</div>
                 </div>
               ))}
@@ -907,7 +937,7 @@ export default function AppraisalReport() {
               >
                 {/* no comma: the figure face spaces punctuation oddly at this size */}
                 <div className="font-ui" style={{ flex: 4.2 }}>Construction with fees and contingency</div>
-                <div className="text-right" style={{ flex: 1 }}>£{n0(R.buildRate)}/ft²</div>
+                <div className="text-right" style={{ flex: 1 }}>{U.rate(R.buildRate)}</div>
                 <div className="text-right" style={{ flex: 1.4, color: brand[700] }}>
                   {formatMoneyFull(R.build + R.fees + R.cont)}
                 </div>
@@ -974,7 +1004,7 @@ export default function AppraisalReport() {
           <div className="mt-6 grid grid-cols-4 gap-3">
             <Kpi label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr, 0)} />
             <Kpi label="Equity IRR" value={cash.eqIrr == null ? 'N/A' : formatPct(cash.eqIrr, 0)} />
-            <Kpi label="RoGDV" value={formatPct(R.rogdv, 0)} />
+            <Kpi label={`Ro${U.terms.gdv}`} value={formatPct(R.rogdv, 0)} />
             <Kpi label="Peak debt" value={fM(R.facility)} />
           </div>
 
@@ -982,7 +1012,7 @@ export default function AppraisalReport() {
           <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
             Finance interest compounds monthly on the drawn balance; only the {input.finance.ltcPct}% loan-to-cost share of each month's
             spend is drawn, with equity funding the remainder. {isResidual
-              ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of GDV after acquisition costs of ${input.site.acqPct}%.`
+              ? `The residual land value is solved so that developer profit equals ${input.targetProfitOnGdvPct}% of ${U.terms.gdv} after acquisition costs of ${input.site.acqPct}%.`
               : `Developer profit is the amount remaining after all costs including the fixed land price plus ${input.site.acqPct}% acquisition costs.`}
           </p>
           <PageFoot no={residualPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
@@ -995,28 +1025,28 @@ export default function AppraisalReport() {
 
             <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
               Part of the scheme is retained and let rather than sold on. Its value is the net rent capitalised at the
-              all-risks yield, net of purchaser's costs, and that figure is the one carried into gross development value
-              on the preceding page.
+              {' '}{U.terms.allRisksYield.toLowerCase()}, net of purchaser's costs, and that figure is the one carried into
+              {' '}{U.terms.gdvLong.toLowerCase()} on the preceding page.
             </p>
 
             <SectionTitle>Rent roll</SectionTitle>
             <div className="border border-border-std rounded-[12px] overflow-hidden" style={{ marginTop: 10 }}>
               <div className="flex text-[10px] font-semibold uppercase" style={{ background: brand[700], color: '#fff' }}>
                 <div style={{ flex: 2.4, padding: '9px 14px' }}>Tenancy</div>
-                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Area ft²</div>
-                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Rent £/ft²</div>
-                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>ERV £/ft²</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Area {U.unit}</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>Rent £/{U.unit}</div>
+                <div className="text-right" style={{ flex: 1, padding: '9px 10px' }}>ERV £/{U.unit}</div>
                 <div className="text-right" style={{ flex: 1.3, padding: '9px 14px' }}>Net rent</div>
               </div>
               {R.income.lines.map((l, i) => (
                 <div key={i} className="flex text-[12px]" style={{ borderTop: '1px solid #ECEBE5' }}>
                   <div style={{ flex: 2.4, padding: '9px 14px' }}>{l.label}</div>
-                  <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>{n0(l.totalArea)}</div>
+                  <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>{U.areaNum(l.totalArea)}</div>
                   <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>
-                    £{(l.totalArea > 0 ? l.grossRent / l.totalArea : 0).toFixed(2)}
+                    £{U.rateNum(l.totalArea > 0 ? l.grossRent / l.totalArea : 0, 2)}
                   </div>
                   <div className="fig text-right" style={{ flex: 1, padding: '9px 10px' }}>
-                    £{(l.totalArea > 0 ? l.grossErv / l.totalArea : 0).toFixed(2)}
+                    £{U.rateNum(l.totalArea > 0 ? l.grossErv / l.totalArea : 0, 2)}
                   </div>
                   <div className="fig text-right font-semibold" style={{ flex: 1.3, padding: '9px 14px' }}>
                     {formatMoneyFull(l.netPassing)}
@@ -1030,7 +1060,7 @@ export default function AppraisalReport() {
               {([
                 ['Gross rent', formatMoneyFull(R.income.grossRent)],
                 ['Less: voids and non-recoverables', `(${formatMoneyFull(R.income.voidAllowance + R.income.nonRecoverable + R.income.deductions)})`],
-                ['Net rent (NOI)', formatMoneyFull(R.income.netRent), 'sub'],
+                [U.terms.netRent, formatMoneyFull(R.income.netRent), 'sub'],
                 ...(R.income.lines.some((l) => l.isReversionary)
                   ? ([
                       ['Term — passing rent capitalised', formatMoneyFull(R.income.lines.reduce((a, l) => a + l.termValue, 0))],
@@ -1042,7 +1072,7 @@ export default function AppraisalReport() {
                   : ([[`Years purchase @ ${input.income.yieldPct}% — YP ${R.income.yearsPurchase.toFixed(2)}`, formatMoneyFull(R.income.grossCapitalValue)]] as Array<[string, string, string?]>)),
                 [`Let-up void — ${input.income.letUpMonths ?? 0} months`, `(${formatMoneyFull(R.income.letUpDeduction)})`],
                 [`Purchaser's costs (${input.income.purchaserCostsPct ?? 6.8}%)`, `(${formatMoneyFull(R.income.purchaserCosts)})`],
-                ['Investment value in GDV', formatMoneyFull(R.income.netCapitalValue), 'final'],
+                [`Investment value in ${U.terms.gdv}`, formatMoneyFull(R.income.netCapitalValue), 'final'],
               ] as Array<[string, string, string?]>).map(([label, value, kind]) => (
                 <div
                   key={label}
@@ -1065,7 +1095,7 @@ export default function AppraisalReport() {
               <Kpi label="Net initial yield" value={formatPct(R.income.netInitialYield, 2)} tone={brand[700]} />
               <Kpi label="Reversionary" value={formatPct(R.income.reversionaryYield, 2)} />
               <Kpi label="Equivalent yield" value={formatPct(R.income.equivalentYield, 2)} />
-              <Kpi label="Capital value" value={`£${n0(R.income.capitalValuePsf)}/ft²`} />
+              <Kpi label="Capital value" value={U.rate(R.income.capitalValuePsf)} />
             </div>
 
             {dcf && input.dcf && (
@@ -1183,7 +1213,7 @@ export default function AppraisalReport() {
           </p>
           <div className="mt-5 border border-border-std rounded-[12px] overflow-hidden">
             <div className="flex bg-canvas fig text-[10px] font-semibold text-ink-2b">
-              <div style={{ flex: 1.4, padding: '10px 14px' }}>Build ↓ / GDV →</div>
+              <div style={{ flex: 1.4, padding: '10px 14px' }}>Build ↓ / {U.terms.gdv} →</div>
               {steps.map((s) => (
                 <div key={s} className="text-center" style={{ flex: 1, padding: '10px 8px' }}>{deltaLabel(s)}</div>
               ))}
@@ -1208,9 +1238,9 @@ export default function AppraisalReport() {
 
           <SectionTitle>Reading the grid</SectionTitle>
           <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
-            Each cell re-runs the full appraisal — including monthly finance — at the stated GDV and build-cost movements, holding the land
+            Each cell re-runs the full appraisal — including monthly finance — at the stated {U.terms.gdv} and build-cost movements, holding the land
             price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
-            A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in GDV moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
+            A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in {U.terms.gdv} moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
           </p>
           <PageFoot no={sensitivityPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>
@@ -1227,13 +1257,13 @@ export default function AppraisalReport() {
                 <div style={{ marginTop: 18 }}>
                   <CashflowChart rows={cash.rows} peak={cash.peak} pcMonth={R.period} monthLabel={monthLabel} />
                 </div>
-                <SectionTitle>Profit bridge — GDV to developer profit</SectionTitle>
+                <SectionTitle>Profit bridge — {U.terms.gdv} to developer profit</SectionTitle>
                 <div style={{ marginTop: 8 }}>
                   <ProfitBridge
                     steps={[
                       ['Build', R.build],
                       ['Fees & cont.', R.fees + R.cont],
-                      ['CIL · S106', R.otherTotal],
+                      [`${U.terms.infraLevy} · ${U.terms.planningObligation}`, R.otherTotal],
                       ['Finance', R.finance],
                       ['Sale costs', R.saleCosts],
                       ['Land', R.landGross],

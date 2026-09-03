@@ -23,7 +23,7 @@ export const isWebhookEvent = (s: string): s is WebhookEvent => (WEBHOOK_EVENTS 
 export const WEBHOOK_EVENT_MEANING: Record<WebhookEvent, string> = {
   'deal.created': 'A scheme was added to the pipeline.',
   'appraisal.submitted': 'A saved appraisal version was sent for review.',
-  'appraisal.approved': 'A reviewer approved an appraisal. Its figures are the firm’s committed position.',
+  'appraisal.approved': 'A reviewer approved an appraisal. Its figures are the firm’s committed position. Carries the GDV, profit and profit on cost, and the engine version and input hash the approval was pinned to.',
   'covenant.breached': 'Approved figures broke a facility limit the firm set. Carries the limits and what breached them.',
   'report.shared': 'A share link was minted for a report. Never carries the link itself — the link is the credential.',
 };

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Spinner } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
 
 /**
  * Where the identity provider sends the person back.
@@ -55,7 +56,7 @@ export default function SsoCallback() {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
-      style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
+      style={{ background: heroGradient }}
     >
       <div className="w-[400px] max-w-[92vw]">
         <div className="flex items-center gap-3 justify-center mb-7">

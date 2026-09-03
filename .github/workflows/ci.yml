@@ -25,6 +25,8 @@ jobs:
         run: pnpm --filter @apex/api build
       - name: API tests (tenant isolation)
         run: pnpm --filter @apex/api test
+      - name: MCP server tests
+        run: pnpm --filter @apex/mcp-server build && pnpm --filter @apex/mcp-server test
       - name: Typecheck web
         run: pnpm --filter @apex/web lint
       # The heavy dependencies must arrive on demand, not with the screen. A
@@ -147,10 +149,14 @@ jobs:
         run: pnpm --filter @apex/web exec playwright test
       - name: API logs on failure
         if: failure()
-        run: docker compose logs --tail 120 api
+        # the errors first — the last 120 lines are the seed's welcome emails
+        run: |
+          docker compose logs api | grep -E '"level":(40|50)' | tail -60 || true
+          docker compose logs --tail 120 api
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
-          path: apps/web/playwright-report
+          name: playwright-results
+          # Playwright's per-failure folder: the page snapshot (error-context.md) and the last screenshot
+          path: apps/web/test-results
           retention-days: 7

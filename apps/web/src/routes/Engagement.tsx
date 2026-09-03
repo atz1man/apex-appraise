@@ -387,7 +387,7 @@ export default function Engagement() {
                         ]}
                       />
                     </label>
-                    <Button
+                    <Button writes
                       size="sm"
                       loading={issue.isPending}
                       disabled={dirty || !saved?.saved}
@@ -427,11 +427,11 @@ export default function Engagement() {
                     </div>
                     <div className="mt-2 flex gap-1.5">
                       {saved?.linkExpired ? (
-                        <Button size="sm" loading={issue.isPending} onClick={() => issue.mutate({ dealId, expiryDays })}>
+                        <Button writes size="sm" loading={issue.isPending} onClick={() => issue.mutate({ dealId, expiryDays })}>
                           Reissue link
                         </Button>
                       ) : (
-                        <Button size="sm" variant="secondary" loading={revokeLink.isPending} onClick={() => revokeLink.mutate(dealId)}>
+                        <Button writes size="sm" variant="secondary" loading={revokeLink.isPending} onClick={() => revokeLink.mutate(dealId)}>
                           Revoke link
                         </Button>
                       )}
@@ -448,7 +448,7 @@ export default function Engagement() {
                       value={acceptedBy}
                       onChange={(e) => setAcceptedBy(e.target.value)}
                     />
-                    <Button
+                    <Button writes
                       size="sm"
                       variant="secondary"
                       loading={accept.isPending}
@@ -469,7 +469,7 @@ export default function Engagement() {
                   </div>
                 )}
                 {status !== 'DRAFT' && (
-                  <Button size="sm" variant="secondary" loading={withdraw.isPending} onClick={() => withdraw.mutate(dealId)}>
+                  <Button writes size="sm" variant="secondary" loading={withdraw.isPending} onClick={() => withdraw.mutate(dealId)}>
                     Withdraw & revise
                   </Button>
                 )}

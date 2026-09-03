@@ -49,3 +49,14 @@ export function currentByDeal<T extends { dealId: string }>(rows: T[]): Map<stri
 export function currentAppraisals<T>(appraisal: { findMany(args: unknown): Promise<T[]> }, orgId: string): Promise<T[]> {
   return appraisal.findMany({ where: { orgId, isCurrent: true }, orderBy: CURRENT_FIRST });
 }
+
+/**
+ * The latest APPROVED version for a deal, or null — a different question from
+ * "the current one". After an approval, `save` opens a fresh draft which becomes
+ * current, so the current row is usually not the signed one. Anything that
+ * treats a figure as the firm's committed position — the benchmark pool, the
+ * out-turn calculation — reads this rather than the draft somebody is typing.
+ */
+export function latestApproved<T>(appraisal: Findable<T>, dealId: string, orgId: string): Promise<T | null> {
+  return appraisal.findFirst({ where: { dealId, orgId, reviewStatus: 'approved' }, orderBy: { reviewedAt: 'desc' } });
+}

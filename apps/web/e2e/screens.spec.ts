@@ -202,6 +202,9 @@ test.describe('internal screens', () => {
     await page.goto('/benchmarking');
     await expect(page.getByRole('heading', { name: /How your deals compare/ })).toBeVisible();
     await expect(page.getByText('Build cost trend — £/ft²')).toBeVisible();
+    // what completed schemes actually cost, beside what they were appraised at
+    // the card, and the consent panel naming it — either proves the strip is offered
+    await expect(page.getByText('Out-turn build £/ft²').first()).toBeVisible();
   });
 
   test('benchmarking never passes demonstration figures off as market evidence', async ({ page }) => {
@@ -2050,7 +2053,16 @@ test('the board states the book’s debt exposure and its largest concentration'
  * is half of what is being tested.
  */
 test('covenants are judged only once the firm sets them, and can be cleared again', async ({ page }) => {
-  test.setTimeout(90_000);
+  /**
+   * 120s, not 90s: eight page loads, five of them carrying the exposure of the
+   * whole book, plus three one-second settles. Twice in CI the 90s test budget
+   * ran out at the funding pack's own load — the last load, not a slow one —
+   * with the other worker busy beside it, and both times the same spec was
+   * green locally and on the next commit. The budget is the test's, so the
+   * timeout reads as "the pack never rendered" when it means "the seven loads
+   * before it took 88 seconds".
+   */
+  test.setTimeout(120_000);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -2094,6 +2106,27 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
   // the rest of the book go unmentioned
   await expect(panel.getByText(/against a maximum of 20%/)).toHaveCount(breaching);
 
+  /**
+   * And the funding pack, with those breaches on its first sheet, still fits
+   * the sheet. Its page-one budget was a constant that assumed one line in the
+   * Exceptions box; measured here with twelve breach lines, the sheet was
+   * 1,342px against an A4 of 1,123 — the exceptions a lender reads the pack
+   * for were the thing printed off the bottom of it.
+   */
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText(/against a maximum of 20%/).first()).toBeVisible();
+  const withExceptions = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
+      // across EVERY sheet: a box the first sheet cannot hold goes on to the next
+      lines: p.reduce((a, x) => a + ((x.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0), 0),
+    };
+  });
+  expect(withExceptions.lines).toBe(breaching);
+  expect(withExceptions.overflowing, 'a sheet of the pack overflowed A4 under its own exceptions').toEqual([]);
+
   // clear it: a covenant that cannot be removed is one nobody will risk setting
   await page.goto('/settings');
   await page.getByLabel('Max loan to GDV (%)').fill('');
@@ -2113,7 +2146,18 @@ test('covenants are judged only once the firm sets them, and can be cleared agai
  * reach a second page.
  */
 test('the funding pack states the book, its exceptions, and paginates honestly', async ({ page }) => {
-  test.setTimeout(90_000);
+  /**
+   * 120 seconds, as its neighbour has had since `2691344` and for the same
+   * reason. This spec loads the pack repeatedly, and each load renders every
+   * position in the demo workspace — which grows through the run, because the
+   * specs before it create deals there. Measured: it timed out on CI at the
+   * FIRST `waitForSelector`, having spent the whole budget on one render with
+   * the other worker busy beside it, and passed on an immediate re-run of the
+   * same commit with nothing changed. A spec sitting at the edge of its budget
+   * is a red build waiting to happen, and this one reads as "the pack never
+   * rendered" when it means "the pack was slow".
+   */
+  test.setTimeout(120_000);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -2164,7 +2208,9 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
       pages: p.length,
       overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).length,
       feet: p.map((x) => (x.textContent ?? '').match(/Page (\d+) of (\d+)/)?.[0]),
-      rows: p.reduce((a, x) => a + ((x.textContent ?? '').match(/Scheme \d+/g)?.length ?? 0), 0),
+      // TABLE rows only: the exceptions box names a scheme too, and a covenant a
+      // neighbouring test left set turned forty rows into eighty "Scheme N"s
+      rows: p.reduce((a, x) => a + [...x.querySelectorAll('.pack-row')].filter((r) => /Scheme \d+/.test(r.textContent ?? '')).length, 0),
       totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
     };
   });
@@ -2175,6 +2221,39 @@ test('the funding pack states the book, its exceptions, and paginates honestly',
   // than one that overflows, because nothing on the page says so
   expect(long.rows).toBe(40);
   expect(long.totals).toBe(1);
+
+  /**
+   * The boundary forty schemes never reach: a book whose rows exactly fill
+   * a sheet. Thirteen schemes fitted the first sheet's rows and so the sheet
+   * also carried the totals row and the closing note — which had never been
+   * budgeted — and measured 1,153px against an A4 of 1,123. CI found it by
+   * rendering the pack while a neighbouring spec's deals took the demo book
+   * from eleven schemes to twelve, with an overspend line beside them.
+   */
+  await page.unroute('**/trpc/deals.exposure*');
+  await page.route('**/trpc/deals.exposure*', async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    const envelope = Array.isArray(body) ? body[0] : body;
+    const data = envelope.result.data.json;
+    const one = data.positions[0];
+    data.positions = Array.from({ length: 13 }, (_, i) => ({ ...one, dealId: `edge-${i}`, name: `Edge ${i + 1}` }));
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.goto('/portfolio/pack');
+  await page.waitForSelector('.a4-page');
+  await page.waitForTimeout(600);
+  const edge = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.a4-page')];
+    return {
+      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
+      rows: p.reduce((a, x) => a + [...x.querySelectorAll('.pack-row')].filter((r) => /Edge \d+/.test(r.textContent ?? '')).length, 0),
+      totals: p.filter((x) => /schemes? · \d+ postcode/.test(x.textContent ?? '')).length,
+    };
+  });
+  expect(edge.overflowing, 'a sheet exactly full of rows was also asked to carry the totals and the note').toEqual([]);
+  expect(edge.rows).toBe(13);
+  expect(edge.totals).toBe(1);
 });
 
 /**

@@ -52,6 +52,21 @@ const tenancyOut = (t: any) => ({
 });
 
 /**
+ * EVERY procedure here returns through one of the two mappers above, mutations
+ * included.
+ *
+ * Money crosses this wire in POUNDS — every `*Out` mapper applies `P()`, and
+ * `toPence` converts back on the way in. These mutations used to return the
+ * Prisma row, so the same field was pounds from a query and raw PENCE from the
+ * mutation that wrote it: `arrears` came back as "123400" beside a
+ * `sales.tenancies` that says 1234. Latent only because today's callers read
+ * `id` and `updatedAt` and then invalidate — a future `onSuccess` reading a
+ * figure would show it a hundred times over, and nothing would raise an error.
+ * `no-raw-money-out` in `query-side-effects.test.ts` now asks this of the
+ * router rather than leaving it to whoever writes the next one.
+ */
+
+/**
  * What changed, in the words the drawer uses.
  *
  * "Provenance on every figure" is one of this product's non-negotiables, and
@@ -92,6 +107,8 @@ const TENANCY_LABELS: Record<string, string> = {
   leadSource: 'lead source',
   progress: 'milestone',
   stalled: 'stalled flag',
+  // money a tenant owes: moving it is exactly the kind of change a timeline is for
+  arrears: 'arrears',
 };
 
 /** pence → the way a timeline reads it, en-GB, or an em dash for nothing agreed */
@@ -194,7 +211,7 @@ export const salesRouter = router({
         if (changed.length) {
           await record(ctx, dealId, `updated plot — ${changed.join(', ')}`, `${updated.name} · agreed ${moneyLabel(updated.agreedValue)}`);
         }
-        return updated;
+        return unitOut(updated);
       }
       const created = await ctx.prisma.unit.create({
         data: {
@@ -216,7 +233,7 @@ export const salesRouter = router({
         },
       });
       await record(ctx, dealId, 'added plot', `${created.name} · appraised ${moneyLabel(created.appraisedValue)}`);
-      return created;
+      return unitOut(created);
     }),
 
   /**
@@ -302,7 +319,7 @@ export const salesRouter = router({
       `advanced milestone to ${SALES_MILESTONES[progress] ?? progress}`,
       `${advanced.name} · deposit held ${moneyLabel(advanced.depositHeld)}`,
     );
-    return advanced;
+    return unitOut(advanced);
   }),
 
   upsertTenancy: internalProcedure
@@ -320,6 +337,37 @@ export const salesRouter = router({
         incentive: z.string().nullable().default(null),
         progress: z.number().int().min(0).max(5).default(0),
         stalled: z.boolean().default(false),
+        /**
+         * Rent owed, and the only field here that is OPTIONAL rather than
+         * defaulted.
+         *
+         * `Tenancy.arrears` existed with nothing able to write it. It is read in
+         * three places — the lettings KPI row, a stat card and the drawer, all
+         * coloured green at zero, which is an assertion that nothing is owed —
+         * and it could only ever BE zero outside the demo seed. So a letting
+         * agent could not record that a tenant was behind, and the screen said
+         * so in green.
+         *
+         * Worse, `deleteTenancy` refuses a tenancy carrying arrears with
+         * "Clear or write off the arrears first" — an instruction the product
+         * did not offer. On the demo workspace, Apt 4 carries £1,425 and is
+         * undeletable for ever.
+         *
+         * Optional, not `.default(0)` like its neighbours. A default here would
+         * mean "any caller who does not mention this debt has written it off",
+         * and that is not a thing a money column may say — a script, a future
+         * screen or a partial edit would clear it by omission. A missing key
+         * leaves the column alone.
+         *
+         * Note what this does NOT protect, because it was nearly assumed: the
+         * lettings drawer sends `arrears` on every save, so the guard that keeps
+         * an ordinary edit from wiping the debt is the DRAWER loading the
+         * current figure, not this. Driving a mutation through
+         * `e2e/lettings-arrears.spec.ts` found it — loading 0 into the edit form
+         * passed every other assertion, and changing a tenant's name silently
+         * cleared what they owed. Both halves are now driven, one at each end.
+         */
+        arrears: z.number().min(0).optional(),
         /** the stamp of the tenancy the caller loaded — see upsertUnit above */
         expectedUpdatedAt: z.coerce.date().optional(),
       }),
@@ -327,11 +375,14 @@ export const salesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-      const { id, dealId, ervPcm, agreedRentPcm, expectedUpdatedAt, ...rest } = input;
+      const { id, dealId, ervPcm, agreedRentPcm, arrears, expectedUpdatedAt, ...rest } = input;
       const data = {
         ...rest,
         ervPcm: toPence(ervPcm),
         agreedRentPcm: agreedRentPcm != null && agreedRentPcm > 0 ? toPence(agreedRentPcm) : null,
+        // only when supplied — a missing key leaves the column alone, and the
+        // column is money a tenant owes
+        ...(arrears !== undefined ? { arrears: toPence(arrears) } : {}),
         status: tenancyStatusForProg(input.progress),
         appliedAt: input.progress > 0 ? new Date() : null,
       };
@@ -349,11 +400,11 @@ export const salesRouter = router({
         if (changed.length) {
           await record(ctx, dealId, `updated tenancy — ${changed.join(', ')}`, `${updated.name} · agreed rent ${moneyLabel(updated.agreedRentPcm)} pcm`);
         }
-        return updated;
+        return tenancyOut(updated);
       }
       const created = await ctx.prisma.tenancy.create({ data: { ...data, orgId: ctx.principal.orgId, dealId } });
       await record(ctx, dealId, 'added tenancy', `${created.name} · ERV ${moneyLabel(created.ervPcm)} pcm`);
-      return created;
+      return tenancyOut(created);
     }),
 
   deleteTenancy: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
@@ -392,6 +443,6 @@ export const salesRouter = router({
       `advanced tenancy to ${LETTING_MILESTONES[progress] ?? progress}`,
       `${advanced.name} · agreed rent ${moneyLabel(advanced.agreedRentPcm)} pcm`,
     );
-    return advanced;
+    return tenancyOut(advanced);
   }),
 });

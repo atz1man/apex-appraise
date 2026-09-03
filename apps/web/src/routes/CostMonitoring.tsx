@@ -1,27 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, type StatusKey } from '@apex/ui-tokens';
-import { getToken, trpc } from '../lib/trpc';
+import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
+import { getPrincipal, getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
-import { Avatar, Button, Dot, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { useToast } from '../components/Toast';
 import { DealNav } from '../components/DealNav';
 
+type ContractorDraft = {
+  name: string; trade: string; status: string; rating: string; nextCert: string; retentionRelease: string;
+  timesheetRate: string; operatives: string;
+};
+
 /** Contractor avatar gradients — per the design handoff prototype. */
-const GRADS = [
-  'linear-gradient(135deg,#1E7A55,#14503B)',
-  'linear-gradient(135deg,#3C7FB5,#1F4E73)',
-  'linear-gradient(135deg,#C79A4B,#8A6420)',
-  'linear-gradient(135deg,#9B79C0,#5E3F86)',
-];
-const GRAD_NONE = 'linear-gradient(135deg,#9AA09A,#6E7269)';
+const GRADS = personGradients;
+const GRAD_NONE = personGradientNone;
 
 /** Evergreen gradient placeholders for photo cards (no real images). */
-const PHOTO_GRADS = [
-  'linear-gradient(150deg,#1E7A55 0%,#14503B 60%,#0F3528 100%)',
-  'linear-gradient(150deg,#5E9C80 0%,#1B6048 55%,#0C2A20 100%)',
-  'linear-gradient(150deg,#7FB99E 0%,#1E7A55 50%,#13402F 100%)',
-];
+const PHOTO_GRADS = placeholderGradients.evergreen;
 
 const initialsOf = (name: string) =>
   name
@@ -81,6 +78,93 @@ export default function CostMonitoring() {
     },
   });
   const logWeek = trpc.cost.logTimesheetWeek.useMutation({ onSuccess: () => utils.cost.contractors.invalidate() });
+
+  /**
+   * The contractor register. These cards, and the dropdown on every package
+   * row, rendered contractors for as long as the screen has existed; nothing
+   * could create one, so a real workspace read "No contractors in your
+   * organisation yet" with no way past it.
+   */
+  const toast = useToast();
+  const [contractorSel, setContractorSel] = useState<string | null>(null); // id | 'new' | null
+  const [cDraft, setCDraft] = useState<ContractorDraft | null>(null);
+  const [cRemoving, setCRemoving] = useState(false);
+  const closeContractor = () => {
+    setContractorSel(null);
+    setCDraft(null);
+    setCRemoving(false);
+  };
+  const createContractor = trpc.cost.createContractor.useMutation({
+    onSuccess: (c) => {
+      utils.cost.contractors.invalidate();
+      closeContractor();
+      toast.success(`${c.name} added`);
+    },
+  });
+  const updateContractor = trpc.cost.updateContractor.useMutation({
+    onSuccess: (c) => {
+      utils.cost.contractors.invalidate();
+      closeContractor();
+      toast.success(`${c.name} updated`);
+    },
+  });
+  const deleteContractor = trpc.cost.deleteContractor.useMutation({
+    onSuccess: (res, vars) => {
+      const gone = (contractors ?? []).find((c) => c.id === vars.id);
+      utils.cost.contractors.invalidate();
+      utils.cost.packages.invalidate(dealId);
+      utils.photos.list.invalidate(dealId);
+      closeContractor();
+      toast.success(gone ? `${gone.name} removed` : 'Contractor removed');
+      if (res.detachedPackages > 0 || res.detachedPhotos > 0) {
+        toast.push('info', `${res.detachedPackages} package${res.detachedPackages === 1 ? '' : 's'} and ${res.detachedPhotos} photo${res.detachedPhotos === 1 ? '' : 's'} no longer name a contractor.`);
+      }
+    },
+  });
+  const openContractor = (c: NonNullable<typeof contractors>[number] | 'new') => {
+    setCRemoving(false);
+    if (c === 'new') {
+      setContractorSel('new');
+      setCDraft({ name: '', trade: '', status: 'On site', rating: '', nextCert: '', retentionRelease: '50% at PC', timesheetRate: '', operatives: '' });
+      return;
+    }
+    setContractorSel(c.id);
+    setCDraft({
+      name: c.name, trade: c.trade, status: c.status, rating: c.rating === '—' ? '' : c.rating,
+      nextCert: c.nextCert === '—' ? '' : c.nextCert, retentionRelease: c.retentionRelease,
+      timesheetRate: c.timesheetRate == null ? '' : String(c.timesheetRate), operatives: c.operatives == null ? '' : String(c.operatives),
+    });
+  };
+  /** an update is a patch: only what changed is sent, so a colleague's edit to another field survives */
+  const saveContractor = () => {
+    if (!cDraft) return;
+    const rate = cDraft.timesheetRate.trim() === '' ? null : Number(cDraft.timesheetRate);
+    const ops = cDraft.operatives.trim() === '' ? null : Number(cDraft.operatives);
+    if (contractorSel === 'new') {
+      createContractor.mutate({
+        name: cDraft.name.trim(), trade: cDraft.trade.trim(), status: cDraft.status.trim() || 'On site',
+        rating: cDraft.rating.trim() || '—', nextCert: cDraft.nextCert.trim() || '—',
+        retentionRelease: cDraft.retentionRelease.trim() || '50% at PC', timesheetRate: rate, operatives: ops,
+      });
+      return;
+    }
+    const cur = (contractors ?? []).find((c) => c.id === contractorSel);
+    if (!cur) return;
+    const patch: Parameters<typeof updateContractor.mutate>[0]['patch'] = {};
+    if (cDraft.name.trim() !== cur.name) patch.name = cDraft.name.trim();
+    if (cDraft.trade.trim() !== cur.trade) patch.trade = cDraft.trade.trim();
+    if (cDraft.status.trim() !== cur.status) patch.status = cDraft.status.trim();
+    if ((cDraft.rating.trim() || '—') !== cur.rating) patch.rating = cDraft.rating.trim() || '—';
+    if ((cDraft.nextCert.trim() || '—') !== cur.nextCert) patch.nextCert = cDraft.nextCert.trim() || '—';
+    if (cDraft.retentionRelease.trim() !== cur.retentionRelease) patch.retentionRelease = cDraft.retentionRelease.trim();
+    if (rate !== cur.timesheetRate) patch.timesheetRate = rate;
+    if (ops !== cur.operatives) patch.operatives = ops;
+    if (Object.keys(patch).length === 0) {
+      closeContractor();
+      return;
+    }
+    updateContractor.mutate({ id: cur.id, patch });
+  };
   const addPhoto = trpc.photos.add.useMutation({ onSuccess: () => utils.photos.list.invalidate(dealId) });
   const createTask = trpc.tasks.create.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
@@ -90,7 +174,10 @@ export default function CostMonitoring() {
   // ---- local UI state ----
   const [hoursDraft, setHoursDraft] = useState<Record<string, string>>({});
   const [taskDraft, setTaskDraft] = useState('');
-  const [taskWho, setTaskWho] = useState('AO');
+  // the firm's real members, defaulting to whoever is raising the action — not the demo firm's initials
+  const { data: members } = trpc.org.members.useQuery();
+  const assignees = useMemo(() => Array.from(new Set((members ?? []).map((m) => m.initials))), [members]);
+  const [taskWho, setTaskWho] = useState(getPrincipal()?.initials ?? '');
   const [photoCap, setPhotoCap] = useState('');
   const [photoCid, setPhotoCid] = useState('');
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -136,6 +223,7 @@ export default function CostMonitoring() {
   const weightedProgress = rollup?.weightedProgressPct ?? 0;
   const drawdown = rollup?.drawdownPct ?? 0;
   const retentionHeld = rollup?.retentionHeld ?? 0;
+  const retentionAtCompletion = rollup?.retentionAtCompletion ?? 0;
   const certificates = rollup?.certificates ?? 0;
 
   // photo log grouped by week commencing, newest first
@@ -424,9 +512,21 @@ export default function CostMonitoring() {
                       })}
                     </div>
                   </div>
+                  {/*
+                    * Two retention figures, because they answer two questions
+                    * and this line used to answer the wrong one. "Held" is what
+                    * has been deducted from payments already certified — the
+                    * liability the firm owes today, which belongs on a panel of
+                    * to-date figures. "At completion" is the whole-contract
+                    * amount that used to sit under this heading.
+                    */}
                   <div className="flex justify-between text-[12.5px] text-ink-2b border-t border-border-faint pt-2.5">
                     <span>Retention held</span>
                     <span className="fig font-semibold text-ink">{fM(retentionHeld)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11.5px] text-ink-3">
+                    <span>At completion</span>
+                    <span className="fig font-semibold">{fM(retentionAtCompletion)}</span>
                   </div>
                   <div className="flex justify-between text-[12.5px] text-ink-2b">
                     <span>Certificates issued</span>
@@ -467,11 +567,14 @@ export default function CostMonitoring() {
         <div className="mt-8">
           <div className="flex items-center justify-between mb-3.5 gap-4 flex-wrap">
             <h2 className="text-[17px] font-bold tracking-[-0.4px]">Contractors & actions</h2>
-            <span className="text-[12px] text-ink-3">Contract value, retention, certificates & weekly timesheets per contractor.</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-ink-3">Contract value, retention, certificates & weekly timesheets per contractor.</span>
+              <Button writes size="sm" variant="secondary" onClick={() => openContractor('new')}>Add contractor</Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(contractors ?? []).length === 0 && <div className="col-span-full"><EmptyState>No contractors in your organisation yet.</EmptyState></div>}
+              {(contractors ?? []).length === 0 && <div className="col-span-full"><EmptyState>No contractors in your organisation yet — add one and it can be assigned to any package.</EmptyState></div>}
               {(contractors ?? []).map((c) => {
                 const chip = contractorChip(c.status);
                 const pkgCount = packages.filter((p) => p.contractorId === c.id).length;
@@ -490,7 +593,10 @@ export default function CostMonitoring() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[15px] font-semibold truncate">{c.name}</div>
-                          <StatusChip status={chip.key} label={chip.label} />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <StatusChip status={chip.key} label={chip.label} />
+                            <Button size="sm" variant="ghost" onClick={() => openContractor(c)} ariaLabel={`Edit ${c.name}`}>Edit</Button>
+                          </div>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-3">
                           <span>{c.trade} · {pkgCount === 1 ? '1 package' : `${pkgCount} packages`}</span>
@@ -506,6 +612,9 @@ export default function CostMonitoring() {
                       {(
                         [
                           ['Contract', c.contractValue > 0 ? fM(c.contractValue) : '—', undefined],
+                          // held so far, not the contract's eventual total: a
+                          // contractor with no certificates has had nothing
+                          // withheld, and this card showed them owed retention
                           ['Retention', c.retention > 0 ? fM(c.retention) : '—', statusTokens.amber.text],
                           ['Certificates', String(c.certificates), undefined],
                         ] as Array<[string, string, string | undefined]>
@@ -533,7 +642,7 @@ export default function CostMonitoring() {
                           <div className="flex items-end gap-[3px] h-[34px] shrink-0">
                             {spark.length === 0 && <span className="text-[10.5px] text-ink-3b">No weeks logged</span>}
                             {spark.map((h, i) => (
-                              <div key={i} className="w-2 rounded-t-[2px]" style={{ height: `${Math.max(6, (h / maxWk) * 100)}%`, background: i === spark.length - 1 ? brand[500] : '#AECBBC' }} title={`${h} h`} />
+                              <div key={i} className="w-2 rounded-t-[2px]" style={{ height: `${Math.max(6, (h / maxWk) * 100)}%`, background: i === spark.length - 1 ? brand[500] : accent.muted3 }} title={`${h} h`} />
                             ))}
                           </div>
                           <div className="flex gap-4 flex-1">
@@ -585,9 +694,9 @@ export default function CostMonitoring() {
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"
-                      style={{ background: t.done ? brand[700] : '#fff', borderColor: t.done ? brand[700] : neutral.dashed }}
+                      style={{ background: t.done ? brand[700] : neutral.surface, borderColor: t.done ? brand[700] : neutral.dashed }}
                     >
-                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
+                      {t.done && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2" aria-hidden="true"><path d="M4 12l5 5L20 7" /></svg>}
                     </span>
                     <span className="flex-1 text-[12px]" style={{ color: t.done ? neutral.ink3b : neutral.ink, textDecoration: t.done ? 'line-through' : 'none' }}>{t.title}</span>
                     <span className="fig text-[10.5px]" style={{ color: !t.done && isPastDue(t.due, todayKey) ? statusTokens.red.text : neutral.ink3 }}>{t.due ? firmDay(t.due) : '—'}</span>
@@ -596,9 +705,9 @@ export default function CostMonitoring() {
                 ))}
                 {(tasks ?? []).length === 0 && <EmptyState>No cost-monitoring actions yet — raise one below.</EmptyState>}
               </div>
-              <div className="mt-2.5 flex gap-1.5 items-center">
+              <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
-                  className="flex-1 min-w-0"
+                  className="flex-1 min-w-[140px]"
                   placeholder="Raise an action…"
                   value={taskDraft}
                   onChange={(e) => setTaskDraft(e.target.value)}
@@ -609,7 +718,7 @@ export default function CostMonitoring() {
                     }
                   }}
                 />
-                {['AO', 'DW', 'MV'].map((w) => (
+                {assignees.map((w) => (
                   <button key={w} aria-pressed={taskWho === w} onClick={() => setTaskWho(w)} className="rounded-full shrink-0 cursor-pointer" style={{ outline: taskWho === w ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
                     <Avatar initials={w} size={24} />
                   </button>
@@ -659,10 +768,10 @@ export default function CostMonitoring() {
                 className="hidden"
                 onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
               />
-              <Button variant="secondary" size="sm" loading={photoUploading} disabled={!photoCap.trim()} onClick={() => photoFileRef.current?.click()}>
+              <Button writes variant="secondary" size="sm" loading={photoUploading} disabled={!photoCap.trim()} onClick={() => photoFileRef.current?.click()}>
                 📷 Attach photo
               </Button>
-              <Button size="sm" loading={addPhoto.isPending} disabled={!photoCap.trim()} onClick={submitPhoto}>+ Add entry</Button>
+              <Button writes size="sm" loading={addPhoto.isPending} disabled={!photoCap.trim()} onClick={submitPhoto}>+ Add entry</Button>
             </div>
           </div>
 
@@ -743,6 +852,64 @@ export default function CostMonitoring() {
           </div>
         </div>
       )}
+
+      {/* ===== Contractor — create / edit / remove ===== */}
+      <Drawer
+        open={!!contractorSel}
+        onClose={closeContractor}
+        width={520}
+        title={contractorSel === 'new' ? 'New contractor' : (contractors ?? []).find((c) => c.id === contractorSel)?.name ?? 'Contractor'}
+      >
+        {cDraft && (
+          <form
+            className="flex flex-col gap-3.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveContractor();
+            }}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Company</span>
+                <input className="w-full" aria-label="Contractor name" value={cDraft.name} onChange={(e) => setCDraft({ ...cDraft, name: e.target.value })} placeholder="Kingsmead Plant Ltd" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Trade</span>
+                <input className="w-full" aria-label="Contractor trade" value={cDraft.trade} onChange={(e) => setCDraft({ ...cDraft, trade: e.target.value })} placeholder="Groundworks" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Status</span>
+                <select className="w-full" aria-label="Contractor status" value={cDraft.status} onChange={(e) => setCDraft({ ...cDraft, status: e.target.value })}>
+                  {['Mobilising', 'On site', 'Off site', 'Complete'].map((o) => <option key={o} value={o}>{o}</option>)}
+                </select></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Rating</span>
+                <input className="w-full fig" aria-label="Contractor rating" value={cDraft.rating} onChange={(e) => setCDraft({ ...cDraft, rating: e.target.value })} placeholder="4.5" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Next certificate</span>
+                <input className="w-full" aria-label="Next certificate" value={cDraft.nextCert} onChange={(e) => setCDraft({ ...cDraft, nextCert: e.target.value })} placeholder="Cert 04 · 02 Jul" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Retention release</span>
+                <input className="w-full" aria-label="Retention release" value={cDraft.retentionRelease} onChange={(e) => setCDraft({ ...cDraft, retentionRelease: e.target.value })} /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Day rate (£, per operative)</span>
+                <input type="number" min={0} className="w-full fig" aria-label="Day rate" value={cDraft.timesheetRate} onChange={(e) => setCDraft({ ...cDraft, timesheetRate: e.target.value })} placeholder="340" /></label>
+              <label className="block"><span className="text-[11px] text-ink-3 block mb-1">Operatives</span>
+                <input type="number" min={0} className="w-full fig" aria-label="Operatives" value={cDraft.operatives} onChange={(e) => setCDraft({ ...cDraft, operatives: e.target.value })} placeholder="6" /></label>
+            </div>
+            <div className="flex gap-2.5">
+              <Button writes type="submit" className="flex-1" loading={createContractor.isPending || updateContractor.isPending} disabled={cDraft.name.trim().length < 2 || !cDraft.trade.trim()}>
+                {contractorSel === 'new' ? 'Add contractor' : 'Save'}
+              </Button>
+              <Button variant="secondary" type="button" onClick={closeContractor}>Cancel</Button>
+            </div>
+            {contractorSel !== 'new' && (
+              <div className="pt-3 border-t border-border-faint flex items-center gap-2 flex-wrap">
+                {cRemoving ? (
+                  <>
+                    <span className="text-[11.5px] text-ink-2">Refused while a package holds money against them. Empty packages and photos are detached.</span>
+                    <Button writes size="sm" variant="danger" loading={deleteContractor.isPending} onClick={() => contractorSel && deleteContractor.mutate({ id: contractorSel })}>Remove contractor</Button>
+                    <Button size="sm" variant="secondary" type="button" onClick={() => setCRemoving(false)}>Cancel</Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="ghost" type="button" onClick={() => setCRemoving(true)}>Remove contractor…</Button>
+                )}
+              </div>
+            )}
+          </form>
+        )}
+      </Drawer>
     </div>
   );
 }

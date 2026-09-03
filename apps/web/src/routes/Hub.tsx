@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
+import { useUnits } from '../lib/region';
 import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
+import { workingDeal } from '../lib/working-deal';
 
 const ICONS: Record<string, string> = {
   board: 'M3 5h5v14H3zM10 5h5v9h-5zM17 5h4v6h-4z',
@@ -76,6 +79,8 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
 }
 
 export default function Hub() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
   const navigate = useNavigate();
   const principal = getPrincipal();
   const utils = trpc.useUtils();
@@ -88,7 +93,8 @@ export default function Hub() {
       navigate(`/deal/${res.dealId}`);
     },
   });
-  const flagship = data?.deals.find((d) => d.name.startsWith('Northgate')) ?? data?.deals[0];
+  // the deal the firm is on — `lib/working-deal.ts` says how that is decided
+  const flagship = workingDeal(data?.deals);
   // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
   const TOOL_TINTS: Record<string, string> = {
     appraise: 'bg-tint-success text-brand-ink',
@@ -100,7 +106,7 @@ export default function Hub() {
     ? [
         ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
         ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],
-        ['comps', 'Comparables', 'Adjustment grid → supported £/ft²', `/deal/${flagship.id}/comparables`, 'appraise'],
+        ['comps', 'Comparables', `Adjustment grid → supported £/${U.unit}`, `/deal/${flagship.id}/comparables`, 'appraise'],
         ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`, 'appraise'],
         ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`, 'site'],
         ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`, 'sell'],
@@ -108,7 +114,9 @@ export default function Hub() {
         ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`, 'records'],
         ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field', 'site'],
         ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking', 'appraise'],
-        ['investor', 'Investor portal', 'LP positions, cashflows, capital calls', '/portal/investor', 'sell'],
+        // the register, not the LP's own page: an internal user is not an LP, and
+        // `investors.myPosition` answered them FORBIDDEN
+        ['investor', 'Investors', 'The register — holdings, distributions, capital calls, portal logins', '/investors', 'sell'],
         ['board', 'Pipeline board', 'Every deal across the lifecycle', '/board', 'appraise'],
         ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
       ]
@@ -138,7 +146,7 @@ export default function Hub() {
         {/* dark evergreen hero with live portfolio summary */}
         <section
           className="relative overflow-hidden mt-6 rounded-[22px] p-6 sm:p-8 text-white shadow-dark-card"
-          style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
+          style={{ background: heroGradient }}
         >
           {/* soft accent bloom + hairline top edge give the flat gradient physical depth */}
           <div
@@ -202,7 +210,7 @@ export default function Hub() {
                   words appear again as a button — made the user click "New deal
                   from documents" twice to reach one form. */}
               <Button to="/board?new=1">New deal from documents →</Button>
-              <Button variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
+              <Button writes variant="secondary" loading={loadSample.isPending} onClick={() => loadSample.mutate()}>
                 {loadSample.isPending ? 'Setting up your sample…' : 'Explore with a sample deal'}
               </Button>
             </div>

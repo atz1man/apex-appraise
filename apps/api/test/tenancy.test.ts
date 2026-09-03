@@ -250,3 +250,107 @@ describe('reads never cross an org boundary', () => {
     expect(audit.every((e) => e.orgId === A.orgId)).toBe(true);
   });
 });
+
+/**
+ * Rent a tenant owes, and the instruction the product could not obey.
+ *
+ * `Tenancy.arrears` existed with nothing able to write it. `upsertTenancy` did
+ * not take it; no other procedure touched it; only the demo seed ever set it.
+ * It is READ in three places on the lettings screen — a KPI row, a stat card
+ * and the drawer — each coloured green at zero, which is not an absence but an
+ * assertion that nothing is owed. So a letting agent could not record that a
+ * tenant was behind, and the screen said so in green.
+ *
+ * `deleteTenancy` then refuses a tenancy carrying arrears:
+ *
+ *   "Apt 4 cannot be deleted — £1,425 of arrears is recorded against it.
+ *    Clear or write off the arrears first."
+ *
+ * an instruction the product did not offer any way to follow. Measured on the
+ * demo workspace: Apt 4 carries £1,425 and was undeletable for ever.
+ */
+describe('rent a tenant owes', () => {
+  const make = async () =>
+    (await callerFor(A.principal).sales.upsertTenancy({
+      dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+    } as never)) as { id: string; updatedAt: Date; arrears: bigint };
+
+  it('can be recorded at all — nothing could write it before', async () => {
+    const t = await make();
+    expect(Number(t.arrears), 'a new tenancy starts owing nothing').toBe(0);
+
+    const updated = (await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      arrears: 1_425, expectedUpdatedAt: t.updatedAt,
+    } as never)) as { arrears: number };
+
+    /**
+     * Both representations, pinned separately. The wire speaks POUNDS — every
+     * `*Out` mapper applies `P()` — and the column holds integer PENCE, which
+     * is a non-negotiable of this product. Asserting only one of them would
+     * miss a `toPence` skipped on the way in or a `P()` skipped on the way out,
+     * and either is a silent hundredfold.
+     */
+    expect(updated.arrears, 'arrears could still not be recorded').toBe(1_425);
+    const row = await prisma.tenancy.findUniqueOrThrow({ where: { id: t.id } });
+    expect(Number(row.arrears), 'the column is not integer pence').toBe(142_500);
+  });
+
+  /**
+   * The reason this field is optional while every neighbour is `.default(0)`.
+   *
+   * The lettings form does not send arrears when an agent edits a name or a
+   * lead source. A `.default(0)` would have made every such save write off the
+   * debt silently — turning a fix for an unrecordable figure into a way to lose
+   * one. A missing key leaves the column alone.
+   */
+  it('is not written off by an edit that never mentioned it', async () => {
+    const t = await make();
+    const withDebt = (await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      arrears: 900, expectedUpdatedAt: t.updatedAt,
+    } as never)) as { updatedAt: Date };
+
+    // an ordinary edit: a new lead source, nothing about money owed
+    const after = (await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      leadSource: 'Rightmove', expectedUpdatedAt: withDebt.updatedAt,
+    } as never)) as { arrears: number; leadSource: string | null };
+
+    expect(after.leadSource, 'the edit itself did not land').toBe('Rightmove');
+    expect(after.arrears, 'an unrelated edit wrote off the debt').toBe(900);
+  });
+
+  /**
+   * The instruction `deleteTenancy` gives, now followable. Both halves: the
+   * refusal still stands while money is owed, and clearing it actually releases
+   * the tenancy — a guard that can never be satisfied is a dead end, and a
+   * guard that stops refusing is not a guard.
+   */
+  it('blocks a delete until it is cleared, and then lets it through', async () => {
+    const t = await make();
+    const owing = (await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      arrears: 1_425, expectedUpdatedAt: t.updatedAt,
+    } as never)) as { updatedAt: Date };
+
+    await expect(callerFor(A.principal).sales.deleteTenancy(t.id as never)).rejects.toThrow(/arrears is recorded against it/i);
+
+    await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      arrears: 0, expectedUpdatedAt: owing.updatedAt,
+    } as never);
+    await callerFor(A.principal).sales.deleteTenancy(t.id as never);
+    expect(await prisma.tenancy.findUnique({ where: { id: t.id } })).toBeNull();
+  });
+
+  it('records the change, because it is money somebody owes', async () => {
+    const t = await make();
+    await callerFor(A.principal).sales.upsertTenancy({
+      id: t.id, dealId: A.dealId, name: 'Apt 9', spec: '2 bed', level: 1, ervPcm: 1_500, progress: 2,
+      arrears: 2_000, expectedUpdatedAt: t.updatedAt,
+    } as never);
+    const events = await prisma.activityEvent.findMany({ where: { dealId: A.dealId, action: { contains: 'arrears' } } });
+    expect(events.length, 'money owed moved with no trace of who moved it').toBeGreaterThan(0);
+  });
+});

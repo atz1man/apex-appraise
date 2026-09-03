@@ -1,17 +1,17 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { appraisalRowToEngineInput } from '../mappers.js';
 import {
   MIN_CONTRIBUTORS,
   MIN_POINTS,
   cohortStats,
-  computeAppraisal,
   periodMedian,
   rankWithin,
   type CohortPoint,
 } from '@apex/appraisal-engine';
 import { recordAudit } from '../audit.js';
-import { currentAppraisal } from '../current-appraisal.js';
+import { latestApproved } from '../current-appraisal.js';
+import { METRICS, backfill, consentsToBenchmarks, feedApproved, feedOutturn, type BenchmarkMetric } from '../benchmark-feed.js';
+import { regionForDeal } from '@apex/types/uk-regions';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 
 /**
@@ -30,14 +30,7 @@ import { adminProcedure, internalProcedure, requiresFeature, router } from '../t
  * said "your deals feed the median" while the median could not see them.
  */
 
-const METRICS = ['buildPsf', 'gdvPsf', 'poc'] as const;
-type Metric = (typeof METRICS)[number];
-
-const REGION_BY_COUNTY: Array<[RegExp, string]> = [
-  [/dorset|bournemouth|poole|hampshire|devon|somerset|bristol/i, 'South West'],
-  [/london/i, 'London'],
-  [/kent|surrey|sussex|berkshire|oxford/i, 'South East'],
-];
+type Metric = BenchmarkMetric;
 
 /**
  * Where a cohort's numbers came from.
@@ -248,29 +241,44 @@ export const benchmarksRouter = router({
       }
     });
 
+    /**
+     * Opting in puts the signed-off book in at once. Consent used to switch on a
+     * button that then had to be pressed per deal, per quarter; a firm that
+     * consented and pressed nothing contributed nothing, and the pool grew by
+     * memory. Every deal with an approved version, and the out-turn of every
+     * completed one, goes in here — through the same feed approval uses.
+     */
+    const actor = { userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip };
+    const contributed = input.enabled ? await backfill(ctx.prisma, ctx.principal.orgId, actor) : 0;
+
     await recordAudit(ctx.prisma, {
       orgId: ctx.principal.orgId,
       userId: ctx.principal.userId,
       actor: ctx.principal.name,
       action: input.enabled ? 'enabled benchmark contribution' : 'disabled benchmark contribution',
-      target: input.enabled ? 'anonymised appraisal ratios' : `withdrew ${withdrawn} contributed points`,
+      target: input.enabled
+        ? `anonymised appraisal ratios · ${contributed} deal${contributed === 1 ? '' : 's'} with approved figures contributed`
+        : `withdrew ${withdrawn} contributed points`,
     });
-    return { enabled: input.enabled, withdrawn };
+    return { enabled: input.enabled, withdrawn, contributed };
   }),
 
   /**
-   * Contribute a deal's ratios to the shared pool.
+   * Contribute a deal's ratios to the shared pool, by hand.
+   *
+   * Approval does this automatically now (see `benchmark-feed.ts`), so this is
+   * for a deal approved before the firm consented, or a scheme completed before
+   * the feed existed. It contributes the latest APPROVED version, never the
+   * current draft: a figure nobody has signed off is not market evidence, and
+   * this used to send whatever the current row held.
    *
    * Only derived ratios leave the workspace — build £/ft², GDV £/ft², profit on
-   * cost. Never absolute money, never the address, and the deal name is stored
-   * only so this firm can find its own point again.
+   * cost, and for a completed scheme its out-turn build £/ft². Never absolute
+   * money, never the address, and the deal name is stored only so this firm can
+   * find its own point again.
    */
   contribute: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const org = await ctx.prisma.organisation.findUnique({
-      where: { id: ctx.principal.orgId },
-      select: { contributesBenchmarks: true },
-    });
-    if (!org?.contributesBenchmarks) {
+    if (!(await consentsToBenchmarks(ctx.prisma, ctx.principal.orgId))) {
       throw new TRPCError({
         code: 'FORBIDDEN',
         message: 'Benchmark contribution is off for this workspace. An administrator can turn it on in Benchmarking.',
@@ -279,38 +287,34 @@ export const benchmarksRouter = router({
 
     const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
-    const row = await currentAppraisal(ctx.prisma.appraisal, deal.id, ctx.principal.orgId);
-    if (!row) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Save an appraisal before contributing' });
-    const R = computeAppraisal(appraisalRowToEngineInput(row));
-    if (R.gia <= 0 || R.gdv <= 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Appraisal has no areas/revenue yet' });
-
-    const region = REGION_BY_COUNTY.find(([re]) => re.test(deal.address))?.[1] ?? 'South West';
-    const now = new Date();
-    const period = `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
-    const points: Array<[Metric, number]> = [
-      ['buildPsf', R.buildRate],
-      ['gdvPsf', R.gdv / R.gia],
-      ['poc', R.poc],
-    ];
-
-    // replace this deal's previous contribution for the period, then write fresh
-    await ctx.prisma.benchmarkPoint.deleteMany({
-      where: { source: 'contributed', orgId: ctx.principal.orgId, dealName: deal.name, period },
-    });
-    for (const [metric, value] of points) {
-      await ctx.prisma.benchmarkPoint.create({
-        data: { region, useClass: deal.assetType, metric, period, value, source: 'contributed', orgId: ctx.principal.orgId, dealName: deal.name },
+    const approved = await latestApproved(ctx.prisma.appraisal, deal.id, ctx.principal.orgId);
+    if (!approved) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Approve an appraisal first — only figures the firm has signed off enter the pool.',
       });
     }
-
-    await recordAudit(ctx.prisma, {
-      orgId: ctx.principal.orgId,
-      dealId: deal.id,
-      userId: ctx.principal.userId,
-      actor: ctx.principal.name,
-      action: 'contributed to benchmark',
-      target: `${region} · ${deal.assetType.toLowerCase()} · ${period}`,
-    });
-    return { region, useClass: deal.assetType, period };
+    /**
+     * Where the deal is, asked BEFORE the feed rather than after.
+     *
+     * The feed answers null for a deal it cannot place, and it answers null for
+     * an appraisal with no area or revenue, and until this check existed both
+     * arrived here as "Appraisal has no areas/revenue yet" — a message that
+     * sends somebody to look at a unit schedule that is fine. A refusal that
+     * names the wrong cause is worse than a vague one.
+     */
+    if (regionForDeal(deal) == null) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message:
+          'This deal could not be placed in a UK region, so nothing was contributed — the pool files evidence by region and ' +
+          'a figure filed under the wrong one is a wrong number in another firm\'s appraisal. Add a postcode to the deal.',
+      });
+    }
+    const actor = { userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip };
+    const fed = await feedApproved(ctx.prisma, ctx.principal.orgId, deal, approved, actor);
+    if (!fed) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Appraisal has no areas/revenue yet' });
+    const outturn = await feedOutturn(ctx.prisma, ctx.principal.orgId, deal, actor);
+    return { region: fed.region, useClass: fed.useClass, period: fed.period, outturn: !!outturn };
   }),
 });

@@ -1,7 +1,9 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { status as statusTokens, type StatusKey, assetTypeTag, avatarGradients, brandMarkGradient } from '@apex/ui-tokens';
+import { assetClass } from '@apex/types/asset-classes';
+import { assetFamilyTag, avatarGradients, brand, brandInk, brandMarkGradient, onFill, personGradientNone, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getPrincipal, trpc } from '../lib/trpc';
+import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
 
 // ---------- Brand ----------
 
@@ -11,7 +13,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
       className="inline-flex items-center justify-center rounded-[8px] shrink-0"
       style={{ width: size, height: size, background: brandMarkGradient }}
     >
-      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 11 12 4l8 7" />
         <path d="M6 10v9h12v-9" />
       </svg>
@@ -49,6 +51,7 @@ const GLOBAL_NAV: Array<[string, string]> = [
   ['/board', 'Pipeline'],
   ['/calendar', 'Calendar'],
   ['/benchmarking', 'Benchmarking'],
+  ['/investors', 'Investors'],
   ['/integrations', 'Integrations'],
   ['/settings', 'Settings'],
 ];
@@ -80,7 +83,23 @@ export function ThemeToggle() {
 
 /** 56px sticky top bar: brand lockup → breadcrumb → global nav (internal) → status/actions. */
 export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode }) {
-  const internal = getPrincipal()?.principalType === 'internal';
+  const principal = getPrincipal();
+  const internal = principal?.principalType === 'internal';
+  /**
+   * A view-only member should learn that from the app, not from a refusal.
+   *
+   * The API now enforces what the team screen has always claimed — a VIEWER's
+   * permission is "View" — so every write is refused with a message naming the
+   * way out. Without this chip the first a member hears of it is an error toast
+   * on work they have already done, which reads as a broken app rather than as
+   * a permission.
+   *
+   * The chip only; the write controls themselves are still rendered. Hiding
+   * them is a real piece of work across dozens of screens and forty-five
+   * mutations, and is NOT done here — it is a follow-up. What is not acceptable
+   * is a member who cannot tell which of the two they are looking at.
+   */
+  const viewOnly = isViewOnly(principal);
   return (
     <header
       className="sticky top-0 z-40 h-14 flex items-center gap-3 px-5"
@@ -95,11 +114,16 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
       {crumb && (
         <>
           <span className="text-ink-3b" aria-hidden="true">/</span>
-          <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px]">{crumb}</span>
+          {/* the crumb is what gives way: it truncates before a screen's own controls are pushed off the header */}
+          <span className="text-[13.5px] font-medium text-ink-2 truncate max-w-[420px] min-w-[60px]">{crumb}</span>
         </>
       )}
       {internal && (
-        <nav className="ml-5 hidden lg:flex items-center gap-1" aria-label="Global">
+        /* from 1400px, not lg: below that the seven labels left the deal screens' own
+           controls — Save, Export, Versions — scrolled out of sight behind a hidden
+           scrollbar (measured: the appraisal's Save button 18px past the header at
+           1280). Below it the Hub, one click on the lockup, carries the same links. */
+        <nav className="ml-5 hidden min-[1400px]:flex shrink-0 items-center gap-1" aria-label="Global">
           {GLOBAL_NAV.map(([to, label]) => (
             <NavLink
               key={to}
@@ -116,7 +140,14 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
           ))}
         </nav>
       )}
-      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none]">
+      {/* on a phone the slot still scrolls (the header is 390px wide and a screen's controls
+          are not); from lg it is its full width and the crumb gives way instead */}
+      <div className="ml-auto flex items-center gap-2.5 min-w-0 overflow-x-auto [scrollbar-width:none] lg:flex-none lg:overflow-visible">
+        {viewOnly && (
+          <span className="flex-none" title="Your account has view-only access to this workspace. An administrator can change your role under Settings → Team.">
+            <StatusChip status="neutral" label="View only" />
+          </span>
+        )}
         <ThemeToggle />
         {right}
       </div>
@@ -203,11 +234,23 @@ export function Dot({ color, size = 7 }: { color: string; size?: number }) {
   return <span className="inline-block rounded-full shrink-0" style={{ width: size, height: size, background: color }} />;
 }
 
+/**
+ * The asset class chip.
+ *
+ * Both halves come from the taxonomy now. The text used to be
+ * `type.replace('_', '-')` — the stored code with its FIRST underscore swapped
+ * — which reads acceptably for the four codes it was written against and for
+ * nothing else, and the colour used to fall back to INDUSTRIAL, so an
+ * uncoloured class got a confident green chip. An unknown code now prints
+ * itself in the neutral chip, which is what "we do not know this one" looks
+ * like.
+ */
 export function AssetTag({ type }: { type: string }) {
-  const t = assetTypeTag[type] ?? assetTypeTag.INDUSTRIAL;
+  const cls = assetClass(type);
+  const t = cls ? assetFamilyTag[cls.family] : { text: statusTokens.neutral.text, bg: statusTokens.neutral.bg };
   return (
     <span className="label-mono inline-flex rounded-[6px] px-1.5 py-[2px]" style={{ color: t.text, background: t.bg }}>
-      {type.replace('_', '-')}
+      {cls?.tag ?? type}
     </span>
   );
 }
@@ -216,7 +259,7 @@ export function Avatar({ initials, size = 26 }: { initials: string; size?: numbe
   return (
     <span
       className="inline-flex items-center justify-center rounded-full text-white font-semibold shrink-0"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: avatarGradients[initials] ?? 'linear-gradient(135deg,#9AA09A,#6E7269)' }}
+      style={{ width: size, height: size, fontSize: size * 0.38, background: avatarGradients[initials] ?? personGradientNone }}
       title={initials}
     >
       {initials}
@@ -238,7 +281,7 @@ const BTN_STYLES: Record<ButtonVariant, string> = {
 const BTN_CHROME: Record<ButtonVariant, React.CSSProperties> = {
   // subtle top-light gradient + inner highlight — tactile, Apple-style primary
   primary: {
-    background: 'linear-gradient(180deg,#1B6048 0%,#14503B 100%)',
+    background: `linear-gradient(180deg,${brand[600]} 0%,${brand[700]} 100%)`,
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(20,30,25,0.18), 0 6px 16px -8px rgba(20,80,59,0.45)',
   },
   secondary: { border: '1px solid rgb(var(--control-border))', boxShadow: '0 1px 2px rgba(20,30,25,0.05)' },
@@ -274,9 +317,12 @@ export function Button({
   size = 'md',
   type = 'button',
   disabled,
+  writes,
   loading,
   to,
   className = '',
+  ariaLabel,
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -284,12 +330,31 @@ export function Button({
   size?: ButtonSize;
   type?: 'button' | 'submit';
   disabled?: boolean;
+  /**
+   * This control changes something. A view-only member sees it greyed out with
+   * the reason on hover, rather than filling in the form behind it and being
+   * refused afterwards.
+   *
+   * Marking is per-site because nothing can infer it: `onClick` covers "Delete
+   * unit" and "Close drawer" alike, and this app has no shared input primitive
+   * to disable instead. What makes that safe is that marking is an AFFORDANCE,
+   * not the rule — the rule is the read-only tRPC link in `lib/trpc.ts`, which
+   * sees all ninety-eight mutations and refuses them whether or not anyone
+   * remembered this prop. An unmarked write button is a rough edge, not a hole.
+   */
+  writes?: boolean;
   /** Shows a spinner and disables the control — wire to mutation.isPending. */
   loading?: boolean;
   /** Renders a react-router Link with identical chrome (client-side nav CTA). */
   to?: string;
   className?: string;
+  /** an accessible name when the visible text repeats across rows ("Edit", "Remove") */
+  ariaLabel?: string;
+  /** a hover explanation; the read-only reason wins when the control is blocked */
+  title?: string;
 }) {
+  const blocked = !!writes && isViewOnly(getPrincipal());
+  disabled = disabled || blocked;
   const cls = `inline-flex items-center justify-center font-semibold select-none transition-[transform,filter,background-color,box-shadow] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100 ${BTN_SIZES[size]} ${BTN_STYLES[variant]} ${className}`;
   const inner = (
     <>
@@ -299,13 +364,21 @@ export function Button({
   );
   if (to && !disabled && !loading) {
     return (
-      <Link to={to} className={cls} style={BTN_CHROME[variant]}>
+      <Link to={to} className={cls} style={BTN_CHROME[variant]} aria-label={ariaLabel} title={title}>
         {inner}
       </Link>
     );
   }
   return (
-    <button type={type} disabled={disabled || loading} onClick={onClick} className={cls} style={BTN_CHROME[variant]}>
+    <button
+      type={type}
+      disabled={disabled || loading}
+      onClick={onClick}
+      className={cls}
+      style={BTN_CHROME[variant]}
+      aria-label={ariaLabel}
+      title={blocked ? READ_ONLY_MESSAGE : title}
+    >
       {inner}
     </button>
   );
@@ -316,7 +389,7 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   return (
     <div
       className="inline-flex rounded-[12px] p-[3px] gap-[2px]"
-      // the rail was a hardcoded #EDECE6: a light bar glaring at 15.69:1 against
+      // the rail was a hardcoded light grey: a light bar glaring at 15.69:1 against
       // the dark canvas. Tokenised so it recesses under the panel in both themes.
       style={{ background: 'rgb(var(--toggle-track, 237 236 230))', boxShadow: 'inset 0 1px 2px rgba(20,30,25,0.06)' }}
       role="tablist"
@@ -351,7 +424,7 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   );
 }
 
-export function ProgressBar({ pct, color = '#1E7A55', height = 6 }: { pct: number; color?: string; height?: number }) {
+export function ProgressBar({ pct, color = brandInk, height = 6 }: { pct: number; color?: string; height?: number }) {
   return (
     <div className="rounded-[3px] bg-border-std overflow-hidden" style={{ height }}>
       <div className="h-full rounded-[3px] transition-all" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
@@ -504,7 +577,7 @@ export function Listbox({
             >
               <span className="w-3 shrink-0">
                 {o.value === value && (
-                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1E7A55" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
+                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>
                 )}
               </span>
               <span className="truncate">{o.label}</span>

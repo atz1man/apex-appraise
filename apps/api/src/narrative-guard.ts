@@ -18,12 +18,54 @@
  * signed valuation is not a small loss of anything.
  */
 
-/** Money written as £8,575,000, £8.6m, £205 or £205/ft². */
-const MONEY = /£\s?([\d,]+(?:\.\d+)?)\s?(m|bn|k)?/gi;
-/** Percentages, including "20.4% on cost". */
-const PERCENT = /(\d+(?:\.\d+)?)\s?%/g;
+/**
+ * A figure is only checked if this can SEE it, and the mark it looked for was a
+ * leading pound sign.
+ *
+ * That made the guard depend on the model's formatting, which is the same
+ * circularity the file exists to break: the prompt says write £, and this was
+ * written because a prompt is not a guard. Measured against an engine Market
+ * Value of £8,575,000, with the transposition this whole module is for:
+ *
+ *     "the Market Value is £8,570,000."      FLAGGED
+ *     "the Market Value is 8,570,000."       passed
+ *     "the Market Value is 8,570,000 pounds" passed
+ *     "the Market Value is 8,570,000 GBP."   passed
+ *     "the Market Value is 8,570,000£."      passed
+ *     "a return on cost of 31.2 per cent"    passed
+ *
+ * So the marker may now come before or after, and may be a word. The suffix list
+ * gained the spelled-out multipliers at the same time: "£8.6 million" only
+ * worked before because `m` happened to match the first letter of the word, and
+ * "£8.6 billion" did not work at all.
+ *
+ * WHAT IS STILL NOT SEEN, and why it is left: a number carrying no marker of any
+ * kind — "the Market Value is 8,570,000." The shape that would catch it is a
+ * comma-grouped number, and areas share it exactly. The facts handed to the
+ * model are `[mv, gdv, profit, psf, supportedPsf]` and contain no areas, so
+ * "the scheme provides 8,750 sq ft of net internal area" would be flagged as an
+ * invented figure and the draft discarded. That is not the cheap failure it
+ * looks like: rejecting every honest draft removes the model path silently,
+ * leaving a feature that appears to work and never runs. Closing it properly
+ * means putting areas in the facts, which is a change to what the drafter is
+ * given rather than to what this reads.
+ */
+/** Money written as £8,575,000, £8.6m, 8,575,000 GBP, £205 or £205/ft². */
+const MONEY = /£\s?([\d,]+(?:\.\d+)?)\s*(million|billion|thousand|bn|m|k)?/gi;
+/** The same figure with its marker after it: "8,575,000 GBP", "£8.6m" reversed. */
+const MONEY_TRAILING =
+  /([\d,]+(?:\.\d+)?)\s*(million|billion|thousand|bn|m|k)?\s*(?:£|GBP\b|pounds?\b|sterling\b)/gi;
+/** Percentages, including "20.4% on cost" and "20.4 per cent". */
+const PERCENT = /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent\b|percent\b)/gi;
 
-const MULTIPLIER: Record<string, number> = { k: 1_000, m: 1_000_000, bn: 1_000_000_000 };
+const MULTIPLIER: Record<string, number> = {
+  k: 1_000,
+  thousand: 1_000,
+  m: 1_000_000,
+  million: 1_000_000,
+  bn: 1_000_000_000,
+  billion: 1_000_000_000,
+};
 
 export interface FoundFigure {
   /** as written, for the message a human reads */
@@ -46,15 +88,19 @@ const digitsWritten = (literal: string) => {
 
 export function moneyIn(text: string): FoundFigure[] {
   const out: FoundFigure[] = [];
-  for (const m of text.matchAll(MONEY)) {
-    const digits = Number(m[1]!.replace(/,/g, ''));
-    if (!Number.isFinite(digits)) continue;
-    const suffix = m[2]?.toLowerCase();
-    out.push({
-      raw: m[0].trim(),
-      value: digits * (suffix ? (MULTIPLIER[suffix] ?? 1) : 1),
-      writtenDigits: digitsWritten(m[1]!),
-    });
+  // both marker positions; a figure carrying one at each end is simply checked
+  // twice, which costs nothing and is cheaper than reasoning about overlap
+  for (const re of [MONEY, MONEY_TRAILING]) {
+    for (const m of text.matchAll(re)) {
+      const digits = Number(m[1]!.replace(/,/g, ''));
+      if (!Number.isFinite(digits)) continue;
+      const suffix = m[2]?.toLowerCase();
+      out.push({
+        raw: m[0].trim(),
+        value: digits * (suffix ? (MULTIPLIER[suffix] ?? 1) : 1),
+        writtenDigits: digitsWritten(m[1]!),
+      });
+    }
   }
   return out;
 }

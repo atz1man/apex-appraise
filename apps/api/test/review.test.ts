@@ -1,3 +1,4 @@
+import { ENGINE_VERSION } from '@apex/appraisal-engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
@@ -251,5 +252,121 @@ describe('the queue across deals', () => {
     // a queue they cannot act on would be noise dressed as a task
     expect(asAnalyst.awaitingReview).toEqual([]);
     expect(asAnalyst.returnedToMe[0]!.reviewNote).toBe('Contingency looks light');
+  });
+});
+
+
+/**
+ * Two admins deciding one version at the same moment.
+ *
+ * `review` read the row, checked it was `in_review`, and then wrote — the shape
+ * `a0acf31` found across the three payment paths and `engagement.sign` carried
+ * in the public signing flow. Both callers passed the check and both wrote.
+ * Measured before the fix, one approving while the other asked for changes:
+ *
+ *   FINAL STATUS      changes_requested
+ *   DECISION EVENTS   approved an appraisal version |
+ *                     requested changes to an appraisal version
+ *   WEBHOOKS QUEUED   1 appraisal.approved
+ *
+ * Two contradictory decisions in the trail with nothing saying which stood,
+ * and `appraisal.approved` queued to the subscriber for a version that ended up
+ * NOT approved. The router's own comment names who is listening: a lender's
+ * system watching for the firm's committed position.
+ */
+describe('two admins deciding one version at once', () => {
+  const decisionEvents = (dealId: string) =>
+    prisma.activityEvent.findMany({
+      where: { dealId, action: { in: ['approved an appraisal version', 'requested changes to an appraisal version'] } },
+    });
+
+  /**
+   * Run the pair more than once, deliberately.
+   *
+   * A single round is not enough to hold this. Unguarded, the race reproduces
+   * 20 times out of 20 — but which caller loses, and whether the loser is
+   * stopped by the cheap pre-check or by the compare-and-set, shifts with the
+   * interleaving. A mutation that removed the enforcement survived one round
+   * for exactly that reason: that run's loser happened to be refused by the
+   * pre-check, and the test reported success for a question it had not asked.
+   */
+  const ROUNDS = 5;
+
+  it('lets one decision stand each time, and tells the subscriber that one', async () => {
+    const R = await makeTenant('Decision');
+    const c = callerFor(R.principal);
+    await prisma.webhookEndpoint.create({
+      data: { orgId: R.orgId, url: 'https://lender.example/hook', secret: 'x', events: 'appraisal.approved', active: true, createdById: R.userId },
+    });
+    for (let round = 0; round < ROUNDS; round++) {
+      const saved = (await c.appraisal.save({
+        dealId: R.dealId, input: input(), label: `V${round}`, asNewVersion: true,
+      } as never)) as { id: string };
+      await c.appraisal.submitForReview({ versionId: saved.id } as never);
+      const eventsBefore = (await decisionEvents(R.dealId)).length;
+      const queuedBefore = await prisma.webhookDelivery.count({ where: { orgId: R.orgId } });
+
+      const settled = await Promise.allSettled([
+        c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never),
+        c.appraisal.review({ versionId: saved.id, decision: 'request_changes', note: 'Check the build rate.' } as never),
+      ]);
+      expect(settled.filter((r) => r.status === 'fulfilled'), `round ${round}: exactly one decision is accepted`).toHaveLength(1);
+      for (const r of settled) {
+        if (r.status === 'rejected') expect(String((r.reason as Error).message)).toMatch(/only a version in review/i);
+      }
+
+      const after = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+      const added = (await decisionEvents(R.dealId)).slice(eventsBefore);
+      expect(added, `round ${round}: one decision, one entry in the trail`).toHaveLength(1);
+
+      /**
+       * The row, the trail and the subscriber must all describe the SAME
+       * decision. Counting events alone would pass a fix that recorded once
+       * while still emitting the wrong event — the half that reaches a lender.
+       */
+      const expected =
+        after.reviewStatus === 'approved' ? 'approved an appraisal version' : 'requested changes to an appraisal version';
+      expect(added[0]!.action, `round ${round}: the trail and the row disagree`).toBe(expected);
+
+      const queuedNow = await prisma.webhookDelivery.findMany({ where: { orgId: R.orgId }, orderBy: { createdAt: 'asc' } });
+      const emitted = queuedNow.slice(queuedBefore).map((d) => d.event);
+      expect(
+        emitted,
+        `round ${round}: a version that is ${after.reviewStatus} announced ${emitted.join(', ') || 'nothing'}`,
+      ).toEqual(after.reviewStatus === 'approved' ? ['appraisal.approved'] : []);
+      /**
+       * And the event names what the approval was pinned to. A subscriber
+       * storing a GDV with no engine version and no input hash holds a figure
+       * nothing can ever check; the pin on the row is what `verifyApproved`
+       * checks, so the event carries the same two fields.
+       */
+      if (after.reviewStatus === 'approved') {
+        const payload = JSON.parse(queuedNow.slice(queuedBefore)[0]!.payload) as {
+          data?: { engineVersion?: string; inputHash?: string };
+          engineVersion?: string;
+          inputHash?: string;
+        };
+        const data = payload.data ?? payload;
+        expect(data.engineVersion, `round ${round}: the event does not say which engine signed`).toBe(ENGINE_VERSION);
+        expect(data.inputHash, `round ${round}: the event carries no input hash`).toMatch(/^[0-9a-f]{64}$/);
+        const pinned = JSON.parse(after.approvalPin!) as { inputHash: string };
+        expect(data.inputHash).toBe(pinned.inputHash);
+      }
+    }
+  });
+
+  it('still refuses a decision on a version already decided', async () => {
+    // the sequential path the pre-check answers — it must not have been lost
+    const R = await makeTenant('Decision2');
+    const c = callerFor(R.principal);
+    const saved = (await c.appraisal.save({ dealId: R.dealId, input: input(), label: 'Base' } as never)) as { id: string };
+    await c.appraisal.submitForReview({ versionId: saved.id } as never);
+    await c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never);
+
+    await expect(
+      c.appraisal.review({ versionId: saved.id, decision: 'request_changes', note: 'Too late.' } as never),
+    ).rejects.toThrow(/only a version in review/i);
+    expect((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).reviewStatus).toBe('approved');
+    expect(await decisionEvents(R.dealId)).toHaveLength(1);
   });
 });

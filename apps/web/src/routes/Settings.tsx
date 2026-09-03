@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
+import { DEFAULT_REGION, REGION_PROFILES, REGIONS, regionProfile, type Region } from '@apex/types/regions';
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
@@ -128,7 +129,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
               value={ricsDraft}
               onChange={(e) => setRics(e.target.value)}
             />
-            <Button type="submit" loading={update.isPending} disabled={!ricsDirty}>
+            <Button writes type="submit" loading={update.isPending} disabled={!ricsDirty}>
               Save
             </Button>
           </form>
@@ -175,7 +176,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
               </span>
             </label>
             {org.logoUrl && (
-              <Button size="sm" variant="secondary" loading={clearLogo.isPending} onClick={() => clearLogo.mutate()}>
+              <Button writes size="sm" variant="secondary" loading={clearLogo.isPending} onClick={() => clearLogo.mutate()}>
                 Remove
               </Button>
             )}
@@ -198,7 +199,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
             }}
           >
             <input className="flex-1" aria-label="Workspace name" value={draft} onChange={(e) => setName(e.target.value)} />
-            <Button type="submit" loading={update.isPending} disabled={!dirty}>
+            <Button writes type="submit" loading={update.isPending} disabled={!dirty}>
               Save
             </Button>
           </form>
@@ -294,7 +295,7 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         </select>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" loading={invite.isPending} disabled={!valid}>
+        <Button writes type="submit" loading={invite.isPending} disabled={!valid}>
           Send invite
         </Button>
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
@@ -534,7 +535,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </label>
-          <Button type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
+          <Button writes type="submit" className="mb-1" disabled={!target || form.name.trim().length < 2 || !form.email.includes('@')} loading={pending}>
             Invite to portal
           </Button>
           {kind === 'buyer' && candidates && candidates.units.length === 0 && (
@@ -571,7 +572,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
                   (revoking === l.id ? (
                     <>
                       <span className="text-[11.5px] text-ink-2">Sign-in ends immediately.</span>
-                      <Button size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
+                      <Button writes size="sm" variant="danger" loading={revoke.isPending} onClick={() => revoke.mutate({ userId: l.id })}>
                         Revoke
                       </Button>
                       <Button size="sm" variant="secondary" onClick={() => setRevoking(null)}>
@@ -703,7 +704,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                       <td className="py-2.5 px-2 border-t border-border-faint text-right whitespace-nowrap">
                         {isSelf ? null : removing === m.id ? (
                           <span className="inline-flex items-center gap-2">
-                            <Button
+                            <Button writes
                               size="sm"
                               variant="danger"
                               loading={remove.isPending}
@@ -924,7 +925,7 @@ function DataPrivacyPanel() {
                   autoFocus
                 />
               </div>
-              <Button type="submit" variant="danger" loading={destroy.isPending} disabled={confirmName.trim() !== org?.name}>
+              <Button writes type="submit" variant="danger" loading={destroy.isPending} disabled={confirmName.trim() !== org?.name}>
                 Permanently delete
               </Button>
               <Button variant="ghost" onClick={() => { setArmed(false); setConfirmName(''); }}>
@@ -943,6 +944,7 @@ function DataPrivacyPanel() {
 /** Firm-level standing wording used by new terms of engagement and the reports. */
 type PolicyForm = {
   aiPolicy: string;
+  region: Region;
   toePurpose: string;
   toeOtherUsers: string;
   toeInterest: string;
@@ -1064,7 +1066,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
       title="Valuation policy"
       right={
         isAdmin ? (
-          <Button
+          <Button writes
             size="sm"
             loading={save.isPending}
             onClick={() =>
@@ -1083,7 +1085,43 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
         ) : undefined
       }
     >
-      <div className="text-[13.5px] font-semibold">AI policy note</div>
+      {/*
+        Words and units, not money. A firm working outside the UK reads "cap
+        rate" rather than "yield" and quotes floor areas in square metres; every
+        figure stays in pounds and nothing is computed differently. The two
+        notes below are the honest limits of that, and they are stated here
+        rather than discovered on a certificate.
+      */}
+      <div className="text-[13.5px] font-semibold">Region</div>
+      <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
+        Which jurisdiction&rsquo;s vocabulary and floor-area unit your screens and reports use. Money is always in pounds
+        and no figure is calculated differently.
+      </div>
+      <select
+        className="mt-2.5 text-[12.5px]"
+        aria-label="Region"
+        disabled={!isAdmin}
+        value={form.region ?? DEFAULT_REGION}
+        onChange={(e) => set('region', e.target.value)}
+      >
+        {REGIONS.map((r) => (
+          <option key={r} value={r}>{REGION_PROFILES[r].label}</option>
+        ))}
+      </select>
+      {!regionProfile(form.region).landTaxModelled && (
+        <div className="mt-2 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+          {regionProfile(form.region).terms.landTax} is not calculated for this region — the acquisition duty in an
+          appraisal follows England &amp; Northern Ireland SDLT bands. Override it on the deal.
+        </div>
+      )}
+      {!regionProfile(form.region).redBook && (
+        <div className="mt-2 rounded-[10px] bg-sunken-2 px-3 py-2.5 text-[11.5px] text-ink-2 leading-snug">
+          The valuation certificate is drafted to the RICS Red Book and names a RICS Registered Valuer. Changing the
+          region changes the wording around the figures, not the standard the report is written to.
+        </div>
+      )}
+
+      <div className="mt-5 border-t border-border-std pt-4 text-[13.5px] font-semibold">AI policy note</div>
       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         Added to the AI-use disclosure in every report, after the standing statement. Use it for your own commitments —
         how AI-assisted text is reviewed, where your full policy can be read.
@@ -1391,7 +1429,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                     ))}
                   </ul>
                   {isAdmin && !current && data.configured && (
-                    <Button
+                    <Button writes
                       className="mt-3 w-full"
                       variant={p.featured ? 'primary' : 'secondary'}
                       loading={checkout.isPending && checkout.variables?.plan === p.key}

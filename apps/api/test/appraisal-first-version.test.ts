@@ -136,3 +136,95 @@ describe('the first version of an appraisal', () => {
     );
   });
 });
+
+/**
+ * The abort the database makes to stay serialisable, and what the save does with it.
+ *
+ * Postgres does not block the loser of a serialisable conflict; it aborts one
+ * with SQLSTATE 40001, which Prisma reports as P2034. This path used to read
+ * that abort as proof somebody else had saved the first version — true when
+ * there WAS somebody else, wrong the rest of the time. SSI aborts on the
+ * possibility of a cycle rather than a proven one, so two saves on two unrelated
+ * deals abort each other under load.
+ *
+ * CI found it. A browser test created a deal of its own, saved the first
+ * appraisal on it, and was told somebody had got there first — on an id no other
+ * test had ever seen, so no transaction existed that could have raced it.
+ *
+ * SQLite never raises P2034, so the abort is injected: `$transaction` is made to
+ * throw it once, and only for the serialisable call this path makes. Retrying is
+ * safe because the read that decides "nobody else has one" is inside the
+ * transaction — a retry takes a fresh snapshot and refuses properly if a genuine
+ * winner committed — and the test above still proves the loser of a real race is
+ * refused.
+ */
+describe('a serialisation abort from the database', () => {
+  it('is retried rather than reported as somebody else winning', async () => {
+    const T = await makeTenant('Retry');
+    const deal = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Aborted Once', address: '1 Retry Row', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+
+    const realTx = prisma.$transaction.bind(prisma);
+    let injected = 0;
+    // only the serialisable call this path makes; every other transaction in the
+    // save must run untouched or the test proves nothing about this one
+    (prisma as unknown as { $transaction: unknown }).$transaction = ((...args: unknown[]) => {
+      const opts = args[1] as { isolationLevel?: string } | undefined;
+      if (opts?.isolationLevel === 'Serializable' && injected === 0) {
+        injected++;
+        return Promise.reject(Object.assign(new Error('write conflict'), { code: 'P2034' }));
+      }
+      return (realTx as (...a: unknown[]) => unknown)(...args);
+    }) as never;
+
+    try {
+      const saved = await callerFor(T.principal).appraisal.save({ dealId: deal.id, input: INPUT, label: 'Base' } as never);
+      expect(saved, 'the save gave up on an abort the database asked it to retry').toBeTruthy();
+      expect(injected, 'the abort was never injected — this test proved nothing').toBe(1);
+    } finally {
+      (prisma as unknown as { $transaction: unknown }).$transaction = realTx as never;
+    }
+
+    // and exactly one row is current, which is the invariant the retry must not cost
+    const rows = await prisma.appraisal.findMany({ where: { dealId: deal.id } });
+    expect(rows.filter((r) => r.isCurrent)).toHaveLength(1);
+    expect(rows).toHaveLength(1);
+  });
+
+  /**
+   * And when the retries run out, the caller still gets a refusal it can act on.
+   *
+   * Whether the cause was contention or a real winner, the answer to the person
+   * saving is the same — reload and try again — so the exhausted case must not
+   * escape as a raw driver error and become a 500. A save that fails should not
+   * look like the server falling over.
+   */
+  it('refuses properly when the aborts never stop, rather than throwing a 500', async () => {
+    const T = await makeTenant('Exhausted');
+    const deal = await prisma.deal.create({
+      data: { orgId: T.orgId, name: 'Aborted Always', address: '2 Retry Row', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' },
+    });
+
+    const realTx = prisma.$transaction.bind(prisma);
+    let injected = 0;
+    (prisma as unknown as { $transaction: unknown }).$transaction = ((...args: unknown[]) => {
+      const opts = args[1] as { isolationLevel?: string } | undefined;
+      if (opts?.isolationLevel === 'Serializable') {
+        injected++;
+        return Promise.reject(Object.assign(new Error('write conflict'), { code: 'P2034' }));
+      }
+      return (realTx as (...a: unknown[]) => unknown)(...args);
+    }) as never;
+
+    try {
+      await expect(
+        callerFor(T.principal).appraisal.save({ dealId: deal.id, input: INPUT, label: 'Base' } as never),
+      ).rejects.toThrow(/saved the first version/i);
+      // every attempt was spent, not just the first
+      expect(injected).toBeGreaterThan(1);
+    } finally {
+      (prisma as unknown as { $transaction: unknown }).$transaction = realTx as never;
+    }
+  });
+});

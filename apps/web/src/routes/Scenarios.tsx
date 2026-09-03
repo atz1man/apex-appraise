@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetrics as Metrics } from '@apex/appraisal-engine';
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
+import { useUnits, type RegionUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
+import { brand, onFill } from '@apex/ui-tokens';
 
 const ACCENTS = ['rgb(var(--brand-ink, 20 80 59))', 'rgb(var(--status-blue, 45 91 168))', 'rgb(var(--status-amber, 154 98 18))'];
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
@@ -13,10 +15,18 @@ const RED = 'rgb(var(--status-red, 178 58 46))';
 
 type LeverKey = 'blendedPsf' | 'buildPsf' | 'gia' | 'targetProfitPct';
 
-const LEVERS: Array<{ key: LeverKey; label: string; min: number; max: number; step: number; fmt: (v: number) => string }> = [
-  { key: 'blendedPsf', label: 'Blended £/ft²', min: 180, max: 280, step: 5, fmt: (v) => `£${Math.round(v)}` },
-  { key: 'buildPsf', label: 'Build £/ft²', min: 85, max: 160, step: 5, fmt: (v) => `£${Math.round(v)}` },
-  { key: 'gia', label: 'GIA (ft²)', min: 16_000, max: 34_000, step: 500, fmt: (v) => n0(v) },
+/**
+ * The levers, in the firm's own unit.
+ *
+ * The VALUES stay in square feet — they are the engine's inputs and the slider
+ * ranges are calibrated in them — and only the label and the printed figure
+ * change. Converting the range too would move every slider's stops, which is a
+ * different scheme rather than the same one described differently.
+ */
+const leversFor = (U: RegionUnits): Array<{ key: LeverKey; label: string; min: number; max: number; step: number; fmt: (v: number) => string }> => [
+  { key: 'blendedPsf', label: `Blended £/${U.unit}`, min: 180, max: 280, step: 5, fmt: (v) => `£${U.rateNum(v)}` },
+  { key: 'buildPsf', label: `Build £/${U.unit}`, min: 85, max: 160, step: 5, fmt: (v) => `£${U.rateNum(v)}` },
+  { key: 'gia', label: `GIA (${U.unit})`, min: 16_000, max: 34_000, step: 500, fmt: (v) => U.areaNum(v) },
   { key: 'targetProfitPct', label: 'Target profit %', min: 12, max: 28, step: 1, fmt: (v) => `${v}%` },
 ];
 
@@ -47,6 +57,9 @@ const OUTPUT_ROWS: Array<{ label: string; key: keyof Metrics; fmt: (v: number) =
 const cellBorder = { borderLeft: '1px solid rgb(var(--border-faint, 240 239 233))' } as const;
 
 export default function Scenarios() {
+  /** floor areas and rates in the firm's own unit — words and units only */
+  const U = useUnits();
+  const LEVERS = leversFor(U);
   const { dealId = '' } = useParams();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -134,8 +147,8 @@ export default function Scenarios() {
     <div className="min-h-screen">
       <style>{`
         input[type=range].scn{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:rgb(var(--border-strong, 230 229 222));outline:none;padding:0;border:none;width:100%;box-shadow:none}
-        input[type=range].scn::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
-        input[type=range].scn::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#14503B;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(20,30,25,0.3)}
+        input[type=range].scn::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:${brand[700]};cursor:pointer;border:2px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,0.3)}
+        input[type=range].scn::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:${brand[700]};cursor:pointer;border:2px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,0.3)}
       `}</style>
       <TopBar
         crumb={
@@ -293,7 +306,7 @@ export default function Scenarios() {
                   <Dot color={v.color} size={7} />
                   <span className="text-[11px] font-semibold" style={{ color: v.color }}>{v.label}</span>
                 </div>
-                <Button
+                <Button writes
                   variant={isBest ? 'primary' : 'secondary'}
                   className="w-full"
                   loading={upsert.isPending}
@@ -316,7 +329,7 @@ export default function Scenarios() {
                 Compares the options&apos; risk profiles — planning, cost, sales absorption and leverage — against the figures above.
               </div>
             </div>
-            <Button
+            <Button writes
               variant="secondary"
               loading={draftRisk.isPending}
               disabled={scenarios.length < 2}

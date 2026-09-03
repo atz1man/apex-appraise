@@ -1,0 +1,58 @@
+<!--
+  Ten questions for checking that a model can actually USE this server.
+
+  Every answer below was produced by calling the engine, not by working it out
+  here — the script that produced them is the same `@apex/appraisal-engine`
+  import the tools use, so a model that reasons its way to a number instead of
+  calling a tool will get a different one and fail. That is the property being
+  tested: the questions are designed so that arithmetic-in-the-head is WRONG,
+  because a residual land value depends on monthly compounding interest on a
+  drawn balance and nobody does that in their head.
+
+  All read-only. None touches a workspace, so no key is needed and the answers
+  cannot drift with anybody's data. They are stable as long as ENGINE_VERSION
+  is — and if the engine's arithmetic changes, its own fingerprint test fails
+  first and names the bump.
+-->
+<evaluation>
+  <qa_pair>
+    <question>A Bournemouth trade scheme: six trade counter units of 2,600 ft² NIA at £225/ft², plus one 3,200 ft² mezzanine office at £240/ft². 90% efficiency, a single build trade at £105/ft², professional fees 11%, contingency 5%. Other costs are £150,000 of planning and S106 plus the CIL on the gross internal area at £40 per square metre. Senior debt 60% of construction at 7.5% over an 18-month build and 3 months of sales, 1.5% arrangement fee, S-curve spend. Solve the land value at a 20% target profit on GDV, with 6.8% acquisition costs and disposal at 1.5% agency and 0.5% legal. What is the gross development value, in pounds?</question>
+    <answer>4278000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>For that same Bournemouth scheme — six 2,600 ft² trade counter units at £225/ft², one 3,200 ft² mezzanine at £240/ft², 90% efficiency, £105/ft² build, 11% fees, 5% contingency, £150,000 planning and S106 plus CIL at £40/m², 60% LTC at 7.5% over 18 months plus 3 months of sales with a 1.5% arrangement fee and S-curve spend, 20% target profit on GDV, 6.8% acquisition, 1.5% agency and 0.5% legal — what residual land value does it support, to the nearest pound?</question>
+    <answer>406711</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>On that same Bournemouth appraisal, what is the profit on cost as a percentage, to one decimal place?</question>
+    <answer>25.0</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the Stamp Duty Land Tax on a £1,850,000 non-residential purchase in England, in pounds?</question>
+    <answer>82000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the Stamp Duty Land Tax on a £950,000 residential purchase in England where the higher rate for an additional dwelling applies, in pounds?</question>
+    <answer>86250</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A scheme has 20,888.89 ft² of gross internal area and the charging schedule sets CIL at £40 per square metre. What is the levy, to the nearest pound?</question>
+    <answer>77625</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A build-to-rent block of 48 apartments, each 620 ft², letting at £32/ft²/year with a 4% void allowance. Non-recoverable outgoings are 5% of rent, the all-risks yield is 4.25% and purchaser's costs are 6.8%. What is the capital value net of purchaser's costs, to the nearest pound?</question>
+    <answer>19134519</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Two options on the same 24,000 ft² site. Option A sells at a blended £245/ft² and builds at £118/ft². Option B sells at £265/ft² and builds at £132/ft². Both target 20% profit on GDV. Which option supports the higher residual land value — answer A or B?</question>
+    <answer>A</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Thirty flats of 850 ft² at £450/ft², 88% efficiency, an all-in build rate of £165/ft², 11% fees, 5% contingency, CIL at £60 per square metre, £240,000 of S106, 1.5% agency and 0.5% legal, 60% LTC at 8% over a 20-month build and 4 months of sales with a 1.5% arrangement fee, 20% target profit and 6.8% acquisition costs, with no asking price quoted. What residual land value does the scheme support, to the nearest pound?</question>
+    <answer>2467373</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In this product's asset taxonomy, what planning use class does purpose-built student accommodation fall under in England and Wales?</question>
+    <answer>Sui generis</answer>
+  </qa_pair>
+</evaluation>

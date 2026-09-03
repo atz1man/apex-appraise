@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { ASSET_TYPES } from './asset-classes.js';
 
 // ---- Enum-like unions (SQLite dev DB stores these as strings) ----
-export const ASSET_TYPES = ['INDUSTRIAL', 'RESIDENTIAL', 'COMMERCIAL', 'MIXED_USE'] as const;
 export const DEAL_STAGES = ['SOURCING', 'APPRAISAL', 'OFFER', 'ACQUISITION', 'CONSTRUCTION', 'SALES_LETTING', 'COMPLETED'] as const;
 export const FIGURE_STATUSES = ['ESTIMATE', 'COMMITTED', 'ACTUAL'] as const;
 export const VIABILITIES = ['PROCEED', 'CAUTION', 'DECLINE'] as const;
@@ -11,7 +11,6 @@ export const USER_ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 export const PRINCIPAL_TYPES = ['internal', 'buyer', 'investor'] as const;
 export const SPEND_PROFILES = ['SCURVE', 'EVEN', 'FRONT', 'BACK'] as const;
 
-export type AssetType = (typeof ASSET_TYPES)[number];
 export type DealStage = (typeof DEAL_STAGES)[number];
 export type FigureStatus = (typeof FIGURE_STATUSES)[number];
 export type Viability = (typeof VIABILITIES)[number];
@@ -238,3 +237,47 @@ export const zWhatIfResponse = z.object({
 
 // ---- Plans: what each tier switches on (see ./plan.ts) ----
 export * from './plan.js';
+/**
+ * The asset taxonomy — labels, chip families, planning use classes and the
+ * starting rent roll for each class. Its own module (and its own export path,
+ * `@apex/types/asset-classes`) so the browser can read it without zod.
+ */
+export * from './asset-classes.js';
+/**
+ * What a jurisdiction calls things — terminology and floor-area units behind a
+ * firm-level region setting. Words and units only; money stays in pounds.
+ */
+export * from './regions.js';
+
+/**
+ * The data providers a workspace can connect.
+ *
+ * `integrations.connect` took `z.string()` and looked the provider up with
+ * `findFirst`, so an unknown name simply found no row and 404'd — the provider
+ * was never validated, it merely failed. `isolation-sweep` relied on that
+ * accident: it feeds every procedure another firm's ids, and this one refused
+ * them because no IntegrationConnection had a cuid for a provider name. The
+ * moment `connect` became an upsert (so a firm could connect a provider it had
+ * no placeholder row for) the accident stopped holding, and the sweep said so
+ * immediately.
+ *
+ * So the set is named. Shared rather than kept in the router because the
+ * Integrations screen renders a card per provider and typed its own copy of
+ * these strings; `ProviderMeta.provider` is this type, so a card naming a
+ * provider the server will not accept is now a typecheck failure rather than a
+ * button that 400s.
+ */
+export const INTEGRATION_PROVIDERS = [
+  'HM Land Registry',
+  'EPC Register',
+  'Companies House',
+  'PriceHubble AVM',
+  'Planning Portal',
+  'Ordnance Survey',
+  'Environment Agency',
+  'BCIS',
+  'Xero',
+  'DocuSign',
+] as const;
+
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];

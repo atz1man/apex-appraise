@@ -1,9 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useLayoutEffect, useState } from 'react';
 import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
-import { Button, Spinner } from '../components/ui';
+import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
+import { Button, EmptyState, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
+import { PACK_LAYOUT, paginatePack } from '../lib/pack-pagination';
+import type { CovenantTest, ExposurePosition } from '@apex/appraisal-engine';
 
 /**
  * The funding pack — the book, as a lender receives it.
@@ -27,13 +30,33 @@ const fmtLong = docDate;
  * under-filled page one and overran page two by 62px — the arithmetic looked
  * right and the page did not.
  */
-const ROW_PX = 32;
-const TABLE_HEAD_PX = 34;
-const TOTAL_PX = 36;
-const SUMMARY_PX = 420;
+// the sheet arithmetic lives in lib/pack-pagination.ts, where its boundaries are tested
+const LAYOUT = { ...PACK_LAYOUT, pageContentPx: PAGE_CONTENT_PX };
+
+/** one line of the Exceptions box */
+type PackException = { kind: 'breach'; p: ExposurePosition; b: CovenantTest } | { kind: 'overdrawn'; p: ExposurePosition };
+
+/** the one line of an Exceptions box, wherever the sheet it lands on */
+function ExceptionLine({ e }: { e: PackException }) {
+  if (e.kind === 'breach') {
+    return (
+      <div className="pack-line text-[11.5px]">
+        <b className="font-semibold">{e.p.name}</b> — {e.b.label} {e.b.actualPct.toFixed(1)}% against a{' '}
+        {e.b.direction === 'max' ? 'maximum' : 'minimum'} of {e.b.limitPct}%
+      </div>
+    );
+  }
+  return (
+    <div className="pack-line text-[11.5px]">
+      {/* the figure the verdict was actually reached on, under the word that describes it — see drawn-basis.ts */}
+      <b className="font-semibold">{e.p.name}</b> — {fM(e.p.drawdown!.actualToDate)} {drawnAgainstWorksLabel(e.p.drawnSource)} against{' '}
+      {fM(e.p.drawdown!.expectedByProgress)} of works
+    </div>
+  );
+}
 
 export default function FundingPack() {
-  const { data: exposure, isLoading } = trpc.deals.exposure.useQuery();
+  const { data: exposure, isLoading, error, refetch } = trpc.deals.exposure.useQuery();
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
 
   const firmName = org?.name ?? 'Apex Appraise';
@@ -45,18 +68,73 @@ export default function FundingPack() {
    * the ones after it — sizing every page the same would either waste a sheet or
    * overrun the first.
    */
+  /**
+   * Height the arithmetic did not know about, measured off the rendered
+   * sheets. The budget below is close, and three times it has been wrong by
+   * a line: exception lines, the closing note on a sheet that was also full,
+   * and the dagger footnote a mixed book prints. Each was "fixed" by adding
+   * a constant, and the next unbudgeted line was already there. So after
+   * render the sheets are measured, and any that overruns A4 hands its
+   * overrun back as reserve and the pack lays out again — one pass in
+   * practice, bounded to a handful so a pathological book cannot loop.
+   */
+  const [reserve, setReserve] = useState(0);
+  /**
+   * The row and the exception line are budgeted at their measured height for
+   * a name that fits on one line. A long scheme name wraps and the row is
+   * taller, on EVERY sheet — a uniform reserve taken off every sheet for that
+   * starves the sheets it did not happen on (measured: page one down to eight
+   * exception lines from twenty-seven). So the tallest rendered row and line
+   * are read back and the layout uses those; the reserve is left for what the
+   * arithmetic still cannot see.
+   */
+  const [measured, setMeasured] = useState({ rowPx: LAYOUT.rowPx, exceptionLinePx: LAYOUT.exceptionLinePx });
   const pages = useMemo(() => {
     const positions = exposure?.positions ?? [];
-    if (!positions.length) return [positions];
-    const firstPageRows = Math.max(1, Math.floor((PAGE_CONTENT_PX - SUMMARY_PX - TABLE_HEAD_PX - TOTAL_PX) / ROW_PX));
-    const laterPageRows = Math.max(1, Math.floor((PAGE_CONTENT_PX - TABLE_HEAD_PX - TOTAL_PX) / ROW_PX));
-    const out: (typeof positions)[] = [positions.slice(0, firstPageRows)];
-    for (let i = firstPageRows; i < positions.length; i += laterPageRows) {
-      out.push(positions.slice(i, i + laterPageRows));
+    /**
+     * The exception lines, in the order they print: every covenant breach,
+     * then every overspending scheme. Page one's budget used to be a constant
+     * that assumed one line, and twelve breach lines put 220px of the pack off
+     * the bottom of the sheet; then the lines themselves grew past the sheet —
+     * 43 of them on a forty-scheme book — so the box paginates like the table.
+     */
+    const exceptions: PackException[] = [
+      ...positions.flatMap((p) => (p.covenants?.breaches ?? []).map((b) => ({ kind: 'breach' as const, p, b }))),
+      ...positions.filter((p) => p.drawdown?.status === 'overspending').map((p) => ({ kind: 'overdrawn' as const, p })),
+    ];
+    return paginatePack(positions, exceptions, { ...LAYOUT, ...measured }, reserve);
+  }, [exposure, reserve, measured]);
+  useLayoutEffect(() => {
+    const tallest = (selector: string) =>
+      Math.ceil(Math.max(0, ...Array.from(document.querySelectorAll<HTMLElement>(selector)).map((el) => el.getBoundingClientRect().height)));
+    const rowPx = Math.max(measured.rowPx, tallest('.pack-row'));
+    const exceptionLinePx = Math.max(measured.exceptionLinePx, tallest('.pack-line'));
+    // heights only ever grow, so this settles; a sheet laid out for its tallest row cannot then overrun on rows
+    if (rowPx !== measured.rowPx || exceptionLinePx !== measured.exceptionLinePx) {
+      setMeasured({ rowPx, exceptionLinePx });
+      return;
     }
-    return out;
-  }, [exposure]);
+    const sheets = Array.from(document.querySelectorAll<HTMLElement>('.a4-page'));
+    // 1122 is the sheet; anything past it is content the page cannot hold
+    const overrun = Math.max(0, ...sheets.map((el) => el.getBoundingClientRect().height - 1122));
+    if (overrun > 0 && reserve < 8 * LAYOUT.rowPx) setReserve((r) => r + Math.ceil(overrun) + 4);
+  }, [pages, reserve, measured]);
 
+  /**
+   * A pack that could not be built says so. It used to spin for ever on a
+   * failed exposure read — `isLoading || !exposure` is true of an error too —
+   * which in the browser suite read as "the pack never rendered" and told a
+   * person printing one nothing at all.
+   */
+  if (error) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-frame p-6">
+        <EmptyState title="The funding pack could not be built" cta={<Button onClick={() => refetch()}>Try again</Button>}>
+          <span data-testid="pack-error">{error.message}</span>
+        </EmptyState>
+      </div>
+    );
+  }
   if (isLoading || !exposure) {
     return (
       <div className="min-h-screen grid place-items-center bg-frame">
@@ -66,9 +144,14 @@ export default function FundingPack() {
   }
 
   const t = exposure.totals;
-  const breaching = exposure.positions.filter((p) => (p.covenants?.breaches.length ?? 0) > 0);
-  const overdrawn = exposure.positions.filter((p) => p.drawdown?.status === 'overspending');
   const total = pages.length;
+  const anyExceptions = pages.some((s) => s.exceptions.length > 0);
+  /**
+   * The pack states where "Drawn" came from instead of asserting one basis for
+   * the whole book — see `drawn-basis.ts` for what it used to say and why that
+   * mattered on a firm that had connected its bank feed.
+   */
+  const basis = drawnBasis(exposure.positions);
 
   /**
    * A pack over no schemes is not a pack.
@@ -100,7 +183,7 @@ export default function FundingPack() {
     <div className="light min-h-screen bg-frame">
       <style>{PRINT_CSS}</style>
       <div className="a4-canvas flex flex-col items-center gap-6 px-5 pt-7 pb-14">
-        {pages.map((rows, pi) => (
+        {pages.map(({ rows, exceptions, continued }, pi) => (
           <A4Page key={pi}>
             <PageHead
               title={pi === 0 ? 'Portfolio funding pack' : `Portfolio funding pack (${pi + 1} of ${total})`}
@@ -111,8 +194,8 @@ export default function FundingPack() {
               <>
                 <p className="mt-4 text-[12px] text-ink-2b leading-[1.6]">
                   Prepared {fmtLong(today)} from {t.deals} funded {t.deals === 1 ? 'scheme' : 'schemes'}. Facility figures are
-                  recomputed from each scheme's current appraisal, not carried forward from a previous pack; drawn is committed
-                  spend from cost monitoring.
+                  recomputed from each scheme's current appraisal, not carried forward from a previous pack.
+                  {basis.sentence ? ` ${basis.sentence}` : ''}
                 </p>
 
                 <div className="mt-4 grid grid-cols-3 gap-3">
@@ -180,7 +263,7 @@ export default function FundingPack() {
                     not find them. */}
                 <div className="mt-3 rounded-[10px] border border-border-std p-2.5">
                   <div className="text-[11px] uppercase tracking-wide text-ink-3">Exceptions</div>
-                  {breaching.length === 0 && overdrawn.length === 0 ? (
+                  {!anyExceptions ? (
                     <div className="mt-1 text-[11.5px] text-ink-2b">
                       {exposure.positions.every((p) => p.covenants?.untested !== false)
                         ? 'No covenants are set, so none are tested. Nothing is drawn ahead of works.'
@@ -188,19 +271,8 @@ export default function FundingPack() {
                     </div>
                   ) : (
                     <div className="mt-1 flex flex-col gap-0.5">
-                      {breaching.map((p) =>
-                        p.covenants!.breaches.map((b) => (
-                          <div key={`${p.dealId}-${b.key}`} className="text-[11.5px]">
-                            <b className="font-semibold">{p.name}</b> — {b.label} {b.actualPct.toFixed(1)}% against a{' '}
-                            {b.direction === 'max' ? 'maximum' : 'minimum'} of {b.limitPct}%
-                          </div>
-                        )),
-                      )}
-                      {overdrawn.map((p) => (
-                        <div key={`${p.dealId}-draw`} className="text-[11.5px]">
-                          <b className="font-semibold">{p.name}</b> — {fM(p.drawn)} committed against{' '}
-                          {fM(p.drawdown!.expectedByProgress)} of works
-                        </div>
+                      {exceptions.map((e) => (
+                        <ExceptionLine key={e.kind === 'breach' ? `${e.p.dealId}-${e.b.key}` : `${e.p.dealId}-draw`} e={e} />
                       ))}
                     </div>
                   )}
@@ -208,6 +280,20 @@ export default function FundingPack() {
               </>
             )}
 
+            {/* a box the first sheet could not hold goes on, sheet by sheet, before the table */}
+            {continued && (
+              <div className="mt-3 rounded-[10px] border border-border-std p-2.5">
+                <div className="text-[11px] uppercase tracking-wide text-ink-3">Exceptions (continued)</div>
+                <div className="mt-1 flex flex-col gap-0.5">
+                  {exceptions.map((e) => (
+                    <ExceptionLine key={e.kind === 'breach' ? `${e.p.dealId}-${e.b.key}` : `${e.p.dealId}-draw`} e={e} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* a first sheet the exceptions have filled carries no table; the rows start on the next */}
+            {(rows.length > 0 || pi === total - 1) && (
             <div className="mt-4 border border-border-std rounded-[10px] overflow-hidden">
               <div
                 className="flex text-white fig text-[9.5px] font-semibold uppercase"
@@ -221,12 +307,17 @@ export default function FundingPack() {
                 <div className="text-right" style={{ flex: 1.1, padding: '9px 10px' }}>LTGDV</div>
               </div>
               {rows.map((p) => (
-                <div key={p.dealId} className="flex border-t border-border-faint fig text-[11px]">
+                <div key={p.dealId} className="pack-row flex border-t border-border-faint fig text-[11px]">
                   <div className="font-ui" style={{ flex: 2.4, padding: '7px 10px' }}>{p.name}</div>
                   <div style={{ flex: 0.8, padding: '7px 6px' }}>{p.region}</div>
                   <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.gdv)}</div>
                   <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.facility)}</div>
-                  <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>{fM(p.drawn)}</div>
+                  {/* † only on a mixed book: where every row shares one basis the
+                      methodology note above has already said so */}
+                  <div className="text-right" style={{ flex: 1.2, padding: '7px 6px' }}>
+                    {fM(p.drawn)}
+                    {basis.markRows && p.drawnSource !== 'bank' ? <span className="text-ink-3">&thinsp;†</span> : null}
+                  </div>
                   <div className="text-right font-semibold" style={{ flex: 1.1, padding: '7px 10px' }}>
                     {p.gdv > 0 ? `${Math.round((p.facility / p.gdv) * 100)}%` : '—'}
                   </div>
@@ -245,6 +336,7 @@ export default function FundingPack() {
                 </div>
               )}
             </div>
+            )}
 
             {pi === total - 1 && (
               <p className="mt-3 text-[10px] text-ink-3 leading-snug">

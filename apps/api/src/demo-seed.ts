@@ -465,14 +465,45 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
       data: { orgId: org.id, dealId: northgate, name, category, ext, sizeBytes: BigInt(sizeBytes), extraction, buyerVisible, addedById: ao.id },
     });
   }
-  // buyer-visible docs live on the buyer's own development (Harbour Reach)
+  /**
+   * What the syndicate may read. The investor portal's Documents panel used to
+   * be a JSON list of names on the investor row with no file behind any of
+   * them; it now lists the documents flagged on the deals the LP holds in, and
+   * the demo LP holds in Harbour Reach.
+   */
+  const investorDocs: Array<[string, string, string, number]> = [
+    ['Q2 2026 investor report — Harbour Reach.pdf', 'Finance', 'pdf', 1_200_000],
+    ['Drawdown notice 4 — Harbour Reach.pdf', 'Finance', 'pdf', 220_000],
+  ];
+  for (const [name, category, ext, sizeBytes] of investorDocs) {
+    await prisma.document.create({
+      data: {
+        orgId: org.id, dealId: harbourReach, name, category, ext, sizeBytes: BigInt(sizeBytes),
+        extraction: 'STORED', investorVisible: true, addedById: ao.id,
+      },
+    });
+  }
+  /**
+   * Buyer-visible docs live on the buyer's own development (Harbour Reach), and
+   * belong to ONE plot.
+   *
+   * Their names always said so — "Reservation pack — Plot 1", "Contract of sale
+   * — Plot 1 (engrossment)" — but the rows carried only a dealId, and the portal
+   * selected by deal. On a scheme with ten plots that is another private
+   * individual's conveyancing file in every buyer's portal. `unitId` is what
+   * makes the name true, and `buyerUnitId` above is the same plot the demo buyer
+   * signs in as.
+   */
   const buyerDocs: Array<[string, string, string, number]> = [
     ['Reservation pack — Plot 1.pdf', 'Legal', 'pdf', 380_000],
     ['Contract of sale — Plot 1 (engrossment).pdf', 'Legal', 'pdf', 640_000],
   ];
   for (const [name, category, ext, sizeBytes] of buyerDocs) {
     await prisma.document.create({
-      data: { orgId: org.id, dealId: harbourReach, name, category, ext, sizeBytes: BigInt(sizeBytes), extraction: 'STORED', buyerVisible: true, addedById: ao.id },
+      data: {
+        orgId: org.id, dealId: harbourReach, unitId: buyerUnitId, name, category, ext,
+        sizeBytes: BigInt(sizeBytes), extraction: 'STORED', buyerVisible: true, addedById: ao.id,
+      },
     });
   }
   const activityRows: Array<[string, string, string]> = [
@@ -491,28 +522,21 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     ['Meridian Capital LP', 'MC', 'Lena', 55],
     ['Private — S. Okonkwo', 'SO', 'Sade', 18],
   ];
-  const baseHoldings: Array<[string, number, number, number]> = [
-    ['Harbour Reach', 4_700_000, 0, 0],
+  // the third figure is the deal's recorded IRR; Harbour Reach is still in
+  // construction, so nobody has recorded one and it is null, not zero
+  const baseHoldings: Array<[string, number, number, number | null]> = [
+    ['Harbour Reach', 4_700_000, 0, null],
     ['Old Brewery Quarter', 2_100_000, 2_760_000, 0.231],
     ['Parkstone Mews', 1_600_000, 2_040_000, 0.198],
   ];
   const investorIds: string[] = [];
   for (const [name, initials, contactFirst, sharePct] of investorRows) {
-    const inv = await prisma.investor.create({
-      data: {
-        orgId: org.id, name, initials, contactFirst, sharePct,
-        documents: JSON.stringify([
-          { name: 'Q2 2026 investor report.pdf', date: '2026-06-30', size: '1.2 MB' },
-          { name: 'LPA — Brookfield JV II.pdf', date: '2025-09-12', size: '3.4 MB' },
-          { name: 'Distribution notice — OBQ.pdf', date: '2026-05-14', size: '220 KB' },
-        ]),
-      },
-    });
+    const inv = await prisma.investor.create({ data: { orgId: org.id, name, initials, contactFirst, sharePct } });
     investorIds.push(inv.id);
     for (const [dealName, committed, distributed, irr] of baseHoldings) {
       await prisma.holding.create({
         data: {
-          investorId: inv.id, dealId: deals[dealName], sharePct,
+          investorId: inv.id, dealId: deals[dealName],
           committed: p(committed), called: p(committed * 0.82), distributed: p(distributed), irr,
         },
       });

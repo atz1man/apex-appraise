@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
+import { assetLabel } from '@apex/types/asset-classes';
+import { useUnits } from '../lib/region';
 import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
+import { brand, onFill } from '@apex/ui-tokens';
 
 const GREEN = 'rgb(var(--status-green, 30 122 85))';
 const RED = 'rgb(var(--status-red, 178 58 46))';
 const AMBER = 'rgb(var(--status-amber, 154 98 18))';
 const NEUTRAL = 'rgb(var(--inactive, 138 144 138))';
-const PIN = '#1E9E6A';
+const PIN = brand[400];
 
 const adjColor = (v: number) => (v > 0 ? GREEN : v < 0 ? RED : NEUTRAL);
 
@@ -98,6 +101,8 @@ export default function Comparables() {
           ? 'The postcode lookup is unavailable, so the subject can’t be placed right now — the deal is fine.'
           : '';
 
+  /** rates print in the firm's own unit; the engine and the database hold £/ft² */
+  const U = useUnits();
   const supported = comps.length ? Math.round(summary.supportedPsf) : 0;
   const avgGross = summary.avgGrossAdjustment;
   const conf =
@@ -127,7 +132,7 @@ export default function Comparables() {
     upsert.mutate({
       dealId,
       address: `Comparable ${comps.length + 1}`,
-      meta: 'New evidence — set base £/ft² and adjustments',
+      meta: 'New evidence — set the base rate and adjustments',
       basePsf: 220,
       adjSize: 0,
       adjCondition: 0,
@@ -179,7 +184,7 @@ export default function Comparables() {
         right={
           comps.length > 0 && (
             <span className="inline-flex items-center rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
-              Derived: £{supported}/ft²
+              Derived: {U.rate(supported)}
             </span>
           )
         }
@@ -195,7 +200,7 @@ export default function Comparables() {
                 <div>
                   <div className="text-[17px] font-bold tracking-[-0.4px]">Sales comparison — adjustment grid</div>
                   <div className="mt-0.5 text-[12.5px] text-ink-3 font-normal">
-                    Adjust each comp to the subject; the grid derives a supported £/ft².
+                    Adjust each comp to the subject; the grid derives a supported £/{U.unit}.
                   </div>
                 </div>
               }
@@ -207,7 +212,7 @@ export default function Comparables() {
             >
               {comps.length === 0 ? (
                 <EmptyState title="No comparable evidence yet" cta={<Button onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
-                  Add sold comparables to derive a supported £/ft² for the valuation.
+                  Add sold comparables to derive a supported £/{U.unit} for the valuation.
                 </EmptyState>
               ) : (
                 <div className="overflow-x-auto">
@@ -215,7 +220,7 @@ export default function Comparables() {
                     {/* header */}
                     <div className="flex label-mono text-ink-3 border-b border-border-std">
                       <div className="pb-2 px-2.5" style={{ flex: 2 }}>Comparable</div>
-                      <div className="pb-2 px-1.5 text-right" style={{ flex: 1.1 }}>Sale £/ft²</div>
+                      <div className="pb-2 px-1.5 text-right" style={{ flex: 1.1 }}>Sale £/{U.unit}</div>
                       {ADJ_COLS.map(([k, label]) => (
                         <div key={k} className="pb-2 px-1.5 text-center" style={{ flex: 1 }}>{label}</div>
                       ))}
@@ -235,7 +240,7 @@ export default function Comparables() {
                             </div>
                             <div className="mt-0.5 pl-[17px] text-[10.5px] text-ink-3 truncate">{c.meta}</div>
                           </div>
-                          <div className="fig px-1.5 text-right text-[13px] font-semibold" style={{ flex: 1.1 }}>£{c.basePsf}</div>
+                          <div className="fig px-1.5 text-right text-[13px] font-semibold" style={{ flex: 1.1 }}>£{U.rateNum(c.basePsf)}</div>
                           {ADJ_COLS.map(([k, label]) => (
                             <div key={k} className="px-1 flex justify-center" style={{ flex: 1 }}>
                               <input
@@ -253,7 +258,7 @@ export default function Comparables() {
                             </div>
                           ))}
                           <div className="px-2.5 text-right" style={{ flex: 1.2 }}>
-                            <div className="fig text-[14px] font-semibold text-brand-ink">£{r.adjustedPsf}</div>
+                            <div className="fig text-[14px] font-semibold text-brand-ink">£{U.rateNum(r.adjustedPsf)}</div>
                             <div className="fig text-[10px]" style={{ color: adjColor(r.netAdjustment) }}>{netFmt}</div>
                           </div>
                         </div>
@@ -305,17 +310,17 @@ export default function Comparables() {
 
           {/* RIGHT: subject + evidence quality + apply */}
           <aside className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
-            <div className="rounded-card p-5 text-white shadow-rest" style={{ background: 'linear-gradient(155deg,#1B6048,#14503B)' }}>
+            <div className="rounded-card p-5 text-white shadow-rest" style={{ background: `linear-gradient(155deg,${brand[600]},${brand[700]})` }}>
               <div className="fig text-[10px] font-medium uppercase tracking-[0.7px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Subject</div>
               <div className="mt-1.5 text-[17px] font-semibold">{deal?.name ?? '—'}</div>
               <div className="mt-0.5 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                {deal ? `${deal.assetType.replace('_', ' / ')} · ${deal.address}` : ''}
+                {deal ? `${assetLabel(deal.assetType)} · ${deal.address}` : ''}
               </div>
               <div className="mt-4 pt-3.5 flex items-end justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.75)' }}>Supported blended value</span>
                 <span className="fig text-[24px] font-semibold tracking-[-1px]">
-                  £{supported}
-                  <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>/ft²</span>
+                  £{U.rateNum(supported)}
+                  <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>/{U.unit}</span>
                 </span>
               </div>
             </div>
@@ -350,23 +355,23 @@ export default function Comparables() {
 
             <Panel title={<span className="text-[13px] font-semibold">Apply to appraisal</span>}>
               <div className="text-[12px] text-ink-2b leading-relaxed">
-                Push the supported £{supported}/ft² into the revenue tab of the development appraisal.
+                Push the supported {U.rate(supported)} into the revenue tab of the development appraisal.
               </div>
               {apply.isSuccess ? (
                 <div className="mt-3">
                   <div className="flex items-center gap-2 px-3 py-2.5 rounded-[9px] bg-tint-success-2">
                     <Icon d="M4 12l5 5L20 7" size={15} color={GREEN} strokeWidth={2.5} />
                     <span className="text-[12px] font-semibold text-status-green">
-                      Applied — unit caps set to £{apply.data.supportedPsf}/ft²
+                      Applied — unit caps set to {U.rate(apply.data.supportedPsf)}
                     </span>
                   </div>
                   <Button to={`/deal/${dealId}/appraisal`} size="lg" className="mt-3 w-full">
                     Open appraisal
-                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                   </Button>
                 </div>
               ) : (
-                <Button
+                <Button writes
                   size="lg"
                   className="mt-3.5 w-full"
                   loading={apply.isPending}
@@ -376,7 +381,7 @@ export default function Comparables() {
                   {!apply.isPending && (
                     <>
                       Apply &amp; open appraisal
-                      <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                      <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                     </>
                   )}
                 </Button>

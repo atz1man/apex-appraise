@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -24,7 +24,26 @@ import { describe, expect, it } from 'vitest';
  */
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
-const SEARCHED = ['apps/web/src', 'apps/api/src', 'packages/types/src', 'packages/ui-tokens/src'];
+const SEARCHED = ['apps/web/src', 'apps/api/src', 'packages/types/src', 'packages/ui-tokens/src', 'packages/mcp-server/src'];
+
+/**
+ * Every source tree in the repo except the engine's own.
+ *
+ * Derived, and checked against `SEARCHED` below, because the list above is the
+ * part of this sweep that could quietly stop being true: a new package is added,
+ * nobody thinks to add it here, and the sweep goes on passing over a smaller and
+ * smaller tree while reporting success. The MCP server is exactly that case —
+ * a surface whose whole job is to hand money figures to a model, arriving in a
+ * package that did not exist when this list was written.
+ */
+const everySourceTree = (): string[] =>
+  ['apps', 'packages']
+    .flatMap((group) =>
+      readdirSync(join(ROOT, group))
+        .map((name) => `${group}/${name}/src`)
+        .filter((rel) => existsSync(join(ROOT, rel))),
+    )
+    .filter((rel) => rel !== 'packages/appraisal-engine/src');
 
 const RULES: Array<{ what: string; use: string; re: RegExp }> = [
   {
@@ -37,6 +56,30 @@ const RULES: Array<{ what: string; use: string; re: RegExp }> = [
     what: 'the analysed rate — a Market Value over a net internal area',
     use: 'analysedPsf()',
     re: /Math\.round\(\s*mv\s*\/\s*[\w.]*nia\b/i,
+  },
+  {
+    /**
+     * The third, and the first this sweep found rather than confirmed.
+     *
+     * Progress across a job is weighted by what each package is WORTH — a
+     * £900k package at 10% beside a £100k package at 100% is a job barely
+     * started, and averaging the percentages calls it 55%. `cost-report.ts`
+     * owns that as `weightedProgressPct`. `deals.exposure` carried its own
+     * copy, and so did `/api/v1/exposure`: three implementations, and the
+     * argument FOR the rule written out twice in comments as well.
+     *
+     * They print on three surfaces — the cost monitor's build-programme bar,
+     * the funding pack's overspending verdict, and a customer's own
+     * integration — so a change to the weighting basis would have moved one
+     * and left the others contradicting it. Written after routing the other
+     * two through the engine, and verified against the source as it stood
+     * BEFORE that: it finds both offenders unaided.
+     */
+    what: 'progress weighted by what each package is worth',
+    use: 'costRollup().weightedProgressPct',
+    // a money figure multiplied by a progress percentage — the accumulation
+    // step, which is where a hand-rolled weighting always starts
+    re: /[\w.]+\s*\*\s*\(?\s*[\w.]*progressPct/,
   },
 ];
 
@@ -63,6 +106,14 @@ describe('one shared calculation engine for every surface', () => {
     expect(files.length, 'the sweep found no source files — the paths have moved').toBeGreaterThan(50);
     expect(files.some((f) => f.endsWith('RedBookReport.tsx'))).toBe(true);
     expect(files.some((f) => f.endsWith('routers/appraisal.ts'))).toBe(true);
+    expect(files.some((f) => f.endsWith('mcp-server/src/server.ts'))).toBe(true);
+  });
+
+  it('sweeps every source tree in the repo, not the ones somebody remembered', () => {
+    expect(
+      everySourceTree().filter((t) => !SEARCHED.includes(t)),
+      'a package this sweep does not look at — add it to SEARCHED, or say in a comment why money maths cannot reach it',
+    ).toEqual([]);
   });
 
   for (const rule of RULES) {

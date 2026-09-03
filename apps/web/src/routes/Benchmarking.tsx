@@ -1,18 +1,29 @@
 import { useState } from 'react';
-import { status as statusTokens, brand } from '@apex/ui-tokens';
+import { accent, brand, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
+import { workingDeal } from '../lib/working-deal';
+import { useUnits } from '../lib/region';
+import { ASSET_CLASSES, assetLabel } from '@apex/types/asset-classes';
+import { UK_REGION_NAMES } from '@apex/types/uk-regions';
 
-const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
-const USE_CLASSES: Array<[string, string]> = [
-  ['INDUSTRIAL', 'Industrial'],
-  ['RESIDENTIAL', 'Residential'],
-  ['COMMERCIAL', 'Commercial'],
-  ['MIXED_USE', 'Mixed-use'],
-];
-const useLabel = (k: string) => USE_CLASSES.find(([id]) => id === k)?.[1] ?? k;
+/**
+ * The cohorts a firm can read, from the one region table.
+ *
+ * Four were offered here, and the feed could produce three of them: "Midlands"
+ * was in this list and unreachable, so its cohort held nothing but illustrative
+ * seed data while every real Midlands scheme was filed under the South West.
+ */
+const REGIONS = UK_REGION_NAMES;
+/**
+ * The cohort selector follows the taxonomy — `BenchmarkPoint.useClass` stores
+ * a `Deal.assetType`, so an asset class the product can create is a cohort the
+ * pool can hold.
+ */
+const USE_CLASSES: Array<[string, string]> = ASSET_CLASSES.map((c) => [c.code, c.label] as [string, string]);
+const useLabel = (k: string) => assetLabel(k);
 
 /** "2026-Q2" → "Q2·26" */
 const periodShort = (p: string) => {
@@ -169,6 +180,11 @@ function MetricCard({
 }
 
 export default function Benchmarking() {
+  /**
+   * The pool holds £/ft², as every contributing firm's engine produced it. What
+   * a reader sees is their own unit — the cohort is the same evidence either way.
+   */
+  const U = useUnits();
   const [region, setRegion] = useState('South West');
   const [useClass, setUseClass] = useState('INDUSTRIAL');
 
@@ -212,7 +228,7 @@ export default function Benchmarking() {
   const optedIn = setContribution.isPending
     ? (setContribution.variables?.enabled ?? contribQ.data?.optedIn ?? false)
     : (contribQ.data?.optedIn ?? false);
-  const effectiveContribId = contribDealId || dealsQ.data?.deals.find((d) => d.name.startsWith('Northgate'))?.id || dealsQ.data?.deals[0]?.id || '';
+  const effectiveContribId = contribDealId || workingDeal(dealsQ.data?.deals)?.id || '';
 
   const M = metricsQ.data;
   const trend = trendQ.data?.series ?? [];
@@ -338,8 +354,11 @@ export default function Benchmarking() {
     <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
       <h3 className="text-[13px] font-semibold">Data contribution</h3>
       <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
-        Contributing shares three ratios from an appraisal — build £/ft², GDV £/ft² and profit on cost. Never the address, the
-        client, the deal name or any absolute figure. A cohort is only ever published once{' '}
+        Contributing shares three ratios from each appraisal an administrator approves — build £/{U.unit}, {U.terms.gdv} £/{U.unit}{' '}
+        and profit on cost — automatically at approval, and the out-turn build £/{U.unit} of each scheme marked completed, from
+        certified spend.
+        Nothing enters from a draft. Never the address, the client, the deal name or any absolute figure. A cohort is only
+        ever published once{' '}
         {contribQ.data ? n0(contribQ.data.minContributors) : 'several'} separate firms are in it, and you are never compared
         against your own schemes.
       </p>
@@ -354,9 +373,16 @@ export default function Benchmarking() {
         <span className="text-[11.5px] leading-[1.45] text-ink-2b">
           <span className="font-semibold text-ink">Contribute this workspace's appraisals</span>
           <br />
-          Off by default. Turning it off again withdraws everything already contributed.
+          Off by default. Turning it on contributes every deal already approved; turning it off again withdraws everything already contributed.
         </span>
       </label>
+      {setContribution.data && setContribution.data.enabled && (
+        <div className="mt-2 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
+          {setContribution.data.contributed > 0
+            ? `${n0(setContribution.data.contributed)} deal${setContribution.data.contributed === 1 ? '' : 's'} with approved figures contributed.`
+            : 'Nothing to contribute yet — the pool takes approved appraisals, and each one will go in as it is approved.'}
+        </div>
+      )}
       {setContribution.data && setContribution.data.withdrawn > 0 && (
         <div className="mt-2 rounded-[8px] bg-sunken px-2.5 py-1.5 text-[11px] text-ink-2b">
           Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
@@ -387,7 +413,7 @@ export default function Benchmarking() {
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
-        <Button
+        <Button writes
           loading={contribute.isPending}
           disabled={!effectiveContribId || !contribQ.data?.optedIn}
           onClick={() => contribute.mutate(effectiveContribId)}
@@ -458,10 +484,12 @@ export default function Benchmarking() {
         ) : (
           <>
             {/* percentile strip cards */}
-            <div className="mt-[18px] grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              <MetricCard label="Build cost £/ft²" m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
-              <MetricCard label="GDV £/ft²" m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
+            <div className="mt-[18px] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+              <MetricCard label={`Build cost £/${U.unit}`} m={M.buildPsf} scope={scopeShort.toLowerCase()} lowerBetter />
+              <MetricCard label={`${U.terms.gdv} £/${U.unit}`} m={M.gdvPsf} scope={scopeShort.toLowerCase()} />
               <MetricCard label="Profit on cost" m={M.poc} scope={scopeShort.toLowerCase()} isPct />
+              {/* what completed schemes actually cost — certified spend over appraised area */}
+              <MetricCard label={`Out-turn build £/${U.unit}`} m={M.outturnPsf} scope={scopeShort.toLowerCase()} lowerBetter />
             </div>
 
             <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
@@ -469,7 +497,7 @@ export default function Benchmarking() {
                 {/* build cost trend */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/ft²</h3>
+                    <h3 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/{U.unit}</h3>
                     {latestCallout && (
                       <div className="text-right">
                         <div className="fig text-[10px] font-medium text-ink-3">Latest quarter with your data</div>
@@ -532,7 +560,7 @@ export default function Benchmarking() {
                                     key={`${o.dealName}-${i}`}
                                     className="absolute left-1/2 w-2.5 h-2.5 rounded-full border-2 border-surface -translate-x-1/2 translate-y-1/2"
                                     style={{ bottom: `${Math.max(3, Math.min(97, hOf(o.value)))}%`, background: 'rgb(var(--brand-ink, 20 80 59))', boxShadow: '0 1px 3px rgba(20,30,25,0.3)' }}
-                                    title={`${o.dealName ?? 'Your deal'} — £${Math.round(o.value)}/ft²`}
+                                    title={`${o.dealName ?? 'Your deal'} — ${U.rate(o.value)}`}
                                   >
                                     {/* a floating value label lands wherever the dot is: over the
                                         panel at desktop widths, over the dot's own fill at 390px
@@ -581,8 +609,8 @@ export default function Benchmarking() {
                         <tr>
                           <Th>Deal</Th>
                           <Th>Period</Th>
-                          <Th right>Build £/ft²</Th>
-                          <Th right>GDV £/ft²</Th>
+                          <Th right>Build £/{U.unit}</Th>
+                          <Th right>{U.terms.gdv} £/{U.unit}</Th>
                           <Th right>Profit on cost</Th>
                           <Th right>vs median</Th>
                         </tr>
@@ -657,7 +685,7 @@ export default function Benchmarking() {
                                 key={pt.month}
                                 className="flex-1 rounded-t-[3px]"
                                 title={`${pt.month}: £${Math.round(pt.averagePrice).toLocaleString('en-GB')}`}
-                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? 'rgb(var(--brand-ink, 20 80 59))' : '#AECBBC' }}
+                                style={{ height: `${18 + ((pt.averagePrice - min) / span) * 82}%`, background: pt.month === latest.month ? 'rgb(var(--brand-ink, 20 80 59))' : accent.muted3 }}
                               />
                             ))}
                           </div>
@@ -679,7 +707,7 @@ export default function Benchmarking() {
                 >
                   <div className="flex items-center gap-[9px]">
                     <span className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.16)' }}>
-                      <Icon d={SPARKLE} size={15} color="#7FE3B4" strokeWidth={1.6} />
+                      <Icon d={SPARKLE} size={15} color={accent[300]} strokeWidth={1.6} />
                     </span>
                     <span className="text-[13px] font-semibold">Intelligence</span>
                   </div>
@@ -701,7 +729,7 @@ export default function Benchmarking() {
                   </p>
                   <Button to="/board" size="lg" className="mt-3 w-full">
                     Start from benchmark
-                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color="#fff" strokeWidth={2.2} />
+                    <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
                   </Button>
                 </section>
               </div>

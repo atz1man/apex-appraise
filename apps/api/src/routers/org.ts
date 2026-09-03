@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { computeAppraisal, depositsHeldAt, jvWaterfall, type AppraisalInput } from '@apex/appraisal-engine';
+import { DEFAULT_REGION, REGIONS } from '@apex/types/regions';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
@@ -15,6 +16,7 @@ import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, re
 import { assertCanAddMember, featuresFor, usageFor } from '../entitlements.js';
 import { sealFor } from '../sealed-fields.js';
 import { signDownloadToken } from '../download-token.js';
+import { OutboundUrlError, assertPublicHttpsUrl } from '../outbound.js';
 import { TILE_ATTRIBUTION } from '../tiles.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
@@ -269,6 +271,8 @@ export const orgRouter = router({
     const row = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
     return {
       aiPolicy: row?.aiPolicy ?? '',
+      // words and units only — see @apex/types/regions
+      region: row?.region ?? DEFAULT_REGION,
       toePurpose: row?.toePurpose ?? '',
       toeOtherUsers: row?.toeOtherUsers ?? '',
       toeInterest: row?.toeInterest ?? '',
@@ -294,6 +298,13 @@ export const orgRouter = router({
     .input(
       z.object({
         aiPolicy: z.string().max(1200),
+        /**
+         * The jurisdiction whose vocabulary and floor-area unit this firm reads.
+         * An enum, not a free string: it selects a profile, and an unknown code
+         * would silently fall back to the UK on every screen while the settings
+         * panel showed whatever was typed.
+         */
+        region: z.enum(REGIONS),
         toePurpose: z.string().max(1000),
         toeOtherUsers: z.string().max(1000),
         toeInterest: z.string().max(600),
@@ -854,8 +865,23 @@ export const orgRouter = router({
       if (!events.length) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: `Unknown events. Available: ${WEBHOOK_EVENTS.join(', ')}` });
       }
-      if (!input.url.startsWith('https://')) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Webhook URLs must be https — payloads carry deal figures' });
+      /**
+       * https was the only thing ever asked about this URL, and it says nothing
+       * about WHERE the request lands. See `outbound.ts`: an endpoint pointing
+       * inside this server's own network turns the delivery log into a port
+       * scanner with a results page, because webhookDeliveries hands the same
+       * admin back the response code and the connection error.
+       *
+       * Checked again at delivery, because DNS moves and this answer is only
+       * true at the moment it is given.
+       */
+      try {
+        await assertPublicHttpsUrl(input.url);
+      } catch (e) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: e instanceof OutboundUrlError ? e.message : 'That webhook URL cannot be used.',
+        });
       }
       const secret = newWebhookSecret();
       const row = await ctx.prisma.webhookEndpoint.create({
@@ -942,6 +968,21 @@ export const orgRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      /**
+       * `z.string().url()` accepted `http://10.0.0.5` — a URL, and nothing else
+       * asked. The transport in sso.ts checks every fetch, so this is not the
+       * only line standing between the issuer and the network; it is here so an
+       * administrator is told at the moment they paste it, rather than by a
+       * sign-in failing later for a reason the screen cannot explain.
+       */
+      try {
+        await assertPublicHttpsUrl(input.issuer);
+      } catch (e) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: e instanceof OutboundUrlError ? e.message.replace('Webhook URLs', 'Issuer URLs') : 'That issuer cannot be used.',
+        });
+      }
       const domains = input.domains.map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean);
       /**
        * A domain may be claimed by one workspace only. Two firms claiming the

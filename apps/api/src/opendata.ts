@@ -8,6 +8,8 @@
  * never the whole site pack.
  */
 
+import { hpiSlugFor } from '@apex/types/uk-regions';
+
 const TIMEOUT_MS = 12_000;
 
 /**
@@ -337,27 +339,21 @@ export interface HpiPoint {
   annualChangePct: number | null;
 }
 
-const HPI_REGION_SLUGS: Record<string, string> = {
-  'South West': 'south-west',
-  'South East': 'south-east',
-  London: 'london',
-  Midlands: 'west-midlands',
-  'East Midlands': 'east-midlands',
-  'West Midlands': 'west-midlands',
-  'North West': 'north-west',
-  'North East': 'north-east',
-  'Yorkshire and The Humber': 'yorkshire-and-the-humber',
-  'East of England': 'east-of-england',
-  Wales: 'wales',
-  Scotland: 'scotland',
-};
 
 /**
  * UK House Price Index (HM Land Registry, OGL, no key) — REAL market levels and
  * annual growth for the region, latest N months. Data publishes ~6 weeks behind.
  */
 export async function fetchHpi(region: string, months = 12): Promise<{ region: string; series: HpiPoint[] }> {
-  const slug = HPI_REGION_SLUGS[region] ?? 'south-west';
+  /**
+   * The slug, or nothing. This carried its own copy of the region list — the
+   * only one of the four that knew all twelve — and ended `?? 'south-west'`,
+   * so a region it did not recognise was answered with South West house prices
+   * under the asked-for region's name. A market index labelled as somewhere it
+   * is not is worse than no index: the reader has no way to tell.
+   */
+  const slug = hpiSlugFor(region);
+  if (!slug) return { region, series: [] };
   const now = new Date();
   now.setMonth(now.getMonth() - 2); // publication lag
   const wanted: string[] = [];

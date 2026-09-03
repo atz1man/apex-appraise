@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { status as statusTokens, brand, neutral, type StatusKey } from '@apex/ui-tokens';
+import { accent, brand, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { formatMoneyFull } from '@apex/appraisal-engine';
 import { Avatar, Button, FirmMark, Icon, Skeleton, SkeletonRows, StatusChip } from '../components/ui';
@@ -155,7 +155,7 @@ export default function BuyerPortal() {
                 <div className="flex-1 h-2 rounded-[5px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.18)' }}>
                   <div
                     className="h-full transition-all"
-                    style={{ width: `${milestones.length ? (doneCount / milestones.length) * 100 : 0}%`, background: '#7FE3B4' }}
+                    style={{ width: `${milestones.length ? (doneCount / milestones.length) * 100 : 0}%`, background: accent[300] }}
                   />
                 </div>
                 <span className="fig text-[13px] font-semibold">
@@ -184,7 +184,7 @@ export default function BuyerPortal() {
                             }}
                           >
                             {m.done ? (
-                              <Icon d="m5 12 5 5 9-10" size={12} color="#fff" strokeWidth={3.2} />
+                              <Icon d="m5 12 5 5 9-10" size={12} color={onFill} strokeWidth={3.2} />
                             ) : isCurrent ? (
                               <span className="w-2 h-2 rounded-full animate-pulseDot" style={{ background: statusTokens.amber.dot }} />
                             ) : null}
@@ -267,6 +267,23 @@ export default function BuyerPortal() {
                               PDF
                             </span>
                             <span className="flex-1 min-w-0 text-[12.5px] font-medium truncate">{d.name}</span>
+                            {/*
+                              * The document itself. "Review & sign" stood beside a
+                              * name with nothing to open — an e-signature on an
+                              * unread contract is the thing the flow exists to
+                              * prevent. Where the firm holds no file, no link.
+                              */}
+                            {d.url && (
+                              <a
+                                href={d.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="shrink-0 text-[12px] font-medium text-brand-ink hover:underline"
+                                aria-label={`Read ${d.name}`}
+                              >
+                                Read
+                              </a>
+                            )}
                             {isSigned ? (
                               <StatusChip status="green" label="SIGNED" />
                             ) : (
@@ -332,7 +349,7 @@ export default function BuyerPortal() {
                 <section className="rounded-panel p-[22px] bg-tint-success border border-border-strong">
                   <div className="flex items-center gap-[9px]">
                     <span className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center" style={{ background: brand[700] }}>
-                      <Icon d="M12 16v-4|M12 8h.01" size={15} color="#fff" strokeWidth={2.2} />
+                      <Icon d="M12 16v-4|M12 8h.01" size={15} color={onFill} strokeWidth={2.2} />
                     </span>
                     <span className="text-[13.5px] font-semibold text-brand-ink">What happens next</span>
                   </div>

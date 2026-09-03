@@ -29,10 +29,35 @@ export const sitePackRouter = router({
       const postcode = (input.postcode ?? deal.postcode ?? '').trim();
       if (!postcode) return { status: 'no-postcode' as const, dealName: deal.name, address: deal.address };
 
-      // persist a newly supplied postcode on the deal
-      if (input.postcode && input.postcode !== deal.postcode) {
-        await ctx.prisma.deal.update({ where: { id: deal.id }, data: { postcode: input.postcode } });
-      }
+      /**
+       * This is a QUERY, and it used to write.
+       *
+       * `if (input.postcode !== deal.postcode) prisma.deal.update(...)` sat here,
+       * persisting whatever postcode the caller passed. Two of the fifteen
+       * mechanical sweeps are blind to it for the same reason: they walk
+       * `appRouter._def.procedures` and ask their question of MUTATIONS.
+       *
+       *   `viewer-readonly` — every internal mutation must refuse a VIEWER.
+       *   `provenance-sweep` — every mutation must write an audit event.
+       *
+       * Measured against the real router, as a VIEWER, on a deal set to
+       * BH15 1JF:
+       *
+       *     >>> call SUCCEEDED
+       *     >>> postcode now: SW1A 1AA
+       *     >>> activity events: 0
+       *
+       * A read-only account moved a scheme to a different postcode, and nothing
+       * recorded it. `deals.update` already accepts a postcode, refuses a viewer
+       * and records what changed — and its own comment says why the address on a
+       * valuation workfile is not cosmetic: "comparables, the site pack and the
+       * Red Book report all read it, and a valuer asked months later why a scheme
+       * moved street needs an answer". So the lookup below runs against the
+       * postcode it was given without adopting it, and the screen saves through
+       * that mutation when a valuer means to.
+       *
+       * `no-query-writes` now asks this of every query in the router.
+       */
 
       /**
        * `locate` distinguishes "that postcode does not exist" from "we could not

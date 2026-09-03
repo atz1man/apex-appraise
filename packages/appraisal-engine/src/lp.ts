@@ -31,8 +31,8 @@ export function dpi(distributed: number, called: number): number | null {
 export interface IrrHoldingLike {
   /** £ committed to this deal */
   committed: number;
-  /** the IRR recorded against this deal, as a fraction (0.231 = 23.1%) */
-  irr: number;
+  /** the IRR recorded against this deal, as a fraction (0.231 = 23.1%), or null while nobody has recorded one */
+  irr: number | null;
 }
 
 /**
@@ -42,9 +42,25 @@ export interface IrrHoldingLike {
  * scheme still in construction has not returned 0% — it has not returned yet,
  * and averaging a zero into the portfolio understates every realised deal
  * beside it. Null when nothing has an IRR yet, so the page can say so.
+ *
+ * That is what the comment above has always said. What the code did was filter
+ * on `h.irr > 0`, which is not the same test: it dropped every RECORDED loss as
+ * well as every unrecorded holding, so the portfolio figure was an average over
+ * the winners. An LP with a scheme at +23% and one at -40% was shown +23% —
+ * their portfolio return with the losing half deleted. `dpi` above already
+ * draws exactly this distinction, and draws it correctly: absence is not zero,
+ * and a bad number is not an absent one.
+ *
+ * That was latent when it was written: `Holding.irr` was `Float @default(0)`,
+ * the only writer was the demo seed, and zero stood in for "not recorded" — so
+ * a deal that genuinely returned 0.0% and one nobody had entered were the same
+ * value, and both had to be left out. The register that now lets a firm record
+ * the figure is what made it live, and the column went nullable with it:
+ * absence is null, a zero is a return of nothing and COUNTS, and a loss is a
+ * negative number that counts too.
  */
 export function weightedIrr(holdings: IrrHoldingLike[]): number | null {
-  const scored = holdings.filter((h) => h.irr > 0 && h.committed > 0);
+  const scored = holdings.filter((h): h is IrrHoldingLike & { irr: number } => h.irr != null && h.committed > 0);
   if (!scored.length) return null;
   const capital = scored.reduce((a, h) => a + h.committed, 0);
   if (capital <= 0) return null;

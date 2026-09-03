@@ -41,6 +41,8 @@ const DIRECT = [/recordAudit\(/, /activityEvent\.create\(/];
 const HELPERS: Array<{ call: RegExp; name: string; source: string }> = [
   { call: /settlePayment\(/, name: 'settlePayment', source: 'src/payments.ts' },
   { call: /\brecord\(/, name: 'record', source: 'src/routers/sales.ts' },
+  // the benchmark feed records each contribution; the manual button now only calls it
+  { call: /feedApproved\(/, name: 'feedApproved', source: 'src/benchmark-feed.ts' },
 ];
 
 /**

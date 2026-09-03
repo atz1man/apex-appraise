@@ -5,9 +5,10 @@ import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
+import { INTEGRATION_PROVIDERS } from '@apex/types';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
-import { SELF_SERVE_PROVIDERS, type SelfServeProvider } from '../integration-creds.js';
+import { SELF_SERVE_PROVIDERS } from '../integration-creds.js';
 import { fetchEpc } from '../opendata.js';
 import { searchCompanies } from '../companieshouse.js';
 import { assertOwned } from '../auth/owned.js';
@@ -65,6 +66,45 @@ const pkgOut = (pk: any) => ({
   contractorId: pk.contractorId,
   contractor: pk.contractor ? { id: pk.contractor.id, name: pk.contractor.name, trade: pk.contractor.trade } : null,
 });
+
+/**
+ * One shape for a contractor wherever it is read or written back. Money on
+ * the row is pence; it leaves in pounds. The totals are the engine's — it owns
+ * the retention rule, and this file used to keep its own copy of it.
+ */
+const contractorOut = (
+  c: {
+    id: string; name: string; trade: string; status: string; rating: string; nextCert: string; retentionRelease: string;
+    timesheetRate: bigint | null; operatives: number | null; weeks: string;
+  },
+  packages: Array<{ budget: bigint; committed: bigint; spent: bigint; forecast: bigint; retentionPct: number; certificates: number }>,
+) => ({
+  id: c.id,
+  name: c.name,
+  trade: c.trade,
+  status: c.status,
+  rating: c.rating,
+  nextCert: c.nextCert,
+  retentionRelease: c.retentionRelease,
+  timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
+  operatives: c.operatives,
+  weeks: J<number[]>(c.weeks, []),
+  ...contractorTotals(
+    packages.map((pk) => ({
+      budget: P(pk.budget),
+      committed: P(pk.committed),
+      spent: P(pk.spent),
+      forecast: P(pk.forecast),
+      retentionPct: pk.retentionPct,
+      certificates: pk.certificates,
+    })),
+  ),
+});
+
+const CONTRACTOR_LABELS: Record<string, string> = {
+  name: 'name', trade: 'trade', status: 'status', rating: 'rating', nextCert: 'next certificate',
+  retentionRelease: 'retention release', timesheetRate: 'day rate', operatives: 'operatives',
+};
 
 /**
  * The AI Development Director — every language-model touchpoint in this file.
@@ -193,37 +233,135 @@ export const costRouter = router({
           target: `${row.name} — forecast ${moneyLabel(row.forecast)}`,
         },
       });
-      return row;
+      // through the mapper, like every read of this row — see sales.ts for why
+      return pkgOut(row);
     }),
 
   contractors: internalProcedure.query(async ({ ctx }) => {
     const rows = await ctx.prisma.contractor.findMany({
       where: { orgId: ctx.principal.orgId },
       include: { packages: true },
+      orderBy: { name: 'asc' },
     });
-    return rows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      trade: c.trade,
-      status: c.status,
-      rating: c.rating,
-      nextCert: c.nextCert,
-      retentionRelease: c.retentionRelease,
-      timesheetRate: c.timesheetRate != null ? P(c.timesheetRate) : null,
-      operatives: c.operatives,
-      weeks: J<number[]>(c.weeks, []),
-      // the engine owns the retention rule; this used to keep its own copy of it
-      ...contractorTotals(
-        c.packages.map((pk: any) => ({
-          budget: P(pk.budget),
-          committed: P(pk.committed),
-          spent: P(pk.spent),
-          forecast: P(pk.forecast),
-          retentionPct: pk.retentionPct,
-          certificates: pk.certificates,
-        })),
-      ),
-    }));
+    return rows.map((c) => contractorOut(c, c.packages));
+  }),
+
+  /**
+   * The contractor register.
+   *
+   * The cost monitor has always rendered contractors — cards with contract
+   * value, retention, certificates and a weekly timesheet — and every package
+   * row has a dropdown to assign one. Nothing could create one. Outside the
+   * demo seed and the sample-data generator the only writer was
+   * `logTimesheetWeek`, which needs a row to exist first. So on a real
+   * workspace the section read "No contractors in your organisation yet" with
+   * no way past it, and the dropdown on every package was permanently empty.
+   */
+  createContractor: internalProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(120),
+        trade: z.string().trim().min(1).max(80),
+        status: z.string().trim().max(40).default('On site'),
+        rating: z.string().trim().max(10).default('—'),
+        nextCert: z.string().trim().max(60).default('—'),
+        retentionRelease: z.string().trim().max(60).default('50% at PC'),
+        timesheetRate: z.number().min(0).nullable().default(null), // £/day
+        operatives: z.number().int().min(0).max(1000).nullable().default(null),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.prisma.contractor.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          name: input.name,
+          trade: input.trade,
+          status: input.status,
+          rating: input.rating,
+          nextCert: input.nextCert,
+          retentionRelease: input.retentionRelease,
+          timesheetRate: input.timesheetRate != null ? toPence(input.timesheetRate) : null,
+          operatives: input.operatives,
+          weeks: '[]',
+        },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'added a contractor', target: `${row.name} (${row.trade})`, ip: ctx.ip,
+      });
+      return contractorOut(row, []);
+    }),
+
+  updateContractor: internalProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        patch: z.object({
+          name: z.string().trim().min(2).max(120).optional(),
+          trade: z.string().trim().min(1).max(80).optional(),
+          status: z.string().trim().max(40).optional(),
+          rating: z.string().trim().max(10).optional(),
+          nextCert: z.string().trim().max(60).optional(),
+          retentionRelease: z.string().trim().max(60).optional(),
+          timesheetRate: z.number().min(0).nullable().optional(), // £/day
+          operatives: z.number().int().min(0).max(1000).nullable().optional(),
+        }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await assertOwned(ctx.prisma.contractor, input.id, ctx.principal.orgId);
+      const { timesheetRate, ...rest } = input.patch;
+      const data: Record<string, unknown> = { ...rest };
+      if (timesheetRate !== undefined) data.timesheetRate = timesheetRate != null ? toPence(timesheetRate) : null;
+      const row = await ctx.prisma.contractor.update({ where: { id: existing.id }, data, include: { packages: true } });
+      const changed = Object.entries(CONTRACTOR_LABELS)
+        .filter(([k]) => String((existing as Record<string, unknown>)[k] ?? '') !== String((row as Record<string, unknown>)[k] ?? ''))
+        .map(([, label]) => label);
+      if (changed.length) {
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: `updated contractor — ${changed.join(', ')}`, target: `${row.name} (${row.trade})`, ip: ctx.ip,
+        });
+      }
+      return contractorOut(row, row.packages);
+    }),
+
+  /**
+   * Refused while a package holds money against them: committed, spent or a
+   * certificate issued is a contract on the record, and the cost report's
+   * retention and certificate figures are derived from those rows. A package
+   * with nothing on it, and a site photo, are merely detached — the photo is
+   * a record of works and outlives the firm that did them.
+   */
+  deleteContractor: internalProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const c = await ctx.prisma.contractor.findFirst({
+      where: { id: input.id, orgId: ctx.principal.orgId },
+      include: { packages: true },
+    });
+    if (!c) throw new TRPCError({ code: 'NOT_FOUND' });
+    const live = c.packages.filter((pk) => pk.committed > 0n || pk.spent > 0n || pk.certificates > 0);
+    if (live.length) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `“${c.name}” cannot be removed — ${live.map((pk) => pk.name).join(', ')} ${live.length === 1 ? 'has' : 'have'} money committed or certified against them. Reassign the package first.`,
+      });
+    }
+    const { count: detachedPackages } = await ctx.prisma.costPackage.updateMany({
+      where: { contractorId: c.id, orgId: ctx.principal.orgId },
+      data: { contractorId: null },
+    });
+    const { count: detachedPhotos } = await ctx.prisma.sitePhoto.updateMany({
+      where: { contractorId: c.id, orgId: ctx.principal.orgId },
+      data: { contractorId: null },
+    });
+    await ctx.prisma.contractor.delete({ where: { id: c.id } });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'removed a contractor',
+      target: `${c.name} (${c.trade})${detachedPackages ? ` · ${detachedPackages} package${detachedPackages === 1 ? '' : 's'} detached` : ''}`,
+      ip: ctx.ip,
+    });
+    return { ok: true, detachedPackages, detachedPhotos };
   }),
 
   logTimesheetWeek: internalProcedure
@@ -243,7 +381,12 @@ export const costRouter = router({
         target: `${c.name} (${c.trade}) · ${input.hours} hours, week ${weeks.length}`,
         ip: ctx.ip,
       });
-      return updated;
+      // `timesheetRate` is pence on the row and pounds everywhere it is read
+      return {
+        id: updated.id,
+        weeks: J<number[]>(updated.weeks, []),
+        timesheetRate: updated.timesheetRate != null ? P(updated.timesheetRate) : null,
+      };
     }),
 });
 
@@ -328,18 +471,37 @@ export const tasksRouter = router({
       });
     }),
 
+  /**
+   * A task is assigned to a MEMBER of the firm.
+   *
+   * The assignee defaulted to `'AO'` here and in the column, and the two
+   * pickers that call this offered `['AO', 'DW', 'MV', 'PA']` — the demo
+   * firm's people, spelled out in the component. Measured on a fresh tenant
+   * whose only member is its owner: every task raised without naming anybody
+   * was assigned to "AO", who does not exist in that firm, and the picker
+   * offered three more who do not either. The default is now whoever raised
+   * it, and initials nobody in the firm has are refused rather than stored as
+   * a name that will never resolve. Internal members only: a buyer's or an
+   * investor's login is not a colleague a to-do can be handed to.
+   */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().default('AO'), due: z.string().optional() }))
+    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), due: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      const assignee = input.assignee ?? ctx.principal.initials;
+      const member = await ctx.prisma.user.findFirst({
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: assignee },
+        select: { id: true },
+      });
+      if (!member) throw new TRPCError({ code: 'BAD_REQUEST', message: `“${assignee}” is not a member of this workspace.` });
       return ctx.prisma.task.create({
         data: {
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
           title: input.title,
           aspect: input.aspect,
-          assignee: input.assignee,
+          assignee,
           due: input.due ? new Date(input.due) : new Date(Date.now() + 7 * 86400e3),
         },
       });
@@ -408,7 +570,7 @@ export const documentsRouter = router({
     const deal = await ctx.prisma.deal.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
 
-    const [members, holdings, buyerVisibleCount] = await Promise.all([
+    const [members, holdings, buyerVisibleCount, investorVisibleCount] = await Promise.all([
       ctx.prisma.user.findMany({
         where: { orgId: ctx.principal.orgId, principalType: 'internal' },
         select: { id: true, name: true, initials: true, role: true },
@@ -419,6 +581,7 @@ export const documentsRouter = router({
         select: { investor: { select: { id: true, name: true, initials: true, orgId: true } } },
       }),
       ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, buyerVisible: true } }),
+      ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, investorVisible: true } }),
     ]);
 
     // an investor reaches the deal through a holding, and only through one
@@ -441,7 +604,13 @@ export const documentsRouter = router({
         permission: m.role === 'ADMIN' ? 'Full' : m.role === 'VIEWER' ? 'View' : 'Edit',
         you: m.id === ctx.principal.userId,
       })),
+      /**
+       * An investor's "View" is of the documents shared with investors, not of
+       * the room — the same honesty the buyer line below keeps, so the count
+       * travels with the names.
+       */
       investors: investors.map((inv) => ({ id: inv.id, name: inv.name, initials: inv.initials, permission: 'View' })),
+      investorDocuments: investorVisibleCount,
       /**
        * Buyers are counted, not named: a buyer sees only the documents flagged
        * for them, so listing them beside people with full access would overstate
@@ -528,6 +697,127 @@ export const documentsRouter = router({
         },
       });
       return updated;
+    }),
+
+  /**
+   * Share a document with one plot's buyer, or stop sharing it.
+   *
+   * `Document.buyerVisible` has existed all along and NOTHING in the product
+   * could set it. Every creator — the upload route, `documents.expect`, the EPC
+   * link, the workspace importer — leaves it at the schema default of false, and
+   * no procedure toggled it. Only `demo-seed.ts` ever wrote true.
+   *
+   * So "Buyer + investor portals" sits on the Growth column of the pricing page,
+   * a firm invites a buyer, and that buyer's "Documents to sign" panel reads
+   * "Nothing waiting for your signature" forever, because no document on the
+   * platform can be offered to them. Exactly the shape the portal LOGINS were in
+   * before they could be created: a paid feature with no way to switch on.
+   * `ops.access` compounded it by reporting `visibleDocuments` to the firm as the
+   * honest measure of what buyers reach — a figure that could only ever be zero.
+   *
+   * IT TAKES A UNIT, and that is the point rather than a convenience. Documents
+   * are keyed on the deal, and `portal.myUnit` selected every buyerVisible
+   * document on it. Fixing visibility WITHOUT this would have opened a hole
+   * rather than closed one: on the demo workspace the two buyer-visible files
+   * are "Reservation pack — Plot 1.pdf" and "Contract of sale — Plot 1
+   * (engrossment).pdf", on a development with ten plots. Invite plot 2's buyer
+   * and they would read another private individual's contract of sale, and
+   * `portal.sign` — scoped to the deal too — would let them sign it. `signedAt`
+   * is a single column, so their signature would then mark that contract signed
+   * in plot 1's own portal.
+   *
+   * A document offered to a buyer is offered to A buyer. Sharing with nobody
+   * clears the unit as well, so a file cannot keep a stale owner while dark.
+   */
+  shareWithBuyer: internalProcedure
+    .input(z.object({ id: z.string(), unitId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      /**
+       * A placeholder is not a document. `documents.expect` raises an AWAITED
+       * row for a file the deal is still waiting for, and offering one to a
+       * buyer would put a name and a Review & sign button in their portal over
+       * nothing at all — the same reason `setExtraction` refuses it.
+       */
+      if (input.unitId && doc.extraction === 'AWAITED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'That document has not been received yet — upload the file before sharing it with a buyer.',
+        });
+      }
+      let unit: { id: string; name: string } | null = null;
+      if (input.unitId) {
+        // the unit is a THIRD input, and it must be this firm's and on THIS deal
+        const found = await ctx.prisma.unit.findFirst({
+          where: { id: input.unitId, orgId: ctx.principal.orgId, dealId: doc.dealId },
+          select: { id: true, name: true },
+        });
+        if (!found) throw new TRPCError({ code: 'NOT_FOUND', message: 'That plot is not on this deal.' });
+        unit = found;
+      }
+      const updated = await ctx.prisma.document.update({
+        where: { id: doc.id },
+        data: { buyerVisible: unit != null, unitId: unit?.id ?? null },
+      });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: unit ? 'shared a document with a buyer' : 'stopped sharing a document with a buyer',
+          target: unit ? `${doc.name} → ${unit.name}` : doc.name,
+        },
+      });
+      return { id: updated.id, buyerVisible: updated.buyerVisible, unitId: updated.unitId };
+    }),
+
+  /**
+   * Share a document with the deal's investors, or stop.
+   *
+   * The investor portal had a Documents panel from the first prototype, fed
+   * from `Investor.documents` — a JSON list of {name, date, size} on the
+   * investor row. Nothing but the demo seed ever wrote to it; the register that
+   * creates investors wrote `'[]'`; and no file was ever behind an entry, so
+   * the panel drew a download icon beside each name that downloaded nothing.
+   * An LP reading "Q2 2026 investor report.pdf · 1.2 MB" was reading a string.
+   *
+   * It is now a flag on the DOCUMENT, beside the buyer's, and the portal lists
+   * the flagged documents of every deal the investor holds in, each with the
+   * same signed file URL the data room uses. Deal-level rather than per
+   * investor: a quarterly report or a distribution notice is one document for
+   * the whole syndicate, where a buyer's contract of sale is one person's.
+   *
+   * A placeholder is refused for the reason `shareWithBuyer` gives — a name
+   * over nothing is the defect this replaces.
+   */
+  shareWithInvestors: internalProcedure
+    .input(z.object({ id: z.string(), visible: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (input.visible && doc.extraction === 'AWAITED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'That document has not been received yet — upload the file before sharing it with investors.',
+        });
+      }
+      const updated = await ctx.prisma.document.update({
+        where: { id: doc.id },
+        data: { investorVisible: input.visible },
+      });
+      await ctx.prisma.activityEvent.create({
+        data: {
+          orgId: ctx.principal.orgId,
+          dealId: doc.dealId,
+          userId: ctx.principal.userId,
+          actor: ctx.principal.name,
+          action: input.visible ? 'shared a document with investors' : 'stopped sharing a document with investors',
+          target: doc.name,
+        },
+      });
+      return { id: updated.id, investorVisible: updated.investorVisible };
     }),
 
   activity: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
@@ -1004,22 +1294,56 @@ export const xeroRouter = router({
 });
 
 export const integrationsRouter = router({
+  /**
+   * A QUERY, which used to write.
+   *
+   * It backfilled a placeholder row for every self-serve provider the org had
+   * none for — inside a read, on every visit to the Integrations screen. Found
+   * by `no-query-writes`, not by reading, and measured against the real router:
+   *
+   *     three concurrent integrations.list() -> Companies House: 2 rows
+   *     one call as a VIEWER                 -> 2 rows created
+   *
+   * Two faults at once. `IntegrationConnection` has no unique key on
+   * (orgId, provider), so concurrent reads each saw the row missing and each
+   * created it — and duplicates matter here because `getIntegrationCreds` and
+   * `saveCredentials` both resolve a provider with `findFirst`: a key saved onto
+   * one row can be read from the other, and the integration reports itself
+   * unconfigured with the key sitting in the table. And a VIEWER — the role the
+   * product prints as "View" — created rows, because `viewer-readonly` asks its
+   * question of mutations and this was declared a query.
+   *
+   * The rows were never needed. The screen already renders a provider it has no
+   * row for as NOT_CONNECTED (`row?.status ?? 'NOT_CONNECTED'`), which is
+   * exactly what a placeholder said. A row is now created when a firm actually
+   * connects or saves a key, on a composite unique key so a double-click cannot
+   * make two.
+   */
   list: internalProcedure.query(async ({ ctx }) => {
-    // Backfill any providers added since this org registered (e.g. Companies House)
-    const existing = await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId } });
-    const missing = Object.keys(SELF_SERVE_PROVIDERS).filter((p) => !existing.some((e) => e.provider === p));
-    for (const provider of missing) {
-      await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider } });
-    }
-    const rows = missing.length
-      ? await ctx.prisma.integrationConnection.findMany({ where: { orgId: ctx.principal.orgId }, orderBy: { provider: 'asc' } })
-      : existing.sort((a, b) => a.provider.localeCompare(b.provider));
-    // config (credentials) never leaves the server — expose only whether keys are set
-    return rows.map(({ config, ...row }) => ({
-      ...row,
-      hasCredentials: config !== '{}' && config !== '',
-      selfServe: row.provider in SELF_SERVE_PROVIDERS ? SELF_SERVE_PROVIDERS[row.provider as SelfServeProvider] : null,
-    }));
+    const rows = await ctx.prisma.integrationConnection.findMany({
+      where: { orgId: ctx.principal.orgId },
+      orderBy: { provider: 'asc' },
+    });
+    return {
+      // config (credentials) never leaves the server — expose only whether keys are set
+      connections: rows.map(({ config, ...row }) => ({
+        ...row,
+        hasCredentials: config !== '{}' && config !== '',
+      })),
+      /**
+       * Whether a provider takes the workspace's own API key is a fact about
+       * the PROVIDER, and it used to be attached to the row — so it existed
+       * only for a provider this workspace happened to have a row for. That was
+       * survivable while a query backfilled a row for everything; it is not now.
+       * Companies House is not in the demo seed and was never in the seed of any
+       * workspace that registered before it was added, so the credentials drawer
+       * — the only way to give this product a Companies House key — simply did
+       * not open, and Connect fell through to the demo connect instead.
+       *
+       * Caught by `e2e/screens.spec.ts`, which opens that drawer.
+       */
+      selfServe: SELF_SERVE_PROVIDERS as Record<string, { fields: ReadonlyArray<{ key: string; label: string }>; signupUrl: string } | undefined>,
+    };
   }),
 
   /**
@@ -1027,7 +1351,17 @@ export const integrationsRouter = router({
    * validated against the live upstream before it's accepted, stored
    * server-side only, and the connection flips to CONNECTED.
    */
-  saveCredentials: internalProcedure
+  /**
+   * `adminProcedure`, not `internalProcedure` plus a hand-rolled check.
+   *
+   * The builder's own comment says why it exists: "Defined ONCE: this guard was
+   * copied into two routers, and a permission check that exists in several
+   * places is one edit away from meaning different things in each." Two copies
+   * of it were still sitting in this file, so that comment was not true. The
+   * order is unchanged — `internalProcedure` still refuses a VIEWER and an
+   * expired trial before the role is looked at.
+   */
+  saveCredentials: adminProcedure
     .input(
       z.object({
         provider: z.enum(['EPC Register', 'Companies House']),
@@ -1035,7 +1369,6 @@ export const integrationsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
       const spec = SELF_SERVE_PROVIDERS[input.provider];
       for (const f of spec.fields) {
         if (!input.fields[f.key]?.trim()) throw new TRPCError({ code: 'BAD_REQUEST', message: `${f.label} is required` });
@@ -1053,6 +1386,9 @@ export const integrationsRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Companies House rejected this key — check it and try again.' });
         }
       }
+      // read first only to word the audit line — the write itself is an upsert on
+      // the composite key, so a double-click through the slow probe above cannot
+      // leave two rows for one provider
       const existing = await ctx.prisma.integrationConnection.findFirst({
         where: { orgId: ctx.principal.orgId, provider: input.provider },
       });
@@ -1063,9 +1399,11 @@ export const integrationsRouter = router({
         // opened by getIntegrationCreds and nowhere else
         config: sealFor('integrationConnection', 'config', ctx.principal.orgId, JSON.stringify(input.fields)),
       };
-      const row = existing
-        ? await ctx.prisma.integrationConnection.update({ where: { id: existing.id }, data })
-        : await ctx.prisma.integrationConnection.create({ data: { orgId: ctx.principal.orgId, provider: input.provider, ...data } });
+      const row = await ctx.prisma.integrationConnection.upsert({
+        where: { orgId_provider: { orgId: ctx.principal.orgId, provider: input.provider } },
+        create: { orgId: ctx.principal.orgId, provider: input.provider, ...data },
+        update: data,
+      });
       // a credential for someone else's service, stored by this firm. `fde80d6`
       // sealed these at rest; who put one there, and when, was still unrecorded.
       // Never the key itself — the provider and the actor are the whole event.
@@ -1081,10 +1419,9 @@ export const integrationsRouter = router({
     }),
 
   /** Remove a self-serve provider's stored key and mark it not connected. */
-  disconnect: internalProcedure
+  disconnect: adminProcedure
     .input(z.enum(['EPC Register', 'Companies House']))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' });
       const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
       if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
       await ctx.prisma.integrationConnection.update({
@@ -1104,12 +1441,29 @@ export const integrationsRouter = router({
       return { disconnected: true };
     }),
 
-  connect: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const conn = await ctx.prisma.integrationConnection.findFirst({ where: { orgId: ctx.principal.orgId, provider: input } });
-    if (!conn) throw new TRPCError({ code: 'NOT_FOUND' });
-    const row = await ctx.prisma.integrationConnection.update({
-      where: { id: conn.id },
-      data: { status: 'CONNECTED', lastSync: new Date() },
+  /**
+   * The provider is an ENUM, not a string.
+   *
+   * This took `z.string()` and resolved it with `findFirst`, so an unknown name
+   * found no row and 404'd — the provider was never checked, it merely failed.
+   * `isolation-sweep` relied on that accident: it feeds every procedure another
+   * firm's ids, and this refused them only because no connection row had a cuid
+   * for a provider name. Making `connect` an upsert removed the accident, and
+   * the sweep failed within the same run — a foreign id would have become a
+   * connected "provider". Named set, one copy, shared with the screen.
+   */
+  connect: internalProcedure.input(z.enum(INTEGRATION_PROVIDERS)).mutation(async ({ ctx, input }) => {
+    /**
+     * Upsert, not update-an-existing-row. `list` no longer materialises a
+     * placeholder for every provider, so the row a firm is connecting may not
+     * exist yet — and refusing NOT_FOUND would have made every Connect button
+     * on a provider nobody had touched fail. The composite key is what makes a
+     * double-click harmless.
+     */
+    const row = await ctx.prisma.integrationConnection.upsert({
+      where: { orgId_provider: { orgId: ctx.principal.orgId, provider: input } },
+      create: { orgId: ctx.principal.orgId, provider: input, status: 'CONNECTED', lastSync: new Date() },
+      update: { status: 'CONNECTED', lastSync: new Date() },
     });
     // not an OAuth redirect like `bank.connect` and `xero.connect`, which is why
     // those two are exempt and this is not: it flips a data source ON, and the

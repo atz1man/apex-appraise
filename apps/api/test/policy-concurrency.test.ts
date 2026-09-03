@@ -20,6 +20,8 @@ const caller = () => callerFor(T.principal);
 
 const policy = (over: Record<string, unknown> = {}) => ({
   aiPolicy: 'Extraction only.',
+  // words and units, not money — the panel posts it back with everything else
+  region: 'GB',
   toePurpose: 'Secured lending.',
   toeOtherUsers: 'None.',
   toeInterest: 'Freehold.',
@@ -91,5 +93,38 @@ describe('a second admin saving policy they loaded before the first save', () =>
   it('needs no stamp the first time, when there is no policy to have changed', async () => {
     const fresh = await makeTenant('First time');
     await expect(callerFor(fresh.principal).org.savePolicy(policy() as never)).resolves.toBeTruthy();
+  });
+});
+
+/**
+ * The firm's region — words and units, and nothing else.
+ *
+ * It rides on the same procedure as the standing wording because it is the same
+ * kind of thing: a house style the whole workspace reads. What it must never
+ * become is a free string. The profile it selects decides the floor-area unit on
+ * every screen and the name printed against the acquisition duty, and an
+ * unrecognised code would fall back to the United Kingdom everywhere while the
+ * settings panel showed whatever was typed — a workspace that believes it is
+ * Australian and reads square feet.
+ */
+describe('the firm’s region', () => {
+  it('defaults to the United Kingdom for a workspace that has never set one', async () => {
+    const fresh = await makeTenant('No region');
+    expect((await callerFor(fresh.principal).org.policy()).region).toBe('GB');
+  });
+
+  it('round-trips a chosen region', async () => {
+    const fresh = await makeTenant('Metric');
+    const c = callerFor(fresh.principal);
+    await c.org.savePolicy(policy({ region: 'AU' }) as never);
+    expect((await c.org.policy()).region).toBe('AU');
+  });
+
+  it('refuses a region it has no profile for, rather than storing it', async () => {
+    const fresh = await makeTenant('Nowhere');
+    const c = callerFor(fresh.principal);
+    await expect(c.org.savePolicy(policy({ region: 'ZZ' }) as never)).rejects.toThrow();
+    // and nothing was written on the way to refusing
+    expect(await prisma.orgPolicy.findUnique({ where: { orgId: fresh.orgId } })).toBeNull();
   });
 });

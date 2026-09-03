@@ -3,10 +3,13 @@ import { currentAppraisal, currentAppraisals, currentByDeal } from './current-ap
 import {
   aggregateExposure,
   computeAppraisal,
+  costRollup,
   monthsBetween,
   postcodeArea,
+  reconcileCash,
   spendAgainstProgramme,
   testCovenants,
+  type CostPackageLike,
 } from '@apex/appraisal-engine';
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from './context.js';
@@ -187,6 +190,8 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
               label: appraisal!.label,
               reviewStatus: appraisal!.reviewStatus,
               updatedAt: appraisal!.updatedAt,
+              // the engine that signed an approved version; null until one has
+              engineVersion: appraisal!.engineVersion ?? null,
               gdv: money(result.gdv),
               totalCost: money(result.totalCost),
               profit: money(result.profit),
@@ -206,22 +211,56 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
     if (!hasScope(principal, 'read')) return fail(reply, 403, 'forbidden', 'This key does not carry the read scope');
 
     const orgId = principal.orgId;
-    const [deals, appraisals, packages, policy] = await Promise.all([
+    const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
       db.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       currentAppraisals(db.appraisal, orgId),
-      db.costPackage.findMany({ where: { orgId }, select: { dealId: true, committed: true, budget: true, progressPct: true } }),
+      db.costPackage.findMany({
+        where: { orgId },
+        select: { dealId: true, committed: true, budget: true, spent: true, forecast: true, progressPct: true, retentionPct: true },
+      }),
       db.orgPolicy.findUnique({ where: { orgId } }),
+      // the same bank feed `deals.exposure` reads. This route had none, so for a
+      // firm with a mapped account the two surfaces answered "how much is drawn"
+      // differently — this one always with committed spend, and with no
+      // `drawnSource` for a consumer to notice the difference by
+      db.bankAccount.findMany({
+        where: { orgId, dealId: { not: null } },
+        select: { dealId: true, transactions: { select: { amount: true, classification: true } } },
+      }),
     ]);
 
-    const costBy = new Map<string, { drawn: number; budget: number; weighted: number }>();
-    for (const p of packages) {
-      const cur = costBy.get(p.dealId) ?? { drawn: 0, budget: 0, weighted: 0 };
-      const budget = Number(p.budget) / 100;
-      cur.drawn += Number(p.committed) / 100;
-      cur.budget += budget;
-      cur.weighted += budget * (p.progressPct ?? 0);
-      costBy.set(p.dealId, cur);
+    /** Per deal, the transactions of whichever accounts fund it. */
+    const cashBy = new Map<string, Array<{ amount: number; classification: string }>>();
+    for (const acct of bankAccounts) {
+      if (!acct.dealId) continue;
+      const list = cashBy.get(acct.dealId) ?? [];
+      for (const t of acct.transactions) list.push({ amount: Number(t.amount), classification: t.classification });
+      cashBy.set(acct.dealId, list);
     }
+
+    /**
+     * Rolled up by the ENGINE, which is the whole point of the package.
+     *
+     * This route carried its own budget-weighted progress — the THIRD copy of
+     * one rule, beside `deals.exposure` and `cost-report.ts` — so a change to
+     * the weighting basis would have had to be made in three files, and this is
+     * the surface a customer's own system reads.
+     */
+    const byPackages = new Map<string, CostPackageLike[]>();
+    for (const p of packages) {
+      const list = byPackages.get(p.dealId) ?? [];
+      list.push({
+        budget: Number(p.budget) / 100,
+        committed: Number(p.committed) / 100,
+        spent: Number(p.spent) / 100,
+        forecast: Number(p.forecast) / 100,
+        progressPct: p.progressPct,
+        retentionPct: p.retentionPct,
+      });
+      byPackages.set(p.dealId, list);
+    }
+    const costBy = new Map<string, ReturnType<typeof costRollup>>();
+    for (const [dealId, list] of byPackages) costBy.set(dealId, costRollup(list, { appraisedBuild: null }));
     const limits = {
       ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
       ltcMaxPct: policy?.covLtcMaxPct ?? null,
@@ -236,6 +275,7 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
         if (!a) return null;
         const r = computeAppraisal(appraisalRowToEngineInput(a));
         const cost = costBy.get(d.id);
+        const cash = reconcileCash({ committed: cost?.committed ?? 0, transactions: cashBy.get(d.id) as never });
         return {
           dealId: d.id,
           name: d.name,
@@ -246,17 +286,20 @@ export function registerPublicApi(app: FastifyInstance, db: PrismaClient = defau
           totalCost: r.totalCost,
           facility: r.facility,
           equity: r.equity,
-          drawn: cost?.drawn ?? 0,
+          drawn: cash.drawn,
+          /** which of the two it is — the same disclosure the funding pack makes */
+          drawnSource: cash.drawnSource,
+          paid: cash.paid,
           drawdown:
-            cost && cost.budget > 0
+            cost && cost.weightedProgressPct != null
               ? spendAgainstProgramme({
                   constructionTotal: r.build + r.fees + r.cont,
                   periodMonths: r.period,
                   profile: (a.spendProfile ?? 'SCURVE').toLowerCase() as never,
                   monthsElapsed:
                     a.startYear && a.startMonth ? monthsBetween({ year: a.startYear, month: a.startMonth }, new Date()) : 0,
-                  actualToDate: cost.drawn,
-                  progressPct: cost.weighted / cost.budget,
+                  actualToDate: cash.drawnSource === 'bank' ? cash.paid : cost.committed,
+                  progressPct: cost.weightedProgressPct,
                 })
               : null,
           covenants: testCovenants({ facility: r.facility, totalCost: r.totalCost, gdv: r.gdv, profit: r.profit }, limits),

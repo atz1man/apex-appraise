@@ -171,6 +171,8 @@ test('billing panel shows plan tiers with Stripe checkout', async ({ page }) => 
 });
 
 test('global nav present for internal, absent for portals', async ({ page }) => {
+  // the global nav shows from 1400px — below that a deal screen's own controls need the header
+  await page.setViewportSize({ width: 1440, height: 900 });
   await loginInternal(page);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
   // investor portal must not expose internal navigation

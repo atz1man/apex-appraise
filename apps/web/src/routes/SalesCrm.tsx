@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { status as statusTokens, neutral, brand, brandInk, type StatusKey } from '@apex/ui-tokens';
+import { accent, brand, brandInk, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { SalesVelocityChart } from '../components/charts';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatMoneyFull, formatPct, formatRent } from '../lib/format';
@@ -70,9 +70,11 @@ interface Draft {
   incentive: string;
   statusId: string;
   stalled: boolean;
+  /** lettings only — see the Arrears field below */
+  arrears: number;
 }
 
-const emptyDraft = (): Draft => ({ name: '', spec: '', level: 0, party: '', solicitor: '', appraised: 0, agreed: 0, lead: '', incentive: 'None', statusId: 'AVAILABLE', stalled: false });
+const emptyDraft = (): Draft => ({ name: '', spec: '', level: 0, party: '', solicitor: '', appraised: 0, agreed: 0, lead: '', incentive: 'None', statusId: 'AVAILABLE', stalled: false, arrears: 0 });
 
 const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const fmtFull = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -379,7 +381,7 @@ export default function SalesCrm() {
     setDraft({
       name: sel.name, spec: sel.spec, level: sel.level, party: sel.party ?? '', solicitor: sel.solicitor ?? '',
       appraised: sel.appraised, agreed: sel.agreed ?? 0, lead: sel.lead ?? '', incentive: sel.incentive ?? 'None',
-      statusId: sel.status, stalled: sel.stalled,
+      statusId: sel.status, stalled: sel.stalled, arrears: sel.arrears,
     });
     setEditing(true);
   };
@@ -410,6 +412,7 @@ export default function SalesCrm() {
         ervPcm: draft.appraised,
         agreedRentPcm: draft.agreed > 0 ? draft.agreed : null,
         tenantName: draft.party || null,
+        arrears: draft.arrears,
         expectedUpdatedAt: stampFor(selected),
       });
     } else {
@@ -696,7 +699,7 @@ export default function SalesCrm() {
                             <span className="fig text-[8px] font-semibold text-brand-ink">{v > 0 ? fM(v) : ''}</span>
                             <div
                               className="w-[70%] rounded-t-[3px]"
-                              style={{ height: `${(v / fcMax) * 72}%`, background: forecast.cumulative || i < 2 ? brand[700] : '#AECBBC' }}
+                              style={{ height: `${(v / fcMax) * 72}%`, background: forecast.cumulative || i < 2 ? brand[700] : accent.muted3 }}
                             />
                             <span className="fig text-[9px] text-ink-3">{months[i].toLocaleDateString('en-GB', { month: 'short' })}</span>
                           </div>
@@ -768,9 +771,27 @@ export default function SalesCrm() {
                 </select>
               </Field>
               <Field label="Incentive"><input className="w-full" value={draft.incentive} onChange={(e) => setDraft({ ...draft, incentive: e.target.value })} /></Field>
+              {/*
+                * Lettings only. `Tenancy.arrears` is read on the KPI row, a stat
+                * card and the drawer — coloured green at zero, which asserts
+                * nothing is owed — and nothing could write it, so it could only
+                * ever BE zero. `sales.deleteTenancy` then refuses a tenancy
+                * carrying arrears with "Clear or write off the arrears first",
+                * an instruction the product did not offer.
+                */}
+              {isRent && (
+                <Field label="Arrears (£)">
+                  <input
+                    type="number"
+                    className="w-full fig"
+                    value={draft.arrears || ''}
+                    onChange={(e) => setDraft({ ...draft, arrears: parseFloat(e.target.value) || 0 })}
+                  />
+                </Field>
+              )}
             </div>
             <div className="flex gap-2.5 mt-1">
-              <Button className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
+              <Button writes className="flex-1" loading={saving} disabled={!draft.name.trim() || draft.appraised <= 0} onClick={saveDraft}>
                 Save
               </Button>
               <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
@@ -807,11 +828,11 @@ export default function SalesCrm() {
                   List {isRent ? 'rent' : 'price'} {money(sel.appraised)}. {isRent ? 'Take an application to start referencing.' : 'Take a reservation to start the chain.'}
                 </div>
                 <div className="mt-4 flex gap-2.5">
-                  <Button className="flex-1" loading={advancing} onClick={() => advanceSel(sel.id)}>
+                  <Button writes className="flex-1" loading={advancing} onClick={() => advanceSel(sel.id)}>
                     {labels.availCta}
                   </Button>
                   <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                  <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
+                  <Button writes variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                 </div>
               </div>
             ) : (
@@ -872,7 +893,7 @@ export default function SalesCrm() {
                                 border: `2px solid ${done ? brand[700] : current ? statusTokens.amber.dot : neutral.dashed}`,
                               }}
                             >
-                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>}
+                              {done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>}
                             </span>
                             {i < names.length - 1 && <span className="w-[2px] flex-1 min-h-[14px]" style={{ background: i < sel.progress - 1 ? brand[700] : neutral.border }} />}
                           </div>
@@ -885,11 +906,11 @@ export default function SalesCrm() {
                     })}
                   </div>
                   <div className="mt-1 flex gap-2.5">
-                    <Button className="flex-1" loading={advancing} disabled={sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
+                    <Button writes className="flex-1" loading={advancing} disabled={sel.progress >= maxProg} onClick={() => advanceSel(sel.id)}>
                       {sel.progress >= maxProg ? labels.doneCta : 'Advance milestone'}
                     </Button>
                     <Button variant="secondary" onClick={openEdit}>Edit</Button>
-                    <Button variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
+                    <Button writes variant="danger" loading={deleting} onClick={removeSel}>Delete</Button>
                   </div>
                 </div>
               </>

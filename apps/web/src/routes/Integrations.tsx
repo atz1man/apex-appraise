@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { IntegrationProvider } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
+import { neutral } from '@apex/ui-tokens';
+import { workingDeal } from '../lib/working-deal';
 
 /** providers with a demo/mock sync that populates real deal data */
 const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
@@ -10,7 +13,13 @@ const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']
 type Status = 'CONNECTED' | 'ATTENTION' | 'NOT_CONNECTED';
 
 interface ProviderMeta {
-  provider: string; // DB key
+  /**
+   * The DB key, and the enum `integrations.connect` accepts. Typed rather than
+   * `string` so a card naming a provider the server will not take is a
+   * typecheck failure here rather than a Connect button that 400s in front of a
+   * customer — the two lists were separate copies of the same strings.
+   */
+  provider: IntegrationProvider;
   name: string; // display name (per prototype)
   mark: string;
   desc: string;
@@ -50,7 +59,7 @@ const STATUS_STYLE: Record<Status, { label: string; dot: string; bg: string; col
     dot: 'rgb(var(--status-green, 30 122 85))',
     bg: 'rgb(var(--tint-success-2, 228 241 234))',
     color: 'rgb(var(--status-green, 30 122 85))',
-    border: '#BFE0CD',
+    border: neutral.borderGreenSoft,
     iconBg: 'rgb(var(--tint-success, 236 243 239))',
     iconColor: 'rgb(var(--brand-ink, 20 80 59))',
   },
@@ -87,7 +96,16 @@ function rel(d: Date | string): string {
 export default function Integrations() {
   const toast = useToast();
   const utils = trpc.useUtils();
-  const { data: rows, isLoading } = trpc.integrations.list.useQuery();
+  const { data, isLoading } = trpc.integrations.list.useQuery();
+  const rows = data?.connections;
+  /**
+   * Whether a provider takes the workspace's own API key — a fact about the
+   * PROVIDER, read from the catalogue rather than from a row. It used to be
+   * `row.selfServe`, so it existed only where a row happened to exist, and a
+   * workspace with no Companies House row could not open the drawer that is the
+   * only way to give this product a Companies House key.
+   */
+  const selfServe = data?.selfServe;
   const connect = trpc.integrations.connect.useMutation({ onSuccess: () => utils.integrations.list.invalidate() });
   // self-serve key flow: drawer with the provider's fields, validated live on save
   const [credProvider, setCredProvider] = useState<string | null>(null);
@@ -120,7 +138,7 @@ export default function Integrations() {
     },
   });
   const deals = dealsData?.deals ?? [];
-  const effectiveDealId = syncDealId || deals.find((d) => d.name.startsWith('Northgate'))?.id || deals[0]?.id || '';
+  const effectiveDealId = syncDealId || workingDeal(deals)?.id || '';
 
   const byProvider = new Map((rows ?? []).map((r) => [r.provider, r]));
   const connected = (rows ?? []).filter((r) => r.status === 'CONNECTED').length;
@@ -215,7 +233,7 @@ export default function Integrations() {
                         {status === 'CONNECTED' ? (
                           <div className="flex gap-1.5">
                             {SYNCABLE.has(item.provider) && effectiveDealId && (
-                              <Button
+                              <Button writes
                                 size="sm"
                                 className="min-h-10 sm:min-h-0"
                                 loading={sync.isPending && sync.variables?.provider === item.provider}
@@ -224,26 +242,26 @@ export default function Integrations() {
                                 Sync to deal
                               </Button>
                             )}
-                            <Button
+                            <Button writes
                               variant="secondary"
                               size="sm"
                               className="min-h-10 sm:min-h-0"
                               loading={pending}
-                              onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                              onClick={() => (selfServe?.[item.provider] ? setCredProvider(item.provider) : connect.mutate(item.provider))}
                             >
                               Manage
                             </Button>
                           </div>
                         ) : status === 'ATTENTION' ? (
-                          <Button size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
+                          <Button writes size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
                             Reconnect
                           </Button>
                         ) : (
-                          <Button
+                          <Button writes
                             size="sm"
                             className="min-h-10 sm:min-h-0"
                             loading={pending}
-                            onClick={() => (row?.selfServe ? setCredProvider(item.provider) : connect.mutate(item.provider))}
+                            onClick={() => (selfServe?.[item.provider] ? setCredProvider(item.provider) : connect.mutate(item.provider))}
                           >
                             Connect
                           </Button>
@@ -261,7 +279,7 @@ export default function Integrations() {
       {/* self-serve key drawer — validated live before it's stored */}
       {(() => {
         const row = credProvider ? byProvider.get(credProvider) : undefined;
-        const spec = row?.selfServe;
+        const spec = credProvider ? selfServe?.[credProvider] : undefined;
         if (!credProvider || !spec) return null;
         const isConnected = row?.status === 'CONNECTED';
         const valid = spec.fields.every((f) => credFields[f.key]?.trim());
@@ -289,7 +307,7 @@ export default function Integrations() {
                 </div>
               ))}
               <div className="flex items-center gap-2">
-                <Button
+                <Button writes
                   loading={saveCreds.isPending}
                   disabled={!valid}
                   onClick={() => saveCreds.mutate({ provider: credProvider as 'EPC Register' | 'Companies House', fields: credFields })}
@@ -298,7 +316,7 @@ export default function Integrations() {
                 </Button>
                 <Button variant="ghost" onClick={() => { setCredProvider(null); setCredFields({}); }}>Cancel</Button>
                 {isConnected && (
-                  <Button
+                  <Button writes
                     variant="danger"
                     className="ml-auto"
                     loading={disconnect.isPending}

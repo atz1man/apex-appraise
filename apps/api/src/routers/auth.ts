@@ -18,6 +18,13 @@ import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
 import { openFor } from '../sealed-fields.js';
 
+/** the accounts prisma/seed.ts creates for a demo instance, in the order the login page lists them */
+export const DEMO_ACCOUNTS = [
+  { label: 'Internal team', email: 'arthur@apexappraise.co.uk', blurb: 'Pipeline, appraisals, construction, sales' },
+  { label: 'Investor portal', email: 'investor@demo.co.uk', blurb: 'LP position, cashflows, capital calls' },
+  { label: 'Buyer portal', email: 'buyer@demo.co.uk', blurb: 'Reservation, conveyancing, payments' },
+] as const;
+
 /** Pending SSO sign-ins. Ten minutes, single use, in memory — a restart costs
  *  someone one retry, which is a better trade than a table. */
 /**
@@ -137,6 +144,32 @@ export const authRouter = router({
       const conn = await connectionForEmail(ctx.prisma, input.email);
       return { sso: !!conn, enforced: !!conn?.enforced };
     }),
+
+  /**
+   * The demo logins, offered only where they exist.
+   *
+   * The login page listed three demo accounts — "password 'demo'" — and
+   * arrived with the demo founder's email and that password already typed,
+   * on every deployment. The seed had been cured of the matching defect
+   * (prisma/seed.ts: production does not create those accounts unless asked
+   * out loud, because a live system once shipped with three known passwords
+   * reachable from the internet), and the page undid half of it: a firm's
+   * production sign-in advertised credentials for accounts it had refused to
+   * create, and prefilled a password that was not theirs.
+   *
+   * Data-driven rather than a flag: a demo login is offered when that login
+   * exists. The three addresses are fixed and their password is public by
+   * design, so answering whether they exist discloses nothing that the
+   * offer itself would not.
+   */
+  demoAccounts: publicProcedure.query(async ({ ctx }) => {
+    const found = await ctx.prisma.user.findMany({
+      where: { email: { in: DEMO_ACCOUNTS.map((a) => a.email) } },
+      select: { email: true },
+    });
+    const present = new Set(found.map((f) => f.email));
+    return DEMO_ACCOUNTS.filter((a) => present.has(a.email));
+  }),
 
   /** Begin an SSO sign-in for whichever workspace claims this domain. */
   ssoStart: publicProcedure

@@ -111,7 +111,7 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
             data. The scope machinery is kept: when a write endpoint exists, offer
             it again. apps/api/test/api-scopes.test.ts fails if the two drift.
           */}
-          <Button
+          <Button writes
             size="sm"
             className="mb-1"
             disabled={!name.trim()}
@@ -135,7 +135,7 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
                 {k.lastUsedAt ? `used ${shortDate(k.lastUsedAt)}` : 'never used'}
               </span>
               {k.live ? (
-                <Button size="sm" variant="secondary" loading={revoke.isPending && revoke.variables?.id === k.id} onClick={() => revoke.mutate({ id: k.id })}>
+                <Button writes size="sm" variant="secondary" loading={revoke.isPending && revoke.variables?.id === k.id} onClick={() => revoke.mutate({ id: k.id })}>
                   Revoke
                 </Button>
               ) : (
@@ -261,7 +261,7 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </fieldset>
           <div>
-            <Button
+            <Button writes
               size="sm"
               /* https only, and the server refuses otherwise — payloads carry
                  deal figures, and a plaintext hop is somebody else's ledger */
@@ -284,7 +284,7 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
               <span className="fig text-[10.5px] text-ink-3 min-w-0 truncate">{e.events.join(' · ')}</span>
               <span className="flex-1" />
               {e.failureCount > 0 && <StatusChip status="amber" label={`${e.failureCount} FAILED`} />}
-              <Button size="sm" variant="secondary" loading={remove.isPending && remove.variables?.id === e.id} onClick={() => remove.mutate({ id: e.id })}>
+              <Button writes size="sm" variant="secondary" loading={remove.isPending && remove.variables?.id === e.id} onClick={() => remove.mutate({ id: e.id })}>
                 Remove
               </Button>
             </div>
@@ -390,7 +390,7 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {status?.configured && !status.connected && (
         <div className="mt-3">
-          <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>
+          <Button writes size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>
             Connect Xero
           </Button>
         </div>
@@ -405,10 +405,10 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
             <span className="text-ink-3">·</span>
             <span className="text-ink-2">last sync {shortDate(status.lastSyncAt)}</span>
             <span className="flex-1" />
-            <Button size="sm" loading={sync.isPending} disabled={!status.trackingCategoryName} onClick={() => sync.mutate()}>
+            <Button writes size="sm" loading={sync.isPending} disabled={!status.trackingCategoryName} onClick={() => sync.mutate()}>
               Sync now
             </Button>
-            <Button size="sm" variant="secondary" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+            <Button writes size="sm" variant="secondary" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
               Disconnect
             </Button>
           </div>
@@ -614,7 +614,7 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
       </label>
 
       <div className="mt-3 flex items-center gap-2">
-        <Button
+        <Button writes
           size="sm"
           loading={save.isPending}
           disabled={!form.issuer.trim() || !form.clientId.trim() || !domains.length || (!sso?.hasSecret && !form.clientSecret)}
@@ -633,7 +633,7 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
           Save
         </Button>
         {sso && (
-          <Button size="sm" variant="secondary" loading={remove.isPending} onClick={() => remove.mutate()}>
+          <Button writes size="sm" variant="secondary" loading={remove.isPending} onClick={() => remove.mutate()}>
             Remove
           </Button>
         )}
@@ -723,7 +723,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {status?.configured && !status.connected && (
         <div className="mt-3">
-          <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>
+          <Button writes size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>
             Connect a bank account
           </Button>
         </div>
@@ -736,10 +736,10 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
             <span className="text-ink-3">·</span>
             <span className="text-ink-2">last sync {shortDate(status.lastSyncAt)}</span>
             <span className="flex-1" />
-            <Button size="sm" loading={sync.isPending} onClick={() => sync.mutate()}>
+            <Button writes size="sm" loading={sync.isPending} onClick={() => sync.mutate()}>
               Sync now
             </Button>
-            <Button size="sm" variant="secondary" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+            <Button writes size="sm" variant="secondary" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
               Disconnect
             </Button>
           </div>
@@ -798,7 +798,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
                     <span className="flex-1 min-w-0 truncate">{t.description}</span>
                     <span className="fig font-semibold">£{t.amount.toLocaleString('en-GB')}</span>
                     {(['drawdown', 'equity', 'receipt'] as const).map((c) => (
-                      <Button
+                      <Button writes
                         key={c}
                         size="sm"
                         variant="secondary"

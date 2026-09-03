@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { status as statusTokens, brand, brandInk, neutral } from '@apex/ui-tokens';
+import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
-import { fM } from '../lib/format';
+import { fM, fmtBytes } from '../lib/format';
 import { formatPct } from '@apex/appraisal-engine';
 import { Avatar, Button, Icon, Skeleton, SkeletonRows, Td, Th, TopBar } from '../components/ui';
 
@@ -25,7 +25,7 @@ type HoldingRow = {
   committed: number;
   called: number;
   distributed: number;
-  irr: number;
+  irr: number | null;
 };
 type CashflowRow = { kind: string; label: string; amount: number; date: Date };
 
@@ -226,7 +226,8 @@ export default function InvestorPortal() {
                               {h.distributed > 0 ? fM(h.distributed) : '—'}
                             </Td>
                             <Td right fig className="font-semibold">
-                              {h.irr > 0 ? formatPct(h.irr, 1) : '—'}
+                              {/* null is unrecorded; a recorded zero or a loss prints */}
+                              {h.irr != null ? formatPct(h.irr, 1) : '—'}
                             </Td>
                             <Td className="pl-4">
                               <span className="label-mono inline-flex rounded-[7px] px-2 py-1" style={{ color: chip.text, background: chip.bg }}>
@@ -283,7 +284,7 @@ export default function InvestorPortal() {
                         className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center"
                         style={{ background: statusTokens.amber.text }}
                       >
-                        <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color="#fff" />
+                        <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color={onFill} />
                       </span>
                       <span className="text-[13px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
                         Capital call open
@@ -303,42 +304,68 @@ export default function InvestorPortal() {
                     <div className="mt-1 text-[11px] text-right" style={{ color: statusTokens.amber.text }}>
                       due {fdate(inv.openCapitalCall.due)}
                     </div>
-                    <Button variant="secondary" className="mt-3 w-full">
-                      <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6" size={14} />
-                      View drawdown notice
-                    </Button>
+                    {/*
+                      * No "View drawdown notice" button: it had no handler and
+                      * no document to open. The notice itself, when the firm
+                      * shares it, is a document in the panel below.
+                      */}
                   </section>
                 )}
 
-                {/* documents */}
+                {/*
+                  * Documents shared with this investor.
+                  *
+                  * This panel used to draw `Investor.documents` — a JSON list of
+                  * names on the investor row that nothing but the demo seed ever
+                  * wrote, with a download icon on each that downloaded nothing.
+                  * It now lists the documents the firm flagged for investors on
+                  * the deals this LP holds in, each a link to the file, signed
+                  * for this viewer. A document the firm holds no file for is
+                  * named without a link rather than linked to nothing.
+                  */}
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
                   <h3 className="text-[13px] font-semibold">Documents</h3>
                   <div className="mt-2 flex flex-col">
                     {inv.documents.length === 0 ? (
                       <div className="text-[12px] text-ink-3b py-2">No documents shared yet.</div>
                     ) : (
-                      inv.documents.map((d) => (
-                        <button
-                          key={d.name}
-                          className="flex items-center gap-2.5 py-2 px-1 -mx-1 border-b border-border-faint last:border-b-0 text-left group cursor-pointer hover:bg-sunken transition-colors"
-                          title={`Download ${d.name}`}
-                          aria-label={`Download ${d.name}`}
-                        >
-                          <span
-                            className="shrink-0 w-[26px] h-8 rounded-[5px] flex items-center justify-center fig text-[7px] font-semibold"
-                            style={{ background: statusTokens.red.bg, color: statusTokens.red.text }}
-                          >
-                            {(d.name.split('.').pop() ?? 'PDF').toUpperCase()}
-                          </span>
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-[12px] font-medium truncate">{d.name}</span>
-                            <span className="block text-[10px] text-ink-3">
-                              {fdate(d.date)} · {d.size}
+                      inv.documents.map((d) => {
+                        const inner = (
+                          <>
+                            <span
+                              className="shrink-0 w-[26px] h-8 rounded-[5px] flex items-center justify-center fig text-[7px] font-semibold uppercase"
+                              style={{ background: statusTokens.red.bg, color: statusTokens.red.text }}
+                            >
+                              {d.ext}
                             </span>
-                          </span>
-                          <Icon d="M12 3v13|M8 12l4 4 4-4|M5 21h14" size={15} color={neutral.ink3} />
-                        </button>
-                      ))
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[12px] font-medium truncate">{d.name}</span>
+                              <span className="block text-[10px] text-ink-3">
+                                {d.dealName} · {fdate(d.addedAt)}{d.url ? ` · ${fmtBytes(d.sizeBytes)}` : ' · held by the firm'}
+                              </span>
+                            </span>
+                            {d.url && <Icon d="M12 3v13|M8 12l4 4 4-4|M5 21h14" size={15} color={neutral.ink3} />}
+                          </>
+                        );
+                        const rowClass = 'flex items-center gap-2.5 py-2 px-1 -mx-1 border-b border-border-faint last:border-b-0 text-left';
+                        return d.url ? (
+                          <a
+                            key={d.id}
+                            href={d.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`${rowClass} group cursor-pointer hover:bg-sunken transition-colors`}
+                            title={`Open ${d.name}`}
+                            aria-label={`Open ${d.name}`}
+                          >
+                            {inner}
+                          </a>
+                        ) : (
+                          <div key={d.id} className={rowClass}>
+                            {inner}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </section>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { BrandMark, Button } from '../components/ui';
+import { heroGradient } from '@apex/ui-tokens';
 
 /**
  * Request a reset link.
@@ -19,7 +20,7 @@ export default function ForgotPassword() {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
-      style={{ background: 'linear-gradient(160deg,#13402F 0%,#0F3528 55%,#0C2A20 100%)' }}
+      style={{ background: heroGradient }}
     >
       <div className="w-[400px] max-w-[92vw]">
         <div className="flex items-center gap-3 justify-center mb-7">

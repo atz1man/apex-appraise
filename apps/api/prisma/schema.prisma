@@ -83,7 +83,7 @@ model Deal {
   name         String
   address      String
   postcode     String?
-  assetType    String  // INDUSTRIAL | RESIDENTIAL | COMMERCIAL | MIXED_USE
+  assetType    String  // an ASSET_CLASSES code — @apex/types/asset-classes is the list
   stage        String  @default("SOURCING") // SOURCING | APPRAISAL | OFFER | ACQUISITION | CONSTRUCTION | SALES_LETTING | COMPLETED
   figureStatus String  @default("ESTIMATE") // ESTIMATE | COMMITTED | ACTUAL
   probability  Int     @default(50)
@@ -172,6 +172,15 @@ model Appraisal {
   income     String? // JSON IncomeInput — held-and-let element valued by the investment method (rent in £/ft²/yr)
   resultCache String?
   narrative  String? // JSON {marketCommentary, valuationRationale, riskCommentary, generatedAt, model}
+  /// Which engine signed this version, written at approval and never after.
+  /// `resultCache` records what the engine said on the day of the SAVE; the
+  /// reports recompute from the inputs with whatever engine ships today, so an
+  /// approved figure could move under its own signature with nothing to say so.
+  engineVersion String?
+  /// JSON ApprovalPin — the engine version, a hash of the canonical inputs and
+  /// the headline figures to the penny, as they stood when approved. What
+  /// `appraisal.verifyApproved` checks a re-derivation against.
+  approvalPin String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -258,6 +267,7 @@ model Unit {
   /// carries an agreed value.
   updatedAt DateTime @default(now()) @updatedAt
   milestones SalesMilestone[]
+  documents Document[]
 
   @@index([dealId, status])
 }
@@ -364,12 +374,25 @@ model Document {
   sizeBytes BigInt
   url      String @default("")
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
+  // WHICH buyer this is shared with. A document offered to a buyer is offered to
+  // A buyer: `signedAt` is one column, so a row shared across a development
+  // could not have recorded ten people's signatures, and a reservation pack for
+  // plot 1 is not plot 7's business. Null means shared with nobody, which is
+  // what every document is until somebody says otherwise.
+  unitId   String?
+  unit     Unit?   @relation(fields: [unitId], references: [id])
   buyerVisible Boolean @default(false)
+  // Shared with the deal's investors — every LP holding in the deal, since an
+  // investor pack is one document for the whole syndicate. Deal-level on
+  // purpose where the buyer flag is plot-level: a buyer's contract is one
+  // person's business, a quarterly report is not.
+  investorVisible Boolean @default(false)
   signedAt DateTime? // buyer e-sign timestamp (DocuSign in prod)
   addedById String?
   addedAt  DateTime @default(now())
 
   @@index([dealId, category])
+  @@index([unitId])
 }
 
 // Firm-level standing wording: the AI policy note added to reports, and the
@@ -635,6 +658,12 @@ model OrgPolicy {
 
   aiPolicy String @default("")
 
+  /// Which jurisdiction's vocabulary and floor-area unit this firm's screens and
+  /// reports use — a REGIONS code from @apex/types/regions. Words and units only:
+  /// money is always pounds, and no arithmetic changes with it. Defaults to GB,
+  /// which is what every existing workspace has been reading all along.
+  region String @default("GB")
+
   // Facility covenants, firm-wide. NULLABLE ON PURPOSE: an unset limit is not
   // tested, because a breach measured against a threshold nobody agreed to is an
   // accusation rather than a finding.
@@ -750,7 +779,7 @@ model Task {
   deal    Deal   @relation(fields: [dealId], references: [id])
   title   String
   aspect  String
-  assignee String @default("AO") // initials
+  assignee String // a member’s initials — the demo founder’s used to be the default for every firm
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())
@@ -769,7 +798,6 @@ model Investor {
   sharePct Float @default(100) // of the LP base
   holdings Holding[]
   cashflows Cashflow[]
-  documents String // JSON {name, date, size}[]
 }
 
 model Holding {
@@ -778,11 +806,24 @@ model Holding {
   investor   Investor @relation(fields: [investorId], references: [id])
   dealId     String
   deal       Deal @relation(fields: [dealId], references: [id])
-  sharePct   Float
-  committed  BigInt // pence — 100% LP basis, scale by investor share
+  // pence, on the 100% LP basis. The LP's share is the INVESTOR's `sharePct`,
+  // one figure for every pooled amount they read — a holding carried a share
+  // of its own that nothing ever read while the API accepted and audited a
+  // change to it, and it went stale the moment the investor's was edited.
+  committed  BigInt
   called     BigInt @default(0)
   distributed BigInt @default(0)
-  irr        Float @default(0)
+  /// The deal's recorded IRR as a fraction (0.231 = 23.1%), or null while nobody
+  /// has recorded one. It was `Float @default(0)` with zero as the sentinel for
+  /// "not recorded", which lp.ts named as the column's limitation: a deal that
+  /// genuinely returned 0.0% and a deal nobody had entered were the same value,
+  /// and a recorded LOSS was a real number the portfolio figure had to treat as
+  /// real. The day a firm can record one is the day that stops being latent.
+  irr        Float?
+
+  // one position per investor per deal: `investorPosition` sums holdings, so a
+  // second row for the same deal would double the committed figure an LP reads
+  @@unique([investorId, dealId])
 }
 
 model Cashflow {
@@ -828,11 +869,20 @@ model BenchmarkPoint {
   // the contributing firm. Null only for illustrative points. Kept so a cohort
   // can count DISTINCT contributors and exclude the reader's own figures.
   orgId    String?
+  // WHICH deal this point came from. A contribution replaces that deal's
+  // previous one for the period, and the replacement used to key on dealName —
+  // which is not an identity. Two schemes called "Phase 1" erased each other's
+  // contribution, and renaming a deal between contributions left the old point
+  // standing beside the new one, double-weighting one scheme in a median other
+  // firms read as market evidence. Nullable because points contributed before
+  // this column existed carry no id, and illustrative points have no deal.
+  dealId   String?
   dealName String? // returned only to the contributing org, never to a cohort reader
   createdAt DateTime @default(now())
 
   @@index([region, useClass, metric])
   @@index([orgId])
+  @@index([dealId])
 }
 
 // ---- Integrations ----
@@ -843,6 +893,15 @@ model IntegrationConnection {
   status   String @default("NOT_CONNECTED") // CONNECTED | ATTENTION | NOT_CONNECTED
   lastSync DateTime?
   config   String @default("{}") // provider credentials (JSON) — server-side only, never returned to clients
+
+  // One row per provider per workspace. `integrations.list` used to backfill a
+  // placeholder inside a QUERY, and with no key concurrent reads each created
+  // one — measured, three parallel calls left two Companies House rows. That
+  // matters because `getIntegrationCreds` and `saveCredentials` both resolve a
+  // provider with findFirst, so a key saved onto one row can be read from the
+  // other and the integration reports itself unconfigured with the key in the
+  // table.
+  @@unique([orgId, provider])
 }
 
 /// Public open-data responses, cached so a valuer does not wait on the Land
