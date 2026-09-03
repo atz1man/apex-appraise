@@ -52,6 +52,32 @@ Then, exactly as in `DEPLOY.md`:
 docker compose up -d --build
 ```
 
+### Or one command
+
+`scripts/demo-local.sh` does the whole of the above for a demo on the machine you
+are sitting at — the case where the tester is one named person rather than the
+internet. It fills in any missing `.env` value and **never rewrites one that is
+already there**, warns if Docker has been given too little memory for the build,
+brings the stack up, and then waits on `/ready` rather than `/health`, because the
+API answers `/health` while Postgres is still starting and "it is up" is not the
+same moment as "a tester can sign in".
+
+```bash
+./scripts/demo-local.sh              # up, then prints the URL and the logins
+./scripts/demo-local.sh --tunnel     # …and a Cloudflare tunnel, so someone else can reach it
+./scripts/demo-local.sh --down       # stop, keep the data
+./scripts/demo-local.sh --reset      # destroy the data and reseed
+```
+
+The tunnel needs `cloudflared` (`brew install cloudflared`) and opens no port on
+your router. If you have a domain on Cloudflare, prefer a named tunnel with
+Cloudflare Access in front — then only the addresses you list can reach it at all,
+which is a better answer than the basic-auth recipe below.
+
+**The machine must not sleep.** A laptop or Mac mini that sleeps takes the tunnel
+with it, and the tester sees a dead site rather than a paused one: leave
+`caffeinate -dimsu` running, or turn off automatic sleep.
+
 ---
 
 ## What the Anthropic key turns on, and what it costs
