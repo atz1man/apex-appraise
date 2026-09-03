@@ -20,6 +20,14 @@ async function loginInternal(page: Page) {
   await expect(page.getByText('Deal tools')).toBeVisible();
 }
 
+async function northgateId(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    const j = await r.json();
+    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Northgate')).id as string;
+  });
+}
+
 test('every screen names itself in the tab, the history menu and the bookmark', async ({ page }) => {
   await loginInternal(page);
   await expect(page).toHaveTitle('Home · Apex Appraise');
@@ -49,21 +57,40 @@ test('a client-facing tab does not advertise the software', async ({ page }) => 
 });
 
 test('arriving at a page puts you at the top of it', async ({ page }) => {
+  /**
+   * Two things this test has to get right, and the first attempt got both
+   * wrong — it ran Hub → appraisal at 1280×720 and failed on its OWN premise
+   * check: the Hub scrolls 79px at that size, so there was never an offset for
+   * anything to reset.
+   *
+   * The origin and destination must both be genuinely long. The appraisal and
+   * Settings are the two longest screens in the product, so this runs between
+   * them.
+   *
+   * And the link clicked has to be STICKY. Playwright scrolls a target into
+   * view before clicking it, so a link in the body of the page moves the very
+   * offset being measured. The global nav is sticky and is why the viewport is
+   * 1440 wide — below 1400 the header hides it, deliberately, so the deal
+   * screens' own controls are not pushed off.
+   */
+  await page.setViewportSize({ width: 1440, height: 700 });
   await loginInternal(page);
+  const id = await northgateId(page);
+  await page.goto(`/deal/${id}/appraisal`);
+  await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
 
-  // to the foot of the Hub, past the tool grid
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.evaluate(() => window.scrollTo(0, 600));
   const left = await page.evaluate(() => window.scrollY);
-  expect(left, 'the Hub is too short at this viewport to leave a scroll offset behind').toBeGreaterThan(200);
+  expect(left, 'the appraisal is too short at this viewport to leave a scroll offset behind').toBeGreaterThan(200);
 
-  await page.getByRole('link', { name: /Development appraisal/ }).first().click();
-  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+  await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveTitle('Settings · Apex Appraise');
 
   const arrival = await page.evaluate(() => ({ y: window.scrollY, height: document.body.scrollHeight }));
-  // the destination must be taller than the offset we brought, or a browser
+  // the destination must be taller than the offset brought to it, or a browser
   // clamping the scroll would pass this test without the code doing anything
-  expect(arrival.height, 'the destination is too short for this to prove a reset').toBeGreaterThan(left + 600);
-  expect(arrival.y, 'the appraisal opened part-way down, at the offset left behind by the Hub').toBe(0);
+  expect(arrival.height, 'the destination is too short for this to prove a reset').toBeGreaterThan(left + 700);
+  expect(arrival.y, 'Settings opened part-way down, at the offset left behind by the appraisal').toBe(0);
 });
 
 test('and puts keyboard focus there too', async ({ page }) => {
@@ -77,6 +104,16 @@ test('and puts keyboard focus there too', async ({ page }) => {
 
 test('a keyboard user can skip the header instead of tabbing through it', async ({ page }) => {
   await loginInternal(page);
+  /**
+   * Reloaded on purpose. After an in-app navigation focus is already ON the
+   * page wrapper — which is what the test above asserts — and the wrapper sits
+   * AFTER the skip link in the document, so Tab from there goes forward into
+   * the content rather than back to a link that has already done its job. The
+   * skip link is for somebody arriving at a fresh document, which is what a
+   * reload produces: focus on `<body>`, nothing yet skipped.
+   */
+  await page.reload();
+  await expect(page.getByText('Deal tools')).toBeVisible();
 
   // WCAG 2.4.1. The first Tab from the top of the document reaches it, and it
   // is invisible until then
