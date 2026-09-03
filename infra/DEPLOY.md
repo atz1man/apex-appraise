@@ -116,6 +116,9 @@ putting `arthur@apexappraise.co.uk`, `investor@demo.co.uk` and `buyer@demo.co.uk
 internet with the password `demo`, and this runbook asked you to remember to remove them.
 
 Set `SEED_DEMO=1` only where sample deals are the point — a sales demo, or CI.
+For a demo instance specifically — which switches this on deliberately, alongside
+`DEMO_MODE=1` — see [`infra/DEMO.md`](DEMO.md), and hand the tester
+[`docs/DEMO-WALKTHROUGH.md`](../docs/DEMO-WALKTHROUGH.md).
 
 ## Option B — Fly.io (sketch)
 

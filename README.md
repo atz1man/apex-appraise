@@ -49,6 +49,13 @@ own `compute()` output.)
 returns *inputs only* (validated by `zExtraction`); the engine computes outputs.
 Without `ANTHROPIC_API_KEY` the API uses a deterministic demo extraction.
 
+## Giving someone a demo
+
+`infra/DEMO.md` stands up a demo instance (the production stack with `SEED_DEMO=1`,
+`DEMO_MODE=1` and a live AI key); `docs/DEMO-WALKTHROUGH.md` is the end-to-end test
+script to hand the person testing it — every user journey, with what to expect at each
+step and which integrations are standing in.
+
 ## Production deployment (Docker + PostgreSQL)
 
 ```bash
