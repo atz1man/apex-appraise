@@ -83,7 +83,7 @@ model Deal {
   name         String
   address      String
   postcode     String?
-  assetType    String  // INDUSTRIAL | RESIDENTIAL | COMMERCIAL | MIXED_USE
+  assetType    String  // an ASSET_CLASSES code — @apex/types/asset-classes is the list
   stage        String  @default("SOURCING") // SOURCING | APPRAISAL | OFFER | ACQUISITION | CONSTRUCTION | SALES_LETTING | COMPLETED
   figureStatus String  @default("ESTIMATE") // ESTIMATE | COMMITTED | ACTUAL
   probability  Int     @default(50)

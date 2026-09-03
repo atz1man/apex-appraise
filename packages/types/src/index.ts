@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { ASSET_TYPES } from './asset-classes.js';
 
 // ---- Enum-like unions (SQLite dev DB stores these as strings) ----
-export const ASSET_TYPES = ['INDUSTRIAL', 'RESIDENTIAL', 'COMMERCIAL', 'MIXED_USE'] as const;
 export const DEAL_STAGES = ['SOURCING', 'APPRAISAL', 'OFFER', 'ACQUISITION', 'CONSTRUCTION', 'SALES_LETTING', 'COMPLETED'] as const;
 export const FIGURE_STATUSES = ['ESTIMATE', 'COMMITTED', 'ACTUAL'] as const;
 export const VIABILITIES = ['PROCEED', 'CAUTION', 'DECLINE'] as const;
@@ -11,7 +11,6 @@ export const USER_ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
 export const PRINCIPAL_TYPES = ['internal', 'buyer', 'investor'] as const;
 export const SPEND_PROFILES = ['SCURVE', 'EVEN', 'FRONT', 'BACK'] as const;
 
-export type AssetType = (typeof ASSET_TYPES)[number];
 export type DealStage = (typeof DEAL_STAGES)[number];
 export type FigureStatus = (typeof FIGURE_STATUSES)[number];
 export type Viability = (typeof VIABILITIES)[number];
@@ -238,6 +237,12 @@ export const zWhatIfResponse = z.object({
 
 // ---- Plans: what each tier switches on (see ./plan.ts) ----
 export * from './plan.js';
+/**
+ * The asset taxonomy — labels, chip families, planning use classes and the
+ * starting rent roll for each class. Its own module (and its own export path,
+ * `@apex/types/asset-classes`) so the browser can read it without zod.
+ */
+export * from './asset-classes.js';
 
 /**
  * The data providers a workspace can connect.

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { Button, Spinner, TopBar } from '../components/ui';
@@ -334,7 +335,7 @@ export default function FieldApp() {
                     <div className="text-[15px] font-semibold tracking-[-0.2px] truncate">{d.name}</div>
                     <span className="flex-none label-mono px-[9px] py-1 rounded-[8px]" style={{ color: chip.c, background: chip.bg }}>{chip.t}</span>
                   </div>
-                  <div className="mt-[3px] text-[11.5px] text-ink-3 truncate">{d.address} · {d.assetType.replace('_', '-').toLowerCase()}</div>
+                  <div className="mt-[3px] text-[11.5px] text-ink-3 truncate">{d.address} · {assetLabel(d.assetType).toLowerCase()}</div>
                   <div className="mt-2.5 flex items-center gap-2">
                     <div className="flex-1 h-1.5 rounded-[3px] bg-border-std overflow-hidden">
                       <div className="h-full rounded-[3px]" style={{ width: `${p}%`, background: barColor }} />
@@ -420,7 +421,7 @@ export default function FieldApp() {
         <div className="mx-5 mt-3 mb-[18px]">
           {(
             [
-              ['Asset type', deal.assetType.replace('_', '-').toLowerCase()],
+              ['Asset type', assetLabel(deal.assetType)],
               ['Stage', deal.stage.replace('_', ' / ').toLowerCase()],
               ['Figures', deal.figureStatus.toLowerCase()],
               ['Next milestone', deal.nextMilestone ?? '—'],

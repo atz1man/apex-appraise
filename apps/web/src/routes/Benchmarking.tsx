@@ -5,15 +5,16 @@ import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
+import { ASSET_CLASSES, assetLabel } from '@apex/types/asset-classes';
 
 const REGIONS = ['South West', 'South East', 'London', 'Midlands'];
-const USE_CLASSES: Array<[string, string]> = [
-  ['INDUSTRIAL', 'Industrial'],
-  ['RESIDENTIAL', 'Residential'],
-  ['COMMERCIAL', 'Commercial'],
-  ['MIXED_USE', 'Mixed-use'],
-];
-const useLabel = (k: string) => USE_CLASSES.find(([id]) => id === k)?.[1] ?? k;
+/**
+ * The cohort selector follows the taxonomy — `BenchmarkPoint.useClass` stores
+ * a `Deal.assetType`, so an asset class the product can create is a cohort the
+ * pool can hold.
+ */
+const USE_CLASSES: Array<[string, string]> = ASSET_CLASSES.map((c) => [c.code, c.label] as [string, string]);
+const useLabel = (k: string) => assetLabel(k);
 
 /** "2026-Q2" → "Q2·26" */
 const periodShort = (p: string) => {

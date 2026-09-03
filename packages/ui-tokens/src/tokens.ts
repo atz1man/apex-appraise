@@ -72,11 +72,24 @@ export const status: Record<StatusKey, { text: string; bg: string; dot: string }
  */
 export const brandInk = v('brand-ink', '20 80 59');
 
-export const assetTypeTag: Record<string, { text: string; bg: string }> = {
-  INDUSTRIAL: { text: brandInk, bg: v('status-green-bg', '228 241 234') },
-  RESIDENTIAL: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246') },
-  COMMERCIAL: { text: v('status-amber', '149 95 17'), bg: v('tag-commercial-bg', '246 236 217') },
-  MIXED_USE: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },
+/**
+ * The asset chip, keyed by FAMILY rather than by asset class.
+ *
+ * It used to be keyed by the four asset codes, which made it a fifth hand-kept
+ * copy of the taxonomy — and the copy that could not be checked, because a
+ * missing key fell back to INDUSTRIAL and so printed a confident green chip for
+ * a class nobody had coloured in. Now the taxonomy (`@apex/types/asset-classes`)
+ * says which family a class belongs to and there is nothing here to keep in
+ * step: nine classes, four colours, and the chip's own text says which class it
+ * is. The four values below are unchanged, so no existing chip moves.
+ */
+export type AssetFamilyKey = 'industrial' | 'residential' | 'commercial' | 'mixed';
+
+export const assetFamilyTag: Record<AssetFamilyKey, { text: string; bg: string }> = {
+  industrial: { text: brandInk, bg: v('status-green-bg', '228 241 234') },
+  residential: { text: v('status-blue', '45 91 168'), bg: v('status-blue-bg', '229 234 246') },
+  commercial: { text: v('status-amber', '149 95 17'), bg: v('tag-commercial-bg', '246 236 217') },
+  mixed: { text: v('status-purple', '107 78 138'), bg: v('status-purple-bg', '237 230 244') },
 };
 
 /**

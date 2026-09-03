@@ -21,10 +21,12 @@ import {
 import { getPrincipal, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
+import { startingIncome, startingIncomeLine } from '../lib/starting-income';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
+import { assetLabel, isIncomeLed } from '@apex/types/asset-classes';
 import { accent, brand, brandInk, onFill, status as statusTokens } from '@apex/ui-tokens';
 
 const TABS: Array<[string, string]> = [
@@ -43,16 +45,6 @@ const TABS: Array<[string, string]> = [
 const ASPECT: Record<string, string> = {
   general: 'Site visit', revenue: 'Comparables', phases: 'Programme', income: 'Letting', build: 'Cost plan', other: 'Planning',
   finance: 'Finance', site: 'Site purchase', cashflow: 'Cashflow', returns: 'Returns',
-};
-
-/** Starting rent roll when a scheme first takes on a held element. */
-const DEFAULT_INCOME: IncomeInput = {
-  lines: [{ label: 'Let space', count: 1, area: 5000, rentPsf: 15, voidPct: 5 }],
-  nonRecoverablePct: 5,
-  annualDeductions: 0,
-  yieldPct: 7,
-  purchaserCostsPct: 6.8,
-  letUpMonths: 6,
 };
 
 const RENT_COL_ARIA: Record<'count' | 'area' | 'rentPsf' | 'voidPct' | 'ervPsf' | 'yearsToReview' | 'yieldPct', string> = {
@@ -312,7 +304,7 @@ export default function DevelopmentAppraisal() {
 
   // rent-roll editing helpers — the income block is optional, so every patch guards it
   const inc = input.income;
-  const setIncome = (patch: Partial<IncomeInput>) => set({ income: { ...(inc ?? DEFAULT_INCOME), ...patch } });
+  const setIncome = (patch: Partial<IncomeInput>) => set({ income: { ...(inc ?? startingIncome(deal?.assetType)), ...patch } });
   const setLine = (i: number, patch: Partial<IncomeInput['lines'][number]>) =>
     setIncome({ lines: (inc?.lines ?? []).map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
@@ -934,7 +926,7 @@ export default function DevelopmentAppraisal() {
                       title="Rent roll"
                       right={
                         <div className="flex gap-1.5">
-                          <Button variant="secondary" size="sm" onClick={() => setIncome({ lines: [...inc.lines, { label: 'Let space', count: 1, area: 2000, rentPsf: 15, voidPct: 5 }] })}>+ Add line</Button>
+                          <Button variant="secondary" size="sm" onClick={() => setIncome({ lines: [...inc.lines, startingIncomeLine(deal?.assetType)] })}>+ Add line</Button>
                           <Button variant="secondary" size="sm" onClick={() => set({ income: undefined })}>Remove</Button>
                         </div>
                       }
@@ -1251,13 +1243,30 @@ export default function DevelopmentAppraisal() {
                   </>
                 ) : (
                   <Panel title="Investment value">
-                    <EmptyState
-                      title="No held element"
-                      cta={<Button size="sm" onClick={() => set({ income: DEFAULT_INCOME })}>Add a rent roll</Button>}
-                    >
-                      If part of the scheme is retained and let rather than sold on, add a rent roll. The engine capitalises
-                      the net rent at your yield and adds the capital value — net of purchaser's costs — to GDV.
-                    </EmptyState>
+                    {/*
+                      An operated asset is not a sales scheme with a let corner — it IS the rent roll, so
+                      "No held element" reads as though the screen has misunderstood the deal. The taxonomy
+                      knows which classes those are (`incomeLed`), and the two states say different things:
+                      one invites an optional addition, the other points out something missing.
+                    */}
+                    {isIncomeLed(deal?.assetType) ? (
+                      <EmptyState
+                        title="No rent roll yet"
+                        cta={<Button size="sm" onClick={() => set({ income: startingIncome(deal?.assetType) })}>Add a rent roll</Button>}
+                      >
+                        {assetLabel(deal?.assetType)} is valued on the income it produces, so this is where its value comes
+                        from — not the unit schedule. Add the rent roll and the engine capitalises the net rent at your
+                        yield, net of purchaser's costs.
+                      </EmptyState>
+                    ) : (
+                      <EmptyState
+                        title="No held element"
+                        cta={<Button size="sm" onClick={() => set({ income: startingIncome(deal?.assetType) })}>Add a rent roll</Button>}
+                      >
+                        If part of the scheme is retained and let rather than sold on, add a rent roll. The engine capitalises
+                        the net rent at your yield and adds the capital value — net of purchaser's costs — to GDV.
+                      </EmptyState>
+                    )}
                   </Panel>
                 )
               )}
@@ -1981,5 +1990,5 @@ function Kv({ k, v, tone, dot }: { k: string; v: string; tone?: string; dot?: st
 
 function AssetBadge({ type }: { type?: string }) {
   if (!type) return null;
-  return <span className="text-[12.5px] text-ink-2">{type.replace('_', ' / ').toLowerCase()}</span>;
+  return <span className="text-[12.5px] text-ink-2">{assetLabel(type)}</span>;
 }

@@ -9,6 +9,7 @@ import {
   formatPct,
 } from '@apex/appraisal-engine';
 import { accent, brand, neutral, status as statusTokens } from '@apex/ui-tokens';
+import { assetLabel } from '@apex/types/asset-classes';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
@@ -723,7 +724,7 @@ export default function AppraisalReport() {
 
           <SectionTitle>Scheme facts</SectionTitle>
           <div className="mt-3 grid grid-cols-2" style={{ gap: '0 40px' }}>
-            <KvRow k="Asset type" v={(deal?.assetType ?? '—').replace('_', ' / ')} />
+            <KvRow k="Asset type" v={deal ? assetLabel(deal.assetType) : '—'} />
             <KvRow k="Pipeline stage" v={(deal?.stage ?? '—').replace('_', ' / ')} />
             <KvRow k="Figure status" v={deal?.figureStatus ?? '—'} />
             <KvRow k="Probability" v={deal ? `${deal.probability}%` : '—'} />

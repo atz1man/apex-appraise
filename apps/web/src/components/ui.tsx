@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { assetTypeTag, avatarGradients, brand, brandInk, brandMarkGradient, onFill, personGradientNone, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
+import { assetClass } from '@apex/types/asset-classes';
+import { assetFamilyTag, avatarGradients, brand, brandInk, brandMarkGradient, onFill, personGradientNone, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
 
@@ -233,11 +234,23 @@ export function Dot({ color, size = 7 }: { color: string; size?: number }) {
   return <span className="inline-block rounded-full shrink-0" style={{ width: size, height: size, background: color }} />;
 }
 
+/**
+ * The asset class chip.
+ *
+ * Both halves come from the taxonomy now. The text used to be
+ * `type.replace('_', '-')` — the stored code with its FIRST underscore swapped
+ * — which reads acceptably for the four codes it was written against and for
+ * nothing else, and the colour used to fall back to INDUSTRIAL, so an
+ * uncoloured class got a confident green chip. An unknown code now prints
+ * itself in the neutral chip, which is what "we do not know this one" looks
+ * like.
+ */
 export function AssetTag({ type }: { type: string }) {
-  const t = assetTypeTag[type] ?? assetTypeTag.INDUSTRIAL;
+  const cls = assetClass(type);
+  const t = cls ? assetFamilyTag[cls.family] : { text: statusTokens.neutral.text, bg: statusTokens.neutral.bg };
   return (
     <span className="label-mono inline-flex rounded-[6px] px-1.5 py-[2px]" style={{ color: t.text, background: t.bg }}>
-      {type.replace('_', '-')}
+      {cls?.tag ?? type}
     </span>
   );
 }

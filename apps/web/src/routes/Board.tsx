@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { ASSET_CLASSES } from '@apex/types/asset-classes';
 import type { StatusKey } from '@apex/ui-tokens';
 import { brand, onFill } from '@apex/ui-tokens';
 
@@ -22,13 +23,13 @@ const statusChip: Record<string, { key: StatusKey; label: string }> = {
   ACTUAL: { key: 'green', label: 'Actual' },
 };
 
-const FILTERS: Array<[string, string]> = [
-  ['all', 'All'],
-  ['INDUSTRIAL', 'Industrial'],
-  ['RESIDENTIAL', 'Residential'],
-  ['COMMERCIAL', 'Commercial'],
-  ['MIXED_USE', 'Mixed-use'],
-];
+/**
+ * The filter row follows the taxonomy, so an asset class added there appears
+ * here — and in the new-deal dropdown below, which is the same list minus
+ * "All". The row wraps; nine classes plus All is four rows on a 390px phone,
+ * which is the price of a firm being able to filter to the one it works in.
+ */
+const FILTERS: Array<[string, string]> = [['all', 'All'], ...ASSET_CLASSES.map((c) => [c.code, c.label] as [string, string])];
 
 const rocColor = (r: number) =>
   r >= 0.2

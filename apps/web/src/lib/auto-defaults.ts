@@ -1,3 +1,5 @@
+import { assetLabel } from '@apex/types/asset-classes';
+
 /**
  * What the AI Development Director's Manual entry form starts from.
  *
@@ -57,20 +59,13 @@ export const HOUSE_ASSUMPTIONS = {
   finance: { ltc: 60, rate: 7.5, period: 18, sales: 3, arrFee: 1.5 },
 } as const;
 
-const ASSET_LABEL: Record<string, string> = {
-  INDUSTRIAL: 'Industrial',
-  RESIDENTIAL: 'Residential',
-  COMMERCIAL: 'Commercial',
-  MIXED_USE: 'Mixed use',
-};
-
 export type DealLike = { name: string; address: string; postcode?: string | null; assetType: string } | null | undefined;
 
 export function manualDefaultsFor(deal: DealLike): ManualState {
   return {
     scheme: deal?.name ?? '',
     address: deal ? [deal.address, deal.postcode].filter(Boolean).join(', ') : '',
-    assetType: deal ? (ASSET_LABEL[deal.assetType] ?? deal.assetType) : '',
+    assetType: deal ? assetLabel(deal.assetType) : '',
     planningStatus: '',
     units: [],
     asking: 0,

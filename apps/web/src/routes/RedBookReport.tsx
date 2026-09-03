@@ -13,6 +13,7 @@ import {
   toNearestThousand,
   type IncomeInput,
 } from '@apex/appraisal-engine';
+import { assetClass } from '@apex/types/asset-classes';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
@@ -415,19 +416,15 @@ export default function RedBookReport() {
   const psf = analysedPsf(mv, nia);
   const avgNetAdj = hasComps ? summary.comps.reduce((a, c) => a + c.netAdjustment, 0) / summary.comps.length : 0;
 
-  const assetLabel: Record<string, string> = {
-    INDUSTRIAL: 'Industrial / trade',
-    RESIDENTIAL: 'Residential dwelling',
-    COMMERCIAL: 'Commercial',
-    MIXED_USE: 'Mixed-use',
-  };
-  const useClass: Record<string, string> = {
-    INDUSTRIAL: 'B2 / B8',
-    RESIDENTIAL: 'C3 — Dwelling',
-    COMMERCIAL: 'E — Commercial',
-    MIXED_USE: 'Sui generis',
-  };
-  const assetType = deal?.assetType ?? 'RESIDENTIAL';
+  /**
+   * Property type and use class come from the taxonomy, which is the only
+   * place either is written down. A certificate that names the wrong use class
+   * is a certificate with a defect in it, and the operated classes are exactly
+   * where the answer stops being obvious — student accommodation and co-living
+   * are sui generis, a care home is C2, a hotel C1 — so the reasoning is
+   * recorded beside each entry rather than in whoever last typed this table.
+   */
+  const asset = assetClass(deal?.assetType ?? 'RESIDENTIAL');
 
   /**
    * Weights follow the scheme. A held-and-let element carrying most of the GDV
@@ -587,13 +584,13 @@ export default function RedBookReport() {
           <Micro>Subject property summary</Micro>
           <div className="mt-2.5 grid grid-cols-2" style={{ gap: '0 36px' }}>
             <SummaryRow k="Tenure" v="Freehold" />
-            <SummaryRow k="Property type" v={assetLabel[assetType] ?? assetType} />
+            <SummaryRow k="Property type" v={asset?.reportLabel ?? deal?.assetType ?? '—'} />
             <SummaryRow k="Gross internal area" v={`${n0(R.gia / SQFT_PER_SQM)} sq m (${n0(R.gia)} sq ft)`} mono />
             <SummaryRow k="Net internal area" v={`${n0(nia)} sq ft`} mono />
             <SummaryRow k="Units" v={n0(input.units.reduce((a, u) => a + u.count, 0))} mono />
             <SummaryRow k="Efficiency (NIA:GIA)" v={`${input.efficiency}%`} mono />
             <SummaryRow k="Planning status" v={appr.planningStatus ?? 'Not assessed'} />
-            <SummaryRow k="Use class" v={useClass[assetType] ?? '—'} />
+            <SummaryRow k="Use class" v={asset?.useClass ?? '—'} />
             <SummaryRow k="EPC rating" v="C (72)" />
             <SummaryRow k="Title number" v="NYK 284119" mono />
           </div>

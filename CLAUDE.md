@@ -28,9 +28,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (880). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (141): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (153): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal) plus the `no-raw-hex` sweep. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income) plus the `no-raw-hex` and `asset-classes` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -126,6 +126,26 @@ the point, so read the failure rather than adding an exemption.
   NOT trusted: the same test reads it and asserts its allowlist equals what the real
   router lets a viewer through. `Button writes` greys a control out beforehand; that part
   IS per-site (62 marked), and an unmarked one degrades to the link, not to a hole.
+- `asset-classes` (in the WEB suite, `lib/asset-classes.test.ts`) — the browser keeps no
+  second copy of the asset taxonomy. `@apex/types/asset-classes` is the one table: code,
+  label, chip text, report label, planning use class, colour family, whether the class is
+  income-led, and the rent roll it starts from. Before it existed the four asset types were
+  written out in FIVE places that already disagreed ("Mixed use" on one screen, "Mixed-use"
+  on three), plus four screens with no table at all that carved a label out of the stored
+  code — `assetType.replace('_', '-')`, which reads acceptably for the codes it was written
+  against and for nothing else. Adding the operated classes (build-to-rent, student,
+  co-living, care homes, hotels) was nine edits; it is now one. The sweep walks the web tree
+  AND `packages/ui-tokens/src`, because the chip-colour table lived THERE keyed by asset code
+  and is the copy nobody would think to look for. Two rules: no file names more than one
+  asset code (one is a default, two is a table), and no file carves a label out of
+  `assetType`. A code counts quoted OR as a bare object key — three of the five tables used
+  bare keys, so a quoted-string matcher would have passed over most of what it was written to
+  find. Run against the commit before this one it names all five tables and all four label
+  sites unaided. NOT reached, and said out loud in the test: a label carved out of a
+  PARAMETER (`AssetTag`'s `type.replace(...)`) is invisible to a static matcher, because the
+  parameter is named `type` and so is every other one — a third such site needs its own rule
+  rather than this one loosened into matching `.replace('_'` everywhere, which deal stages
+  would trip on every screen.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

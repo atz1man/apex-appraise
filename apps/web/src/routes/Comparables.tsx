@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
+import { assetLabel } from '@apex/types/asset-classes';
 import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
@@ -310,7 +311,7 @@ export default function Comparables() {
               <div className="fig text-[10px] font-medium uppercase tracking-[0.7px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Subject</div>
               <div className="mt-1.5 text-[17px] font-semibold">{deal?.name ?? '—'}</div>
               <div className="mt-0.5 text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                {deal ? `${deal.assetType.replace('_', ' / ')} · ${deal.address}` : ''}
+                {deal ? `${assetLabel(deal.assetType)} · ${deal.address}` : ''}
               </div>
               <div className="mt-4 pt-3.5 flex items-end justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.75)' }}>Supported blended value</span>
