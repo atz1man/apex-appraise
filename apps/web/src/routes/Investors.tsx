@@ -360,7 +360,12 @@ export default function Investors() {
                                 variant="ghost"
                                 disabled={h.moneyMoved || removeHolding.isPending}
                                 title={h.moneyMoved ? 'Money has been called or distributed on this holding' : undefined}
-                                onClick={() => removeHolding.mutate({ investorId: rec.id, dealId: h.dealId })}
+                                onClick={() => {
+                                  // one click used to take an investor's position in a deal off the register
+                                  if (confirm(`Remove ${rec.name}'s holding in ${h.dealName}? Their position on this deal comes off the register.`)) {
+                                    removeHolding.mutate({ investorId: rec.id, dealId: h.dealId });
+                                  }
+                                }}
                                 ariaLabel={`Remove holding in ${h.dealName}`}
                               >
                                 Remove
@@ -436,7 +441,20 @@ export default function Investors() {
                         <div className="text-[11px] text-ink-3">{dateGB(c.date)}{c.dealId ? ` · ${deals.find((d) => d.id === c.dealId)?.name ?? ''}` : ''}</div>
                       </div>
                       <span className="fig font-semibold">{fM(Math.abs(c.amount))}</span>
-                      <Button writes size="sm" variant="ghost" loading={deleteLine.isPending} onClick={() => deleteLine.mutate({ cashflowId: c.id })} ariaLabel={`Remove line ${c.label}`}>
+                      {/* a call or a distribution is a financial record, and this
+                          removed one on a single click with nothing said */}
+                      <Button
+                        writes
+                        size="sm"
+                        variant="ghost"
+                        loading={deleteLine.isPending}
+                        onClick={() => {
+                          if (confirm(`Remove the ${c.kind === 'dist' ? 'distribution' : 'capital call'} “${c.label}” of ${fM(Math.abs(c.amount))}? It comes off ${rec.name}'s statement.`)) {
+                            deleteLine.mutate({ cashflowId: c.id });
+                          }
+                        }}
+                        ariaLabel={`Remove line ${c.label}`}
+                      >
                         Remove
                       </Button>
                     </div>

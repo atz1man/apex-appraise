@@ -34,10 +34,10 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (210): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (219): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title` and `dialogs` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs` and `destructive` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
@@ -232,6 +232,24 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `destructive` (web suite) — nothing this product destroys goes on one click. Measured over
+  every `remove`/`delete` mutation the browser calls: 14 controls, FOUR of which fired
+  immediately — a customer's webhook endpoint, the firm's single sign-on configuration (and
+  `enforced` may mean there is no password to fall back on), an investor's holding in a deal,
+  and a capital call or distribution, which is a financial record. What makes those four
+  omissions rather than a choice is that the other ten already ask, in three ways the product
+  had settled on: `confirm` at row level, arm-then-confirm at panel level (the control appears
+  only after another arms it, with a Cancel beside it), and typing the workspace name back,
+  used once for the control that ends everything. The matcher recognises all three, and that
+  is the whole reason it is trustworthy: a first pass looking only for `confirm(` reported
+  eight offenders of which FOUR were properly guarded, and a matcher that finds what it was
+  written to look for and calls the rest defects is worse than none, because somebody acts on
+  its list. Two more things it had to learn — `confirm` is tested BEFORE the one-line-`if`
+  rule, since six row-level sites write `if (confirm(…)) x.mutate(…)` on one line and were
+  being reported as typed-name gates; and a call takes the NEAREST binding above it, because
+  `settings-integrations.tsx` binds `remove` twice and a name→procedure map reported a webhook
+  endpoint as an SSO configuration — the right count under the wrong name, which is the worse
+  failure, because somebody reads the name.
 - `dialogs` (web suite) — every overlay declares `role="dialog"` and `aria-modal`. Measured
   across the five this app renders: ONE, the marketing page's product tour, did. The
   primitive the PRODUCT uses — `Drawer`, opened from six screens — declared none of it and
