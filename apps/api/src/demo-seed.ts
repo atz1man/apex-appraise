@@ -11,6 +11,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { depositsHeldAt } from '@apex/appraisal-engine';
 import { hashPassword } from './auth/password.js';
+import { seedDepth } from './demo-seed-depth.js';
 
 const hash = (s: string) => hashPassword(s);
 /** pounds → integer pence */
@@ -648,6 +649,17 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     deals: dealRows.length,
     users: 6,
     login: 'arthur@apexappraise.co.uk / demo',
+  });
+
+  // Depth: every deal past sourcing gets an appraisal, comparables, scenarios,
+  // terms and documents so the demo is end-to-end on all eleven deals, not
+  // three. Measured before it existed: 8 of 11 deals were shells.
+  await seedDepth(prisma, {
+    orgId: org.id,
+    deals,
+    users: { ao: ao.id, dw: dw.id, mv: mv.id, pa: pa.id },
+    contractors: { kp, st, mh, fl },
+    salesMilestones,
   });
 
   return org.id;

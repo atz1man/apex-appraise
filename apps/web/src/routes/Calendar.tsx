@@ -119,7 +119,7 @@ export default function Calendar() {
       list: [
         { label: 'Overdue', color: statusTokens.red.text, tasks: overdue },
         { label: 'Today', color: brandInk, tasks: dueToday },
-        { label: 'This week', color: brand[500], tasks: thisWeek },
+        { label: 'This week', color: brandInk, tasks: thisWeek },
         { label: 'Later', color: neutral.ink2b, tasks: later },
         { label: 'Completed', color: neutral.ink3, tasks: done },
       ],

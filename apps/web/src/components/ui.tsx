@@ -477,7 +477,7 @@ export function PlanLocked({
 
 export function EmptyState({ icon, title, children, cta }: { icon?: ReactNode; title?: ReactNode; children: ReactNode; cta?: ReactNode }) {
   return (
-    <div className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center">
+    <div data-testid="empty-state" className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center">
       {icon && (
         <div className="w-11 h-11 rounded-[14px] bg-sunken-2 flex items-center justify-center text-ink-3 mb-1.5">
           {icon}

@@ -1,6 +1,26 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
+ * A deal of the test's own, at the appraisal stage: no appraisal, no terms, no
+ * evidence. The demo seed fills every seeded deal in by stage, so a test whose
+ * premise is a shell — a fresh draft, a report with nothing to value — cannot
+ * borrow one and must make it.
+ */
+async function createDeal(page: Page, name: string): Promise<string> {
+  const id = await page.evaluate(async (name) => {
+    const res = await fetch('/trpc/deals.create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+      body: JSON.stringify({ json: { name, address: '1 Test Row, Bournemouth', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' } }),
+    });
+    const j = await res.json();
+    return (j?.result?.data?.json?.id as string | undefined) ?? `ERR ${j?.error?.json?.message ?? 'unknown'}`;
+  }, name);
+  expect(id, `could not create a deal: ${id}`).not.toMatch(/^ERR/);
+  return id;
+}
+
+/**
  * Per-screen happy-path coverage (BUILD_PLAN cross-cutting acceptance).
  * Assumes the dev stack is running with the seeded demo dataset.
  */
@@ -1097,9 +1117,13 @@ test('a revoked or unknown signing link cannot be used', async ({ page }) => {
  * terms of engagement draft from.
  */
 /**
- * DEPENDS ON A PRISTINE DEAL: it asserts that a FRESH draft inherits the firm's
- * defaults, which only happens while Clovelly has no saved terms row. Any test
- * (or hand-poke) that saves terms there breaks this until the next reseed.
+ * On a deal of its own. It asserts that a FRESH draft inherits the firm's
+ * defaults, which is only true of a deal with no saved terms row — and it used
+ * to read Clovelly for that, on the strength of a comment saying nothing else
+ * must ever save terms there. The demo seed now issues terms on every deal
+ * past sourcing, because a valuer instructed on a scheme has terms, and a
+ * spec whose premise is "this seeded deal is a shell" is a spec that stops the
+ * demo being filled in. It makes the shell it needs.
  */
 test('firm policy sets the AI note and the terms house style', async ({ page }) => {
   await page.goto('/login');
@@ -1123,11 +1147,7 @@ test('firm policy sets the AI note and the terms house style', async ({ page }) 
   await expect(page.getByText('Firm policy saved — new terms will draft from it')).toBeVisible();
 
   // a deal with no terms yet drafts from the house style…
-  const id = await page.evaluate(async () => {
-    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
-    const j = await r.json();
-    return j.result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Clovelly')).id;
-  });
+  const id = await createDeal(page, `Policy Draft ${Date.now()}`);
   await page.goto(`/deal/${id}/engagement`);
   await expect(page.getByLabel('Purpose of the valuation')).toHaveValue('Internal investment appraisal, as instructed.');
   await expect(page.getByLabel('Basis of fees')).toHaveValue('A fixed fee of £4,750 plus VAT, payable on delivery.');
@@ -1532,9 +1552,11 @@ test('a signing link expires, and an expired one cannot sign', async ({ page, br
 
   /**
    * This test SAVES terms, so it needs a deal no other test reads as a fresh
-   * draft. Currently claimed: Northgate, Kingsway, Harbour (appraisals),
-   * Westover (contrast sweep), Clovelly (firm-policy defaults), Southbourne
-   * (signing walk), Elm Grove. Stour Valley is this test's.
+   * draft. Currently claimed: Northgate, Kingsway, Harbour, Clovelly
+   * (appraisal reports), Westover (contrast sweep), Southbourne (signing walk),
+   * Elm Grove. Stour Valley is this test's. A test that needs a deal in a state
+   * the seed no longer leaves any deal in — no terms, no appraisal — makes its
+   * own with `createDeal`.
    */
   const id = await page.evaluate(async () => {
     const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
@@ -1686,7 +1708,14 @@ test('the appraisal report prints an investment section without desyncing pagina
     const j = await r.json();
     const deals = j.result.data.json.deals as Array<{ id: string; name: string }>;
     const by = (p: string) => deals.find((d) => d.name.startsWith(p))!.id;
-    return { income: by('Kingsway'), sales: by('Northgate') };
+    /**
+     * The pure-sales scheme is one BEFORE construction. Northgate was it, and
+     * the count below is "two sheets fewer than the income scheme" — which held
+     * only while Northgate had no cost plan, because a scheme with one gains a
+     * construction-monitoring sheet of its own. It has one now, as a scheme in
+     * construction should; that sheet is checked below on its own terms.
+     */
+    return { income: by('Kingsway'), sales: by('Clovelly'), building: by('Northgate') };
   });
 
   /**
@@ -1723,6 +1752,9 @@ test('the appraisal report prints an investment section without desyncing pagina
           }))
           .filter((p) => p.height > 1123),
         feet: pages.map((p) => (p.textContent?.match(/Page (\d+) of (\d+)/) ?? []).slice(1).join('/')).filter(Boolean),
+        // the ledger takes as many sheets as the programme is long — 24 months
+        // is two — so the two schemes are compared OUTSIDE it
+        ledger: pages.filter((p) => /Cashflow ledger \(\d+ of \d+\)/.test(p.textContent ?? '')).length,
       };
     });
 
@@ -1751,8 +1783,16 @@ test('the appraisal report prints an investment section without desyncing pagina
   // TWO sheets separate them now: the investment valuation and, since the scheme
   // carries a DCF, its growth × exit-yield grid
   await expect(page.getByText('DCF sensitivity')).toHaveCount(0);
-  expect(noInv.count).toBe(withInv.count - 2);
+  expect(noInv.count - noInv.ledger).toBe(withInv.count - withInv.ledger - 2);
   expect(noInv.feet).toEqual(Array.from({ length: noInv.count - 1 }, (_, i) => `${i + 2}/${noInv.count}`));
+  // a scheme under construction ends on a monitoring sheet, numbered after the
+  // notice it follows, and the footers still count what is there
+  await page.goto(`/deal/${ids.building}/report`);
+  await page.waitForSelector('.a4-page');
+  await expect(page.getByText(/\d · Construction monitoring/)).toBeVisible();
+  const building = await measure();
+  expect(building.overflowing, `pages past A4: ${JSON.stringify(building.tooTall)}`).toBe(0);
+  expect(building.feet).toEqual(Array.from({ length: building.count - 1 }, (_, i) => `${i + 2}/${building.count}`));
 });
 
 /**
@@ -2453,10 +2493,12 @@ test('the red book paginates honestly and refuses clearly when there is nothing 
     const d = (await r.json()).result.data.json.deals as Array<{ id: string; name: string }>;
     return {
       valued: d.find((x) => x.name.startsWith('Harbour'))!.id,
-      unvalued: d.find((x) => x.name.startsWith('Elm Grove'))!.id,
       token: localStorage.getItem('apex_token') ?? '',
     };
   });
+  // "nothing to value" was Elm Grove, which now has an appraisal like every
+  // seeded deal past sourcing; a deal with none is made here instead
+  const unvalued = await createDeal(page, `Unvalued ${Date.now()}`);
 
   await page.goto(`/deal/${ids.valued}/redbook`);
   await page.waitForSelector('.a4-page');
@@ -2475,7 +2517,7 @@ test('the red book paginates honestly and refuses clearly when there is nothing 
    * Nothing to value: the page says so, and — the part that was broken — it does
    * not offer an export that cannot work.
    */
-  await page.goto(`/deal/${ids.unvalued}/redbook`);
+  await page.goto(`/deal/${unvalued}/redbook`);
   await expect(page.getByText('No appraisal saved yet')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download PDF' })).toHaveCount(0);
 
@@ -2488,15 +2530,15 @@ test('the red book paginates honestly and refuses clearly when there is nothing 
    */
   const mint = await request.post('/trpc/appraisal.downloadToken', {
     headers: { authorization: `Bearer ${ids.token}`, 'content-type': 'application/json' },
-    data: { json: { kind: 'redbook', dealId: ids.unvalued } },
+    data: { json: { kind: 'redbook', dealId: unvalued } },
   });
   const downloadToken = (await mint.json()).result.data.json.token as string;
-  const refused = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(downloadToken)}`);
+  const refused = await request.get(`/reports/${unvalued}/redbook.pdf?t=${encodeURIComponent(downloadToken)}`);
   expect(refused.status()).toBe(409);
   expect(await refused.text()).toMatch(/has no saved appraisal yet/);
 
   // the session token, which used to work here, no longer opens a document
-  const withSession = await request.get(`/reports/${ids.unvalued}/redbook.pdf?t=${encodeURIComponent(ids.token)}`);
+  const withSession = await request.get(`/reports/${unvalued}/redbook.pdf?t=${encodeURIComponent(ids.token)}`);
   expect(withSession.status()).toBe(401);
 });
 
@@ -2580,10 +2622,9 @@ test('the terms document paginates to fit whatever house style a firm writes', a
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
 
-  const dealId = await page.evaluate(async () => {
-    const r = await fetch('/trpc/deals.list', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
-    return (await r.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Harbour')).id;
-  });
+  // the document drafts from the house style only on a deal with NO saved
+  // terms — Harbour Reach has terms now, like every seeded deal past sourcing
+  const dealId = await createDeal(page, `Terms Length ${Date.now()}`);
 
   const measure = () =>
     page.evaluate(() => {
