@@ -37,9 +37,9 @@ export default function SignTerms() {
       <div className="light min-h-screen bg-frame flex items-center justify-center px-5">
         <div className="bg-surface border border-border-strong rounded-card shadow-rest max-w-[440px] w-full p-8 text-center">
           <BrandMark size={34} />
-          <div className="mt-4 text-[17px] font-semibold tracking-[-0.3px]">
+          <h1 className="mt-4 text-[17px] font-semibold tracking-[-0.3px]">
             {expired ? 'This signing link has expired' : 'This signing link is no longer valid'}
-          </div>
+          </h1>
           <p className="mt-2 text-[13px] text-ink-2 leading-relaxed">
             {expired
               ? 'Signing links stop working after a set period. Ask the sender to issue a new one — nothing you have already signed is affected.'
@@ -80,7 +80,7 @@ export default function SignTerms() {
         <div id="sign-panel" className="bg-surface border border-border-strong rounded-card shadow-rest w-full max-w-[794px] p-7">
           {signed ? (
             <>
-              <div className="text-[16px] font-semibold tracking-[-0.3px]">Thank you — these terms are signed</div>
+              <h2 className="text-[16px] font-semibold tracking-[-0.3px]">Thank you — these terms are signed</h2>
               <p className="mt-2 text-[13px] text-ink-2 leading-relaxed">
                 Signed by <b className="font-semibold">{t.signedName ?? t.acceptedBy}</b>
                 {t.signedAt ? ` on ${new Date(t.signedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.
@@ -92,7 +92,7 @@ export default function SignTerms() {
             </>
           ) : (
             <>
-              <div className="text-[16px] font-semibold tracking-[-0.3px]">Sign these terms</div>
+              <h2 className="text-[16px] font-semibold tracking-[-0.3px]">Sign these terms</h2>
               <p className="mt-2 text-[13px] text-ink-2 leading-relaxed">
                 Typing your name below and confirming has the same effect as signing by hand. {t.orgName} will record the time
                 and origin of your signature.

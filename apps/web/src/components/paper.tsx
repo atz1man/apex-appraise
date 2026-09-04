@@ -68,10 +68,17 @@ export function A4Page({
   );
 }
 
-export function PageHead({ title, scheme }: { title: string; scheme: string }) {
+/**
+ * `heading` makes the title the document's `h1`. Sheet one of a document passes
+ * it; continuation sheets do not, so a seven-sheet pack has one `h1` and not
+ * seven. Same classes either way — preflight resets heading font size and
+ * weight, so the tag changes and no pixel does.
+ */
+export function PageHead({ title, scheme, heading = false }: { title: string; scheme: string; heading?: boolean }) {
+  const Title = heading ? 'h1' : 'span';
   return (
     <div className="flex items-center justify-between pb-3" style={{ borderBottom: `2px solid ${brand[700]}` }}>
-      <span className="text-[15px] font-bold">{title}</span>
+      <Title className="text-[15px] font-bold">{title}</Title>
       <span className="fig text-[10px] font-medium text-ink-3">{scheme}</span>
     </div>
   );

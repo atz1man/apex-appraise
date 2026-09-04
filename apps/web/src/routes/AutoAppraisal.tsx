@@ -870,7 +870,7 @@ export default function AutoAppraisal() {
                         <path d="M8 12h.01M12 12h.01M16 12h.01M21 12a8 8 0 0 1-11.3 7.3L3 21l1.7-6.7A8 8 0 1 1 21 12Z" />
                       </svg>
                     </span>
-                    <h3 className="text-[14px] font-semibold">Ask the deal · what-if</h3>
+                    <h2 className="text-[14px] font-semibold">Ask the deal · what-if</h2>
                   </div>
                 }
               >
