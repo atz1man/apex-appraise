@@ -8,10 +8,33 @@ or an option: two apps in `lhr` (London) —
 | `apex-appraise-web` | the front door, and the only one on the public internet — serves the built React app and proxies `/trpc`, `/uploads`, `/reports`, `/webhooks` |
 | `apex-appraise-api` | Fastify + tRPC, **flycast-only**: reachable from the web app over Fly's private network and from nowhere else |
 
-It serves today at https://apex-appraise-web.fly.dev. Both apps run
-`auto_stop_machines = "stop"`, so they scale to zero and cold-start on the first
-request — a few seconds of latency on a sleeping instance is expected, not a
-fault. Configuration lives in [`fly.api.toml`](fly.api.toml) and
+It serves today at https://apex-appraise-web.fly.dev.
+
+Both apps set `auto_stop_machines = "stop"` **and** `min_machines_running = 1`,
+so extra machines stop under low load but one stays up — they do **not** scale
+to zero, and there is no cold start on the first request. That is deliberate on
+the API and `fly.api.toml` says why: "login throttling and Stripe webhooks want
+a warm machine". Rate-limit counters live in the process, and a webhook arriving
+at a stopped machine is a payment confirmation waiting on a boot.
+
+It is also the whole of the compute bill, since a machine that never stops is
+billed around the clock. Dropping either app to `min_machines_running = 0` is
+the one lever that changes that materially, and it is a real trade rather than a
+saving: see the sentence above for what the API gives up. The web app has less
+to lose, holding no state — it costs a cold start on the first request after
+idle.
+
+| | web | api |
+|---|---|---|
+| size | `shared-cpu-1x` | `shared-cpu-1x` |
+| memory | 256mb | 1gb |
+| always-on | yes (`min_machines_running = 1`) | yes (`min_machines_running = 1`) |
+| volume | — | `uploads`, 3gb |
+
+Postgres is a third app, `apex-appraise-db`, created separately (see
+[`DEPLOY.md`](DEPLOY.md)) and billed as its own machine plus its own volume.
+
+Configuration lives in [`fly.api.toml`](fly.api.toml) and
 [`fly.web.toml`](fly.web.toml); how to deploy is in [`DEPLOY.md`](DEPLOY.md).
 
 Once a domain is owned (e.g. `apexappraise.co.uk`), pointing the live app at it
