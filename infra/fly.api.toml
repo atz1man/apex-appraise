@@ -10,6 +10,23 @@
 #   JWT_SECRET     — openssl rand -hex 32
 # Optional: ANTHROPIC_API_KEY, EPC_BEARER_TOKEN, STRIPE_SECRET_KEY,
 #   STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, SMTP_URL, EMAIL_FROM
+#
+# Optional, and the pair that decides what the MAPS look like:
+#   GOOGLE_MAPS_API_KEY        — Static Maps API, restricted BY IP, not by HTTP
+#                                referrer: the requests come from this server,
+#                                and nothing referring to the key is a browser
+#   GOOGLE_MAPS_SIGNING_SECRET — the URL signing secret from the same console
+#
+# With neither set — which is how this app runs today — `/staticmap` answers
+# 404, `org.mapConfig` advertises `staticMapUrl: null`, and every map in the
+# product falls back to the OpenStreetMap tile renderer. That fallback is the
+# DEFAULT path rather than the unhappy one (the public demo has no Google
+# account and CI has no key, so it is the path the whole browser suite
+# exercises), which is exactly why its absence here was easy to miss: nothing
+# looks broken, the maps are simply not Google's.
+#
+# Setting either secret redeploys the app, so the imagery changes on the next
+# boot with no code change. Both stay server-side; neither reaches a browser.
 
 app = "apex-appraise-api"
 primary_region = "lhr"
