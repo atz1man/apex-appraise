@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * Per-screen happy-path coverage (BUILD_PLAN cross-cutting acceptance).
@@ -2045,96 +2045,164 @@ test('the board states the book’s debt exposure and its largest concentration'
 });
 
 /**
+ * Saves the valuation policy and waits for the SAVE to land, rather than for a
+ * second to pass.
+ *
+ * Each of these three saves used to be a click followed by
+ * `waitForTimeout(1000)` and then a `page.goto`. That is a race in the
+ * direction that fails silently: a save still in flight when the navigation
+ * starts is abandoned, the next screen reads the OLD policy, and the assertion
+ * that follows reports a covenant the form appeared to accept. On a dev stack
+ * the save answers in well under a second, which is why it has never been seen
+ * to fail — and is exactly why it would first fail on a loaded CI runner, which
+ * is where this spec has failed three times.
+ */
+async function savePolicy(page: Page, value: string, field?: Locator) {
+  await (field ?? page.getByLabel('Max loan to GDV (%)')).fill(value);
+  await Promise.all([
+    page.waitForResponse((r) => r.url().includes('org.savePolicy')),
+    page.getByRole('button', { name: 'Save policy' }).click(),
+  ]);
+}
+
+/**
  * Facility covenants: not tested until the firm sets its own limits.
  *
- * SELF-CLEANING — it sets a limit, asserts the breach, and clears it again, so it
- * leaves no invented covenant on a customer-facing demo. Sets it through the real
- * Settings form rather than the API, because "can an admin actually enter this"
- * is half of what is being tested.
+ * Sets the limit through the real Settings form rather than the API, because
+ * "can an admin actually enter this" is half of what is being tested.
+ *
+ * The covenant is cleared in an `afterEach` and NOT only at the end of the test
+ * body, which is where the whole cleanup used to live under a docstring
+ * claiming the test was self-cleaning. It was self-cleaning when it passed. On
+ * the three occasions it timed out, every statement after the failing line was
+ * skipped — including all five that clear the limit — so the run that most
+ * needed the cleanup was the one run that did not get it.
+ *
+ * That matters beyond tidiness because this policy is ORG-WIDE and the suite
+ * runs two workers over one seeded workspace. `pack-exceptions.spec.ts` names
+ * the hazard exactly, and avoids it by rewriting its own page's response
+ * instead: "The demo book cannot be made to do this without a policy every
+ * other spec would then see." A timeout here leaves that policy set for every
+ * spec that follows, in this worker and the other.
+ *
+ * The cleanup goes through the API rather than the Settings form because the
+ * form is on the page, and the page is what may have just hung; an
+ * `afterEach` runs after a timeout, but a hung page is no basis for the
+ * cleanup. It is idempotent, so the passing path clears twice and the test
+ * keeps its own assertion that clearing works — "a covenant that cannot be
+ * removed is one nobody will risk setting" is a claim worth testing through
+ * the UI, not a chore to delegate to the teardown.
  */
-test('covenants are judged only once the firm sets them, and can be cleared again', async ({ page }) => {
-  /**
-   * 120s, not 90s: eight page loads, five of them carrying the exposure of the
-   * whole book, plus three one-second settles. Twice in CI the 90s test budget
-   * ran out at the funding pack's own load — the last load, not a slow one —
-   * with the other worker busy beside it, and both times the same spec was
-   * green locally and on the next commit. The budget is the test's, so the
-   * timeout reads as "the pack never rendered" when it means "the seven loads
-   * before it took 88 seconds".
-   */
-  test.setTimeout(120_000);
-  await page.goto('/login');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByText('Deal tools')).toBeVisible();
-
-  /**
-   * Establish the precondition rather than assume it. A previous run — or a demo
-   * left mid-configuration — can have a limit already saved, and a test that
-   * merely hopes for a clean slate fails on the state someone else left.
-   */
-  await page.goto('/settings');
-  await page.getByLabel('Max loan to GDV (%)').fill('');
-  await page.getByRole('button', { name: 'Save policy' }).click();
-  await page.waitForTimeout(1000);
-
-  // nothing set: the board shows the ratios and judges none of them
-  await page.goto('/board');
-  await expect(page.locator('[data-exposure]')).toBeVisible();
-  await expect(page.getByText('Covenant breaches')).toHaveCount(0);
-
-  await page.goto('/settings');
-  const limit = page.getByLabel('Max loan to GDV (%)');
-  // the placeholder offers the market-standard figure without applying it
-  await expect(limit).toHaveAttribute('placeholder', /typically 65/);
-  await limit.fill('20');
-  await page.getByRole('button', { name: 'Save policy' }).click();
-  await page.waitForTimeout(1000);
-
-  await page.goto('/board');
-  const panel = page.locator('[data-exposure]');
-  await expect(panel.getByText('Covenant breaches')).toBeVisible();
-  // named, measured, and against the limit the firm actually set. .first():
-  // several deals genuinely breach at this limit, and asserting the format of one
-  // is the point — the COUNT is checked against the API below instead.
-  await expect(panel.getByText(/Loan to GDV .* against a maximum of 20%/).first()).toBeVisible();
-  const breaching = await page.evaluate(async () => {
-    const r = await fetch('/trpc/deals.exposure', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
-    const d = (await r.json()).result.data.json as { positions: Array<{ covenants: { breaches: unknown[] } }> };
-    return d.positions.filter((p) => p.covenants.breaches.length > 0).length;
+test.describe('facility covenants', () => {
+  test.afterEach(async ({ request }) => {
+    const base = process.env.E2E_BASE_URL ?? 'http://localhost:5273';
+    const login = await request.post(`${base}/trpc/auth.login`, {
+      data: { json: { email: 'arthur@apexappraise.co.uk', password: 'demo' } },
+    });
+    const token = (await login.json()).result.data.json.token as string;
+    const headers = { authorization: `Bearer ${token}` };
+    const current = await request.get(`${base}/trpc/org.policy`, { headers });
+    const { updatedAt, ...policy } = (await current.json()).result.data.json as Record<string, unknown>;
+    await request.post(`${base}/trpc/org.savePolicy`, {
+      headers,
+      data: {
+        json: { ...policy, covLtgdvMaxPct: null, covLtcMaxPct: null, covMinProfitOnCostPct: null, expectedUpdatedAt: updatedAt },
+      },
+    });
   });
-  // every breaching deal is listed — a panel that showed only the first would let
-  // the rest of the book go unmentioned
-  await expect(panel.getByText(/against a maximum of 20%/)).toHaveCount(breaching);
 
-  /**
-   * And the funding pack, with those breaches on its first sheet, still fits
-   * the sheet. Its page-one budget was a constant that assumed one line in the
-   * Exceptions box; measured here with twelve breach lines, the sheet was
-   * 1,342px against an A4 of 1,123 — the exceptions a lender reads the pack
-   * for were the thing printed off the bottom of it.
-   */
-  await page.goto('/portfolio/pack');
-  await page.waitForSelector('.a4-page');
-  await expect(page.getByText(/against a maximum of 20%/).first()).toBeVisible();
-  const withExceptions = await page.evaluate(() => {
-    const p = [...document.querySelectorAll('.a4-page')];
-    return {
-      overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
-      // across EVERY sheet: a box the first sheet cannot hold goes on to the next
-      lines: p.reduce((a, x) => a + ((x.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0), 0),
-    };
+    test('covenants are judged only once the firm sets them, and can be cleared again', async ({ page }) => {
+    /**
+     * 120s, and this is the THIRD time that number has been the answer. It was
+     * 90s, it ran out, it became 120s, and it ran out again on `21577da` at the
+     * same line. Raising it a fourth time is not a diagnosis, so what follows is
+     * what could be established instead.
+     *
+     * The line the timeout names is `waitForSelector('.a4-page')`, and the
+     * previous note read that as the pack being slow. It is not: measured
+     * against a dev stack, `deals.exposure` answers in 12ms and the pack — with
+     * thirteen breach lines on it, which is the state this test puts it in —
+     * renders its sheets in 151ms. All eight loads together take under four
+     * seconds.
+     *
+     * What the line actually means is ambiguous, and that is the defect this
+     * commit fixes rather than the duration. `playwright.config.ts` sets no
+     * `navigationTimeout` and no `actionTimeout`, so every `goto` and every
+     * `waitForSelector` is bounded only by the TEST's budget: whichever action
+     * is in flight when the budget expires is the one blamed, whether or not it
+     * is the slow one. Both earlier investigations landed on the pack because
+     * the pack is simply the last thing this test does. The config now bounds
+     * navigations and actions well below the test budget, so the next occurrence
+     * names the action that actually hung.
+     */
+    test.setTimeout(120_000);
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page.getByText('Deal tools')).toBeVisible();
+
+    /**
+     * Establish the precondition rather than assume it. A previous run — or a demo
+     * left mid-configuration — can have a limit already saved, and a test that
+     * merely hopes for a clean slate fails on the state someone else left.
+     */
+    await page.goto('/settings');
+    await savePolicy(page, '');
+
+    // nothing set: the board shows the ratios and judges none of them
+    await page.goto('/board');
+    await expect(page.locator('[data-exposure]')).toBeVisible();
+    await expect(page.getByText('Covenant breaches')).toHaveCount(0);
+
+    await page.goto('/settings');
+    const limit = page.getByLabel('Max loan to GDV (%)');
+    // the placeholder offers the market-standard figure without applying it
+    await expect(limit).toHaveAttribute('placeholder', /typically 65/);
+    await savePolicy(page, '20', limit);
+
+    await page.goto('/board');
+    const panel = page.locator('[data-exposure]');
+    await expect(panel.getByText('Covenant breaches')).toBeVisible();
+    // named, measured, and against the limit the firm actually set. .first():
+    // several deals genuinely breach at this limit, and asserting the format of one
+    // is the point — the COUNT is checked against the API below instead.
+    await expect(panel.getByText(/Loan to GDV .* against a maximum of 20%/).first()).toBeVisible();
+    const breaching = await page.evaluate(async () => {
+      const r = await fetch('/trpc/deals.exposure', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+      const d = (await r.json()).result.data.json as { positions: Array<{ covenants: { breaches: unknown[] } }> };
+      return d.positions.filter((p) => p.covenants.breaches.length > 0).length;
+    });
+    // every breaching deal is listed — a panel that showed only the first would let
+    // the rest of the book go unmentioned
+    await expect(panel.getByText(/against a maximum of 20%/)).toHaveCount(breaching);
+
+    /**
+     * And the funding pack, with those breaches on its first sheet, still fits
+     * the sheet. Its page-one budget was a constant that assumed one line in the
+     * Exceptions box; measured here with twelve breach lines, the sheet was
+     * 1,342px against an A4 of 1,123 — the exceptions a lender reads the pack
+     * for were the thing printed off the bottom of it.
+     */
+    await page.goto('/portfolio/pack');
+    await page.waitForSelector('.a4-page');
+    await expect(page.getByText(/against a maximum of 20%/).first()).toBeVisible();
+    const withExceptions = await page.evaluate(() => {
+      const p = [...document.querySelectorAll('.a4-page')];
+      return {
+        overflowing: p.filter((x) => x.getBoundingClientRect().height > 1123).map((x) => Math.round(x.getBoundingClientRect().height)),
+        // across EVERY sheet: a box the first sheet cannot hold goes on to the next
+        lines: p.reduce((a, x) => a + ((x.textContent ?? '').match(/against a maximum of 20%/g)?.length ?? 0), 0),
+      };
+    });
+    expect(withExceptions.lines).toBe(breaching);
+    expect(withExceptions.overflowing, 'a sheet of the pack overflowed A4 under its own exceptions').toEqual([]);
+
+    // clear it: a covenant that cannot be removed is one nobody will risk setting
+    await page.goto('/settings');
+    await savePolicy(page, '');
+    await page.goto('/board');
+    await expect(page.locator('[data-exposure]')).toBeVisible();
+    await expect(page.getByText('Covenant breaches')).toHaveCount(0);
   });
-  expect(withExceptions.lines).toBe(breaching);
-  expect(withExceptions.overflowing, 'a sheet of the pack overflowed A4 under its own exceptions').toEqual([]);
-
-  // clear it: a covenant that cannot be removed is one nobody will risk setting
-  await page.goto('/settings');
-  await page.getByLabel('Max loan to GDV (%)').fill('');
-  await page.getByRole('button', { name: 'Save policy' }).click();
-  await page.waitForTimeout(1000);
-  await page.goto('/board');
-  await expect(page.locator('[data-exposure]')).toBeVisible();
-  await expect(page.getByText('Covenant breaches')).toHaveCount(0);
 });
 
 /**

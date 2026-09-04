@@ -1,4 +1,5 @@
-import { useMemo, useLayoutEffect, useState } from 'react';
+import { useEffect, useMemo, useLayoutEffect, useState } from 'react';
+import { nextReserve } from '../lib/pack-relayout';
 import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
@@ -78,7 +79,17 @@ export default function FundingPack() {
    * overrun back as reserve and the pack lays out again — one pass in
    * practice, bounded to a handful so a pathological book cannot loop.
    */
-  const [reserve, setReserve] = useState(0);
+  const [layout, setLayout] = useState({ reserve: 0, passes: 0 });
+  const { reserve } = layout;
+  /**
+   * A new book gets its own pass budget. Without this a long session that
+   * refetches its exposure spends the budget once and then stops reclaiming
+   * rows on every pack after it. Returning the same object bails the render
+   * out, so the common case (the budget already untouched) costs nothing.
+   */
+  useEffect(() => {
+    setLayout((l) => (l.reserve === 0 && l.passes === 0 ? l : { reserve: 0, passes: 0 }));
+  }, [exposure]);
   /**
    * The row and the exception line are budgeted at their measured height for
    * a name that fits on one line. A long scheme name wraps and the row is
@@ -117,8 +128,16 @@ export default function FundingPack() {
     const sheets = Array.from(document.querySelectorAll<HTMLElement>('.a4-page'));
     // 1122 is the sheet; anything past it is content the page cannot hold
     const overrun = Math.max(0, ...sheets.map((el) => el.getBoundingClientRect().height - 1122));
-    if (overrun > 0 && reserve < 8 * LAYOUT.rowPx) setReserve((r) => r + Math.ceil(overrun) + 4);
-  }, [pages, reserve, measured]);
+    /**
+     * Whether to lay out again is decided in `pack-relayout.ts`, where the
+     * bound can be driven to its boundaries. It used to be decided here, in
+     * pixels, and a book overrunning by a fraction of one took 52 passes
+     * against React's limit of 50 — the pack rendered as "This screen stopped
+     * working". See that file for the measurement.
+     */
+    const next = nextReserve({ overrun, reserve, passes: layout.passes });
+    if (next !== null) setLayout((l) => ({ reserve: next, passes: l.passes + 1 }));
+  }, [pages, reserve, measured, layout.passes]);
 
   /**
    * A pack that could not be built says so. It used to spin for ever on a
