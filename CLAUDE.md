@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (922). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (272): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (177, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (180, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -485,6 +485,43 @@ the point, so read the failure rather than adding an exemption.
   fingerprint beside it. That is the moment somebody has to say "figures approved under the
   old version may now differ", which is the point: without it the version on a signed
   valuation would mean nothing. Do NOT update the fingerprint without bumping the version.
+- `seed-depth` (API suite) — every DEMO deal carries what its stage implies. Measured on
+  4 September, signed in and walking every deal and every tab with a browser: the demo
+  workspace rendered 197 empty states, and 8 of its 11 deals were shells — a name, a stage
+  and a headline GDV with no appraisal behind the figure, no comparables, no scenarios, no
+  terms, no documents; the scheme marked COMPLETED had never had a cost plan. The marketing
+  page promises every one of those and the only workspace anyone can try showed each on ONE
+  deal. `demo-seed-depth.ts` fills the eleven in BY STAGE (an appraisal from APPRAISAL,
+  units and a cost plan from CONSTRUCTION, a closed-out final account past it), and the
+  sweep seeds the throwaway database exactly as `prisma/seed.ts` does and asks each deal for
+  its rows, so a twelfth deal added to `SPECS` as a shell fails naming the deal and the
+  table. After the fill the same walk rendered 96, every one either stage-appropriate, the
+  extraction screen's idle state, or a live open-data panel the host cannot reach. Its
+  second rule is the one the seed's own comment first got WRONG: a closed-out cost plan's
+  budgets sum to the appraisal's construction cost TO THE PENNY, checked by running the
+  engine on the stored row. The first version priced packages over NET area where the
+  engine prices over GROSS (net ÷ efficiency), and the cost monitor read a 12% saving nobody
+  had earned — 285,840,000 pence against 324,818,182 — under a comment saying "to the
+  pound". Three mutants are recorded in it: net-area pricing, the closed-out loop removed,
+  and one deal's comparables skipped; each is named. What filling the demo in FOUND, and the
+  reason a demo full of shells is a testing defect and not a cosmetic one: a calendar label
+  at 3.26:1 in dark mode that only rendered once a task was due this week; a data room
+  control at 1.19:1 that only rendered once a deal had plots to share a document with; and
+  four e2e specs whose premise was "this seeded deal is a shell", which now make their own
+  with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
+  the demo being filled in.
+- `proxy-coverage` (API suite) — every raw route is reachable THROUGH THE FRONT DOOR: an
+  nginx `location` in production and a vite `proxy` entry in development, checked by first
+  path segment against the routes collected the way `raw-route-sweep` collects them. Measured
+  on 4 September: `/staticmap` was on neither list. Static Maps had merged that morning with a
+  route, a signed proxy and tests for the signing and the fallback — and a browser asking the
+  public host for `/staticmap?…` got `index.html` as the image. With the key set, the secret
+  set and the code deployed, the map could not work, and CI could not see it because CI has
+  no key and only walks the tile fallback, which never asks for that path. The Google path
+  had never been driven end-to-end anywhere. `location /` is not coverage — it is the SPA
+  fallback that answered a 200 over a dead route — and the matcher says so with a fixture.
+  It also found vite lacked `/health`, `/ready`, `/webhooks` and `/admin`, all of which nginx
+  proxies; the fix was parity, not exemptions.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`
@@ -600,6 +637,16 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   on 152 positions because the demo workspace had grown to 183 deals from years of e2e runs,
   against 11 seeded. `cd apps/api && SEED_FORCE=1 npx tsx prisma/seed.ts` restores a CI-like state
   (plain `seed` REFUSES when organisations already exist, which is the guard working).
+- Do NOT edit an API source file while a browser run is in flight against `pnpm dev`. `tsx
+  watch` restarts the API on every save, and a spec whose request lands on the restart reads
+  as a product defect: measured, two specs failed in one run — the Red Book printed "No
+  appraisal saved yet" on a deal with one, and a shared report link answered 503 — both at
+  the minute a mutation test was saving and restoring `demo-seed-depth.ts`. Mutation-test
+  API code BEFORE or AFTER the browser suite, never during. The first of those WAS a product
+  defect as well as a test artefact: both printed reports read `!appraisal` as "none saved"
+  when the query had failed, the conflation `lib/load-failure.ts` was written to end on the
+  overview. They go through it now (`data-testid="report-error"`), and `e2e/deal-error.spec.ts`
+  refuses `appraisal.getCurrent` on both and asserts the sentence, the kind and the retry.
 - `tsx watch` exits on a top-level throw and does NOT come back on its own — it restarts on the
   next file change. Save a file mid-edit that references an import you have not added yet and the
   API is simply gone, with `vite` still serving: every browser spec then fails at sign-in, which

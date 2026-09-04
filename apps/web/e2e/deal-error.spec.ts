@@ -62,3 +62,33 @@ test('an API that does not answer is reported as exactly that — and Try again 
   await expect(error).toHaveCount(0);
   await expect(page.locator('h1').first()).toBeVisible();
 });
+
+/**
+ * The printed reports had the same conflation one screen down: `if (!appr …)`
+ * printed "No appraisal saved yet" for a query that never answered. Measured
+ * on Northgate — a deal with a saved appraisal, a Red Book and terms — while
+ * the API was restarting: the valuation report told the valuer the deal had
+ * no appraisal. Same signature (a client error with no `data`), same fix.
+ */
+for (const [route, label] of [['redbook', 'Red Book'], ['report', 'appraisal report']] as const) {
+  test(`the ${label} says the server did not answer, not that there is no appraisal`, async ({ page }) => {
+    await signIn(page);
+    await page.goto('/board');
+    const href = await page.locator('a[href^="/deal/"]').first().getAttribute('href');
+    expect(href).toBeTruthy();
+    const refuse = (r: import('@playwright/test').Route) =>
+      r.request().url().includes('appraisal.getCurrent') ? r.abort('connectionrefused') : r.continue();
+    await page.route('**/trpc/**', refuse);
+    await page.goto(`${href}/${route}`);
+
+    const error = page.getByTestId('report-error');
+    await expect(error).toBeVisible();
+    await expect(error).toHaveAttribute('data-kind', 'unreachable');
+    await expect(page.getByText('No appraisal saved yet')).toHaveCount(0);
+    await expect(page.locator('h1')).toHaveCount(1);
+
+    await page.unroute('**/trpc/**', refuse);
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(error).toHaveCount(0);
+  });
+}

@@ -11,6 +11,7 @@ import {
 import { accent, brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { assetLabel } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
+import { loadFailure } from '../lib/load-failure';
 import { getToken, trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { Button, FirmMark, Spinner } from '../components/ui';
@@ -112,7 +113,7 @@ export default function AppraisalReport() {
   const U = useUnits();
   const { dealId = '' } = useParams();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
-  const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  const { data: appr, isLoading, error: apprError, refetch: refetchAppr } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: photos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
   // client-facing documents carry the firm's identity, not the product's
   const { data: org } = trpc.org.get.useQuery();
@@ -306,6 +307,37 @@ export default function AppraisalReport() {
         <style>{PRINT_CSS}</style>
         {toolbar}
         <div className="mt-16 flex justify-center"><Spinner /></div>
+      </div>
+    );
+  }
+
+  /**
+   * A query that FAILED is not a deal with no appraisal. This branch used to be
+   * `if (!appr …)` alone, so a stopped API, a 500 and a rate limit all printed
+   * "No appraisal saved yet" — measured on a deal with one, during an API
+   * restart, and read as a product defect. `loadFailure` says only what the
+   * client can tell, and offers a retry only where one might succeed.
+   */
+  if (apprError) {
+    const failure = loadFailure(apprError, 'appraisal');
+    return (
+      <div className="light min-h-screen bg-frame">
+        <style>{PRINT_CSS}</style>
+        {toolbar}
+        <div className="mt-20 flex justify-center px-6">
+          <div className="bg-surface border border-border-strong rounded-panel shadow-rest px-10 py-12 max-w-[480px] text-center">
+            <div className="eyebrow">Appraisal report</div>
+            <h1 className="mt-2 text-[22px] font-bold tracking-[-0.6px]">{failure.title}</h1>
+            <p className="mt-2.5 text-[13px] text-ink-2 leading-relaxed">
+              <span data-testid="report-error" data-kind={failure.kind}>{failure.detail}</span>
+            </p>
+            {failure.retry && (
+              <Button onClick={() => refetchAppr()} className="mt-5">
+                Try again
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

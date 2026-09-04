@@ -424,7 +424,7 @@ export default function DataRoom() {
                       ) : (
                         <select
                           aria-label={`Share ${d.name} with a buyer`}
-                          className="max-w-full text-[11.5px] bg-sunken border border-border-std rounded-[7px] px-1.5 py-1 text-ink-2b disabled:opacity-50"
+                          className="max-w-full text-[11.5px] bg-sunken rounded-[7px] px-1.5 py-1 text-ink-2b disabled:opacity-50"
                           disabled={shareWithBuyer.isPending || !units.length}
                           value={d.buyerVisible ? (d.unitId ?? '') : ''}
                           onChange={(e) => shareWithBuyer.mutate({ id: d.id, unitId: e.target.value || null })}

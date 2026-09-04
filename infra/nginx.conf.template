@@ -68,6 +68,25 @@ server {
     proxy_read_timeout 30s;
   }
 
+  # Google Static Maps, proxied by the API for the same reason as the tiles: the
+  # key and the signing secret never reach a browser, and no visitor's browser
+  # talks to Google. Exact-match, because the path is exactly /staticmap with
+  # the request in its query string.
+  #
+  # This block was MISSING for the whole life of the feature. With it absent the
+  # request fell through to `location /`, which answered index.html with a 200,
+  # and the browser drew a broken image — with the key set, the secret set and
+  # the code deployed. CI never saw it because CI has no key and only ever walks
+  # the tile fallback. `apps/api/test/proxy-coverage.test.ts` now asserts every
+  # raw API route is proxied here AND in vite's dev proxy, so the next route
+  # cannot ship reachable in development and dead in production.
+  location = /staticmap {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    include /etc/nginx/client-ip.conf;
+    proxy_read_timeout 30s;
+  }
+
   # Liveness and readiness, proxied to the API.
   #
   # Exact-match (`= /path`) so they beat the SPA fallback outright. Without these

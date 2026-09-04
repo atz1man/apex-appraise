@@ -14,6 +14,17 @@ export default defineConfig({
       '/api': { target: 'http://localhost:4100', changeOrigin: true },
       // map tiles are proxied by the API, so no browser talks to a tile server
       '/tiles': { target: 'http://localhost:4100', changeOrigin: true },
+      // Google Static Maps, likewise — and this entry was missing, so the Google
+      // path could not be exercised in development either. proxy-coverage.test.ts
+      // in the API keeps this list and nginx's in step with the real routes.
+      '/staticmap': { target: 'http://localhost:4100', changeOrigin: true },
+      // and the rest of what nginx proxies in production, so development and
+      // production answer the same paths: a Stripe CLI forward, the demo-reset
+      // curl and an uptime probe all work against the dev server as they do live
+      '/webhooks': { target: 'http://localhost:4100', changeOrigin: true },
+      '/admin': { target: 'http://localhost:4100', changeOrigin: true },
+      '/health': { target: 'http://localhost:4100', changeOrigin: true },
+      '/ready': { target: 'http://localhost:4100', changeOrigin: true },
     },
   },
   build: {
