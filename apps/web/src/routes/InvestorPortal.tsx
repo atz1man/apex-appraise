@@ -197,7 +197,7 @@ export default function InvestorPortal() {
               <div className="flex flex-col gap-4">
                 {/* holdings */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
-                  <h3 className="text-[16px] font-semibold tracking-[-0.3px] mb-3.5">Your holdings</h3>
+                  <h2 className="text-[16px] font-semibold tracking-[-0.3px] mb-3.5">Your holdings</h2>
                   <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -244,7 +244,7 @@ export default function InvestorPortal() {
 
                 {/* cashflow history */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
-                  <h3 className="text-[16px] font-semibold tracking-[-0.3px] mb-1.5">Cashflow history</h3>
+                  <h2 className="text-[16px] font-semibold tracking-[-0.3px] mb-1.5">Cashflow history</h2>
                   {inv.cashflows.length === 0 ? (
                     <div className="mt-3">
                       <div className="text-[12.5px] text-ink-3b">No distributions or capital calls yet.</div>
@@ -324,7 +324,7 @@ export default function InvestorPortal() {
                   * named without a link rather than linked to nothing.
                   */}
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <h3 className="text-[13px] font-semibold">Documents</h3>
+                  <h2 className="text-[13px] font-semibold">Documents</h2>
                   <div className="mt-2 flex flex-col">
                     {inv.documents.length === 0 ? (
                       <div className="text-[12px] text-ink-3b py-2">No documents shared yet.</div>
@@ -372,7 +372,7 @@ export default function InvestorPortal() {
 
                 {/* manager contact — the real administrator at the managing firm */}
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <h3 className="text-[13px] font-semibold">Your manager</h3>
+                  <h2 className="text-[13px] font-semibold">Your manager</h2>
                   {contactQ.data?.manager ? (
                     <div className="mt-3 flex items-center gap-[11px]">
                       <Avatar initials={contactQ.data.manager.initials} size={40} />

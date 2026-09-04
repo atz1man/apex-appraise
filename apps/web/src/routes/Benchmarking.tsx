@@ -352,7 +352,7 @@ export default function Benchmarking() {
    */
   const contributionSection = (
     <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-      <h3 className="text-[13px] font-semibold">Data contribution</h3>
+      <h2 className="text-[13px] font-semibold">Data contribution</h2>
       <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
         Contributing shares three ratios from each appraisal an administrator approves — build £/{U.unit}, {U.terms.gdv} £/{U.unit}{' '}
         and profit on cost — automatically at approval, and the out-turn build £/{U.unit} of each scheme marked completed, from
@@ -503,7 +503,7 @@ export default function Benchmarking() {
                 {/* build cost trend */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
                   <div className="flex items-start justify-between gap-4">
-                    <h3 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/{U.unit}</h3>
+                    <h2 className="text-[16px] font-semibold tracking-[-0.3px]">Build cost trend — £/{U.unit}</h2>
                     {latestCallout && (
                       <div className="text-right">
                         <div className="fig text-[10px] font-medium text-ink-3">Latest quarter with your data</div>
@@ -604,7 +604,7 @@ export default function Benchmarking() {
 
                 {/* your deals vs benchmark */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">
-                  <h3 className="text-[16px] font-semibold tracking-[-0.3px] mb-3.5">Your deals vs benchmark</h3>
+                  <h2 className="text-[16px] font-semibold tracking-[-0.3px] mb-3.5">Your deals vs benchmark</h2>
                   {dealRows.length === 0 ? (
                     <EmptyState icon={<Icon d="M18 20V10|M12 20V4|M6 20v-6" size={22} />}>
                       None of your appraisals sit in {scopeShort} yet — they'll appear here automatically once appraised.
@@ -729,7 +729,7 @@ export default function Benchmarking() {
                 {contributionSection}
 
                 <section className="bg-surface border border-border-strong rounded-card shadow-rest px-[18px] py-4">
-                  <h3 className="text-[13px] font-semibold">Apply a benchmark</h3>
+                  <h2 className="text-[13px] font-semibold">Apply a benchmark</h2>
                   <p className="mt-2 text-[12px] leading-[1.5] text-ink-2b m-0">
                     Seed a new appraisal with the median build &amp; GDV rates for {scopeShort}.
                   </p>

@@ -167,7 +167,7 @@ export default function BuyerPortal() {
             <div className="mt-[18px] grid gap-[18px] items-start lg:grid-cols-2">
               {/* left: conveyancing timeline */}
               <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
-                <h3 className="text-[15px] font-semibold mb-4">Your progress</h3>
+                <h2 className="text-[15px] font-semibold mb-4">Your progress</h2>
                 <div className="flex flex-col">
                   {milestones.map((m, i) => {
                     const isCurrent = i === currentIdx;
@@ -251,7 +251,7 @@ export default function BuyerPortal() {
 
                 {/* documents to e-sign */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
-                  <h3 className="text-[15px] font-semibold">Documents to sign</h3>
+                  <h2 className="text-[15px] font-semibold">Documents to sign</h2>
                   {data.documentsToSign.length === 0 ? (
                     <div className="mt-2 text-[12px] text-ink-3b">Nothing waiting for your signature.</div>
                   ) : (
@@ -311,8 +311,11 @@ export default function BuyerPortal() {
 
                 {/* payments */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
-                  <h3 className="text-[15px] font-semibold">Payments</h3>
-                  <div className="mt-2 flex flex-col">
+                  <h2 className="text-[15px] font-semibold">Payments</h2>
+                  {/* named for the spec that totals these against "Deposit held";
+                      it used to be found as "the div after the h3", which broke
+                      the moment the heading became an h2 */}
+                  <div data-testid="payment-rows" className="mt-2 flex flex-col">
                     {data.payments.map((p) => (
                       <div key={p.id} className="flex items-center gap-3 py-2.5 border-b border-border-faint last:border-b-0">
                         <div className="flex-1 min-w-0">

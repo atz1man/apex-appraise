@@ -7,8 +7,9 @@ declare module '@tanstack/react-query' {
   }
 }
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { titleFor } from './lib/page-title';
+import { shouldInterceptNavigation, unsavedMessage, unsavedWork } from './lib/unsaved';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -250,6 +251,53 @@ export default function App() {
   useEffect(() => {
     document.title = titleFor(location.pathname);
   }, [location.pathname]);
+
+  /**
+   * Leaving a screen that holds unsaved work, by clicking a link.
+   *
+   * `beforeunload` covers closing the tab and reloading. It does NOT fire when
+   * a link changes the route, because nothing is unloading — and that is the
+   * exit a person actually takes. React Router's `useBlocker` would be the
+   * proper answer and needs a data router; this app mounts `<BrowserRouter>`,
+   * so the interception happens where every link click passes: the document,
+   * in the CAPTURE phase, which runs before React Router's own handler and is
+   * the only place a click can still be stopped.
+   *
+   * `shouldInterceptNavigation` holds the decision and is tested at its
+   * boundaries. Everything it refuses is a click that does not take the person
+   * off this screen — a middle click, a ⌘-click, an external URL, a download,
+   * the skip link, a link to the page they are already on. A prompt for any of
+   * those is a prompt for nothing, which is how people learn to dismiss
+   * prompts without reading them.
+   *
+   * On "yes" this navigates itself rather than replaying the click, because
+   * the click has already been cancelled by then. The dirty screen unmounts on
+   * the way out and its own effect clears the registry.
+   */
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const what = unsavedWork();
+      if (!what) return;
+      const anchor = (e.target as Element | null)?.closest?.('a');
+      const decision = shouldInterceptNavigation({
+        dirty: true,
+        button: e.button,
+        modifier: e.metaKey || e.ctrlKey || e.shiftKey || e.altKey,
+        defaultPrevented: e.defaultPrevented,
+        href: anchor?.getAttribute('href') ?? null,
+        target: anchor?.getAttribute('target') ?? null,
+        download: anchor?.hasAttribute('download') ?? false,
+        currentPath: window.location.pathname,
+      });
+      if (!decision) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.confirm(unsavedMessage(what))) navigate(anchor!.getAttribute('href')!);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [navigate]);
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

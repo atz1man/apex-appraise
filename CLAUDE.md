@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (235): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (253): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements` and `symbol-buttons` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons` and `headings` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (171, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (174, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -232,6 +232,25 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `headings` (web suite) — a screen's heading levels have no gaps, so its outline can be
+  navigated. A screen reader's "next heading" and heading list are the main way around an
+  unfamiliar page, and an `h1` followed by `h3`s with no `h2` reads as a section missing its
+  parent. Measured over the route tree: four screens skipped a level, and the two that matter
+  most were CLIENT-facing — the buyer portal and the investor portal each had one `h1` and
+  then every section marked `h3`, with no `h2` in the file. Those are the screens read by
+  people who do not work at the firm, with nobody to ask how the page is laid out. Every one
+  of those headings carried an explicit Tailwind size, so the fix changed tags and could not
+  move a pixel. The rule keys on the SET of levels, not their order: `Benchmarking.tsx`
+  declares a JSX variable carrying a section heading two hundred lines above the `h1` it
+  renders below, and an order-sensitive rule would report that forever. A `<Drawer>` is
+  stripped before the page's outline is measured — that is the sweep being wrong and the
+  markup right, found when it reported `Investors.tsx`: both its `h4`s sit in a drawer whose
+  title the PRIMITIVE renders as `h3`, so the outline a reader traverses inside the
+  `aria-modal` dialog is h3 → h4 and the step from the page's `h1` is never taken. NOT PROVEN,
+  and found by mutation: putting ONE heading back to `h3` survives, because the file still has
+  `h2`s and the levels stay contiguous. The rule catches a MISSING level, not a mis-levelled
+  section, and no static rule can catch the second — an `h3` under an `h2` is correct and
+  beside one is not, and only the rendered nesting says which.
 - `symbol-buttons` (web suite) — a control whose only label is a symbol has no name.
   `accessible-names` covers what a person TYPES into (`input`, `select`, `textarea`) and says
   nothing about buttons, which had the same defect in disguise: "×" is a text node, so every
@@ -278,11 +297,20 @@ the point, so read the failure rather than adding an exemption.
   comparing one field to the saved organisation name, which is not work, and computes it
   below that panel's loading return where a hook could not go anyway. What `useUnsavedWarning`
   does NOT cover is the commoner case, clicking a link inside the app: `beforeunload` does not
-  fire for that. The reason the document-level click interceptor is not here is measured
-  rather than assumed — Playwright DISMISSES a dialog by default and NO spec in this suite
-  registers a handler, so every existing spec that edits one of these screens and then
-  navigates would silently stay put; `screens.spec.ts` alone holds 49 fills and 163
-  navigations. And the tempting alternative — keep the draft, restore it later — is worse
+  fire for that, so it is blocked by a document-level click interceptor instead — React
+  Router's `useBlocker` needs a data router and this app mounts `<BrowserRouter>`. The
+  interceptor was deferred once, on the grounds that Playwright DISMISSES a dialog by default
+  and no spec in this suite registers a handler, so any spec that edited one of these screens
+  and then clicked away would silently stay put. The audit that claim owed has been run and
+  the answer is ZERO: every spec leaves those three screens with `page.goto`, which is a real
+  navigation and not a click. The caution was right and the number was cheap — the scan that
+  produced it is in the commit, verified against a planted case, and its three over-broad hits
+  were all state carried across test boundaries. `shouldInterceptNavigation` holds the
+  decision as a pure predicate: everything it refuses is a click that does NOT take the person
+  off the screen — a middle click, a ⌘-click, an external URL, a download, the skip link's
+  `#page`, a link to the page they are already on — because a product that prompts for nothing
+  teaches people to dismiss prompts unread, which disarms it on the one occasion it matters.
+  And the tempting alternative — keep the draft, restore it later — is worse
   rather than merely bigger: silently putting a valuer's abandoned inputs back into an
   appraisal means a figure nobody chose to enter can end up under a signature.
 - `destructive` (web suite) — nothing this product destroys goes on one click. Measured over
