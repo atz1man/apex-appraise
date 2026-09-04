@@ -485,6 +485,18 @@ the point, so read the failure rather than adding an exemption.
   fingerprint beside it. That is the moment somebody has to say "figures approved under the
   old version may now differ", which is the point: without it the version on a signed
   valuation would mean nothing. Do NOT update the fingerprint without bumping the version.
+- `proxy-coverage` (API suite) — every raw route is reachable THROUGH THE FRONT DOOR: an
+  nginx `location` in production and a vite `proxy` entry in development, checked by first
+  path segment against the routes collected the way `raw-route-sweep` collects them. Measured
+  on 4 September: `/staticmap` was on neither list. Static Maps had merged that morning with a
+  route, a signed proxy and tests for the signing and the fallback — and a browser asking the
+  public host for `/staticmap?…` got `index.html` as the image. With the key set, the secret
+  set and the code deployed, the map could not work, and CI could not see it because CI has
+  no key and only walks the tile fallback, which never asks for that path. The Google path
+  had never been driven end-to-end anywhere. `location /` is not coverage — it is the SPA
+  fallback that answered a 200 over a dead route — and the matcher says so with a fixture.
+  It also found vite lacked `/health`, `/ready`, `/webhooks` and `/admin`, all of which nginx
+  proxies; the fix was parity, not exemptions.
 - `raw-route-sweep` — the routes that are NOT procedures. Every other sweep here walks
   `appRouter._def.procedures` and is therefore blind to the eighteen raw Fastify routes
   beside them; this one builds a real Fastify instance from the same registrars `main.ts`
