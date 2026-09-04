@@ -258,6 +258,14 @@ export const dealsRouter = router({
       z.object({
         name: z.string().min(1),
         address: z.string().min(1),
+        /**
+         * Measured on a fresh workspace: a deal created WITH a postcode had none,
+         * because this schema did not name the key and zod strips what it does
+         * not name — the site pack then asked for the postcode the caller had
+         * just supplied. The map, the site pack and the benchmark REGION all
+         * hang off it. Same bound as `update`, which has always taken one.
+         */
+        postcode: z.string().trim().max(9).optional(),
         assetType: zAssetType,
         stage: zDealStage.default('SOURCING'),
         probability: z.number().int().min(0).max(100).default(50),
@@ -275,6 +283,7 @@ export const dealsRouter = router({
           orgId: ctx.principal.orgId,
           name: input.name,
           address: input.address,
+          postcode: input.postcode || null,
           assetType: input.assetType,
           stage: input.stage,
           figureStatus: figureStatusForStage[input.stage],
