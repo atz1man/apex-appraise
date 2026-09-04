@@ -1807,6 +1807,37 @@ export const comparablesRouter = router({
       return created;
     }),
 
+  /**
+   * Take a comparable back out of the evidence.
+   *
+   * There was no way to. `upsert` was the only write, so a comp added to the
+   * wrong deal, or typed twice, or later found not to be comparable at all,
+   * could only be EDITED into something else — and the row it left behind still
+   * carried weight in `weightedComparables`, which is what sets the supported
+   * £/ft² a Red Book valuation is defended with. "Overwrite it with a different
+   * property" is not a withdrawal; it is a second mistake on top of the first.
+   *
+   * Recorded like every other change to the evidence, and with the same detail
+   * `upsert` records, because "who removed which comp, and when" is exactly the
+   * question a reviewer asks of a valuation that moved.
+   */
+  remove: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.comparable, input, ctx.principal.orgId);
+    const c = row as { id: string; dealId: string; address: string; basePsf: number };
+    await ctx.prisma.comparable.delete({ where: { id: c.id } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: c.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'removed a comparable',
+        target: `${c.address} · £${Math.round(c.basePsf).toLocaleString('en-GB')}/ft² base`,
+      },
+    });
+    return { ok: true };
+  }),
+
   /** Writes the supported £/ft² onto every unit cap of the current appraisal. */
   applyToAppraisal: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
@@ -1914,6 +1945,32 @@ export const scenariosRouter = router({
       await note('added a scheme option', created);
       return created;
     }),
+
+  /**
+   * Take a scheme option off the table.
+   *
+   * `upsert` was the only write here too, so an option added by mistake could
+   * only be renamed into a different one — and options are not a private
+   * scratchpad: `draftRisk` writes comparative commentary ACROSS them, and the
+   * MCP server ranks them by residual. An option nobody meant to propose was
+   * being weighed against the ones they did.
+   */
+  remove: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.scenario, input, ctx.principal.orgId);
+    const sc = row as { id: string; dealId: string; name: string };
+    await ctx.prisma.scenario.delete({ where: { id: sc.id } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: sc.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'removed a scheme option',
+        target: sc.name,
+      },
+    });
+    return { ok: true };
+  }),
 
   /**
    * AI-drafted comparative risk commentary across the scheme options. Every

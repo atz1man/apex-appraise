@@ -3,23 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { brand, neutral, onFill, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatPct } from '../lib/format';
-import {
-  AssetTag,
-  Avatar,
-  Button,
-  Dot,
-  EmptyState,
-  Icon,
-  Panel,
-  ProgressBar,
-  Skeleton,
-  SkeletonRows,
-  Spinner,
-  StatCard,
-  StatusChip,
-  TopBar,
-  SPARKLE,
-} from '../components/ui';
+import { AssetTag, Avatar, Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, SPARKLE, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 import { useUnits } from '../lib/region';
 import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
@@ -59,7 +43,9 @@ const fmtAt = (d: Date) =>
 
 // ---------- Workfile tool cards ----------
 
-const ICONS: Record<string, string> = {
+// no `Record<string, string>`: see Hub.tsx — an annotated table types a missing
+// key as `string`, and `Icon` then throws on `undefined.split('|')` mid-render.
+const ICONS = {
   appraisal: 'M4 4h16v16H4z|M8 12h8|M8 8h8|M8 16h5',
   auto: SPARKLE,
   comps: 'M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z|M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
@@ -70,7 +56,7 @@ const ICONS: Record<string, string> = {
   workbench: 'M3 3h7v7H3z|M14 3h7v7h-7z|M14 14h7v7h-7z|M3 14h7v7H3z',
   report: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M8 13h8|M8 17h5',
   redbook: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20|M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
-};
+} as const;
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
@@ -307,7 +293,7 @@ export default function DealOverview() {
               <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
                 Cancel
               </Button>
-              {saveDetails.error && <div className="w-full text-[12px] text-status-red">{saveDetails.error.message}</div>}
+              {saveDetails.error && <FormError className="w-full text-[12px]">{saveDetails.error.message}</FormError>}
               <div className="w-full text-[11.5px] text-ink-3">
                 {/* said out loud, because the absence of GDV here is the point */}
                 GDV, profit, equity and return on cost are computed by the appraisal engine and cannot be typed in.
@@ -413,7 +399,7 @@ export default function DealOverview() {
               {setStage.isPending ? <Spinner /> : nextStage ? `Advance stage →` : 'Completed'}
             </Button>
           </div>
-          {setStage.error && <div className="mt-2 text-[11.5px] text-status-red">{setStage.error.message}</div>}
+          {setStage.error && <FormError className="mt-2 text-[11.5px]">{setStage.error.message}</FormError>}
         </Panel>
 
         {/* ===== KPI strip ===== */}

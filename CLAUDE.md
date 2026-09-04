@@ -32,15 +32,16 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (888). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (174): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (235): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions) plus the `no-raw-hex`, `asset-classes` and `hooks-order` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements` and `symbol-buttons` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (160, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (171, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -125,6 +126,41 @@ procedure or a model without satisfying them fails CI with a message naming your
 the point, so read the failure rather than adding an exemption.
 
 - `reachable` — every declared procedure/scope/feature/webhook has something that can reach it.
+- `route-reachable` (in the WEB suite) — every screen has a door. The API has had
+  `reachable` for a while ("an unreachable procedure is not dead code, it is a capability we
+  believe we have") and the browser had no equivalent, so the same defect was free to happen
+  one layer up — and had. `/portfolio/pack` and `/docs/api` were complete, tested, working
+  screens that NOTHING linked to; every one of the funding pack's five e2e specs opens it
+  with `page.goto`, which is the tell. Half this app's navigation is TABLE-driven
+  (`GLOBAL_NAV`, `TOOLS`, the Hub grid), so the sweep matches path-shaped literals anywhere
+  rather than only `to=`/`href=` — a JSX-attribute matcher called nine reachable routes
+  orphans. Comments are stripped FIRST, found by mutation: removing the one real link to
+  `/docs/api` left the sweep green because the comment explaining the link still spelled the
+  path, and a route whose only mention is prose about the route is exactly an unreachable one.
+- `accessible-names` (WEB suite) — every control a person types into says what it is for. A
+  `placeholder` is NOT a name: it disappears the moment somebody types and fails WCAG 4.1.2
+  on its own, so a form that reads perfectly to a sighted user can be a row of unlabelled
+  boxes to a screen reader. Eleven were, among them BOTH pickers on Benchmarking, which
+  announced as "combo box" twice with nothing to say which was region and which asset class.
+  The matcher took three passes and the two it failed are recorded in it: 48 flagged while
+  counting a `<select>` in a JSDoc comment and every control inside a plain `<label>`; 29
+  while still missing `htmlFor={`…`}` backticks and wrapper COMPONENTS that render the label;
+  eleven real. `LABEL_WRAPPERS` is verified rather than trusted — EVERY declaration of each
+  must render a `<label>`, because `Field` is declared twice and a tree-wide search left the
+  test green on the strength of the other one. Also says what it does NOT prove: removing
+  backtick support survives, because `htmlFor` and `id` are always written in the same style
+  at a site and so still pair up whatever is captured.
+- `crud-completeness` — what a firm can create, a firm can remove. Measured across the whole
+  router: FIVE entities had a create-shaped mutation and nothing that removed one —
+  comparables, scenarios, photos, tasks and deals — while `sales` and `investors` beside them
+  already had `deleteUnit`, `deleteTenancy`, `delete`, `removeHolding` and `deleteCashflow`,
+  so deleting properly is this product's own convention and those five were omissions. What
+  made them matter is what the only alternative WAS: a comparable could be withdrawn only by
+  overwriting it with a different property, while the row went on carrying weight in the
+  supported £/ft²; a task could be retired only by ticking it, which claims the work
+  happened. `deals` stays exempt ON PURPOSE and the exemption says why — it is the root of
+  everything else and one carrying a signed valuation is a professional record, so archive
+  vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
@@ -196,6 +232,122 @@ the point, so read the failure rather than adding an exemption.
   between the indent and the `use` and read `onClick={() => useOption(s)}` inside JSX as a
   hook call. Run against the commit before the fix it names the line and the guard that
   shadows it.
+- `symbol-buttons` (web suite) — a control whose only label is a symbol has no name.
+  `accessible-names` covers what a person TYPES into (`input`, `select`, `textarea`) and says
+  nothing about buttons, which had the same defect in disguise: "×" is a text node, so every
+  "does this control have text?" check passes it, and a screen reader reads "multiplication
+  sign". Three were found BY HAND, one at a time — the drawer's close button (reached from six
+  screens), the payment dialog's, and the toast's — which is this repo's threshold for writing
+  the rule down. It took two corrections and both are recorded in it, because both produce a
+  confident wrong answer rather than an error. The opening tag ends at a brace-depth-zero `>`,
+  not the first one: `onClick={() => …}` contains a `>`, and the naive version cut the tag
+  through the arrow function, found two of the three known offenders and silently missed the
+  toast — the one with an arrow in its handler. And a button whose content interpolates
+  anything is skipped, because stripping the expressions leaves the SEPARATOR: a filter chip
+  rendering `{f.label} · {count}` reported as a symbol-only name, when the dot was never the
+  name but what sat between two of them. Comments become blank LINES rather than vanishing,
+  or every offender is named at a line that drifted up by however much prose sat above it.
+  Verified against the tree as it stood before the fixes, where it names all three unaided,
+  each at its own opening tag.
+- `announcements` (web suite) — when this app says something went wrong, it is audible.
+  Measured across the whole browser tree: `role="alert"`, `aria-invalid` and
+  `aria-describedby` appeared in ZERO files, against seventeen places rendering a refusal in
+  red beside the control that caused it. The sharper half is that NINETEEN mutations declare
+  `meta: { inlineError: true }`, which suppresses the toast on the explicit grounds that "the
+  screen shows the error where it happened" — it showed it in a colour, so for those nineteen
+  the red line was not a second channel but the only one. They go through `FormError` now
+  (`components/ui.tsx`), and the sweep matches a red `<div>` whose content is an EXPRESSION:
+  a message that appeared because something happened. Literal red text is left alone — a
+  "Danger zone" heading and an overdue condition in a table are labels, and announcing them
+  on render is the noise that teaches people to ignore the channel. The toasts are the other
+  half and were subtler: each carried `role="status"`, which LOOKS right and is the
+  documented way NOT to be announced, because a live region has to be in the document before
+  the message arrives. Two regions are now mounted empty from startup — assertive for errors,
+  polite for the rest — since `aria-live` is a property of the REGION, not of the card.
+  Comments are stripped before matching, found the same way `route-reachable` found it: the
+  assertion that no per-toast `role="status"` remains matched the comment explaining why it
+  had been removed.
+- `unsaved` (web suite) — a screen that KNOWS its work is unsaved says so before the tab
+  closes. Measured before it existed: `beforeunload` appeared nowhere in the source and
+  neither did any navigation blocker, while THREE screens track a `dirty` flag and each
+  PRINTS it — a button reading "Save appraisal" rather than "Saved". The information was on
+  screen and no use was made of it when the work was about to be thrown away: every financial
+  input behind a residual, the Market Value opinion that goes on to the Red Book, and the
+  terms a client will sign. The rule keys on a TRACKED flag (`const [dirty, setDirty] =
+  useState`), which is a distinction and not an exemption — Settings derives a `dirty` by
+  comparing one field to the saved organisation name, which is not work, and computes it
+  below that panel's loading return where a hook could not go anyway. What `useUnsavedWarning`
+  does NOT cover is the commoner case, clicking a link inside the app: `beforeunload` does not
+  fire for that. The reason the document-level click interceptor is not here is measured
+  rather than assumed — Playwright DISMISSES a dialog by default and NO spec in this suite
+  registers a handler, so every existing spec that edits one of these screens and then
+  navigates would silently stay put; `screens.spec.ts` alone holds 49 fills and 163
+  navigations. And the tempting alternative — keep the draft, restore it later — is worse
+  rather than merely bigger: silently putting a valuer's abandoned inputs back into an
+  appraisal means a figure nobody chose to enter can end up under a signature.
+- `destructive` (web suite) — nothing this product destroys goes on one click. Measured over
+  every `remove`/`delete` mutation the browser calls: 14 controls, FOUR of which fired
+  immediately — a customer's webhook endpoint, the firm's single sign-on configuration (and
+  `enforced` may mean there is no password to fall back on), an investor's holding in a deal,
+  and a capital call or distribution, which is a financial record. What makes those four
+  omissions rather than a choice is that the other ten already ask, in three ways the product
+  had settled on: `confirm` at row level, arm-then-confirm at panel level (the control appears
+  only after another arms it, with a Cancel beside it), and typing the workspace name back,
+  used once for the control that ends everything. The matcher recognises all three, and that
+  is the whole reason it is trustworthy: a first pass looking only for `confirm(` reported
+  eight offenders of which FOUR were properly guarded, and a matcher that finds what it was
+  written to look for and calls the rest defects is worse than none, because somebody acts on
+  its list. Two more things it had to learn — `confirm` is tested BEFORE the one-line-`if`
+  rule, since six row-level sites write `if (confirm(…)) x.mutate(…)` on one line and were
+  being reported as typed-name gates; and a call takes the NEAREST binding above it, because
+  `settings-integrations.tsx` binds `remove` twice and a name→procedure map reported a webhook
+  endpoint as an SSO configuration — the right count under the wrong name, which is the worse
+  failure, because somebody reads the name.
+- `dialogs` (web suite) — every overlay declares `role="dialog"` and `aria-modal`. Measured
+  across the five this app renders: ONE, the marketing page's product tour, did. The
+  primitive the PRODUCT uses — `Drawer`, opened from six screens — declared none of it and
+  managed no focus at all: opening it left focus on the button now behind the backdrop, the
+  first Tab walked out into a page greyed out and unusable, and Escape left focus on `<body>`
+  so the next Tab restarted at the top of the document. The payment dialog had no Escape
+  either — a card form a keyboard user could not abandon. `useDialog` (in `components/ui.tsx`)
+  is the fix for all four at once, and `lib/focus-trap.ts` holds the one decision worth
+  testing at its boundaries: which element Tab reaches at the two ends of the ring, and that
+  focus OUTSIDE the ring is pulled back in, which is the case a person is actually in when
+  they cannot see where their cursor went. The sweep matches a full-viewport fixed element
+  with a backdrop, not every `fixed inset-0` — the field app's full-bleed camera view is not
+  a dialog, and both directions have a fixture, because an exemption list is how a rule stops
+  meaning anything. `e2e/dialogs.spec.ts` is the half that presses Tab.
+- `page-title` (web suite) — every route the app declares names itself in the tab. Measured
+  before it existed: 37 routes, ONE `<title>`, set in `index.html` and never touched. Every
+  tab, every entry in the back-button menu, every bookmark and every screen-reader
+  announcement on navigation said "Apex Appraise — UK development appraisals, end to end" —
+  WCAG 2.4.2 (Page Titled, Level A) failed on 36 of 37 routes, and a valuer with six tabs
+  open could tell them apart only by clicking each. The table lives in `lib/page-title.ts`
+  and the sweep reads the REAL route table out of `App.tsx` in both directions: a route with
+  no title fails, and a title for a route that has gone fails. It also asserts every FULL
+  title is distinct, since a table drifting back towards shared names is the same defect
+  wearing a table. Two rules the matcher has to get right, both mutation-proven: an exact
+  literal beats a pattern that also fits (`/terms` is the terms of service, `/terms/:token`
+  is a client signing an engagement), and a `:param` takes exactly one segment. The screens
+  a CLIENT reads — both portals and the signing page — carry NO product suffix: a portal
+  already shows the firm's mark rather than ours, and the tab was the one place that rule
+  had not reached.
+- `icon-tables` (web suite) — a glyph table keeps no `Record<string, string>` annotation,
+  so the COMPILER checks its keys. The test does not check icon keys itself; it checks that
+  the compiler is still allowed to. With the annotation, `ICONS[anythingAtAll]` types as
+  `string`, a key that does not exist passes `tsc --noEmit`, and `Icon` calls `.split('|')`
+  on `undefined` — which throws inside render, so React unmounts the tree above it and the
+  screen goes blank. Measured: a Hub tile naming `pack` with no `pack` entry took the whole
+  home screen down and failed twenty-one e2e specs, every one of them at the sign-in
+  assertion and none within sight of an icon. Without the annotation the same tile is a
+  build error naming the tile. It keys on the VALUES (a quoted string starting with a move
+  command), not on the name `ICONS`, because the copy nobody thinks to look for is the one
+  called something else. `Icon` itself also tolerates a missing `d` now: the type stops it
+  reaching a build, and this stops a missing 18px glyph ever again costing a screen.
+- `e2e/reachable.spec.ts` — the doors, CLICKED. `route-reachable` proves a link literal
+  exists in the source, which is a weaker claim than it reads as: the commit that added the
+  funding-pack tile passed it, and the tile was the crash above. A link in the source is not
+  a route a user can reach; these two specs sign in, click, and land.
 - `provenance-sweep` — every mutation writes an audit event, statically and behaviourally.
 - `approved-immutable` — no procedure edits an approved appraisal in place.
 - `lost-update-sweep` — every procedure that updates a held row either takes a stamp

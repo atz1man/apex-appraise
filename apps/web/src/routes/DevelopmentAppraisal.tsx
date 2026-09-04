@@ -19,6 +19,7 @@ import {
   capitalStack,
 } from '@apex/appraisal-engine';
 import { getPrincipal, trpc } from '../lib/trpc';
+import { useUnsavedWarning } from '../lib/unsaved';
 import { fM, n0 } from '../lib/format';
 import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { startingIncome, startingIncomeLine } from '../lib/starting-income';
@@ -222,6 +223,8 @@ export default function DevelopmentAppraisal() {
   const [input, setInput] = useState<AppraisalInput>(DEFAULT_INPUT);
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // the tab must not close on unsaved work without a word — see lib/unsaved.ts
+  useUnsavedWarning(dirty);
 
   useEffect(() => {
     if (saved) setHeldVersion(saved.updatedAt);

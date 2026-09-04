@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
+import { useUnsavedWarning } from '../lib/unsaved';
 import { formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, StatCard, Td, Th, TopBar } from '../components/ui';
@@ -34,6 +35,8 @@ export default function Workbench() {
   const [dismissed, setDismissed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // the tab must not close on unsaved work without a word — see lib/unsaved.ts
+  useUnsavedWarning(dirty);
 
   const nia = appraisal?.result.nia ?? 0;
   const comps = compsData?.comps ?? [];

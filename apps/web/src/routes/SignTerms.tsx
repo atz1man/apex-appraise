@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
-import { BrandMark, Button, FirmMark, Spinner } from '../components/ui';
+import { BrandMark, Button, FirmMark, FormError, Spinner } from '../components/ui';
 import { TermsDocument, TERMS_PRINT_CSS } from '../components/TermsDocument';
 
 /**
@@ -124,7 +124,7 @@ export default function SignTerms() {
                 </span>
               </label>
 
-              {sign.error && <div className="mt-3 text-[12.5px] text-status-red">{sign.error.message}</div>}
+              {sign.error && <FormError className="mt-3 text-[12.5px]">{sign.error.message}</FormError>}
 
               <div className="mt-5 flex items-center gap-3">
                 <Button

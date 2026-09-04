@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
-import { Button, Panel, PlanLocked, StatusChip } from './ui';
+import { Button, FormError, Panel, PlanLocked, StatusChip } from './ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 /**
@@ -60,8 +60,17 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
     <Panel title="API keys" right={<StatusChip status={keys?.some((k) => k.live) ? 'green' : 'neutral'} label={`${keys?.filter((k) => k.live).length ?? 0} live`} />}>
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         For your own systems to read this workspace. A key belongs to the firm rather than to a person, so an integration
-        keeps working after whoever set it up has moved on. See{' '}
-        <code className="fig text-[11.5px]">/api/v1</code> for what it can read.
+        keeps working after whoever set it up has moved on.{' '}
+        {/*
+          The documentation for the thing this panel mints keys for. `/docs/api`
+          existed, was complete and was reachable only by typing the URL — the
+          API's own root response cites it and nothing in the app did, so the one
+          screen where somebody is holding a new key had no link to what it opens.
+        */}
+        <Link className="text-brand-ink font-semibold underline underline-offset-2" to="/docs/api">
+          Read the API reference
+        </Link>{' '}
+        for what a key can read.
       </div>
 
       {minted && (
@@ -71,7 +80,13 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
             Only the hash is stored, so nobody, including us, can produce it a second time.
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <input className="flex-1 fig text-[11.5px]" readOnly value={minted.key} onFocus={(e) => e.currentTarget.select()} />
+            <input
+              aria-label="New API key — copy it now, it is not shown again"
+              className="flex-1 fig text-[11.5px]"
+              readOnly
+              value={minted.key}
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(minted.key)}>
               Copy
             </Button>
@@ -217,7 +232,13 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
             Only your server and this row hold it. Lose it and the endpoint has to be replaced.
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <input className="flex-1 fig text-[11.5px]" readOnly value={minted.secret} onFocus={(e) => e.currentTarget.select()} />
+            <input
+              aria-label="New signing secret — copy it now, it is not shown again"
+              className="flex-1 fig text-[11.5px]"
+              readOnly
+              value={minted.secret}
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(minted.secret)}>
               Copy
             </Button>
@@ -272,7 +293,7 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
               Add endpoint
             </Button>
           </div>
-          {create.error && <div className="text-[11.5px] text-status-red">{create.error.message}</div>}
+          {create.error && <FormError className="text-[11.5px]">{create.error.message}</FormError>}
         </div>
       )}
 
@@ -284,7 +305,18 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
               <span className="fig text-[10.5px] text-ink-3 min-w-0 truncate">{e.events.join(' · ')}</span>
               <span className="flex-1" />
               {e.failureCount > 0 && <StatusChip status="amber" label={`${e.failureCount} FAILED`} />}
-              <Button writes size="sm" variant="secondary" loading={remove.isPending && remove.variables?.id === e.id} onClick={() => remove.mutate({ id: e.id })}>
+              {/* one click used to stop a customer's system receiving events,
+                  with nothing said and nothing to undo it — the same row-level
+                  question a comparable or a task is asked */}
+              <Button
+                writes
+                size="sm"
+                variant="secondary"
+                loading={remove.isPending && remove.variables?.id === e.id}
+                onClick={() => {
+                  if (confirm(`Stop sending events to ${e.url}? Anything listening there stops hearing from this workspace.`)) remove.mutate({ id: e.id });
+                }}
+              >
                 Remove
               </Button>
             </div>
@@ -502,6 +534,14 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
    * Refreshed from the SAVE's own response, never re-read from the query.
    */
   const [stamp, setStamp] = useState<Date | null>(null);
+  /**
+   * Removing SSO is the one control in this panel that can lock a firm out of
+   * its own workspace: every member who signs in through the identity provider
+   * loses their way in, and `enforced` means there may be no password to fall
+   * back to. It fired on one click. This is the arm-then-confirm the other
+   * heavyweight removals use — a member, an investor, a contractor.
+   */
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     if (!sso || loaded) return;
@@ -632,11 +672,15 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
         >
           Save
         </Button>
-        {sso && (
-          <Button writes size="sm" variant="secondary" loading={remove.isPending} onClick={() => remove.mutate()}>
-            Remove
-          </Button>
-        )}
+        {sso && (removing ? (
+          <>
+            <span className="text-[11.5px] text-ink-2">Everyone who signs in through {form.issuer || 'this provider'} loses that route in.</span>
+            <Button writes size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>Remove single sign-on</Button>
+            <Button size="sm" variant="secondary" onClick={() => setRemoving(false)}>Cancel</Button>
+          </>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={() => setRemoving(true)}>Remove…</Button>
+        ))}
         {sso?.lastLoginAt && <span className="text-[11px] text-ink-3">last sign-in {shortDate(sso.lastLoginAt)}</span>}
       </div>
     </Panel>

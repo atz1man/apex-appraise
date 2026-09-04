@@ -66,7 +66,13 @@ export function ShareLinks({ dealId, kind }: { dealId: string; kind: 'appraisal'
           {fresh && (
             <div className="mt-2.5 flex items-center gap-2" data-share-link>
               <span className="text-[11.5px] text-ink-2 flex-none">Copy it now — it is not shown again:</span>
-              <input className="flex-1 fig text-[11.5px]" readOnly value={fresh} onFocus={(e) => e.currentTarget.select()} />
+              <input
+                aria-label="Share link — copy it now, it is not shown again"
+                className="flex-1 fig text-[11.5px]"
+                readOnly
+                value={fresh}
+                onFocus={(e) => e.currentTarget.select()}
+              />
               <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(fresh)}>
                 Copy
               </Button>

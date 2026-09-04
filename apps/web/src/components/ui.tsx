@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 
 import { Link, NavLink } from 'react-router-dom';
 import { assetClass } from '@apex/types/asset-classes';
 import { assetFamilyTag, avatarGradients, brand, brandInk, brandMarkGradient, onFill, personGradientNone, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
+import { focusableWithin, nextFocus } from '../lib/focus-trap';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
 
@@ -591,17 +592,81 @@ export function Listbox({
 
 // ---------- Drawer ----------
 
-export function Drawer({ open, onClose, title, children, width = 480 }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; width?: number }) {
+/**
+ * The dialog behaviours a browser gives a `<dialog>` for free and a div does
+ * not: focus goes in when it opens, stays in while it is open, and comes back
+ * to whatever opened it when it closes. `useDialog` is here rather than beside
+ * each overlay because there are four of them and they had four different
+ * amounts of this — which is to say, three of them had none.
+ *
+ * Returns the ref to put on the dialog panel. See `lib/focus-trap.ts` for what
+ * it can and cannot hold on to.
+ */
+export function useDialog(open: boolean, onClose: () => void) {
+  const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+
+  /**
+   * `onClose` is an inline arrow at every one of the six call sites, so its
+   * identity changes on every render of the screen holding the drawer. With it
+   * in the dependency list this effect tears down and sets up on every
+   * keystroke — and its teardown gives focus back to the opener. Typing a deal
+   * name into the New deal drawer would have thrown the caret out of the field
+   * on the first character. The ref is what makes the effect depend on `open`
+   * and nothing else while still calling the current handler.
+   */
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    if (open) window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    if (!open) return;
+    // whatever had focus when this opened, so it can be given back
+    opener.current = document.activeElement as HTMLElement | null;
+    const node = panel.current;
+    if (node) {
+      const ring = focusableWithin(node);
+      // the panel itself when there is nothing in it to focus — announcing the
+      // dialog is still better than leaving focus behind the backdrop
+      (ring[0] ?? node).focus({ preventScroll: true });
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !panel.current) return;
+      const ring = focusableWithin(panel.current);
+      const to = nextFocus(ring, document.activeElement as HTMLElement | null, e.shiftKey);
+      if (!to) return;
+      e.preventDefault();
+      to.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      // back where they were. Without this Escape leaves focus on <body> and
+      // the next Tab restarts at the top of the document, several screens away
+      // from the row the person was working on.
+      opener.current?.focus?.({ preventScroll: true });
+    };
+  }, [open]);
+
+  return panel;
+}
+
+export function Drawer({ open, onClose, title, children, width = 480 }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; width?: number }) {
+  const panel = useDialog(open, onClose);
   if (!open) return null;
+  const label = typeof title === 'string' ? title : undefined;
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(12,18,14,0.35)', backdropFilter: 'blur(6px) saturate(1.2)' }} onClick={onClose}>
       <div
-        className="h-full shadow-drawer animate-slideIn overflow-y-auto rounded-l-[24px]"
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label ?? 'Panel'}
+        tabIndex={-1}
+        className="h-full shadow-drawer animate-slideIn overflow-y-auto rounded-l-[24px] outline-none"
         style={{
           width,
           maxWidth: '94vw',
@@ -614,13 +679,44 @@ export function Drawer({ open, onClose, title, children, width = 480 }: { open: 
         {title && (
           <div className="sticky top-0 z-10 border-b border-border-std px-5 py-4 flex items-center justify-between" style={{ background: 'rgb(var(--surface, 255 255 255) / 0.85)', backdropFilter: 'blur(12px)' }}>
             {typeof title === 'string' ? <h3 className="text-[16.5px] font-semibold tracking-[-0.3px]">{title}</h3> : title}
-            <button onClick={onClose} className="text-ink-3 hover:text-ink text-[18px] leading-none px-1">
+            {/* "×" is text, so a name check sees a name — and a screen reader
+                reads "multiplication sign". The label is what makes it a control */}
+            <button onClick={onClose} aria-label={label ? `Close ${label}` : 'Close'} className="text-ink-3 hover:text-ink text-[18px] leading-none px-1">
               ×
             </button>
           </div>
         )}
         <div className="p-5">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A message that appears because something went wrong, and is announced.
+ *
+ * Measured across the whole browser tree before this existed: `role="alert"`,
+ * `aria-invalid` and `aria-describedby` appeared in ZERO files, against
+ * seventeen places rendering a refusal in red next to the control that caused
+ * it. For anyone not looking at that corner of the screen the app simply did
+ * nothing — and the sharper half is that nineteen mutations declare
+ * `meta: { inlineError: true }`, which SUPPRESSES the toast on the grounds that
+ * the screen shows the error where it happened. It showed it in a colour.
+ *
+ * `role="alert"` is its own assertive live region and, unlike `role="status"`,
+ * IS announced when the element carrying it is inserted with its text — which
+ * is exactly how these appear. That is why this works as a component and the
+ * toasts needed a persistent region instead.
+ *
+ * `className` is passed through rather than normalised. Four different sizes
+ * are in use for this one thing across fourteen screens, which is worth
+ * tidying and is not what this change is; making every refusal audible should
+ * not also move type around on fourteen screens.
+ */
+export function FormError({ id, children, className = '' }: { id?: string; children: ReactNode; className?: string }) {
+  return (
+    <div id={id} role="alert" className={`text-status-red ${className}`}>
+      {children}
     </div>
   );
 }
@@ -667,10 +763,22 @@ export function Spinner() {
   );
 }
 
+/**
+ * `d` is a `|`-separated list of SVG path data, one `<path>` each.
+ *
+ * The `?? ''` is not defensive typing — the type already says `string`. It is
+ * there because of what happens when something hands this a key its glyph table
+ * does not have: `undefined.split` throws INSIDE render, React unmounts the tree
+ * above it, and the user gets a blank page. Measured: a Hub tile named an icon
+ * with no entry and the entire home screen went white — 21 e2e specs failed at
+ * the sign-in assertion, none of them anywhere near an icon. The typed tables
+ * (see `Hub.tsx`) are what stop that reaching a build; this is what stops a
+ * missing 18px glyph ever again costing a whole screen.
+ */
 export function Icon({ d, size = 16, color = 'currentColor', strokeWidth = 2 }: { d: string; size?: number; color?: string; strokeWidth?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      {d.split('|').map((p, i) => (
+      {(d ?? '').split('|').map((p, i) => (
         <path key={i} d={p} />
       ))}
     </svg>

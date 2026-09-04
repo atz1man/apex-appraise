@@ -4,7 +4,7 @@ import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetr
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { useUnits, type RegionUnits } from '../lib/region';
-import { Button, Dot, EmptyState, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { brand, onFill } from '@apex/ui-tokens';
 
@@ -71,6 +71,15 @@ export default function Scenarios() {
 
   // local lever overlay for live recompute; persisted on slider release / input blur
   const [edits, setEdits] = useState<Record<string, Partial<Record<LeverKey, number>>>>({});
+
+  const remove = trpc.scenarios.remove.useMutation({
+    onSuccess: () => {
+      utils.scenarios.list.invalidate(dealId);
+      // the edit buffer is keyed by scenario id; a removed option's entry would
+      // otherwise be merged back onto whatever id Prisma hands out next
+      setEdits({});
+    },
+  });
 
   const scenarios = useMemo(() => (rows ?? []).slice(0, 3).map((s) => ({ ...s, ...edits[s.id] })), [rows, edits]);
   const metrics = useMemo(() => scenarios.map((s) => compute(s)), [scenarios]);
@@ -189,7 +198,26 @@ export default function Scenarios() {
               <div key={col} className="px-4 py-4 border-b border-border-std" style={cellBorder}>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: ACCENTS[col] }} />
-                  <span className="text-[15px] font-bold leading-tight">{scenarios[slot.i].name}</span>
+                  <span className="text-[15px] font-bold leading-tight flex-1 min-w-0">{scenarios[slot.i].name}</span>
+                  {/*
+                    Take the option off the table. `upsert` was the only write, so an
+                    option added by mistake could only be renamed into a different
+                    one — while the AI risk commentary went on comparing it with the
+                    ones somebody meant to propose.
+                  */}
+                  <button
+                    aria-label={`Remove ${scenarios[slot.i].name}`}
+                    title="Remove this option"
+                    className="shrink-0 w-7 h-7 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (confirm(`Remove ${scenarios[slot.i].name}? The comparison and any risk commentary will be recalculated without it.`)) {
+                        remove.mutate(scenarios[slot.i].id);
+                      }
+                    }}
+                  >
+                    <Icon d="M18 6 6 18M6 6l12 12" size={14} color="currentColor" />
+                  </button>
                 </div>
                 <div className="mt-1 text-[11.5px] text-ink-3">{scenarios[slot.i].descriptor}</div>
               </div>
@@ -338,7 +366,7 @@ export default function Scenarios() {
               Draft risk commentary
             </Button>
           </div>
-          {draftRisk.error && <div className="mt-3 text-[11.5px] text-status-red">{draftRisk.error.message}</div>}
+          {draftRisk.error && <FormError className="mt-3 text-[11.5px]">{draftRisk.error.message}</FormError>}
           {draftRisk.data && (
             <div className="mt-4 pt-4 border-t border-border-faint">
               <p className="text-[13px] text-ink-2 leading-relaxed">{draftRisk.data.commentary}</p>

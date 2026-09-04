@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
 import { getPrincipal, getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
-import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar, useDialog } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { DealNav } from '../components/DealNav';
 
@@ -166,6 +166,13 @@ export default function CostMonitoring() {
     updateContractor.mutate({ id: cur.id, patch });
   };
   const addPhoto = trpc.photos.add.useMutation({ onSuccess: () => utils.photos.list.invalidate(dealId) });
+  const removePhoto = trpc.photos.remove.useMutation({
+    onSuccess: () => {
+      utils.photos.list.invalidate(dealId);
+      // the lightbox is showing the row that no longer exists
+      setLightbox(null);
+    },
+  });
   const createTask = trpc.tasks.create.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
 
@@ -183,13 +190,14 @@ export default function CostMonitoring() {
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lightbox, setLightbox] = useState<Photo | null>(null);
 
-  // close the photo lightbox on Escape
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setLightbox(null);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [lightbox]);
+  /**
+   * Escape closed it already; what it did not do was keep focus inside, or give
+   * focus back to the photo card the person opened it from. The remove control
+   * lives in here, so Tab walking out of it silently meant a destructive button
+   * sitting behind a backdrop with no way back. `useDialog` does all three.
+   */
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const lightboxPanel = useDialog(lightbox !== null, closeLightbox);
 
   const packages = cost?.packages ?? [];
   const rollup = cost?.rollup;
@@ -707,6 +715,7 @@ export default function CostMonitoring() {
               </div>
               <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
+                  aria-label="Raise a cost-monitoring action"
                   className="flex-1 min-w-[140px]"
                   placeholder="Raise an action…"
                   value={taskDraft}
@@ -748,6 +757,7 @@ export default function CostMonitoring() {
             </div>
             <div className="flex items-center gap-2 bg-surface border border-border-strong rounded-[12px] p-2 pl-3 flex-wrap">
               <input
+                aria-label="Photo caption"
                 className="w-44 h-8 py-0 border-none shadow-none px-0 !bg-transparent"
                 placeholder="Caption…"
                 value={photoCap}
@@ -762,6 +772,7 @@ export default function CostMonitoring() {
               </select>
               <input type="date" className="h-8 py-0 fig text-[11.5px]" aria-label="Photo date" value={photoDate} onChange={(e) => setPhotoDate(e.target.value)} />
               <input
+                aria-label="Choose a site photo to upload"
                 ref={photoFileRef}
                 type="file"
                 accept="image/*"
@@ -819,10 +830,12 @@ export default function CostMonitoring() {
           onClick={() => setLightbox(null)}
         >
           <div
+            ref={lightboxPanel}
             role="dialog"
             aria-modal="true"
             aria-label={lightbox.caption}
-            className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card"
+            tabIndex={-1}
+            className="w-[min(880px,90vw)] rounded-card overflow-hidden shadow-dark-card outline-none"
             style={{ background: neutral.ink }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -833,14 +846,44 @@ export default function CostMonitoring() {
                   {lightbox.contractor ?? 'No contractor'} · {firmDate(lightbox.takenAt)}
                 </div>
               </div>
-              <button
-                aria-label="Close"
-                className="shrink-0 w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
-                style={{ background: 'rgba(255,255,255,0.1)' }}
-                onClick={() => setLightbox(null)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
+              <div className="shrink-0 flex items-center gap-2">
+                {/*
+                  Remove lives HERE, not on the card in the grid: the card is
+                  itself a button that opens this view, and a button inside a
+                  button is neither valid nor reachable by keyboard. It is also
+                  the right place to ask — you are looking at the photo you are
+                  about to delete.
+
+                  `add` was the only write until now, so a photo taken on the
+                  wrong site, or of something that should never have been
+                  uploaded, stayed on the deal for good. These come off a phone,
+                  on site, from whoever is standing there.
+                */}
+                <button
+                  aria-label={`Remove ${lightbox.caption}`}
+                  title="Remove this photo"
+                  className="w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.1)' }}
+                  disabled={removePhoto.isPending}
+                  onClick={() => {
+                    if (confirm(`Remove “${lightbox.caption}” from the site log? The audit trail keeps a record that it was removed.`)) {
+                      removePhoto.mutate(lightbox.id);
+                    }
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+                <button
+                  aria-label="Close"
+                  className="w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.1)' }}
+                  onClick={() => setLightbox(null)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             {lightbox.url ? (
               <img src={lightbox.url} alt={lightbox.caption} className="max-h-[70vh] w-full object-contain bg-black" />

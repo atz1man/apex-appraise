@@ -6,8 +6,9 @@ declare module '@tanstack/react-query' {
     mutationMeta: { inlineError?: boolean };
   }
 }
-import { Suspense, lazy, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { titleFor } from './lib/page-title';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -108,6 +109,53 @@ function Protected({ children, portal }: { children: JSX.Element; portal?: 'buye
   return children;
 }
 
+/**
+ * The wrapper every route renders inside, and the two things a browser does on
+ * a real navigation that a single-page app does not.
+ *
+ * THE SCROLL. React Router does not reset it and nothing else did either, so
+ * leaving the foot of a long appraisal for Settings landed you several hundred
+ * pixels down Settings, past its heading, with nothing to say you had arrived.
+ *
+ * THE FOCUS. Keyboard focus stayed on the link that had just been replaced —
+ * in practice `<body>`, so the next Tab restarted at the top of the document —
+ * and a screen reader announced nothing, because for it nothing had happened.
+ *
+ * Both live HERE rather than in an effect on `location.pathname` in `App`, and
+ * that is not a tidying-up. `App`'s effect fires when the URL changes; this
+ * component mounts when the new page's DOM EXISTS, and those are not the same
+ * moment. Every route is `lazy()`, so on a first visit React suspends, the
+ * fallback replaces this subtree, and at the instant the URL-keyed effect ran
+ * there was no wrapper to focus — measured on CI as `document.activeElement`
+ * being `<body>` after a click that had, to the eye, worked perfectly. Keyed on
+ * the pathname, this remounts per navigation, and a mount effect cannot run
+ * before the thing it focuses is there.
+ *
+ * `first` is skipped deliberately: `/login` and `/register` autofocus a field
+ * and stealing that would be a regression dressed as a fix. It is a ref owned
+ * by `App`, because this component is remounted by its key and cannot remember
+ * anything itself — which is the same property that makes it work.
+ */
+function PageFrame({ first, children }: { first: { current: boolean }; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+    ref.current?.focus({ preventScroll: true });
+    // mount only: the `key` on this component is what makes that per-navigation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    // tabIndex -1: focusable by script and by the skip link, never by Tab
+    <div id="page" ref={ref} tabIndex={-1} className="page-enter outline-none">
+      {children}
+    </div>
+  );
+}
+
 export default function App() {
   const location = useLocation();
   const [queryClient] = useState(
@@ -188,16 +236,51 @@ export default function App() {
       }),
   );
   const trpcClient = useMemo(() => makeTrpcClient(), []);
+
+  /**
+   * The TITLE. 37 routes shared one, set in `index.html` and never touched
+   * again — see `lib/page-title.ts` for what that cost.
+   *
+   * This one belongs here rather than in `PageFrame` because it is the only
+   * one of the three that does not need the new page's DOM to exist: it is a
+   * fact about the URL. The scroll and the focus do need it, and that
+   * distinction is the whole reason they are no longer in this effect.
+   */
+  const firstPage = useRef(true);
+  useEffect(() => {
+    document.title = titleFor(location.pathname);
+  }, [location.pathname]);
+
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
         {/* every screen, because the field app is the one that needs it — see OfflineBanner */}
         <OfflineBanner />
+        {/*
+          WCAG 2.4.1 (Bypass Blocks). Every internal screen opens with a sticky
+          header carrying the brand lockup, a breadcrumb and up to six global
+          links, so a keyboard user reached the actual content of a deal on the
+          ninth Tab, on every screen, every time. Visually hidden until focused,
+          which is the first thing Tab reaches from the top of the document.
+        */}
+        <a
+          href="#page"
+          className="sr-only focus:not-sr-only focus:fixed focus:z-50 focus:top-3 focus:left-3 focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-surface focus:text-ink focus:shadow-float focus:outline focus:outline-2 focus:outline-brand-ink"
+          onClick={(e) => {
+            // an href alone moves the browser's :target, not focus — and this is
+            // exactly the control whose entire purpose is to move focus
+            e.preventDefault();
+            document.getElementById('page')?.focus();
+            window.scrollTo(0, 0);
+          }}
+        >
+          Skip to main content
+        </a>
         {/* a render fault must not leave a blank page — see ErrorBoundary */}
         <ErrorBoundary>
         <Suspense fallback={<Splash />}>
-        <div key={location.pathname} className="page-enter">
+        <PageFrame key={location.pathname} first={firstPage}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -247,7 +330,7 @@ export default function App() {
           <Route path="/portal/buyer" element={<Protected portal="buyer"><BuyerPortal /></Protected>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-        </div>
+        </PageFrame>
         </Suspense>
         </ErrorBoundary>
         </ToastProvider>

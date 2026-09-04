@@ -77,6 +77,7 @@ export default function Calendar() {
     },
   });
   const toggleTask = trpc.tasks.toggle.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
+  const removeTask = trpc.tasks.remove.useMutation({ onSuccess: () => utils.tasks.list.invalidate() });
 
   const deals = dealData?.deals ?? [];
   const dealSel = dealId || deals[0]?.id || '';
@@ -420,6 +421,26 @@ export default function Calendar() {
                             </div>
                           </div>
                           <span title={person?.name ?? t.assignee}><Avatar initials={t.assignee} size={26} /></span>
+                          {/*
+                            Delete, as distinct from tick. `toggle` was the only way
+                            out of a task, and marking one done is a CLAIM that the
+                            work happened — so a task raised on the wrong deal could
+                            only be retired by asserting something untrue in the one
+                            list the calendar and the deal overview both count from.
+                          */}
+                          <button
+                            aria-label={`Delete task ${t.title}`}
+                            title="Delete this task"
+                            className="shrink-0 mt-[1px] w-6 h-6 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
+                            disabled={removeTask.isPending}
+                            onClick={() => {
+                              if (confirm(`Delete “${t.title}”? Ticking it instead records that the work was done.`)) removeTask.mutate(t.id);
+                            }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                            </svg>
+                          </button>
                         </div>
                       );
                     })}

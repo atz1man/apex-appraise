@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { trpc, getToken } from '../lib/trpc';
+import { useUnsavedWarning } from '../lib/unsaved';
 import { fM } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { Button, Listbox, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
@@ -102,6 +103,8 @@ export default function Engagement() {
    */
   const [stamp, setStamp] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
+  // the tab must not close on unsaved work without a word — see lib/unsaved.ts
+  useUnsavedWarning(dirty);
   const [acceptedBy, setAcceptedBy] = useState('');
 
   useEffect(() => {

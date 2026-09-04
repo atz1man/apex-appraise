@@ -25,7 +25,17 @@ const signIn = async (page: import('@playwright/test').Page) => {
 };
 
 /** Toasts are the only thing in the app using role=status. */
-const toasts = (page: import('@playwright/test').Page) => page.locator('[role="status"]');
+/**
+ * Toasts by test id, not by `[role="status"]`.
+ *
+ * They used to carry that role individually, which is both the reason a screen
+ * reader never announced them — a live region has to exist before the message
+ * arrives — and the reason this selector was quietly ambiguous: `role="status"`
+ * appears twelve times in the source on LOADING indicators. The "exactly one"
+ * assertion below would have counted a skeleton as a toast the moment one was
+ * on screen, and passed for the wrong reason whenever none was.
+ */
+const toasts = (page: import('@playwright/test').Page) => page.getByTestId('toast');
 
 test('a failure with nowhere else to appear is toasted, once', async ({ page }) => {
   await signIn(page);

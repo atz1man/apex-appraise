@@ -4,7 +4,7 @@ import { weightedComparables } from '@apex/appraisal-engine';
 import { assetLabel } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -32,6 +32,7 @@ export default function Comparables() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data, isLoading } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.comparables.upsert.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
+  const remove = trpc.comparables.remove.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
   // this screen shows the error where it happened; see App.tsx
   const apply = trpc.comparables.applyToAppraisal.useMutation({ meta: { inlineError: true } });
 
@@ -261,6 +262,23 @@ export default function Comparables() {
                             <div className="fig text-[14px] font-semibold text-brand-ink">£{U.rateNum(r.adjustedPsf)}</div>
                             <div className="fig text-[10px]" style={{ color: adjColor(r.netAdjustment) }}>{netFmt}</div>
                           </div>
+                          {/*
+                            Withdraw the comp. Until this existed the only way out of a
+                            mistaken comparable was to overwrite it with a different
+                            property — and the row went on carrying weight in the
+                            supported £/ft² either way.
+                          */}
+                          <button
+                            aria-label={`Remove ${c.address}`}
+                            title="Remove this comparable"
+                            className="shrink-0 w-7 h-7 mr-1 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              if (confirm(`Remove ${c.address} from the evidence? The supported £/${U.unit} will be recalculated without it.`)) remove.mutate(c.id);
+                            }}
+                          >
+                            <Icon d="M18 6 6 18M6 6l12 12" size={14} color="currentColor" />
+                          </button>
                         </div>
                       );
                     })}
@@ -386,7 +404,7 @@ export default function Comparables() {
                   )}
                 </Button>
               )}
-              {apply.error && <div className="mt-2 text-[11.5px] text-status-red">{apply.error.message}</div>}
+              {apply.error && <FormError className="mt-2 text-[11.5px]">{apply.error.message}</FormError>}
             </Panel>
           </aside>
         </div>

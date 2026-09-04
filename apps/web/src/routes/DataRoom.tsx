@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
-import { Button, EmptyState, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
+import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
 import { fmtBytes, n0 } from '../lib/format';
@@ -260,6 +260,7 @@ export default function DataRoom() {
 
           {/* dropzone — real uploads; click also opens the metadata-only form */}
           <input
+            aria-label="Choose documents to upload to the data room"
             ref={fileInputRef}
             type="file"
             multiple
@@ -302,12 +303,13 @@ export default function DataRoom() {
                     List one you are waiting for
                   </button>
                 </div>
-                {uploadError && <div className="mt-1 text-[11.5px] text-status-red">{uploadError}</div>}
+                {uploadError && <FormError className="mt-1 text-[11.5px]">{uploadError}</FormError>}
               </div>
             </div>
             {formOpen && (
               <div className="mt-4 pt-4 border-t border-border-std flex gap-2 items-center flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <input
+                  aria-label="Name of the document you are waiting for"
                   autoFocus
                   className="flex-1"
                   placeholder="Document you are waiting for — e.g. Elemental cost plan v4.xlsx"
@@ -519,6 +521,7 @@ export default function DataRoom() {
           <div className="mt-1 text-[11px] text-ink-3">The AI answers from this deal's uploaded documents only.</div>
           <div className="mt-2.5 flex gap-2">
             <input
+              aria-label="Ask a question of this deal's documents"
               className="flex-1 min-w-0"
               placeholder="e.g. What does the cost plan allow for M&E?"
               maxLength={500}
@@ -530,7 +533,7 @@ export default function DataRoom() {
               {!ask.isPending && 'Ask'}
             </Button>
           </div>
-          {ask.error && <div className="mt-2 text-[11.5px] text-status-red">{ask.error.message}</div>}
+          {ask.error && <FormError className="mt-2 text-[11.5px]">{ask.error.message}</FormError>}
           <div className="mt-3 flex flex-col gap-3">
             {askHistory.map((entry, i) => (
               <div key={`${entry.q}-${i}`} className="bg-sunken border border-border-std rounded-[11px] p-3">

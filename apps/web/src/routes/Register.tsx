@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
-import { BrandMark, Button } from '../components/ui';
+import { BrandMark, Button, FormError } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 
 const REASSURANCE = [
@@ -54,6 +54,18 @@ export default function Register() {
   ) => (
     <div className="mb-3">
       <label htmlFor={`reg-${key}`} className="label-mono text-ink-3 block mb-1">{label}</label>
+      {/*
+        The error has to be ATTACHED to the field, not merely next to it. Sitting
+        below the input in red, it is a message only somebody looking at that
+        spot receives: a screen reader moving through the form reads "Password,
+        edit text" and nothing else, on a field it has just refused.
+
+        `aria-invalid` is what makes the field announce as invalid, and
+        `aria-describedby` is what makes the sentence part of the field rather
+        than a stray line further down the page. The helper text is described
+        the same way when there is no error — the two never show together, so
+        one id does for both.
+      */}
       <input
         id={`reg-${key}`}
         className="w-full"
@@ -62,9 +74,11 @@ export default function Register() {
         onChange={set(key)}
         autoFocus={props.autoFocus}
         autoComplete={props.autoComplete}
+        aria-invalid={errors[key] ? true : undefined}
+        aria-describedby={errors[key] || props.helper ? `reg-${key}-note` : undefined}
       />
-      {props.helper && !errors[key] && <div className="mt-1 text-[11.5px] text-ink-3">{props.helper}</div>}
-      {errors[key] && <div className="mt-1 text-[12px] text-status-red">{errors[key]}</div>}
+      {props.helper && !errors[key] && <div id={`reg-${key}-note`} className="mt-1 text-[11.5px] text-ink-3">{props.helper}</div>}
+      {errors[key] && <FormError id={`reg-${key}-note`} className="mt-1 text-[12px]">{errors[key]}</FormError>}
     </div>
   );
 
@@ -88,7 +102,7 @@ export default function Register() {
           {field('Email', 'email', { type: 'email', autoComplete: 'email' })}
           {field('Password', 'password', { type: 'password', helper: 'At least 8 characters.', autoComplete: 'new-password' })}
           {field('Confirm password', 'confirm', { type: 'password', autoComplete: 'new-password' })}
-          {serverError && <div className="text-[12px] text-status-red mb-3">{serverError}</div>}
+          {serverError && <FormError className="text-[12px] mb-3">{serverError}</FormError>}
           <Button type="submit" className="w-full" loading={register.isPending}>
             Create workspace
           </Button>

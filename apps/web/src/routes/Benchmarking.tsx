@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { accent, brand, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
-import { Button, EmptyState, Icon, PlanLocked, Spinner, Td, Th, TopBar, SPARKLE } from '../components/ui';
+import { Button, EmptyState, FormError, Icon, PlanLocked, SPARKLE, Spinner, Td, Th, TopBar } from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
 import { useUnits } from '../lib/region';
@@ -388,7 +388,7 @@ export default function Benchmarking() {
           Withdrawn — {n0(setContribution.data.withdrawn)} contributed points removed from the pool.
         </div>
       )}
-      {setContribution.error && <div className="mt-2 text-[11px] text-status-red">{setContribution.error.message}</div>}
+      {setContribution.error && <FormError className="mt-2 text-[11px]">{setContribution.error.message}</FormError>}
       <div className="mt-3 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[11px] bg-canvas">
         {contribQ.data ? (
           <>
@@ -426,7 +426,7 @@ export default function Benchmarking() {
           Contributed to {contribute.data.region} · {contribute.data.useClass.toLowerCase()} · {contribute.data.period}.
         </div>
       )}
-      {contribute.error && <div className="mt-2 text-[11px] text-status-red">{contribute.error.message}</div>}
+      {contribute.error && <FormError className="mt-2 text-[11px]">{contribute.error.message}</FormError>}
     </section>
   );
 
@@ -436,14 +436,20 @@ export default function Benchmarking() {
         crumb="Benchmarking & market intelligence"
         right={
           <>
-            <select className="h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
+            {/*
+              Both pickers announced as an unnamed "combo box", so a screen-reader
+              user met two of them side by side with nothing to say which was
+              which. There is no visible label to point at — the design puts them
+              bare in the top bar — so the name is carried here.
+            */}
+            <select aria-label="Region" className="h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
               {REGIONS.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
             </select>
-            <select className="h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
+            <select aria-label="Asset class" className="h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
               {USE_CLASSES.map(([id, label]) => (
                 <option key={id} value={id}>
                   {label}

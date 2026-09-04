@@ -49,30 +49,59 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
   globalPush = push;
 
+  const card = (t: Toast) => {
+    const s = KIND_STYLE[t.kind];
+    return (
+      <div
+        key={t.id}
+        data-testid="toast"
+        className="bg-surface rounded-card shadow-float px-4 py-3 flex items-start gap-2.5 animate-slideIn"
+        style={{ border: `1px solid ${s.border}` }}
+      >
+        <span className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: s.dot }} aria-hidden="true" />
+        <span className="text-[12.5px] leading-snug text-ink">{t.message}</span>
+        {/* "×" is text, so it counts as a name and reads as "multiplication sign" */}
+        <button
+          className="ml-auto text-ink-3 hover:text-ink text-[15px] leading-none"
+          aria-label="Dismiss notification"
+          onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}
+        >
+          ×
+        </button>
+      </div>
+    );
+  };
+
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/*
+        This is the whole product's feedback channel. Every mutation reports
+        through it — saved, refused, removed, invited, "Couldn't load this
+        page's data" — and for anyone not looking at the bottom-right corner of
+        the screen it was silent.
+
+        The markup LOOKED right: each toast carried `role="status"`. The catch
+        is that a live region has to be in the document BEFORE the message
+        arrives. A `role="status"` element that is itself inserted along with
+        its text is the documented way NOT to be announced — the assistive
+        technology has no region to be watching. So the regions below are always
+        mounted, empty, from the moment the app starts, and the messages arrive
+        into them.
+
+        Two of them, because politeness is not one setting. A success waits for
+        a gap in what is being read; "Couldn't load this page's data" should
+        not queue behind a table being narrated. Errors are the assertive one,
+        which is also why they are a separate list rather than a flag on the
+        card: an `aria-live` value is a property of the REGION.
+      */}
       <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 w-[340px] max-w-[90vw]">
-        {toasts.map((t) => {
-          const s = KIND_STYLE[t.kind];
-          return (
-            <div
-              key={t.id}
-              className="bg-surface rounded-card shadow-float px-4 py-3 flex items-start gap-2.5 animate-slideIn"
-              style={{ border: `1px solid ${s.border}` }}
-              role="status"
-            >
-              <span className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: s.dot }} />
-              <span className="text-[12.5px] leading-snug text-ink">{t.message}</span>
-              <button
-                className="ml-auto text-ink-3 hover:text-ink text-[15px] leading-none"
-                onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
+        <div className="flex flex-col gap-2" aria-live="assertive" aria-relevant="additions">
+          {toasts.filter((t) => t.kind === 'error').map(card)}
+        </div>
+        <div className="flex flex-col gap-2" aria-live="polite" aria-relevant="additions">
+          {toasts.filter((t) => t.kind !== 'error').map(card)}
+        </div>
       </div>
     </ToastContext.Provider>
   );

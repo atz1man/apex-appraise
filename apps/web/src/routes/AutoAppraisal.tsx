@@ -5,7 +5,7 @@ import type { Extraction } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
 import { useUnits } from '../lib/region';
-import { Button, Dot, EmptyState, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
 import { manualDefaultsFor, manualIsRunnable, type ManualState, type ManualUnit } from '../lib/auto-defaults';
@@ -672,7 +672,7 @@ export default function AutoAppraisal() {
               </div>
             </div>
           )}
-          {error && <div className="mt-2.5 text-[12px] text-status-red">{error}</div>}
+          {error && <FormError className="mt-2.5 text-[12px]">{error}</FormError>}
         </Panel>
 
         {/* ===== RIGHT: OUTPUT ===== */}

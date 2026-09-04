@@ -449,6 +449,35 @@ export const photosRouter = router({
       });
       return photo;
     }),
+
+  /**
+   * Take a site photo down.
+   *
+   * `add` was the only write, so a photo taken on the wrong site, or of
+   * something that should never have been uploaded, stayed on the deal for
+   * good — and these come off a phone, on site, from whoever is standing
+   * there. Of the five things this product let you create and never remove,
+   * this is the one that can be a person, a neighbour's window, or a document
+   * left face-up on a table.
+   *
+   * The row goes; the audit line stays, which is the point of an audit line.
+   */
+  remove: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const photo = await ctx.prisma.sitePhoto.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!photo) throw new TRPCError({ code: 'NOT_FOUND' });
+    await ctx.prisma.sitePhoto.delete({ where: { id: photo.id } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: photo.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'removed a site photo',
+        target: `${photo.caption} · taken ${photo.takenAt.toISOString().slice(0, 10)}`,
+      },
+    });
+    return { ok: true };
+  }),
 });
 
 // ---------- Tasks ----------
@@ -511,6 +540,32 @@ export const tasksRouter = router({
     const t = await ctx.prisma.task.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
     return ctx.prisma.task.update({ where: { id: t.id }, data: { done: !t.done } });
+  }),
+
+  /**
+   * Delete a task rather than tick it.
+   *
+   * `toggle` was the only way out, and marking a task done is a claim that the
+   * work happened. A task raised against the wrong deal, or duplicated, or
+   * describing something that turned out not to be needed, could only be
+   * retired by asserting it was completed — which puts a false statement in the
+   * one list the calendar and the deal overview both count from.
+   */
+  remove: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const t = await ctx.prisma.task.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+    if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
+    await ctx.prisma.task.delete({ where: { id: t.id } });
+    await ctx.prisma.activityEvent.create({
+      data: {
+        orgId: ctx.principal.orgId,
+        dealId: t.dealId,
+        userId: ctx.principal.userId,
+        actor: ctx.principal.name,
+        action: 'deleted a task',
+        target: `${t.title}${t.done ? ' (was done)' : ''}`,
+      },
+    });
+    return { ok: true };
   }),
 });
 
