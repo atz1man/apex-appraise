@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (178, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (180, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -640,10 +640,13 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Do NOT edit an API source file while a browser run is in flight against `pnpm dev`. `tsx
   watch` restarts the API on every save, and a spec whose request lands on the restart reads
   as a product defect: measured, two specs failed in one run — the Red Book printed "No
-  appraisal saved yet" on a deal with one (the query failed, and `!appraisal` was read as
-  "none"), and a shared report link answered 503 — both at the minute a mutation test was
-  saving and restoring `demo-seed-depth.ts`. Mutation-test API code BEFORE or AFTER the
-  browser suite, never during.
+  appraisal saved yet" on a deal with one, and a shared report link answered 503 — both at
+  the minute a mutation test was saving and restoring `demo-seed-depth.ts`. Mutation-test
+  API code BEFORE or AFTER the browser suite, never during. The first of those WAS a product
+  defect as well as a test artefact: both printed reports read `!appraisal` as "none saved"
+  when the query had failed, the conflation `lib/load-failure.ts` was written to end on the
+  overview. They go through it now (`data-testid="report-error"`), and `e2e/deal-error.spec.ts`
+  refuses `appraisal.getCurrent` on both and asserts the sentence, the kind and the retry.
 - `tsx watch` exits on a top-level throw and does NOT come back on its own — it restarts on the
   next file change. Save a file mid-edit that references an import you have not added yet and the
   API is simply gone, with `vite` still serving: every browser spec then fails at sign-in, which

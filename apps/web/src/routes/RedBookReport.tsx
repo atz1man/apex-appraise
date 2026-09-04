@@ -16,6 +16,7 @@ import {
 } from '@apex/appraisal-engine';
 import { assetClass } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
+import { loadFailure } from '../lib/load-failure';
 import { brand, neutral, status as statusTokens } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { poundsInWords } from '../lib/words';
@@ -117,7 +118,7 @@ function SummaryRow({ k, v, mono = false }: { k: string; v: string; mono?: boole
 export default function RedBookReport() {
   const { dealId = '' } = useParams();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
-  const { data: appr, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  const { data: appr, isLoading, error: apprError, refetch: refetchAppr } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   /**
    * Floor areas and the words for them, in the firm's own jurisdiction. The
@@ -328,6 +329,37 @@ export default function RedBookReport() {
         <style>{PRINT_CSS}</style>
         {toolbar}
         <div className="mt-16 flex justify-center"><Spinner /></div>
+      </div>
+    );
+  }
+
+  /**
+   * A query that FAILED is not a deal with no appraisal. This branch used to be
+   * `if (!appr …)` alone, so a stopped API, a 500 and a rate limit all printed
+   * "No appraisal saved yet" — measured on a deal with one, during an API
+   * restart, and read as a product defect. `loadFailure` says only what the
+   * client can tell, and offers a retry only where one might succeed.
+   */
+  if (apprError) {
+    const failure = loadFailure(apprError, 'appraisal');
+    return (
+      <div className="light min-h-screen bg-frame">
+        <style>{PRINT_CSS}</style>
+        {toolbar}
+        <div className="mt-20 flex justify-center px-6">
+          <div className="bg-surface border border-border-strong rounded-panel shadow-rest px-10 py-12 max-w-[480px] text-center">
+            <div className="eyebrow">Red Book valuation</div>
+            <h1 className="mt-2 text-[22px] font-bold tracking-[-0.6px]">{failure.title}</h1>
+            <p className="mt-2.5 text-[13px] text-ink-2 leading-relaxed">
+              <span data-testid="report-error" data-kind={failure.kind}>{failure.detail}</span>
+            </p>
+            {failure.retry && (
+              <Button onClick={() => refetchAppr()} className="mt-5">
+                Try again
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
