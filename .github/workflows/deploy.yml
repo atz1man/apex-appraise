@@ -1,0 +1,103 @@
+name: Deploy
+
+# Ship what is on main to Fly.io, from the Actions tab.
+#
+# WHY THIS EXISTS. Until now the only way to release was `fly deploy` from a
+# machine holding the flyctl binary and a logged-in Fly account. That is a
+# deliberate release, which is right, but it also means a release happens only
+# when somebody is sitting at that particular computer — and on 4 September the
+# live API turned out to be running an image built on 10 AUGUST. Three and a
+# half weeks of merged, green, reviewed work was not live, and nothing anywhere
+# said so: CI passes on the code, not on the deployment, so a green tick and a
+# merged PR mean the change is CORRECT, never that it is RUNNING.
+#
+# MANUAL ON PURPOSE — it is a button, not a pipeline. `demo-reset.yml` next door
+# records the same judgement after a nightly job deleted a tester's afternoon:
+# automatic is right for something nobody is mid-way through and wrong the
+# moment somebody is. This product prints valuations somebody signs, so which
+# build is live stays a decision. What changes is the COST of that decision: a
+# phone and thirty seconds, rather than one particular desk.
+#
+# To make it automatic instead, add a `workflow_run` trigger on a successful CI
+# run against main. Do that as its own change, with its own reasoning, not as a
+# quiet edit here.
+#
+# SETUP (once):
+#   fly tokens create deploy -a apex-appraise-api    # copy the whole token
+#   fly tokens create deploy -a apex-appraise-web
+# then add the API one as the FLY_API_TOKEN repository secret. One deploy token
+# scoped to both apps is fine too — `fly tokens create org` — but prefer the
+# narrowest that works, since this token can replace what the public is served.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: Which apps to deploy
+        required: true
+        default: both
+        type: choice
+        options: [both, api, web]
+
+# Two deploys of the same app at once leave whichever finishes last serving, and
+# the loser's migrations have already run. One at a time, and never cancel a
+# deploy already in flight — a half-applied release is worse than a late one.
+concurrency:
+  group: deploy-fly
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # main only. A deploy button that can ship any branch is a way to put an
+    # unreviewed commit in front of customers by choosing the wrong dropdown.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # API FIRST, ALWAYS. The web app's nginx proxies /trpc to the API, so
+      # shipping the new front-end first opens a window where it calls
+      # procedures the old API does not have — every data screen fails for
+      # exactly as long as the second deploy takes.
+      - name: Deploy the API
+        if: inputs.apps == 'both' || inputs.apps == 'api'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --remote-only builds on Fly's builders rather than this runner, which
+        # is what the machines then pull. Migrations apply on first boot; that
+        # is why fly.api.toml gives the health check a 90s grace period, and why
+        # this step can sit quiet for a while without being stuck.
+        run: flyctl deploy -c infra/fly.api.toml --remote-only --yes
+
+      - name: Deploy the web app
+        if: inputs.apps == 'both' || inputs.apps == 'web'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy -c infra/fly.web.toml --remote-only --yes
+
+      # A deploy that reported success and left the site refusing requests is
+      # the failure this whole workflow exists to make visible, so ask the
+      # public host rather than trusting the exit code. /login is unauthenticated
+      # and served by nginx, so a 200 proves the web app is up; /ready is
+      # proxied to the API and checks the DATABASE, which is the half a
+      # front-end-only smoke test would miss.
+      - name: Prove it is actually serving
+        run: |
+          set -euo pipefail
+          for path in /login /ready; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 5 \
+              --retry-all-errors "https://apex-appraise-web.fly.dev${path}")
+            echo "${path} -> ${code}"
+            [ "$code" = "200" ] || { echo "::error::${path} answered ${code}, not 200"; exit 1; }
+          done
+
+      - name: Say what is now live
+        run: |
+          echo "### Deployed to Fly.io" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| apps | \`${{ inputs.apps }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| site | https://apex-appraise-web.fly.dev |" >> "$GITHUB_STEP_SUMMARY"
