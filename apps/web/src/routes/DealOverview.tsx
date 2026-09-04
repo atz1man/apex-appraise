@@ -5,6 +5,7 @@ import { trpc } from '../lib/trpc';
 import { fM, formatDelta, formatPct } from '../lib/format';
 import { AssetTag, Avatar, Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, SPARKLE, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
 import { useUnits } from '../lib/region';
+import { loadFailure } from '../lib/load-failure';
 import { CostVarianceStrip, SalesVelocityChart } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 
@@ -66,7 +67,7 @@ export default function DealOverview() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
 
-  const { data: deal, isLoading: dealLoading, error: dealError } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
+  const { data: deal, isLoading: dealLoading, error: dealError, refetch: refetchDeal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: appraisal, isLoading: appraisalLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   const { data: tasks, isLoading: tasksLoading } = trpc.tasks.list.useQuery({ dealId }, { enabled: !!dealId });
   const { data: activity, isLoading: activityLoading } = trpc.documents.activity.useQuery(dealId, { enabled: !!dealId });
@@ -168,12 +169,28 @@ export default function DealOverview() {
   }
 
   if (dealError || !deal) {
+    /**
+     * Says what the client can tell and nothing it cannot. This used to print
+     * "it may have been removed or you may not have access" for EVERY failure,
+     * including an API that never answered — see `lib/load-failure.ts` for
+     * the afternoon that cost. `data-kind` is for the browser suite, which
+     * drives both real paths: a bad id, and an API that does not respond.
+     */
+    const failure = loadFailure(dealError, 'deal');
     return (
       <div className="min-h-screen">
         <TopBar crumb={<span><Link to="/board" className="hover:text-brand-ink">Pipeline</Link> / Deal overview</span>} />
         <main className="max-w-[720px] mx-auto px-4 sm:px-6 py-16">
-          <EmptyState cta={<Link to="/board"><Button variant="secondary">Back to pipeline</Button></Link>}>
-            This deal could not be loaded — it may have been removed or you may not have access.
+          <EmptyState
+            title={failure.title}
+            cta={
+              <div className="flex flex-wrap gap-2 justify-center">
+                {failure.retry && <Button onClick={() => refetchDeal()}>Try again</Button>}
+                <Link to="/board"><Button variant="secondary">Back to pipeline</Button></Link>
+              </div>
+            }
+          >
+            <span data-testid="deal-error" data-kind={failure.kind}>{failure.detail}</span>
           </EmptyState>
         </main>
       </div>

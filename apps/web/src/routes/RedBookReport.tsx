@@ -65,7 +65,7 @@ const fmtLong = docDate;
 function PageHead({ title, right }: { title: string; right: string }) {
   return (
     <div className="flex items-center justify-between border-b border-border-std pb-4">
-      <div className="text-[22px] font-bold" style={{ letterSpacing: '-0.5px' }}>{title}</div>
+      <h2 className="text-[22px] font-bold" style={{ letterSpacing: '-0.5px' }}>{title}</h2>
       <div className="fig text-[11px] font-medium text-ink-3">{right}</div>
     </div>
   );
@@ -489,7 +489,7 @@ export default function RedBookReport() {
               ) : null}
             </div>
             <div className="relative mt-[88px] fig text-[12px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: 'rgba(255,255,255,0.66)' }}>Valuation Report</div>
-            <div className="relative mt-3.5 text-[40px] font-bold leading-[1.08]" style={{ letterSpacing: '-1.4px' }}>{subject}</div>
+            <h1 className="relative mt-3.5 text-[40px] font-bold leading-[1.08]" style={{ letterSpacing: '-1.4px' }}>{subject}</h1>
             <div className="relative mt-1.5 text-[17px]" style={{ color: 'rgba(255,255,255,0.82)' }}>{deal?.address}</div>
             <div className="relative mt-10 inline-flex flex-col gap-1 rounded-[14px]" style={{ padding: '18px 22px', background: 'rgba(255,255,255,0.12)' }}>
               <span className="fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.66)' }}>Market Value</span>

@@ -10,8 +10,32 @@ React app, proxies `/trpc`, `/uploads`, `/reports`, `/webhooks`) → **API** (Fa
 **PostgreSQL 18**. That is what `docker-compose.yml` brings up, and it is what the demo
 instance and CI use.
 
-There is no CD. `ci.yml` runs the tests and stops; every release is a deliberate `fly deploy`
-or `docker compose up -d --build`.
+There is no CD, and a release is still a decision — but it is now a BUTTON rather than a
+command that only one computer can run. `ci.yml` runs the tests and stops; `deploy.yml`
+ships main to Fly on `workflow_dispatch`, from the Actions tab or a phone.
+
+Run it from **Actions → Deploy → Run workflow**, choosing `both`, `api` or `web`. It deploys
+the API before the web app (nginx proxies `/trpc`, so the reverse order breaks every data
+screen for the length of the second deploy), then proves the site is actually serving by
+asking the public host for `/login` and `/ready` — the second is proxied to the API and
+checks the database, which a front-end-only smoke test would miss.
+
+It needs one repository secret, `FLY_API_TOKEN`:
+
+```bash
+fly tokens create deploy -a apex-appraise-api
+```
+
+**Why this exists.** A green CI run and a merged PR mean the code is CORRECT, never that it
+is RUNNING. On 4 September the live API was found to be serving an image built on 10 August
+— three and a half weeks of merged work was not live, and nothing said so, because nothing
+was watching the deployment rather than the code. Setting a secret does not ship code
+either: `fly secrets set` restarts the machine with a new environment, which is why a
+correctly-set Google Maps key changed nothing until the build that had a `/staticmap` route
+in it was deployed.
+
+Deploying by hand still works and is unchanged — **Option B** below for Fly, **Option A**
+for a self-hosted stack:
 
 ## Option A — any Docker VPS (self-hosting, or a second instance)
 

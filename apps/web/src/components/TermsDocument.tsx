@@ -263,7 +263,7 @@ export function TermsDocument({ t, subject, address, postcode, refCode: ref }: T
                   ) : null}
                 </div>
                 <div className="mt-6">
-                  <div className="text-[22px] font-bold" style={{ letterSpacing: '-0.5px' }}>Terms of engagement</div>
+                  <h1 className="text-[22px] font-bold" style={{ letterSpacing: '-0.5px' }}>Terms of engagement</h1>
                   <div className="mt-1 text-[12.5px] text-ink-2">Valuation of {where}</div>
                   <div className="fig mt-2 text-[11px] text-ink-3">
                     Reference {ref}
@@ -279,10 +279,10 @@ export function TermsDocument({ t, subject, address, postcode, refCode: ref }: T
               </>
             ) : (
               <div className="flex items-center justify-between border-b border-border-std pb-4">
-                <div className="text-[16px] font-bold" style={{ letterSpacing: '-0.3px' }}>
+                <h2 className="text-[16px] font-bold" style={{ letterSpacing: '-0.3px' }}>
                   {sheet.kind === 'scope' ? 'Scope of work' : sheet.kind === 'terms' ? 'Terms & acceptance' : 'Terms of engagement'}
                   {!sheet.first ? ' (continued)' : ''}
-                </div>
+                </h2>
                 <div className="fig text-[11px] font-medium text-ink-3">{ref}</div>
               </div>
             )}

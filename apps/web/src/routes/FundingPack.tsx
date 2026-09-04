@@ -207,6 +207,7 @@ export default function FundingPack() {
             <PageHead
               title={pi === 0 ? 'Portfolio funding pack' : `Portfolio funding pack (${pi + 1} of ${total})`}
               scheme={firmName}
+              heading={pi === 0}
             />
 
             {pi === 0 && (

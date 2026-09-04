@@ -8,7 +8,7 @@ declare module '@tanstack/react-query' {
 }
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { titleFor } from './lib/page-title';
+import { frameHeadingFor, titleFor } from './lib/page-title';
 import { shouldInterceptNavigation, unsavedMessage, unsavedWork } from './lib/unsaved';
 import { clearSession, getPrincipal, getToken, makeTrpcClient, trpc } from './lib/trpc';
 import { ToastProvider, toastGlobal } from './components/Toast';
@@ -183,9 +183,13 @@ function PageFrame({ focusedFor, path, children }: { focusedFor: { current: stri
     window.scrollTo(0, 0);
     ref.current?.focus({ preventScroll: true });
   }, [focusedFor, path]);
+  // the screens whose visible title is the breadcrumb get their outline root
+  // here, hidden — see FRAME_HEADING for the measurement that put them there
+  const heading = frameHeadingFor(path);
   return (
     // tabIndex -1: focusable by script and by the skip link, never by Tab
     <div id="page" ref={ref} tabIndex={-1} className="page-enter outline-none">
+      {heading && <h1 className="sr-only">{heading}</h1>}
       {children}
     </div>
   );

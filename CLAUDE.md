@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (258): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (272): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons` and `headings` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings` and `screen-heading` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (174, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (177, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -263,6 +263,24 @@ the point, so read the failure rather than adding an exemption.
   `h2`s and the levels stay contiguous. The rule catches a MISSING level, not a mis-levelled
   section, and no static rule can catch the second — an `h3` under an `h2` is correct and
   beside one is not, and only the rendered nesting says which.
+- `screen-heading` (web suite) — every SCREEN renders an `h1`, its own or the frame's, and
+  never both. Measured in the browser, signed in, over every reachable route: 12 of 25
+  rendered no `h1` at all — the Pipeline board had no heading of any level, and the Red Book
+  valuation (seven sheets) and the client-signed engagement document rendered none either.
+  `headings` could not see it and says why: it checks a file's LEVELS have no gap, and a file
+  with no headings has no gap; and it deliberately does not demand an `h1` per file, since a
+  panel nested in a page is not a page. The missing rule is per SCREEN, so this one reads the
+  route table (route → component → file, unwrapping `<Protected …props>`) and checks both
+  directions against `FRAME_HEADING` in `page-title.ts`: a screen whose file renders no
+  heading must be listed so `PageFrame` supplies one (visually hidden, the tab's name, zero
+  pixels); a listed screen must not also render its own. Documents title themselves —
+  `PageHead heading` on sheet one, the Red Book's cover subject, `TermsDocument` — because the
+  empty funding pack must NOT name itself (a spec pins it). NOT PROVEN statically, and shown
+  by a surviving mutant: a presence check cannot see render branches, and `FundingPack.tsx`
+  carried an `<h1` in its EMPTY state while the populated pack rendered none. Removing the
+  pack's `heading` prop passes this sweep and fails `e2e/headings.spec.ts` on
+  `/portfolio/pack` with "Expected 1, Received 0" — the browser walk is the other half, and
+  it is the half that counts what is rendered.
 - `symbol-buttons` (web suite) — a control whose only label is a symbol has no name.
   `accessible-names` covers what a person TYPES into (`input`, `select`, `textarea`) and says
   nothing about buttons, which had the same defect in disguise: "×" is a text node, so every

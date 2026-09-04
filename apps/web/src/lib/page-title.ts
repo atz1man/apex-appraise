@@ -72,6 +72,55 @@ export const ROUTE_TITLES: Record<string, string> = {
   '*': 'Page not found',
 };
 
+/**
+ * Screens that render no `h1` of their own, so the frame renders one for them —
+ * visually hidden, the same name the tab already shows.
+ *
+ * Measured in the browser before this existed: of 25 reachable screens, TWELVE
+ * rendered no `h1` at all. The Pipeline board had no heading of any level.
+ * Settings, the appraisal, sales and the engagement screen began at `h3`,
+ * because those `h3`s come from the `Panel` primitive and the screen adds
+ * nothing above them. A screen reader's heading list — the main way around an
+ * unfamiliar page — was empty on the product's main working screen.
+ *
+ * `lib/headings.test.ts` could not see it: it checks the LEVELS a file uses
+ * have no gap, and a file using no headings has no gap. It also deliberately
+ * does not demand an `h1` per file, since a panel component nested in a page
+ * is not a page. The rule that was missing is per SCREEN: every route renders
+ * an `h1` by some path. `lib/screen-heading.test.ts` holds it, in both
+ * directions, against the real route table.
+ *
+ * Why hidden rather than visible: these are dense working screens whose visible
+ * title is the breadcrumb in the top bar, and a 32px title above the Pipeline
+ * board is a design change, not an accessibility fix. `sr-only` costs zero
+ * pixels and gives the outline its root — the standard technique (WCAG H42).
+ *
+ * NOT in this set, on purpose: the printed documents. The funding pack must
+ * carry NO "Portfolio funding pack" text in its empty state (a spec pins it —
+ * an empty pack that names itself is a clean bill of health over nothing
+ * examined), so the pack titles sheet one itself, only when there is one.
+ */
+export const FRAME_HEADING = new Set<string>([
+  '/board',
+  '/settings',
+  '/integrations',
+  '/sso/callback',
+  '/deal/:dealId/appraisal',
+  '/deal/:dealId/auto',
+  '/deal/:dealId/comparables',
+  '/deal/:dealId/scenarios',
+  '/deal/:dealId/costs',
+  '/deal/:dealId/sales',
+  '/deal/:dealId/dataroom',
+  '/deal/:dealId/engagement',
+]);
+
+/** The heading the frame renders for this pathname, or null when the screen owns one. */
+export function frameHeadingFor(pathname: string): string | null {
+  const pattern = patternFor(pathname);
+  return FRAME_HEADING.has(pattern) ? (ROUTE_TITLES[pattern] ?? null) : null;
+}
+
 /** Does a concrete pathname sit on this route pattern? `:param` takes one segment. */
 export function matchesPattern(pattern: string, pathname: string): boolean {
   const p = pattern.split('/').filter(Boolean);
