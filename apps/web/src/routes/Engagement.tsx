@@ -104,7 +104,7 @@ export default function Engagement() {
   const [stamp, setStamp] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
   // the tab must not close on unsaved work without a word — see lib/unsaved.ts
-  useUnsavedWarning(dirty);
+  useUnsavedWarning(dirty, 'these terms of engagement');
   const [acceptedBy, setAcceptedBy] = useState('');
 
   useEffect(() => {

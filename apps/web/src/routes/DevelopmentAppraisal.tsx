@@ -224,7 +224,7 @@ export default function DevelopmentAppraisal() {
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
   // the tab must not close on unsaved work without a word — see lib/unsaved.ts
-  useUnsavedWarning(dirty);
+  useUnsavedWarning(dirty, 'this appraisal');
 
   useEffect(() => {
     if (saved) setHeldVersion(saved.updatedAt);

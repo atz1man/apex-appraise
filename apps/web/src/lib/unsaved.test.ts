@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { shouldInterceptNavigation, unsavedMessage } from './unsaved';
 
 /**
  * A screen that KNOWS its work is unsaved says so before the tab closes.
@@ -70,5 +71,90 @@ describe('screens holding unsaved work', () => {
   it('does not sweep in a derived dirty flag', () => {
     expect(TRACKED_DIRTY.test("const dirty = draft.trim() !== org.name;")).toBe(false);
     expect(TRACKED_DIRTY.test("const [dirty, setDirty] = useState(false);")).toBe(true);
+  });
+});
+
+/**
+ * The click decision, at its boundaries.
+ *
+ * Every `false` here is a click that does NOT take the person off the screen,
+ * so interrupting them would be a prompt for nothing — and a product that
+ * prompts for nothing is one whose prompts get dismissed unread. That failure
+ * mode is worse than the defect this whole file exists to fix, because it
+ * disarms the prompt on the occasion that matters.
+ */
+const click = (over: Partial<Parameters<typeof shouldInterceptNavigation>[0]> = {}) =>
+  shouldInterceptNavigation({
+    dirty: true,
+    button: 0,
+    modifier: false,
+    defaultPrevented: false,
+    href: '/board',
+    target: null,
+    download: false,
+    currentPath: '/deal/d1/appraisal',
+    ...over,
+  });
+
+describe('shouldInterceptNavigation', () => {
+  it('stops a plain left-click on an in-app link while work is unsaved', () => {
+    expect(click()).toBe(true);
+  });
+
+  it('lets everything through when nothing is unsaved', () => {
+    expect(click({ dirty: false })).toBe(false);
+  });
+
+  /** A new tab leaves this one — and its unsaved work — exactly where it is. */
+  it('leaves a middle-click or a modified click alone', () => {
+    expect(click({ button: 1 })).toBe(false);
+    expect(click({ button: 2 })).toBe(false);
+    expect(click({ modifier: true })).toBe(false);
+  });
+
+  it('does not fight a handler that has already cancelled the click', () => {
+    expect(click({ defaultPrevented: true })).toBe(false);
+  });
+
+  it('ignores a click that is not on a link at all', () => {
+    expect(click({ href: null })).toBe(false);
+  });
+
+  /**
+   * An absolute URL is leaving the application, where `beforeunload` takes
+   * over and gives the browser's own prompt. Two prompts for one departure is
+   * worse than one.
+   */
+  it('leaves an external link to beforeunload', () => {
+    expect(click({ href: 'https://example.com' })).toBe(false);
+    expect(click({ href: 'mailto:someone@example.com' })).toBe(false);
+  });
+
+  /** The skip link — `#page` — moves focus and changes no route. */
+  it('does not prompt on a fragment link', () => {
+    expect(click({ href: '#page' })).toBe(false);
+  });
+
+  it('does not prompt on a new-tab link or a download', () => {
+    expect(click({ target: '_blank' })).toBe(false);
+    expect(click({ download: true })).toBe(false);
+    // `_self` is the default written out, and does navigate here
+    expect(click({ target: '_self' })).toBe(true);
+  });
+
+  it('does not prompt for the screen you are already on', () => {
+    expect(click({ href: '/deal/d1/appraisal' })).toBe(false);
+  });
+});
+
+describe('unsavedMessage', () => {
+  /**
+   * The sentence names the work. "Your changes" would be true of every screen
+   * and useful on none — somebody deciding whether to throw away half an hour
+   * should be told half an hour of what.
+   */
+  it('names what is at stake', () => {
+    expect(unsavedMessage('this appraisal')).toContain('this appraisal');
+    expect(unsavedMessage('these terms of engagement')).toContain('these terms of engagement');
   });
 });

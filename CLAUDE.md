@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (235): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (245): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements` and `symbol-buttons` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (171, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (174, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -278,11 +278,20 @@ the point, so read the failure rather than adding an exemption.
   comparing one field to the saved organisation name, which is not work, and computes it
   below that panel's loading return where a hook could not go anyway. What `useUnsavedWarning`
   does NOT cover is the commoner case, clicking a link inside the app: `beforeunload` does not
-  fire for that. The reason the document-level click interceptor is not here is measured
-  rather than assumed — Playwright DISMISSES a dialog by default and NO spec in this suite
-  registers a handler, so every existing spec that edits one of these screens and then
-  navigates would silently stay put; `screens.spec.ts` alone holds 49 fills and 163
-  navigations. And the tempting alternative — keep the draft, restore it later — is worse
+  fire for that, so it is blocked by a document-level click interceptor instead — React
+  Router's `useBlocker` needs a data router and this app mounts `<BrowserRouter>`. The
+  interceptor was deferred once, on the grounds that Playwright DISMISSES a dialog by default
+  and no spec in this suite registers a handler, so any spec that edited one of these screens
+  and then clicked away would silently stay put. The audit that claim owed has been run and
+  the answer is ZERO: every spec leaves those three screens with `page.goto`, which is a real
+  navigation and not a click. The caution was right and the number was cheap — the scan that
+  produced it is in the commit, verified against a planted case, and its three over-broad hits
+  were all state carried across test boundaries. `shouldInterceptNavigation` holds the
+  decision as a pure predicate: everything it refuses is a click that does NOT take the person
+  off the screen — a middle click, a ⌘-click, an external URL, a download, the skip link's
+  `#page`, a link to the page they are already on — because a product that prompts for nothing
+  teaches people to dismiss prompts unread, which disarms it on the one occasion it matters.
+  And the tempting alternative — keep the draft, restore it later — is worse
   rather than merely bigger: silently putting a valuer's abandoned inputs back into an
   appraisal means a figure nobody chose to enter can end up under a signature.
 - `destructive` (web suite) — nothing this product destroys goes on one click. Measured over

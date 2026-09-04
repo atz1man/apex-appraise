@@ -36,7 +36,7 @@ export default function Workbench() {
   const [hydrated, setHydrated] = useState(false);
   const [dirty, setDirty] = useState(false);
   // the tab must not close on unsaved work without a word — see lib/unsaved.ts
-  useUnsavedWarning(dirty);
+  useUnsavedWarning(dirty, 'this valuation');
 
   const nia = appraisal?.result.nia ?? 0;
   const comps = compsData?.comps ?? [];
