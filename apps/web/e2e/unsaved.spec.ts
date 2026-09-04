@@ -30,11 +30,17 @@ async function openDirtyAppraisal(page: Page) {
   });
 
   await page.goto(`/deal/${id}/appraisal`);
+  // the link this file clicks lives in the sticky global nav, which the header
+  // hides below 1400px on purpose — assert it is there rather than discovering
+  // it is not through a timeout on the click
+  await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
   await page.getByRole('button', { name: 'Finance', exact: true }).click();
   const rate = page.getByLabel('Mezzanine rate');
   await expect(rate).toBeVisible();
 
   const save = page.getByRole('button', { name: /^Save appraisal$|^Saved$/ }).last();
+  // and that it opens CLEAN, or "became dirty" below proves nothing
+  await expect(save, 'the fixture did not open on a saved appraisal').toHaveText('Saved');
   // alternated, not fixed: re-typing the same value is no change and the
   // screen never becomes dirty, so a second run would test nothing
   const before = await rate.inputValue();
@@ -87,6 +93,8 @@ test('a clean appraisal is never interrupted', async ({ page }) => {
   });
   await page.goto(`/deal/${id}/appraisal`);
   await expect(page.getByRole('navigation', { name: 'Global' })).toBeVisible();
+  // the premise, stated rather than assumed: this screen holds no unsaved work
+  await expect(page.getByRole('button', { name: /^Save appraisal$|^Saved$/ }).last()).toHaveText('Saved');
 
   // nothing typed, so nothing to lose — and the dialog stays dismissed, which
   // would keep us here if the guard fired
