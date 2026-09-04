@@ -39,6 +39,15 @@ import { describe, expect, it } from 'vitest';
  * the time gets an exemption list and then gets ignored. Catching the whole gap
  * is the claim; a third heading in the wrong place is for an axe pass over the
  * rendered tree.
+ *
+ * ALSO NOT SEEN HERE, by the same limit: the level a `Panel` renders. Its
+ * title is a heading in `components/ui.tsx`, at the `level` its caller passes
+ * (default 3), so a route file that passes `level={2}` to every panel has no
+ * literal `<h2` in it and its per-file view here is unchanged. That is the
+ * rule staying narrow rather than a gap in it — matching `level={…}` would be
+ * this sweep guessing at rendered nesting, which is the thing it says it
+ * cannot do. The rendered order is proved in `e2e/headings.spec.ts`, through
+ * `lib/outline.ts`.
  */
 
 const ROUTES = join(__dirname, '..', 'routes');

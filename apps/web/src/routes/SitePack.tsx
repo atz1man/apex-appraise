@@ -255,7 +255,7 @@ export default function SitePack() {
 
             <div className="mt-5 grid gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
               {/* sold prices */}
-              <Panel
+              <Panel level={2}
                 title="Sold prices — HM Land Registry"
                 right={
                   <Button writes
@@ -336,7 +336,7 @@ export default function SitePack() {
 
               {/* right rail: map + constraints + EPC */}
               <div className="flex flex-col gap-4">
-                <Panel title="Location of evidence">
+                <Panel level={2} title="Location of evidence">
                   <SiteMap
                     height={260}
                     pins={[
@@ -359,7 +359,7 @@ export default function SitePack() {
                   </div>
                 </Panel>
 
-                <Panel title="Planning constraints">
+                <Panel level={2} title="Planning constraints">
                   {ok.constraints.status !== 'ok' ? (
                     <EmptyState>planning.data.gov.uk is unreachable right now.</EmptyState>
                   ) : ok.constraints.hits.length === 0 ? (
@@ -394,7 +394,7 @@ export default function SitePack() {
                   </div>
                 </Panel>
 
-                <Panel title="EPC register" right={<StatusChip status={ok.epc.status === 'ok' ? 'green' : 'neutral'} label={ok.epc.status === 'ok' ? 'LIVE' : 'NOT CONFIGURED'} />}>
+                <Panel level={2} title="EPC register" right={<StatusChip status={ok.epc.status === 'ok' ? 'green' : 'neutral'} label={ok.epc.status === 'ok' ? 'LIVE' : 'NOT CONFIGURED'} />}>
                   {ok.epc.status === 'ok' ? (
                     ok.epc.records.length === 0 ? (
                       <EmptyState>No EPC records for {ok.geo.postcode}.</EmptyState>
@@ -430,7 +430,7 @@ export default function SitePack() {
                   "not checked" are the same picture and opposite facts, on the
                   panel a valuer would quote to a lender.
                 */}
-                <Panel
+                <Panel level={2}
                   title="Live flood warnings"
                   right={
                     <StatusChip
@@ -469,7 +469,7 @@ export default function SitePack() {
                   </div>
                 </Panel>
 
-                <Panel title="Walkable amenities · 800m">
+                <Panel level={2} title="Walkable amenities · 800m">
                   {ok.amenities.status !== 'ok' ? (
                     <div className="text-[11.5px] text-ink-3">{stateNote(ok.amenities.status, 'The OpenStreetMap amenity lookup')}</div>
                   ) : ok.amenities.items.length === 0 ? (
@@ -503,7 +503,7 @@ export default function SitePack() {
                   </div>
                 </Panel>
 
-                <Panel title="Counterparty check" right={<StatusChip status={companySearch.data?.status === 'not-configured' ? 'neutral' : 'green'} label={companySearch.data?.status === 'not-configured' ? 'KEY NEEDED' : 'COMPANIES HOUSE'} />}>
+                <Panel level={2} title="Counterparty check" right={<StatusChip status={companySearch.data?.status === 'not-configured' ? 'neutral' : 'green'} label={companySearch.data?.status === 'not-configured' ? 'KEY NEEDED' : 'COMPANIES HOUSE'} />}>
                   <div className="flex gap-2">
                     <input
                       className="flex-1 min-w-0"

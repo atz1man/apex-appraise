@@ -57,7 +57,7 @@ export function ApiKeysPanel({ isAdmin }: { isAdmin: boolean }) {
   if (!isAdmin) return null;
 
   return (
-    <Panel title="API keys" right={<StatusChip status={keys?.some((k) => k.live) ? 'green' : 'neutral'} label={`${keys?.filter((k) => k.live).length ?? 0} live`} />}>
+    <Panel level={2} title="API keys" right={<StatusChip status={keys?.some((k) => k.live) ? 'green' : 'neutral'} label={`${keys?.filter((k) => k.live).length ?? 0} live`} />}>
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         For your own systems to read this workspace. A key belongs to the firm rather than to a person, so an integration
         keeps working after whoever set it up has moved on.{' '}
@@ -216,7 +216,7 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
     setChosen((prev) => (prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]));
 
   return (
-    <Panel title="Webhooks" right={<StatusChip status={live ? 'green' : 'neutral'} label={`${live} active`} />}>
+    <Panel level={2} title="Webhooks" right={<StatusChip status={live ? 'green' : 'neutral'} label={`${live} active`} />}>
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         A POST to your server when something happens here — an appraisal approved, a covenant broken. Each delivery is
         signed, so you can tell it came from us and was not altered: the <code className="fig text-[11.5px]">apex-signature</code>{' '}
@@ -396,7 +396,7 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
   if (!isAdmin) return null;
 
   return (
-    <Panel
+    <Panel level={2}
       title="Xero"
       right={
         status?.connected ? (
@@ -580,7 +580,7 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
   const domains = form.domains.split(',').map((d) => d.trim()).filter(Boolean);
 
   return (
-    <Panel
+    <Panel level={2}
       title="Single sign-on"
       right={sso ? <StatusChip status={sso.enforced ? 'green' : 'amber'} label={sso.enforced ? 'REQUIRED' : 'OPTIONAL'} /> : undefined}
     >
@@ -741,7 +741,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
   const consentSoon = (status?.consentDaysLeft ?? 99) <= 14;
 
   return (
-    <Panel
+    <Panel level={2}
       title="Bank feed"
       right={
         status?.connected ? (

@@ -397,7 +397,7 @@ export default function CostMonitoring() {
 
         <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
           {/* Cost report */}
-          <Panel title="Cost report — packages & contractors" right={<span className="text-[11.5px] text-ink-3">Forecast vs package budget</span>}>
+          <Panel level={2} title="Cost report — packages & contractors" right={<span className="text-[11.5px] text-ink-3">Forecast vs package budget</span>}>
             {packages.length === 0 ? (
               <EmptyState>No cost packages for this deal yet — packages appear once the build cost plan is broken out.</EmptyState>
             ) : (
@@ -485,7 +485,7 @@ export default function CostMonitoring() {
 
           {/* side rail */}
           <aside className="flex flex-col gap-4">
-            <Panel title="Programme & drawdown">
+            <Panel level={2} title="Programme & drawdown">
               {packages.length === 0 ? (
                 <EmptyState>Nothing to draw down yet.</EmptyState>
               ) : (
@@ -544,7 +544,7 @@ export default function CostMonitoring() {
               )}
             </Panel>
 
-            <Panel title="Variance alerts">
+            <Panel level={2} title="Variance alerts">
               {overs.length === 0 ? (
                 <EmptyState>No packages forecast over budget.</EmptyState>
               ) : (
