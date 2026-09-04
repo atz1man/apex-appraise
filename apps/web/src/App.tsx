@@ -137,18 +137,52 @@ function Protected({ children, portal }: { children: JSX.Element; portal?: 'buye
  * by `App`, because this component is remounted by its key and cannot remember
  * anything itself — which is the same property that makes it work.
  */
-function PageFrame({ first, children }: { first: { current: boolean }; children: ReactNode }) {
+/**
+ * Keyed on the pathname, so it mounts once per navigation and its mount effect
+ * is what moves the person to the new screen.
+ *
+ * It remembers the path it last moved focus FOR, rather than counting mounts.
+ * Counting was the first attempt and it was wrong in a way only development
+ * showed: the guard was a boolean consumed on mount, and `React.StrictMode`
+ * deliberately invokes a mount effect twice. The first run spent the guard and
+ * returned; the second saw it spent and focused. So on a FRESH DOCUMENT in dev,
+ * focus landed on `#page` — which sits after the skip link — and the skip link
+ * became unreachable by the first Tab. WCAG 2.4.1, failing in development only,
+ * which is the half a developer testing with a keyboard actually uses.
+ *
+ * Production was unaffected (StrictMode double-invokes in dev alone) and that is
+ * the trap: `e2e/navigation.spec.ts` runs against the built app and passed
+ * throughout. A guard that only holds in one build mode is not a guard, and the
+ * double invocation is React telling you so — an effect has to survive being
+ * mounted, torn down and mounted again.
+ *
+ * Remembering the path survives it: the second invocation sees the path it just
+ * handled and does nothing, while a real navigation always brings a new one.
+ * The first page of a document is still left alone deliberately — the browser
+ * has already put focus at the top, which is where the skip link is.
+ *
+ * NOT PROVEN BY CI, and worth knowing before trusting a green build here. Both
+ * halves were mutation-tested and both are killed by the skip-link spec — but
+ * only when that spec runs against the DEV server, because StrictMode's double
+ * invocation is a development behaviour and CI drives the built app behind
+ * nginx. Removing the remount guard is therefore invisible to CI and visible
+ * the moment somebody runs the suite locally against `pnpm dev`. Removing the
+ * first-page guard breaks both builds and CI does catch that one.
+ */
+function PageFrame({ focusedFor, path, children }: { focusedFor: { current: string | null }; path: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
+    // the document's own first page: leave the browser's focus where it is
+    if (focusedFor.current === null) {
+      focusedFor.current = path;
       return;
     }
+    // already moved for this navigation — a remount, not a new screen
+    if (focusedFor.current === path) return;
+    focusedFor.current = path;
     window.scrollTo(0, 0);
     ref.current?.focus({ preventScroll: true });
-    // mount only: the `key` on this component is what makes that per-navigation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [focusedFor, path]);
   return (
     // tabIndex -1: focusable by script and by the skip link, never by Tab
     <div id="page" ref={ref} tabIndex={-1} className="page-enter outline-none">
@@ -247,7 +281,7 @@ export default function App() {
    * fact about the URL. The scroll and the focus do need it, and that
    * distinction is the whole reason they are no longer in this effect.
    */
-  const firstPage = useRef(true);
+  const focusedFor = useRef<string | null>(null);
   useEffect(() => {
     document.title = titleFor(location.pathname);
   }, [location.pathname]);
@@ -328,7 +362,7 @@ export default function App() {
         {/* a render fault must not leave a blank page — see ErrorBoundary */}
         <ErrorBoundary>
         <Suspense fallback={<Splash />}>
-        <PageFrame key={location.pathname} first={firstPage}>
+        <PageFrame key={location.pathname} path={location.pathname} focusedFor={focusedFor}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

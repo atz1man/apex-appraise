@@ -543,6 +543,14 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   Do not run `playwright install`.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
+- CI drives the BUILT app behind nginx, so `React.StrictMode` is not in play there and a
+  defect that only StrictMode's double-invoked mount effect exposes is invisible to a green
+  build. One real instance: `PageFrame`'s "is this the first page?" guard was a boolean
+  consumed on mount, so in DEV the first invocation spent it and the second focused `#page`
+  anyway — putting focus after the skip link on a fresh document and failing WCAG 2.4.1 in
+  the half a developer actually uses. Any effect guard that must run once has to survive
+  being mounted, torn down and mounted again; key on a VALUE (the pathname it acted for),
+  never on a count. Run the browser suite against `pnpm dev` occasionally for exactly this.
 - `playwright.config.ts` sets `actionTimeout`/`navigationTimeout` ON PURPOSE. Without them an
   action is bounded only by the TEST's budget, so a timeout names whichever action was in
   flight when the budget expired rather than the one that hung — which is how the funding
