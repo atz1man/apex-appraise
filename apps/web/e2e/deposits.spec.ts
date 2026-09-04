@@ -39,7 +39,17 @@ test('the deposit held equals the receipts the buyer can see', async ({ page }) 
   // schedule that says nothing has been received
   const payments = page.locator('section', { has: page.getByRole('heading', { name: 'Payments' }) });
   await expect(payments).toBeVisible();
-  const rows = payments.locator('h3 + div > div');
+  /**
+   * By name, not by shape. This used to be `h3 + div > div` — the rows are
+   * whatever sits after the heading — and it returned nothing the moment that
+   * heading became an `h2`, which it had to: the buyer portal had a single `h1`
+   * and then every section marked `h3`, so its outline could not be navigated.
+   *
+   * A selector coupled to a heading LEVEL is coupled to a presentational
+   * decision, and swapping it for one coupled to div nesting would only move
+   * the coupling. The container says what it is now.
+   */
+  const rows = payments.getByTestId('payment-rows').locator('> div');
   const count = await rows.count();
   expect(count, 'the fixture should have payment rows to compare against').toBeGreaterThan(0);
 

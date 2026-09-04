@@ -312,7 +312,10 @@ export default function BuyerPortal() {
                 {/* payments */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-[22px]">
                   <h2 className="text-[15px] font-semibold">Payments</h2>
-                  <div className="mt-2 flex flex-col">
+                  {/* named for the spec that totals these against "Deposit held";
+                      it used to be found as "the div after the h3", which broke
+                      the moment the heading became an h2 */}
+                  <div data-testid="payment-rows" className="mt-2 flex flex-col">
                     {data.payments.map((p) => (
                       <div key={p.id} className="flex items-center gap-3 py-2.5 border-b border-border-faint last:border-b-0">
                         <div className="flex-1 min-w-0">
