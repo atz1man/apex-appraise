@@ -128,7 +128,16 @@ export function googleStaticMapUrl(req: StaticMapRequest, key = KEY): string {
 
   const subject = req.markers.filter((m) => m.subject);
   const comps = req.markers.filter((m) => !m.subject);
-  // the subject reads as the destination, the comparables as evidence around it
+  /**
+   * The subject reads as the destination, the comparables as evidence around it.
+   *
+   * These two are `brandInk` (#14503B) and the accent (#3FD894) from
+   * `@apex/ui-tokens`, written out because the API does not depend on that
+   * package and should not start doing so for two colours. That makes them a
+   * DUPLICATE of the design tokens, which is worth saying out loud: change the
+   * brand ramp and these do not follow, and the pins on a printed valuation
+   * would quietly stop matching the pins everywhere else in the product.
+   */
   if (subject.length) {
     params.append('markers', `color:0x14503b|label:S|${subject.map((m) => `${m.lat},${m.lng}`).join('|')}`);
   }
