@@ -8,6 +8,7 @@ import { registerHealth } from '../src/health.js';
 import { registerPublicApi } from '../src/public-api.js';
 import { registerReports } from '../src/reports.js';
 import { registerTiles } from '../src/tiles.js';
+import { registerStaticMap } from '../src/staticmap.js';
 import { registerUploads } from '../src/uploads.js';
 import { registerWebhooks } from '../src/webhooks.js';
 
@@ -51,6 +52,7 @@ async function realRoutes(): Promise<RawRoute[]> {
   await registerUploads(app);
   registerReports(app);
   registerTiles(app);
+  registerStaticMap(app);
   registerWebhooks(app);
   registerPublicApi(app);
   registerAdmin(app);

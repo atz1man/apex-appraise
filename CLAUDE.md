@@ -100,7 +100,19 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 - NOTHING is loaded from a third party by the browser — typefaces, icons, scripts and map
   tiles are all served by this app; open data and tiles are fetched server-side. The only
   exception is Stripe's payment form, which must see a card number. `e2e/third-party.spec.ts`
-  fails the build if a page contacts anyone else.
+  fails the build if a page contacts anyone else. This is also why the maps are GOOGLE STATIC
+  MAPS and not Google's JavaScript API: the interactive API has to load in the page, phones
+  home on its own and may not be proxied, so adopting it would hand Google the IP address of
+  every valuer and the coordinates of every site they open. The Static Maps API answers one
+  image to one GET, so `apps/api/src/staticmap.ts` fetches it exactly as `tiles.ts` fetches a
+  tile — signed with an HMAC over the request path, using a secret decoded from base64url to
+  BYTES (signing with the printable form yields a plausible signature Google answers 403 to,
+  and a test that only checked a signature was PRESENT passed that mutation). The key and the
+  secret never reach a browser; nothing is passed through from the caller's query string,
+  because a signed relay is worse than an unsigned one — it looks like ours. With no
+  `GOOGLE_MAPS_API_KEY` the route answers 404, `org.mapConfig` advertises `staticMapUrl: null`
+  and `SiteMap` falls back to the tile map: that fallback is the DEFAULT path, not the unhappy
+  one, since the public demo has no Google account and CI has no key.
 - Provenance on every figure (extraction citations, audit events).
 - A report names a valuer ONLY from saved terms of engagement (`web/src/lib/valuer.ts`).
   `engagement.get` answers an unsaved draft prefilled with the signed-in user and the firm's

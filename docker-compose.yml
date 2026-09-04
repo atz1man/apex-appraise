@@ -81,6 +81,12 @@ services:
       TILE_URL: ${TILE_URL:-}
       TILE_ATTRIBUTION: ${TILE_ATTRIBUTION:-}
       TILE_USER_AGENT: ${TILE_USER_AGENT:-}
+      # Google Static Maps. Both are read SERVER-side and never reach a browser;
+      # without the key the app falls back to the tile map, which is what the
+      # public demo and CI run on. Restrict the key by IP (this server), not by
+      # HTTP referrer — nothing referring to it is a browser.
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      GOOGLE_MAPS_SIGNING_SECRET: ${GOOGLE_MAPS_SIGNING_SECRET:-}
     restart: unless-stopped
     depends_on:
       db:

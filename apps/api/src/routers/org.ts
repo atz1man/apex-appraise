@@ -18,6 +18,7 @@ import { sealFor } from '../sealed-fields.js';
 import { signDownloadToken } from '../download-token.js';
 import { OutboundUrlError, assertPublicHttpsUrl } from '../outbound.js';
 import { TILE_ATTRIBUTION } from '../tiles.js';
+import { GOOGLE_ATTRIBUTION, staticMapsEnabled } from '../staticmap.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
 import { recordAudit } from '../audit.js';
@@ -67,11 +68,24 @@ export const orgRouter = router({
    * pointed it at. The token is what lets an <img> load a tile at all; see
    * download-token.ts for why the credential travels in the URL.
    */
-  mapConfig: internalProcedure.query(({ ctx }) => ({
-    tileUrl: `/tiles/{z}/{x}/{y}.png?t=${encodeURIComponent(signDownloadToken({ sub: ctx.principal.userId, kind: 'tiles' }))}`,
-    attribution: TILE_ATTRIBUTION,
-    maxZoom: 19,
-  })),
+  mapConfig: internalProcedure.query(({ ctx }) => {
+    // one token, both surfaces: a static map and a tile are the same claim —
+    // "someone signed in is looking at a map" — and minting two would say more
+    const t = encodeURIComponent(signDownloadToken({ sub: ctx.principal.userId, kind: 'tiles' }));
+    return {
+      tileUrl: `/tiles/{z}/{x}/{y}.png?t=${t}`,
+      attribution: TILE_ATTRIBUTION,
+      maxZoom: 19,
+      /**
+       * Null when no Google key is configured, and the browser reads that as
+       * "use the tile map". It is what keeps the public demo, a workspace with
+       * no Google account, and CI on a working map rather than an empty box —
+       * so the fallback is the DEFAULT path, not the unhappy one.
+       */
+      staticMapUrl: staticMapsEnabled() ? `/staticmap?t=${t}` : null,
+      staticMapAttribution: staticMapsEnabled() ? GOOGLE_ATTRIBUTION : null,
+    };
+  }),
 
   /**
    * The demo mailbox: what would have been emailed, when no SMTP is configured.
