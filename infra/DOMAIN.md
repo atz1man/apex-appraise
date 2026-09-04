@@ -1,8 +1,21 @@
 # Custom domain — 5-minute wire-up
 
+**Apex Appraise runs on Fly.io.** That is the live production host, not a plan
+or an option: two apps in `lhr` (London) —
+
+| app | role |
+|---|---|
+| `apex-appraise-web` | the front door, and the only one on the public internet — serves the built React app and proxies `/trpc`, `/uploads`, `/reports`, `/webhooks` |
+| `apex-appraise-api` | Fastify + tRPC, **flycast-only**: reachable from the web app over Fly's private network and from nowhere else |
+
+It serves today at https://apex-appraise-web.fly.dev. Both apps run
+`auto_stop_machines = "stop"`, so they scale to zero and cold-start on the first
+request — a few seconds of latency on a sleeping instance is expected, not a
+fault. Configuration lives in [`fly.api.toml`](fly.api.toml) and
+[`fly.web.toml`](fly.web.toml); how to deploy is in [`DEPLOY.md`](DEPLOY.md).
+
 Once a domain is owned (e.g. `apexappraise.co.uk`), pointing the live app at it
-takes one cert command and two DNS records. The app currently serves at
-https://apex-appraise-web.fly.dev.
+takes one cert command and two DNS records.
 
 ## 1. Issue the certificate
 

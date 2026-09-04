@@ -1,9 +1,19 @@
 # Deploying Apex Appraise
 
-The production build is a validated three-container stack: **nginx web** (static React app,
-proxies `/trpc`, `/uploads`, `/reports`, `/webhooks`) → **API** (Fastify + tRPC) → **PostgreSQL 16**.
+**Production runs on Fly.io** — two apps in `lhr`, `apex-appraise-web` (public) and
+`apex-appraise-api` (flycast-only), serving at https://apex-appraise-web.fly.dev. See
+[`DOMAIN.md`](DOMAIN.md) for the app layout and how to put a custom domain in front of it,
+and **Option B** below for the deploy commands.
 
-## Option A — any Docker VPS (recommended, works today)
+The same build also runs as a self-contained three-container stack: **nginx web** (static
+React app, proxies `/trpc`, `/uploads`, `/reports`, `/webhooks`) → **API** (Fastify + tRPC) →
+**PostgreSQL 18**. That is what `docker-compose.yml` brings up, and it is what the demo
+instance and CI use.
+
+There is no CD. `ci.yml` runs the tests and stops; every release is a deliberate `fly deploy`
+or `docker compose up -d --build`.
+
+## Option A — any Docker VPS (self-hosting, or a second instance)
 
 Tested end-to-end on this stack. On a fresh Ubuntu/Debian VPS (Hetzner, DigitalOcean, Lightsail…):
 
@@ -84,12 +94,36 @@ refuses and points you at manual entry instead.
 
 Set `DEMO_MODE=1` only if this deployment IS the demo.
 
-### Map tiles need a decision before you sell this
+### Maps: Google imagery if configured, tiles otherwise — and one decision left
 
-Tiles are fetched and re-served by the API, never by the visitor's browser, so no mapping
-provider learns who your valuers are or which sites they opened. That part is settled.
+Nothing about the map is fetched by the visitor's browser. Whichever source is in use, the
+API fetches it and re-serves it, so no mapping provider learns who your valuers are or which
+sites they opened. That part is settled, and `e2e/third-party.spec.ts` keeps it settled.
 
-What is **not** settled is where the tiles come from. Unset, `TILE_URL` points at
+**With a Google key set**, every map in the product — Site Pack, Comparables and the Red
+Book — is a Google Static Map with aerial imagery:
+
+```bash
+GOOGLE_MAPS_API_KEY=...          # restrict to the Maps Static API, and by IP (this server)
+GOOGLE_MAPS_SIGNING_SECRET=...   # optional; raises the unsigned request limit
+```
+
+Restrict that key **by IP address, not by HTTP referrer** — nothing referring to it is a
+browser. Neither value ever reaches a page; the API signs each request with an HMAC and
+fetches the image itself. Google's interactive JavaScript API is deliberately not used: it
+must load in the page and may not be proxied, which would put every valuer's IP address and
+every site's coordinates in front of Google. See `apps/api/src/staticmap.ts`.
+
+Two things to confirm before this carries paying customers: that Google's current terms
+permit the bounded in-memory cache the proxy keeps (same shape as the tile cache), and what
+Static Maps costs at your volume.
+
+**Without a key** — the public demo, CI, and any workspace with no Google account — the app
+falls back to the Leaflet tile map. That fallback is the default path rather than the unhappy
+one, and it is the path the whole browser suite exercises.
+
+Which leaves the tile question still open, for the fallback. What is **not** settled is where
+the tiles come from. Unset, `TILE_URL` points at
 OpenStreetMap's public tile servers, which are donation-funded and whose usage policy
 forbids heavy use by a distributed application without prior permission from the Operations
 Working Group. That default is right for local development and a demo; it is **not** a
@@ -120,18 +154,39 @@ For a demo instance specifically — which switches this on deliberately, alongs
 `DEMO_MODE=1` — see [`infra/DEMO.md`](DEMO.md), and hand the tester
 [`docs/DEMO-WALKTHROUGH.md`](../docs/DEMO-WALKTHROUGH.md).
 
-## Option B — Fly.io (sketch)
+## Option B — Fly.io (the live deployment)
+
+The apps already exist, and their configuration is committed:
+[`fly.api.toml`](fly.api.toml) and [`fly.web.toml`](fly.web.toml). Deploying a release is
+two commands:
 
 ```bash
-fly auth login
-fly postgres create --name apex-db --region lhr
-fly launch --dockerfile infra/api.Dockerfile --name apex-api --region lhr --no-deploy
-fly postgres attach apex-db -a apex-api          # sets DATABASE_URL
-fly secrets set -a apex-api JWT_SECRET=$(openssl rand -hex 32)
-fly deploy -a apex-api
-# web: build with VITE pointing at the api host, or run the web image with the nginx
-# upstream env pointed at apex-api.internal:4100 (see infra/web.Dockerfile).
+fly auth login                       # once per machine
+fly deploy -c infra/fly.api.toml
+fly deploy -c infra/fly.web.toml
 ```
+
+The API applies migrations on boot (`infra/entrypoint.sh`), so a schema change lands with
+the deploy rather than needing a separate step.
+
+Secrets are set on the app, never committed:
+
+```bash
+fly secrets set -a apex-appraise-api JWT_SECRET=... ENCRYPTION_KEY=... ANTHROPIC_API_KEY=...
+fly secrets list -a apex-appraise-api
+```
+
+For the ORIGINAL creation of the pair — which has already happened and is recorded here so
+the layout is reproducible, not as a step to run:
+
+```bash
+fly postgres create --name apex-appraise-db --region lhr
+fly postgres attach apex-appraise-db -a apex-appraise-api    # sets DATABASE_URL
+```
+
+The web app reaches the API over Fly's private network at `apex-appraise-api.internal:4100`;
+see `infra/web.Dockerfile` for the nginx upstream. That is why the API app publishes no
+public address, and why the `demo-reset` workflow curls the WEB host rather than the API.
 
 ## Stripe webhook
 
@@ -225,9 +280,10 @@ Everything below is already built and exercised in demo/sandbox mode. Each item 
 a credential or a decision, and the product states honestly what it cannot do
 until each one is supplied — it does not pretend.
 
-### 1. Deploy (blocked today)
+### 1. Deploy — done, and this is how each release goes out
 
-`flyctl auth login` on this machine, then:
+Fly is live. Nothing here is blocked; what follows is the release procedure rather than a
+first-time setup. `flyctl auth login` once on the machine you deploy from, then:
 
 ```bash
 fly deploy -c infra/fly.api.toml
