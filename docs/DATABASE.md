@@ -4,7 +4,7 @@
 
 | | local dev | CI | production |
 |---|---|---|---|
-| engine | SQLite (`file:./dev.db`) | PostgreSQL 16 | PostgreSQL (Fly) |
+| engine | SQLite (`file:./dev.db`) | PostgreSQL 18 | PostgreSQL (Fly) |
 | datasource in `schema.prisma` | `sqlite` (committed) | rewritten by `sed` | rewritten by `sed` |
 | how the schema is applied | `prisma db push` | `prisma migrate deploy` | `prisma migrate deploy` |
 

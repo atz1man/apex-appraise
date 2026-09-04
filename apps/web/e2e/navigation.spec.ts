@@ -137,9 +137,20 @@ test('and puts keyboard focus there too', async ({ page }) => {
   await loginInternal(page);
   await page.getByRole('link', { name: /Comparables/ }).first().click();
   await expect(page).toHaveTitle('Comparables · Apex Appraise');
-  // focus follows the person to the new screen; without this the next Tab
-  // resumes from a link that no longer exists and a screen reader says nothing
-  expect(await page.evaluate(() => document.activeElement?.id)).toBe('page');
+  /**
+   * Focus follows the person to the new screen; without this the next Tab
+   * resumes from a link that no longer exists and a screen reader says nothing.
+   *
+   * POLLED, not sampled once, and the title above is not the signal it looks
+   * like. The tab title is set by an effect on the pathname, in `App`; focus is
+   * moved by `PageFrame`'s mount effect. `PageFrame` lives inside `<Suspense>`
+   * on a `lazy()` route, so the URL — and therefore the title — changes at one
+   * moment and the wrapper mounts at a later one. Reading `activeElement` on
+   * the strength of the title asks the question before the screen it is about
+   * exists. Failed 100% of the time in a sandbox container and intermittently
+   * in CI, which is the signature of a race read as an environment quirk.
+   */
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('page');
 });
 
 test('a keyboard user can skip the header instead of tabbing through it', async ({ page }) => {
@@ -163,5 +174,7 @@ test('a keyboard user can skip the header instead of tabbing through it', async 
   await expect(skip).toBeVisible();
 
   await page.keyboard.press('Enter');
-  expect(await page.evaluate(() => document.activeElement?.id)).toBe('page');
+  // polled for the same reason as above: activating the skip link moves focus,
+  // and nothing in the assertion before it waits for that to have happened
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('page');
 });

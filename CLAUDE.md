@@ -34,9 +34,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (900). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (253): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (258): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons` and `headings` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -543,6 +543,28 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   Do not run `playwright install`.
 - Playwright: prefer `getByRole(..., {name, exact})`; toasts echoing labels cause strict-mode
   collisions. First e2e run right after a rebuild can race the stack — rerun before diagnosing.
+- CI drives the BUILT app behind nginx, so `React.StrictMode` is not in play there and a
+  defect that only StrictMode's double-invoked mount effect exposes is invisible to a green
+  build. One real instance: `PageFrame`'s "is this the first page?" guard was a boolean
+  consumed on mount, so in DEV the first invocation spent it and the second focused `#page`
+  anyway — putting focus after the skip link on a fresh document and failing WCAG 2.4.1 in
+  the half a developer actually uses. Any effect guard that must run once has to survive
+  being mounted, torn down and mounted again; key on a VALUE (the pathname it acted for),
+  never on a count. Run the browser suite against `pnpm dev` occasionally for exactly this.
+- `playwright.config.ts` sets `actionTimeout`/`navigationTimeout` ON PURPOSE. Without them an
+  action is bounded only by the TEST's budget, so a timeout names whichever action was in
+  flight when the budget expired rather than the one that hung — which is how the funding
+  pack's `waitForSelector('.a4-page')` got blamed twice for a spec being slow, and answered
+  twice by raising the budget from 90s to 120s. It was not slow (151ms, measured); the pack
+  had CRASHED, and React's "Maximum update depth exceeded" reaches a test only as a selector
+  that never appears. A `Timeout 20000ms exceeded` now means that action really hung; a
+  `Test timeout of Ns exceeded` means the budget went elsewhere. Do not remove them without
+  putting something else in the way of that ambiguity.
+- A spec that mutates ORG-WIDE state (`org.savePolicy`, and anything else on `OrgPolicy`)
+  must undo it in an `afterEach`, not at the end of the test body. Two workers share one
+  seeded workspace, so the leak is visible to every spec that follows — and the run that
+  leaks is by definition the run that failed, which is the one where trailing statements
+  never execute. The covenants spec claimed to be self-cleaning for three such runs.
 - New Prisma model ⇒ add it to the seed wipe list, or stale rows accumulate across reseeds.
 - Editing `schema.prisma` and running `prisma generate` is NOT enough for a running dev stack:
   the SQLite file still lacks the column, so the API throws inside `findUnique` and the failure
