@@ -25,8 +25,21 @@
 # exercises), which is exactly why its absence here was easy to miss: nothing
 # looks broken, the maps are simply not Google's.
 #
-# Setting either secret redeploys the app, so the imagery changes on the next
-# boot with no code change. Both stay server-side; neither reaches a browser.
+# Setting either secret restarts the app with the new environment. That is NOT
+# the same as shipping code, and the difference cost an afternoon: this repo has
+# no CD (`ci.yml` runs the tests and stops), so the machine can be running an
+# image built weeks before the feature the secret is for. `fly secrets set` then
+# succeeds, the machine restarts, the key is genuinely present — and the maps do
+# not change, because the running build has no `/staticmap` route to serve and a
+# `mapConfig` that has never heard of `staticMapUrl`. There is nothing in the
+# logs to say so; the browser simply never asks.
+#
+# So check what is actually running before concluding a secret did not take:
+#
+#   fly status -a apex-appraise-api      # the Image line, and when it was built
+#   fly deploy -c infra/fly.api.toml     # if it predates the feature
+#
+# Both keys stay server-side; neither reaches a browser.
 
 app = "apex-appraise-api"
 primary_region = "lhr"
