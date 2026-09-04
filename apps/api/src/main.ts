@@ -7,6 +7,7 @@ import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
 import { registerReports } from './reports.js';
 import { registerTiles } from './tiles.js';
+import { registerStaticMap } from './staticmap.js';
 import { registerHealth } from './health.js';
 import { startRowSweeper } from './row-sweeper.js';
 import { backfillSealedFields } from './sealed-fields.js';
@@ -86,6 +87,7 @@ async function main() {
   await registerUploads(app);
   registerReports(app);
   registerTiles(app);
+  registerStaticMap(app);
   registerWebhooks(app);
   registerPublicApi(app);
   registerAdmin(app);
