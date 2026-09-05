@@ -209,7 +209,7 @@ export default function Investors() {
           </p>
         </div>
 
-        <Panel title="Register" right={<StatusChip status={rows?.length ? 'green' : 'neutral'} label={`${rows?.length ?? 0} investors`} />}>
+        <Panel level={2} title="Register" right={<StatusChip status={rows?.length ? 'green' : 'neutral'} label={`${rows?.length ?? 0} investors`} />}>
           {isLoading ? (
             <SkeletonRows rows={3} />
           ) : !rows?.length ? (

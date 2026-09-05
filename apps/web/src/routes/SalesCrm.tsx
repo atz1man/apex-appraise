@@ -515,7 +515,7 @@ export default function SalesCrm() {
 
             <div className="mt-5 grid grid-cols-1 gap-4 items-start lg:[grid-template-columns:minmax(0,1fr)_340px]">
               {/* tracker */}
-              <Panel
+              <Panel level={2}
                 title={labels.tableTitle}
                 right={
                   <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -662,12 +662,12 @@ export default function SalesCrm() {
               {/* side rail */}
               <aside className="flex flex-col gap-4">
                 {!isRent && velocityPoints.length > 0 && (
-                  <Panel title="Sales velocity" right={<span className="fig text-[11px] text-ink-3">GDV secured</span>}>
+                  <Panel level={2} title="Sales velocity" right={<span className="fig text-[11px] text-ink-3">GDV secured</span>}>
                     <SalesVelocityChart points={velocityPoints} target={velocityTarget} />
                   </Panel>
                 )}
 
-                <Panel title="Marketing funnel" right={<span className="fig text-[11px] text-ink-3">to date</span>}>
+                <Panel level={2} title="Marketing funnel" right={<span className="fig text-[11px] text-ink-3">to date</span>}>
                   {rows.length === 0 ? (
                     <EmptyState>Funnel appears once units are added.</EmptyState>
                   ) : (
@@ -688,7 +688,7 @@ export default function SalesCrm() {
                   )}
                 </Panel>
 
-                <Panel title={labels.forecastTitle} right={<span className="fig text-[11px] text-ink-3">{labels.forecastSub}</span>}>
+                <Panel level={2} title={labels.forecastTitle} right={<span className="fig text-[11px] text-ink-3">{labels.forecastSub}</span>}>
                   {rows.length === 0 || forecast.bars.every((b) => b === 0) ? (
                     <EmptyState>No {isRent ? 'rent secured' : 'exchanges or reservations'} to forecast yet.</EmptyState>
                   ) : (
@@ -713,7 +713,7 @@ export default function SalesCrm() {
                   )}
                 </Panel>
 
-                <Panel title={labels.healthTitle}>
+                <Panel level={2} title={labels.healthTitle}>
                   <div className="flex flex-col gap-2.5">
                     {health.map(([l, v, tone]) => (
                       <div key={l} className="flex justify-between text-[12.5px] text-ink-2b">

@@ -279,7 +279,7 @@ export default function Engagement() {
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
           <div className="flex flex-col gap-4">
-            <Panel title="Basis of value & date">
+            <Panel level={2} title="Basis of value & date">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="block">
                   <span className="label-mono text-ink-3 block mb-1">Basis of value</span>
@@ -322,7 +322,7 @@ export default function Engagement() {
             </Panel>
 
             {SECTIONS.map((section) => (
-              <Panel key={section.title} title={section.title}>
+              <Panel level={2} key={section.title} title={section.title}>
                 <div className="flex flex-col gap-3">
                   {section.fields.map(([key, label, kind]) => (
                     <label key={key} className="block">
@@ -353,7 +353,7 @@ export default function Engagement() {
           </div>
 
           <aside className="flex flex-col gap-4">
-            <Panel title="Status">
+            <Panel level={2} title="Status">
               <div className="flex flex-col gap-2.5 text-[12.5px]">
                 <Row k="State" v={status === 'DRAFT' ? 'Draft — not yet with the client' : status === 'ISSUED' ? 'Issued, awaiting acceptance' : 'Accepted by the client'} />
                 <Row k="Issued" v={saved?.issuedAt ? fmtDate(saved.issuedAt) : '—'} />
@@ -487,7 +487,7 @@ export default function Engagement() {
               </div>
             </Panel>
 
-            <Panel title="Why this matters">
+            <Panel level={2} title="Why this matters">
               <div className="text-[12px] text-ink-2 leading-relaxed">
                 RICS Red Book VPS 1 requires written terms of engagement agreed with the client before the valuation is
                 reported. The Red Book report cites these terms, and the AI paragraph tells the client up front what may be

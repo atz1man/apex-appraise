@@ -262,7 +262,18 @@ the point, so read the failure rather than adding an exemption.
   and found by mutation: putting ONE heading back to `h3` survives, because the file still has
   `h2`s and the levels stay contiguous. The rule catches a MISSING level, not a mis-levelled
   section, and no static rule can catch the second — an `h3` under an `h2` is correct and
-  beside one is not, and only the rendered nesting says which.
+  beside one is not, and only the rendered nesting says which. And it CANNOT see the level a
+  `Panel` renders: the tag lives in `components/ui.tsx`, at the `level` the caller passes
+  (`2 | 3 | 4`, default 3), so a screen built from panels that all pass `level={2}` has no
+  literal `<h2` in its file and this sweep's per-file view of it is unchanged. Measured once
+  the frame's `h1` was in place: eight screens rendered h1 → h3 with no h2 — Settings fourteen
+  times over, the appraisal on every tab, costs, sales, engagement, site pack, workbench,
+  investors — every `h3` a panel directly under the page. Those were promoted; the cost
+  monitor's "Actions" panel stays 3 because it renders under a real `h2`. Which level is right
+  is decided by where the panel SITS in the rendered tree, never by grep, and
+  `e2e/headings.spec.ts` proves the order in the browser: every route, each heading at most
+  one level below the one before (`lib/outline.ts` holds the predicate). Run before the
+  callers were touched it named all eight screens.
 - `screen-heading` (web suite) — every SCREEN renders an `h1`, its own or the frame's, and
   never both. Measured in the browser, signed in, over every reachable route: 12 of 25
   rendered no `h1` at all — the Pipeline board had no heading of any level, and the Red Book

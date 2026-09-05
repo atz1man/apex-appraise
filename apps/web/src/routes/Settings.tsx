@@ -80,7 +80,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
 
   if (isLoading || !org) {
     return (
-      <Panel title="Organisation">
+      <Panel level={2} title="Organisation">
         <div className="max-w-[460px]">
           <Skeleton width={110} height={10} className="mb-2" />
           <Skeleton height={38} className="mb-3" />
@@ -187,7 +187,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
   );
 
   return (
-    <Panel title="Organisation">
+    <Panel level={2} title="Organisation">
       <div className="max-w-[460px]">
         <label className="label-mono text-ink-3 block mb-1">Workspace name</label>
         {isAdmin ? (
@@ -325,7 +325,7 @@ function DemoMailboxPanel({ isAdmin }: { isAdmin: boolean }) {
   if (!isAdmin || !data?.enabled) return null;
 
   return (
-    <Panel
+    <Panel level={2}
       title="Demo mailbox"
       right={<StatusChip status="amber" label={`${data.messages.length} HELD`} />}
     >
@@ -421,7 +421,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
     : (candidates?.units ?? []).map((u) => ({ id: u.id, label: u.buyerName ? `${u.label} — ${u.buyerName}` : u.label }));
 
   return (
-    <Panel
+    <Panel level={2}
       title="Portal access"
       right={<StatusChip status={logins?.length ? 'green' : 'neutral'} label={`${logins?.length ?? 0} outside`} />}
     >
@@ -646,7 +646,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
   });
 
   return (
-    <Panel
+    <Panel level={2}
       title="Members"
       right={
         isAdmin && !inviting ? <Button variant="secondary" onClick={() => setInviting(true)}>Invite teammate</Button> : undefined
@@ -771,7 +771,7 @@ function SecurityPanel() {
   });
 
   return (
-    <Panel title="Security">
+    <Panel level={2} title="Security">
       <form
         className="max-w-[380px]"
         onSubmit={(e) => {
@@ -841,7 +841,7 @@ function DataPrivacyPanel() {
     new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   return (
-    <Panel title="Data & privacy">
+    <Panel level={2} title="Data & privacy">
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="max-w-[460px]">
@@ -983,7 +983,7 @@ function ErrorsPanel() {
   if (isLoading) return null;
   if (!data?.length) return null;
   return (
-    <Panel title="Recorded faults" right={<StatusChip status="amber" label={`${data.length}`} />}>
+    <Panel level={2} title="Recorded faults" right={<StatusChip status="amber" label={`${data.length}`} />}>
       <div className="flex flex-col gap-2">
         {data.map((e) => (
           <div key={e.id} className="text-[12px]">
@@ -1053,7 +1053,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
 
   if (isLoading || !form) {
     return (
-      <Panel title="Valuation policy">
+      <Panel level={2} title="Valuation policy">
         <SkeletonRows rows={4} />
       </Panel>
     );
@@ -1062,7 +1062,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
   const set = (k: string, v: string) => setForm((f) => ({ ...(f ?? {}), [k]: v }));
 
   return (
-    <Panel
+    <Panel level={2}
       title="Valuation policy"
       right={
         isAdmin ? (
@@ -1240,7 +1240,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
 function AboutPanel() {
   const navigate = useNavigate();
   return (
-    <Panel title="About">
+    <Panel level={2} title="About">
       <div className="flex flex-col gap-2.5 text-[12.5px]">
         <div className="flex items-center gap-2">
           <span className="label-mono text-ink-3 w-[72px]">Version</span>
@@ -1306,7 +1306,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
 
   if (isLoading) {
     return (
-      <Panel title="Billing & plan">
+      <Panel level={2} title="Billing & plan">
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} height={200} className="rounded-card" />
@@ -1317,7 +1317,7 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
   }
   if (!data) return null;
   return (
-    <Panel
+    <Panel level={2}
       title="Billing & plan"
       right={
         <span className="flex items-center gap-2">

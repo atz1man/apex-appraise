@@ -203,7 +203,32 @@ export function FirmMark({ logoUrl, size = 32, alt }: { logoUrl?: string | null;
   return <BrandMark size={size} />;
 }
 
-export function Panel({ title, right, children, className = '', accent }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string }) {
+/**
+ * A titled surface. `level` is the heading level its title renders at, and
+ * it exists because a heading's LEVEL is decided by where the panel SITS,
+ * which only the caller knows.
+ *
+ * Measured in the browser before it existed, signed in, on every screen:
+ * the frame's hidden `h1` had given the working screens a root, and every
+ * panel under it still rendered `h3`, so Settings read h1 → h3 fourteen
+ * times over with no `h2` anywhere, and so did the appraisal, costs, sales,
+ * engagement, site pack, workbench and investors. A screen reader's "next
+ * heading" stepped from the page straight into a subsection.
+ *
+ * Default 3, so nothing changed until a caller opted in. A panel directly
+ * under the page passes `level={2}`; one nested inside a section that has
+ * its own `h2` (the cost monitor's "Actions" panel under "Contractors &
+ * actions") stays at 3. The classes are the same at every level — the size
+ * is explicit, so the tag changes and no pixel moves.
+ *
+ * `lib/headings.test.ts` cannot see any of this and says so: it counts the
+ * literal `<hN` tags in each route file, and this `h2` is rendered here.
+ * The rendered outline is proved by `e2e/headings.spec.ts`, which walks
+ * every route and refuses a heading more than one level below the one
+ * before it.
+ */
+export function Panel({ title, right, children, className = '', accent, level = 3 }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string; level?: 2 | 3 | 4 }) {
+  const Heading = `h${level}` as const;
   return (
     <section
       className={`bg-surface rounded-panel shadow-rest p-5 sm:p-6 ${className}`}
@@ -211,7 +236,7 @@ export function Panel({ title, right, children, className = '', accent }: { titl
     >
       {(title || right) && (
         <div className="flex items-center justify-between mb-3.5">
-          {typeof title === 'string' ? <h3 className="text-[16px] font-semibold tracking-[-0.3px]">{title}</h3> : title}
+          {typeof title === 'string' ? <Heading className="text-[16px] font-semibold tracking-[-0.3px]">{title}</Heading> : title}
           {right}
         </div>
       )}

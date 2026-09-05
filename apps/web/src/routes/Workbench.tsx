@@ -373,7 +373,7 @@ export default function Workbench() {
               ))}
             </div>
 
-            <Panel
+            <Panel level={2}
               title="Comparable evidence grid"
               right={
                 <span className="inline-flex items-center gap-1.5 rounded-chip bg-tint-success px-2.5 py-1 text-[11px] font-semibold text-brand-ink">
@@ -451,7 +451,7 @@ export default function Workbench() {
 
           {/* RIGHT — reconciliation + evidence + field inspection */}
           <aside className="flex flex-col gap-4 min-w-0">
-            <Panel
+            <Panel level={2}
               title="Reconciliation"
               right={
                 <span className="inline-flex items-center gap-1.5 rounded-chip px-2.5 py-1 text-[10.5px] font-semibold" style={{ color: conf.color, background: conf.bg }}>
@@ -488,7 +488,7 @@ export default function Workbench() {
               </div>
             </Panel>
 
-            <Panel title="Evidence & confidence">
+            <Panel level={2} title="Evidence & confidence">
               {(
                 [
                   ['Comparables', comps.length ? `${comps.length}` : '—'],
@@ -511,7 +511,7 @@ export default function Workbench() {
               )}
             </Panel>
 
-            <Panel
+            <Panel level={2}
               title="Field inspection"
               right={
                 inspection ? (

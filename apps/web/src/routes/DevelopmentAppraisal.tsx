@@ -505,7 +505,7 @@ export default function DevelopmentAppraisal() {
 
             <div className="mt-4 flex flex-col gap-4">
               {tab === 'general' && (
-                <Panel title="Scheme">
+                <Panel level={2} title="Scheme">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2 text-[14px] font-semibold">{deal?.name}</div>
                     <div className="text-[12.5px] text-ink-2">{deal?.address}</div>
@@ -519,7 +519,7 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'revenue' && (
                 <>
-                  <Panel
+                  <Panel level={2}
                     title="Unit schedule"
                     right={<Button variant="secondary" size="sm" onClick={() => set({ units: [...input.units, { label: 'New unit type', count: 1, area: 1000, cap: 200 }] })}>+ Add unit</Button>}
                   >
@@ -577,7 +577,7 @@ export default function DevelopmentAppraisal() {
                       <Kv k={U.terms.gdv} v={fM(R.gdv)} tone="rgb(var(--brand-ink, 20 80 59))" />
                     </div>
                   </Panel>
-                  <Panel title="Efficiency & disposal">
+                  <Panel level={2} title="Efficiency & disposal">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="NIA / GIA efficiency" suffix="%" value={input.efficiency} onChange={(v) => set({ efficiency: v })} />
                       <NumField label="Sales agent" suffix="%" value={input.disposal.agentPct} onChange={(v) => set({ disposal: { ...input.disposal, agentPct: v } })} />
@@ -591,7 +591,7 @@ export default function DevelopmentAppraisal() {
               {tab === 'phases' && (
                 phases?.length && R.phases?.length ? (
                   <>
-                    <Panel
+                    <Panel level={2}
                       title="Programme"
                       right={<Button variant="secondary" size="sm" onClick={addPhase}>+ Add phase</Button>}
                     >
@@ -913,7 +913,7 @@ export default function DevelopmentAppraisal() {
                     })}
                   </>
                 ) : (
-                  <Panel title="Programme">
+                  <Panel level={2} title="Programme">
                     <EmptyState
                       title="Single-phase scheme"
                       cta={
@@ -946,7 +946,7 @@ export default function DevelopmentAppraisal() {
               {tab === 'income' && (
                 inc && R.income ? (
                   <>
-                    <Panel
+                    <Panel level={2}
                       title="Rent roll"
                       right={
                         <div className="flex gap-1.5">
@@ -1024,7 +1024,7 @@ export default function DevelopmentAppraisal() {
                       </div>
                     </Panel>
 
-                    <Panel
+                    <Panel level={2}
                       title="Capitalisation"
                       right={
                         <SegmentedToggle
@@ -1116,7 +1116,7 @@ export default function DevelopmentAppraisal() {
                       </div>
                     </Panel>
                     {dcf && dcfIn ? (
-                      <Panel
+                      <Panel level={2}
                         title="Growth-explicit DCF"
                         right={
                           <Button variant="secondary" size="sm" onClick={() => set({ dcf: undefined })}>
@@ -1260,7 +1260,7 @@ export default function DevelopmentAppraisal() {
                         )}
                       </Panel>
                     ) : (
-                      <Panel title="Growth-explicit DCF">
+                      <Panel level={2} title="Growth-explicit DCF">
                         <EmptyState
                           title="Value implicitly, or state the growth"
                           cta={<Button size="sm" onClick={() => set({ dcf: DEFAULT_DCF })}>Run a DCF</Button>}
@@ -1273,7 +1273,7 @@ export default function DevelopmentAppraisal() {
                     )}
                   </>
                 ) : (
-                  <Panel title="Investment value">
+                  <Panel level={2} title="Investment value">
                     {/*
                       An operated asset is not a sales scheme with a let corner — it IS the rent roll, so
                       "No held element" reads as though the screen has misunderstood the deal. The taxonomy
@@ -1303,7 +1303,7 @@ export default function DevelopmentAppraisal() {
               )}
 
               {tab === 'build' && (
-                <Panel
+                <Panel level={2}
                   title="Trade-level build rates"
                   right={
                     <div className="flex gap-1.5 flex-wrap justify-end">
@@ -1345,7 +1345,7 @@ export default function DevelopmentAppraisal() {
               )}
 
               {tab === 'other' && (
-                <Panel
+                <Panel level={2}
                   title={`Other costs — ${U.terms.planningObligation}, ${U.terms.infraLevy}, PM, surveys`}
                   right={<Button variant="secondary" size="sm" onClick={() => set({ otherCosts: [...input.otherCosts, { label: 'New cost', amount: 0 }] })}>+ Add cost</Button>}
                 >
@@ -1379,7 +1379,7 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'finance' && (
                 <>
-                  <Panel title="Debt terms">
+                  <Panel level={2} title="Debt terms">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="Loan to cost" suffix="%" value={input.finance.ltcPct} onChange={(v) => set({ finance: { ...input.finance, ltcPct: v } })} />
                       <NumField label="Interest rate" suffix="% pa" value={input.finance.ratePct} onChange={(v) => set({ finance: { ...input.finance, ratePct: v } })} />
@@ -1417,7 +1417,7 @@ export default function DevelopmentAppraisal() {
                     </div>
                     <p className="mt-2 text-[11px] text-ink-3">Interest compounds monthly on the drawn balance; only the LTC share of each month's spend is drawn.</p>
                   </Panel>
-                  <Panel title="Capital stack">
+                  <Panel level={2} title="Capital stack">
                     <div className="flex h-9 rounded-[9px] overflow-hidden border border-border-std">
                       <div style={{ width: `${(stack.senior / stack.total) * 100}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} title="Senior" />
                       <div style={{ width: `${(stack.mezzanine / stack.total) * 100}%`, background: statusTokens.amber.dot }} title="Mezzanine" />
@@ -1450,7 +1450,7 @@ export default function DevelopmentAppraisal() {
               )}
 
               {tab === 'site' && (
-                <Panel title="Site purchase basis">
+                <Panel level={2} title="Site purchase basis">
                   <SegmentedToggle
                     options={[
                       ['residual', 'Residual — solve land at target profit'],
@@ -1474,7 +1474,7 @@ export default function DevelopmentAppraisal() {
               )}
 
               {tab === 'cashflow' && (
-                <Panel
+                <Panel level={2}
                   title={period === 'month' ? 'Monthly cashflow' : period === 'quarter' ? 'Quarterly cashflow' : 'Annual cashflow'}
                   right={
                     <div className="flex items-center gap-3 flex-wrap justify-end">
@@ -1527,7 +1527,7 @@ export default function DevelopmentAppraisal() {
 
               {tab === 'returns' && (
                 <>
-                  <Panel title="Profit bridge — GDV to developer profit">
+                  <Panel level={2} title="Profit bridge — GDV to developer profit">
                     <ProfitBridge
                       steps={[
                         ['Build', R.build],
@@ -1540,14 +1540,14 @@ export default function DevelopmentAppraisal() {
                       profit={R.profit}
                     />
                   </Panel>
-                  <Panel title="JV structure">
+                  <Panel level={2} title="JV structure">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <NumField label="GP co-invest" suffix="% of equity" value={input.jv!.gpCoinvestPct} onChange={(v) => set({ jv: { ...input.jv!, gpCoinvestPct: v } })} />
                       <NumField label="Preferred return" suffix="% pa compounded" value={input.jv!.prefPct} onChange={(v) => set({ jv: { ...input.jv!, prefPct: v } })} />
                       <NumField label="Promote" suffix="% of residual" value={input.jv!.promotePct} onChange={(v) => set({ jv: { ...input.jv!, promotePct: v } })} />
                     </div>
                   </Panel>
-                  <Panel title="Equity waterfall — four tiers">
+                  <Panel level={2} title="Equity waterfall — four tiers">
                     {(
                       [
                         ['1 · Return of capital', fM(R.equity)],
@@ -1610,7 +1610,7 @@ export default function DevelopmentAppraisal() {
               </div>
             </Panel>
 
-            <Panel
+            <Panel level={2}
               title="Sensitivity — GDV × build"
               right={
                 <SegmentedToggle
@@ -1650,7 +1650,7 @@ export default function DevelopmentAppraisal() {
               <div className="mt-1.5 text-[10.5px] text-ink-3">Columns: GDV. Rows: build cost. Base cell outlined.</div>
             </Panel>
 
-            <Panel
+            <Panel level={2}
               title="Risk — Monte Carlo"
               right={<span className="fig text-[10.5px] text-ink-3">{risk.iterations} runs · land held at {fM(risk.landFixed)}</span>}
             >
@@ -1699,7 +1699,7 @@ export default function DevelopmentAppraisal() {
               })()}
             </Panel>
 
-            <Panel title={`Tasks — ${aspect}`} right={<span className="fig text-[11px] text-ink-3">{tasks?.filter((t) => !t.done).length ?? 0} open</span>}>
+            <Panel level={2} title={`Tasks — ${aspect}`} right={<span className="fig text-[11px] text-ink-3">{tasks?.filter((t) => !t.done).length ?? 0} open</span>}>
               <div className="flex flex-col gap-1.5">
                 {(tasks ?? []).map((t) => (
                   <button
