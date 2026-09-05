@@ -127,7 +127,9 @@ describe('from nothing to an LP reading their own position, without the seed', (
     // nothing recorded, so no portfolio return is claimed
     expect(p.position.portfolioIrr).toBeNull();
     expect(p.holdings[0]!.irr).toBeNull();
-    expect(p.cashflows.map((c) => c.label)).toEqual(['Capital call — drawdown 2', 'Profit distribution']);
+    // the history is money that has MOVED: the distribution ten days ago, and not
+    // the drawdown notice still ahead of its date, which is the open demand below
+    expect(p.cashflows.map((c) => c.label)).toEqual(['Profit distribution']);
     // the drawdown notice still ahead of its date is the open demand, shown positive
     expect(p.openCapitalCall).toMatchObject({ label: 'Capital call — drawdown 2', amount: 275_000 });
   });
