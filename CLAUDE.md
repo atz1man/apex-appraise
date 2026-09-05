@@ -32,9 +32,9 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (924). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (272): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (277): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings` and `screen-heading` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says

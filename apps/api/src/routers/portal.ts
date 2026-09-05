@@ -129,12 +129,22 @@ async function investorPosition(prisma: any, investorId: string, orgId: string, 
       dpi: dpi(distributed, called),
     },
     holdings,
-    cashflows: inv.cashflows.map((c: any) => ({
-      kind: c.kind,
-      label: c.label,
-      amount: share(P(c.amount)),
-      date: c.date,
-    })),
+    /**
+     * The statement's HISTORY is money that has moved. A drawdown notice dated
+     * ahead is the open call above, and it belongs there only: measured on the
+     * demo LP on 5 September, "Cashflow history" led with "Capital call —
+     * drawdown 4 · 05 Oct 2026 · −£495k", a month in the future, printed in
+     * the same red as the three that had been paid. An LP reading that line
+     * reads a payment they have not made.
+     */
+    cashflows: inv.cashflows
+      .filter((c: any) => c.date <= now)
+      .map((c: any) => ({
+        kind: c.kind,
+        label: c.label,
+        amount: share(P(c.amount)),
+        date: c.date,
+      })),
     documents: await sharedDocuments(prisma, orgId, holdings_dealIds(inv), viewerUserId),
     openCapitalCall: openCall
       ? {
