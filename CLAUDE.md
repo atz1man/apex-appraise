@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (922). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (924). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (272): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (180, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (181, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -687,6 +687,15 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   it if the injected sleep returns instantly — vitest's timeout never fires because the hot
   loop starves the timers. Make injected sleeps yield (`setImmediate`) so an unbounded loop
   fails on the test timeout instead.
+- After restoring a mutated API file, PROVE the running dev API is on the restored code before
+  trusting a browser result. Measured: a create that stored the postcode passed twice, then
+  failed three times in a row on a quiet API whose `/health` uptime said it had started at the
+  MUTANT edit and never restarted on the restore — `tsx watch`'s watcher had stopped
+  restarting altogether, and neither a `touch` nor a real content change brought it back
+  (uptime kept climbing through both). The file on disk was right and the process serving it
+  was not. Read `uptimeSeconds` before and after any edit that should restart it; if it does
+  not reset, kill the `tsx watch` tree and start it again from `apps/api` with the CI limits,
+  then drive the behaviour once by hand (a `curl` create, a row read) before re-running the spec.
 - Undoing a mutation with `git checkout -- <file>` restores HEAD, not the pre-mutation state —
   on a file with uncommitted work it deletes the fix you are testing, and the next mutation runs
   against a file with no guard in it, which reads as a cascade of unrelated failures. Copy the

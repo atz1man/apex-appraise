@@ -73,7 +73,7 @@ export default function Board() {
       navigate(`/deal/${res.dealId}`);
     },
   });
-  const [draft, setDraft] = useState({ name: '', address: '', assetType: 'RESIDENTIAL', gdv: 0, probability: 40 });
+  const [draft, setDraft] = useState({ name: '', address: '', postcode: '', assetType: 'RESIDENTIAL', gdv: 0, probability: 40 });
 
   const filtered = useMemo(() => {
     let deals = data?.deals ?? [];
@@ -363,6 +363,10 @@ export default function Board() {
           <input id="new-deal-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Foundry Lane" />
           <label className="label-mono text-ink-3" htmlFor="new-deal-address">Address</label>
           <input id="new-deal-address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Street, town" />
+          {/* the site pack, the map and the benchmark region all read the postcode;
+              without it here the first thing a new deal's site pack did was ask for one */}
+          <label className="label-mono text-ink-3" htmlFor="new-deal-postcode">Postcode</label>
+          <input id="new-deal-postcode" value={draft.postcode} onChange={(e) => setDraft({ ...draft, postcode: e.target.value })} placeholder="e.g. BH15 1JF" autoComplete="postal-code" />
           <label className="label-mono text-ink-3" htmlFor="new-deal-asset-type">Asset type</label>
           <select id="new-deal-asset-type" value={draft.assetType} onChange={(e) => setDraft({ ...draft, assetType: e.target.value })}>
             {FILTERS.slice(1).map(([k, label]) => (
@@ -381,6 +385,7 @@ export default function Board() {
                 createDeal.mutate({
                   name: draft.name,
                   address: draft.address,
+                  postcode: draft.postcode.trim() || undefined,
                   assetType: draft.assetType as never,
                   gdv: draft.gdv,
                   probability: draft.probability,
