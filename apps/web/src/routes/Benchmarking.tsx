@@ -610,6 +610,11 @@ export default function Benchmarking() {
                       None of your appraisals sit in {scopeShort} yet — they'll appear here automatically once appraised.
                     </EmptyState>
                   ) : (
+                    /* the table's columns have a minimum content width the phone does not:
+                       named by the target-size walk in CI at right=391.23px — 1.23px past a
+                       390px viewport in that browser build, just inside it in this one. The
+                       same positioned scroll wrapper the Investors and Settings tables carry. */
+                    <div className="overflow-x-auto relative">
                     <table className="w-full border-collapse">
                       <thead>
                         <tr>
@@ -654,6 +659,7 @@ export default function Benchmarking() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </section>
               </div>
