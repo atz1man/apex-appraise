@@ -657,7 +657,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
         <SkeletonRows rows={4} height={30} />
       ) : (
         <>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto relative">
           <table className="w-full border-collapse">
             <thead>
               <tr>
@@ -869,7 +869,7 @@ function DataPrivacyPanel() {
             </Button>
           </div>
           {showAudit && (
-            <div className="mt-3 rounded-card border border-border-std bg-sunken max-h-[320px] overflow-y-auto">
+            <div className="mt-3 rounded-card border border-border-std bg-sunken max-h-[320px] overflow-y-auto overflow-x-auto">
               {auditQ.isLoading ? (
                 <div className="p-4"><SkeletonRows rows={5} height={22} /></div>
               ) : (auditQ.data ?? []).length === 0 ? (

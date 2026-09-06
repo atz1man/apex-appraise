@@ -404,7 +404,7 @@ export default function Benchmarking() {
       </div>
       <div className="mt-3 flex items-center gap-2">
         <select
-          className="flex-1 h-9 text-[12px]"
+          className="flex-1 min-w-0 h-9 text-[12px]"
           aria-label="Deal to contribute"
           value={effectiveContribId}
           onChange={(e) => setContribDealId(e.target.value)}
@@ -442,14 +442,14 @@ export default function Benchmarking() {
               which. There is no visible label to point at — the design puts them
               bare in the top bar — so the name is carried here.
             */}
-            <select aria-label="Region" className="h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
+            <select aria-label="Region" className="min-w-0 h-[34px] font-medium text-[12.5px]" value={region} onChange={(e) => setRegion(e.target.value)}>
               {REGIONS.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
               ))}
             </select>
-            <select aria-label="Asset class" className="h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
+            <select aria-label="Asset class" className="min-w-0 h-[34px] font-medium text-[12.5px]" value={useClass} onChange={(e) => setUseClass(e.target.value)}>
               {USE_CLASSES.map(([id, label]) => (
                 <option key={id} value={id}>
                   {label}
@@ -476,7 +476,7 @@ export default function Benchmarking() {
         </div>
 
         {locked ? (
-          <div className="mt-6 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
+          <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
             <PlanLocked feature={featureName('benchmarking')} plan={featurePlanName('benchmarking')}>
               Percentile strips, the build-cost trend and the market comparison are drawn from appraisals contributed by
               other firms. Your own deals and their figures are unaffected and stay where they are.
@@ -498,7 +498,7 @@ export default function Benchmarking() {
               <MetricCard label={`Out-turn build £/${U.unit}`} m={M.outturnPsf} scope={scopeShort.toLowerCase()} lowerBetter />
             </div>
 
-            <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_360px]">
               <div className="flex flex-col gap-4">
                 {/* build cost trend */}
                 <section className="bg-surface border border-border-strong rounded-panel shadow-rest p-5">

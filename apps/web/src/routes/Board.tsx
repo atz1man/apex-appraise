@@ -334,7 +334,7 @@ export default function Board() {
                           </div>
                           {st.key !== 'COMPLETED' && (
                             <button
-                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+                              className="mt-2 w-full min-h-6 text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
                               disabled={setStage.isPending}
                               onClick={(e) => {
                                 e.preventDefault();

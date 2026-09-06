@@ -405,7 +405,7 @@ export default function DataRoom() {
                         <input
                           type="checkbox"
                           aria-label={`Share ${d.name} with investors`}
-                          className="w-4 h-4 cursor-pointer disabled:opacity-50"
+                          className="w-4 h-4 mx-2 cursor-pointer disabled:opacity-50"
                           disabled={shareWithInvestors.isPending}
                           // shows the choice while the write is in flight, so the box does not
                           // snap back for the refetch and read as a refusal

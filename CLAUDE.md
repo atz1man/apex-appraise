@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (181, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (183, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -413,6 +413,27 @@ the point, so read the failure rather than adding an exemption.
   command), not on the name `ICONS`, because the copy nobody thinks to look for is the one
   called something else. `Icon` itself also tolerates a missing `d` now: the type stops it
   reaching a build, and this stops a missing 18px glyph ever again costing a screen.
+- `e2e/target-size.spec.ts` — every screen fits a phone and every control on it can be hit
+  with a thumb: at 390px, no route scrolls sideways, and every control is 24×24 CSS px or
+  earns WCAG 2.5.8's own exceptions (a 24px circle centred on it touches no other control;
+  a link in running text). Measured before it existed, signed in over every route: SEVEN
+  routes scrolled sideways and 134 controls were under 24px — 42 once the exceptions were
+  applied, which is the number worth acting on, since a rule that flags spaced checkboxes
+  and footer links is a rule people learn to ignore. The 42 were three sites: every task
+  chip on the calendar at 21px tall, "Advance stage" on every pipeline card at 15px, and
+  the data room's share checkboxes, 16px boxes with a picker hard against them (given
+  clearance rather than redrawn, because `nontext-contrast` reads the box's OWN border and a
+  redraw would blind that guard). The overflows were three shapes: the automatic-minimum
+  gotcha one level UP from where it is usually seen — Calendar and Benchmarking name their
+  page-grid columns only from `lg:`, so below it the single implicit column was `auto` and
+  each two-column item took its min-content width; the four printed documents, whose A4
+  sheet widened the page instead of scrolling inside its frame; and Settings, the subtle
+  one — the members table scrolled inside its wrapper as intended, but the sr-only "Remove"
+  label inside it is absolutely positioned, and a scroll container that is not itself
+  positioned does not contain those, so one 1px span at x=594 widened the page by 204px
+  while the table it belonged to scrolled correctly. Found by walking ancestors for a
+  scrolling container, not by looking at what was wide. The spec carries a fixture of two
+  crowded 20px buttons, one spaced one and an inline link, so an empty walk cannot pass it.
 - `e2e/reachable.spec.ts` — the doors, CLICKED. `route-reachable` proves a link literal
   exists in the source, which is a weaker claim than it reads as: the commit that added the
   funding-pack tile passed it, and the tile was the crash above. A link in the source is not
@@ -674,6 +695,11 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Overpass API requires a User-Agent header (406 without).
 - Flex children default `min-width:auto` — clusters need `min-w-0` (+ internal `overflow-x-auto`)
   or they widen the page on phones; e2e guards zero horizontal scroll at 390px.
+  The same gotcha one level up: a page grid that names its columns only from `lg:` has a
+  single `auto` implicit column below it, and every item takes its min-content width. Give
+  it `grid-cols-[minmax(0,1fr)]` at every width. And a scroll wrapper needs `relative` if
+  anything inside it is `sr-only`: the hidden label is absolutely positioned and escapes an
+  unpositioned scroll container to widen the page, while the table scrolls fine.
 - Live-LLM e2e needs `test.setTimeout(120_000)`.
 - Postgres SERIALIZABLE aborts on the POSSIBILITY of a cycle, not a proven one, so two
   transactions that never touched the same row abort each other under load (SQLSTATE 40001,
