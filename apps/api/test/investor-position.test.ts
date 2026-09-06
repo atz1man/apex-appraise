@@ -120,6 +120,14 @@ describe('the capital call panel', () => {
     expect(p.openCapitalCall!.due.getTime()).toBeGreaterThan(Date.now());
   });
 
+  it('keeps an open notice out of the history — a call dated ahead is a demand, not a payment', async () => {
+    // measured on the demo LP: "drawdown 4 · 05 Oct 2026 · −£495k" led the history a month early
+    const p = (await asInvestor().investors.myPosition()) as Position & { cashflows: Array<{ label: string; date: Date }> };
+    expect(p.openCapitalCall?.label).toBe('Capital call — drawdown 4');
+    expect(p.cashflows.map((c) => c.label)).not.toContain('Capital call — drawdown 4');
+    for (const c of p.cashflows) expect(c.date.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
   it('drops a notice once its due date has passed, rather than showing it overdue for ever', async () => {
     // the hardcoded one had a fixed due date, so it went overdue and stayed there
     await prisma.cashflow.deleteMany({ where: { investorId, kind: 'call' } });

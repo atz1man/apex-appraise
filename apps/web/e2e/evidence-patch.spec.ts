@@ -39,11 +39,25 @@ const sentKeys = (postData: string | null) => {
 const NORTHGATE = 'Northgate';
 
 const oneField = async (page: Page, procedure: string, change: (v: number) => number) => {
-  const field = page.locator('input[type="number"]').first();
-  await expect(field).toBeVisible();
+  /**
+   * The input is pinned by its accessible name, not its position. Locators
+   * re-resolve on every action, so "the first number input" is looked up once
+   * to fill and AGAIN to blur — and if the rows change between the two (the
+   * suite runs two workers on one workspace), the blur lands on a field with no
+   * pending edit, nothing is sent, and the wait times out with no name on it.
+   * Measured once on main: this test alone, 20s waiting for a request, 180
+   * others green, not reproducible locally.
+   */
+  const first = page.locator('input[type="number"]').first();
+  await expect(first).toBeVisible();
+  const name = await first.getAttribute('aria-label');
+  const field = name ? page.getByRole('spinbutton', { name, exact: true }) : first;
   const before = await field.inputValue();
 
-  await field.fill(String(change(Number(before || 0))));
+  const typed = String(change(Number(before || 0)));
+  await field.fill(typed);
+  // if the value does not hold, the failure says so rather than timing out below
+  await expect(field, 'the typed adjustment did not hold before blur').toHaveValue(typed);
   const [req] = await Promise.all([
     page.waitForRequest((r) => r.url().includes(procedure)),
     field.blur(),
