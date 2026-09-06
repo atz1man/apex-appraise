@@ -60,6 +60,30 @@ async function routes(page: Page): Promise<string[]> {
 /** overflow in px, and every control failing 2.5.8 after its exceptions */
 function measure(sel: string) {
   const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  /**
+   * When the page does scroll, name the culprits rather than the count: the
+   * outermost elements past the edge that no scrolling ancestor contains, with
+   * fractional edges, so a one-pixel case reads as the rounding it is — a 1px
+   * overflow appeared in CI and not here, and "scrolls sideways by 1px" named
+   * nothing.
+   */
+  const culprits: string[] = [];
+  if (overflow > 0) {
+    const W = document.documentElement.clientWidth;
+    const scrolls = (el: Element) => ['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(el).overflowX);
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.right <= W) continue;
+      let contained = false;
+      for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+        if (scrolls(a) && a.getBoundingClientRect().right <= W + 0.5) { contained = true; break; }
+      }
+      if (contained) continue;
+      const pr = el.parentElement?.getBoundingClientRect();
+      if (pr && pr.right > W && el.parentElement !== document.body) continue;
+      culprits.push(`<${el.tagName.toLowerCase()} class="${String(el.className || '').slice(0, 60)}"> right=${r.right.toFixed(2)}`);
+    }
+  }
   const visible = (el: Element) => {
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
@@ -85,7 +109,7 @@ function measure(sel: string) {
       small.push(`${el.tagName.toLowerCase()} "${label}" ${Math.round(r.width)}×${Math.round(r.height)}`);
     }
   });
-  return { overflow, small: [...new Set(small)] };
+  return { overflow, culprits: culprits.slice(0, 3), small: [...new Set(small)] };
 }
 
 test('no screen scrolls sideways at phone width, and every control meets the 24px target size', async ({ page }) => {
@@ -98,7 +122,7 @@ test('no screen scrolls sideways at phone width, and every control meets the 24p
       await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
       await page.waitForTimeout(250);
       const m = await page.evaluate(measure, SEL);
-      if (m.overflow > 0) failures.push(`${route}: scrolls sideways by ${m.overflow}px`);
+      if (m.overflow > 0) failures.push(`${route}: scrolls sideways by ${m.overflow}px — ${m.culprits.join(' | ') || 'no element past the edge (sub-pixel)'}`);
       for (const s of m.small) failures.push(`${route}: ${s} is under 24px with another control inside 12px of its centre`);
     });
   }
