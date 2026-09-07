@@ -4,7 +4,7 @@ import { SCENARIO_ASSUMPTIONS as ASSUMPTIONS, scenarioMetrics, type ScenarioMetr
 import { trpc } from '../lib/trpc';
 import { n0 } from '../lib/format';
 import { useUnits, type RegionUnits } from '../lib/region';
-import { Button, Dot, EmptyState, FormError, Icon, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Skeleton, SkeletonRows, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { brand, onFill } from '@apex/ui-tokens';
 
@@ -207,9 +207,9 @@ export default function Scenarios() {
                   */}
                   <button
                     aria-label={`Remove ${scenarios[slot.i].name}`}
-                    title="Remove this option"
                     className="shrink-0 w-7 h-7 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
                     disabled={remove.isPending}
+                    {...writeAttrs('Remove this option')}
                     onClick={() => {
                       if (confirm(`Remove ${scenarios[slot.i].name}? The comparison and any risk commentary will be recalculated without it.`)) {
                         remove.mutate(scenarios[slot.i].id);
@@ -223,7 +223,7 @@ export default function Scenarios() {
               </div>
             ) : (
               <div key={col} className="px-4 py-3 border-b border-border-std" style={cellBorder}>
-                <EmptyState title="No option in this slot" cta={<Button variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
+                <EmptyState title="No option in this slot" cta={<Button writes variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
                   Add a scheme variant to compare returns side by side.
                 </EmptyState>
               </div>

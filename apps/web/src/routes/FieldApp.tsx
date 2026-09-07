@@ -4,7 +4,7 @@ import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
-import { Button, Spinner, TopBar } from '../components/ui';
+import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
 import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
 
 type Room = { name: string; condition: number; photos: number; notes: string };
@@ -470,7 +470,7 @@ export default function FieldApp() {
               <div className="text-[11.5px] text-ink-3">{deal.name}</div>
             </div>
           </div>
-          <button onClick={saveDraft} disabled={save.isPending} className={`min-h-[44px] px-2 rounded-[10px] text-[13px] font-semibold text-brand-ink disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}>
+          <button onClick={saveDraft} disabled={save.isPending} {...writeAttrs()} className={`min-h-[44px] px-2 rounded-[10px] text-[13px] font-semibold text-brand-ink disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}>
             {save.isPending ? <Spinner /> : 'Save'}
           </button>
         </div>
@@ -821,6 +821,7 @@ export default function FieldApp() {
         <button
           onClick={sendToWorkbench}
           disabled={save.isPending || !value}
+          {...writeAttrs()}
           className={`w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}
         >
           {save.isPending ? (

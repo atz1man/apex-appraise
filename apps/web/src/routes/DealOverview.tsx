@@ -409,6 +409,7 @@ export default function DealOverview() {
               })}
             </div>
             <Button
+              writes
               variant="secondary"
               disabled={!nextStage || setStage.isPending}
               onClick={() => nextStage && setStage.mutate({ id: dealId, stage: nextStage.key as never })}

@@ -4,7 +4,7 @@ import { trpc } from '../lib/trpc';
 import { SQFT_PER_SQM } from '@apex/appraisal-engine';
 import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
-import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap, type MapPin } from '../components/SiteMap';
 import { brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
@@ -171,12 +171,13 @@ export default function SitePack() {
               <input
                 className="w-36 fig uppercase"
                 placeholder={ok?.geo.postcode ?? 'e.g. BH8 8EW'}
+                {...writeAttrs()}
                 value={postcodeInput}
                 onChange={(e) => setPostcodeInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runLookup()}
               />
             </label>
-            <Button onClick={runLookup} loading={isFetching}>
+            <Button writes onClick={runLookup} loading={isFetching}>
               Pull live data
             </Button>
           </div>

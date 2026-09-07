@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { accent, brand, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
-import { Button, EmptyState, FormError, Icon, PlanLocked, SPARKLE, Spinner, Td, Th, TopBar } from '../components/ui';
+import { Button, EmptyState, FormError, Icon, PlanLocked, SPARKLE, Spinner, Td, Th, TopBar , writeAttrs} from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
 import { useUnits } from '../lib/region';
@@ -368,6 +368,7 @@ export default function Benchmarking() {
           className="mt-[2px]"
           checked={optedIn}
           disabled={!contribQ.data || setContribution.isPending}
+          {...writeAttrs()}
           onChange={(e) => setContribution.mutate({ enabled: e.target.checked })}
         />
         <span className="text-[11.5px] leading-[1.45] text-ink-2b">

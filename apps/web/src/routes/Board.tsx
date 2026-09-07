@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { ASSET_CLASSES } from '@apex/types/asset-classes';
 import type { StatusKey } from '@apex/ui-tokens';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -336,6 +336,7 @@ export default function Board() {
                             <button
                               className="mt-2 w-full min-h-6 text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
                               disabled={setStage.isPending}
+                              {...writeAttrs()}
                               onClick={(e) => {
                                 e.preventDefault();
                                 const next = STAGES[Math.min(STAGES.findIndex((s) => s.key === st.key) + 1, STAGES.length - 1)].key;

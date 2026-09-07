@@ -5,7 +5,7 @@ import { DEFAULT_REGION, REGION_PROFILES, REGIONS, regionProfile, type Region } 
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
-import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
@@ -690,6 +690,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                           value={m.role}
                           aria-label={`Role for ${m.name}`}
                           disabled={setRole.isPending && setRole.variables?.userId === m.id}
+                          {...writeAttrs()}
                           onChange={(e) => setRole.mutate({ userId: m.id, role: e.target.value as Role })}
                         >
                           {ROLES.map((r) => (

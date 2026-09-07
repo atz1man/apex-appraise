@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (277): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (288): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings` and `screen-heading` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (183, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (185, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -209,7 +209,40 @@ the point, so read the failure rather than adding an exemption.
   tRPC link chain so all 98 mutations refuse locally without 98 edits — and that copy is
   NOT trusted: the same test reads it and asserts its allowlist equals what the real
   router lets a viewer through. `Button writes` greys a control out beforehand; that part
-  IS per-site (62 marked), and an unmarked one degrades to the link, not to a hole.
+  IS per-site, and an unmarked one degrades to the link, not to a hole — but see
+  `write-controls` below for what "degrades" looked like from the member's side.
+- `write-controls` (WEB suite, `lib/write-controls.test.ts`) — every control that fires a
+  mutation a viewer may not run is marked, so it is greyed out with the reason BEFORE it is
+  pressed. Measured by walking every route signed in as a VIEWER: no screen failed, the "View
+  only" chip was on every one, and 42 of the 110 controls that reach a mutation a viewer may not run were live —
+  every destructive one among them. "Advance stage →" on all ten pipeline cards and on the
+  overview, every "Remove" on comparables and scenarios, every "Complete task" and "Delete
+  task" on the calendar, the appraisal's own Save and the terms' Save. Pressed, "Delete task"
+  asked the viewer to confirm and then refused: the confirm was the product's word that the
+  action was theirs. Not one of the destructive ones was a `Button` — they are raw icon
+  `<button>`s with their own chrome, which the `writes` prop cannot reach, so "per-site
+  marking" had no site to go to; `writeAttrs()` (`components/ui.tsx`) is the spread that
+  reaches a raw element, placed AFTER its own `disabled` so `isPending` keeps its meaning.
+  Exempt by RULE, not by list: a control is left alone when every procedure it fires is in
+  `VIEWER_MAY_RUN` (the same file the tRPC link reads) or on a router no member of the firm
+  can be a principal for (`buyer`), so the sign-in, reset and own-password forms and the
+  client's signature are not reported, and if `auth.changePassword` leaves the allowlist its
+  form is reported that day. Two things the matcher had to learn, both recorded in it: a
+  control writes if its own attributes call `.mutate(` OR name a handler declared in the same
+  file whose body does — "Add comp" calls `addComp`, three lines above `upsert.mutate` — and
+  the handler's indent is captured as spaces and tabs, not `\s*`, because under the multiline
+  flag `\s*` swallows the blank line above a declaration, the body scan ends on the
+  declaration's own line, and the real "Add comp" and "Log week" read as clean while the
+  viewer walk still listed them live. A `<form>` is judged by its `type="submit"` control,
+  since the handler sits on the form and the person presses the button. Run against the tree
+  before the fix it names 29 unaided (42 once the indent was right); `e2e/viewer.spec.ts` is
+  the browser half — a member invited through `org.invite` signs in with the temporary
+  password, and any dialog fails the test, because a disabled control opens none. NOT reached,
+  on purpose: a control that OPENS a form (New deal, Edit details, Upload) stays live, because
+  the form's own Save is marked and greying the door as well is a choice, not a rule; and the
+  appraisal's inputs stay editable for a viewer, because the engine runs in the browser and
+  exploring the figures is exactly what "view" is for — only the Save that would make them the
+  firm's position is greyed.
 - `asset-classes` (in the WEB suite, `lib/asset-classes.test.ts`) — the browser keeps no
   second copy of the asset taxonomy. `@apex/types/asset-classes` is the one table: code,
   label, chip text, report label, planning use class, colour family, whether the class is

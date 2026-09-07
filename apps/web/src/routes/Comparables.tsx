@@ -4,7 +4,7 @@ import { weightedComparables } from '@apex/appraisal-engine';
 import { assetLabel } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
 import { trpc } from '../lib/trpc';
-import { Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap } from '../components/SiteMap';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -206,13 +206,13 @@ export default function Comparables() {
                 </div>
               }
               right={
-                <Button variant="secondary" onClick={addComp} disabled={upsert.isPending}>
+                <Button writes variant="secondary" onClick={addComp} disabled={upsert.isPending}>
                   <Icon d="M12 5v14|M5 12h14" size={14} color="rgb(var(--brand-ink))" /> Add comp
                 </Button>
               }
             >
               {comps.length === 0 ? (
-                <EmptyState title="No comparable evidence yet" cta={<Button onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
+                <EmptyState title="No comparable evidence yet" cta={<Button writes onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
                   Add sold comparables to derive a supported £/{U.unit} for the valuation.
                 </EmptyState>
               ) : (
@@ -270,9 +270,9 @@ export default function Comparables() {
                           */}
                           <button
                             aria-label={`Remove ${c.address}`}
-                            title="Remove this comparable"
                             className="shrink-0 w-7 h-7 mr-1 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
                             disabled={remove.isPending}
+                            {...writeAttrs('Remove this comparable')}
                             onClick={() => {
                               if (confirm(`Remove ${c.address} from the evidence? The supported £/${U.unit} will be recalculated without it.`)) remove.mutate(c.id);
                             }}

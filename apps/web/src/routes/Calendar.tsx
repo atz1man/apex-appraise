@@ -3,7 +3,7 @@ import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/
 import { trpc } from '../lib/trpc';
 import { firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar , writeAttrs} from '../components/ui';
 
 /**
  * The team is the workspace's real members.
@@ -302,6 +302,7 @@ export default function Calendar() {
                           key={t.id}
                           title={`${t.title} — ${t.deal.name} (${t.done ? 'click to reopen' : 'click to complete'})`}
                           disabled={toggleTask.isPending}
+                          {...writeAttrs()}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleTask.mutate(t.id);
@@ -339,6 +340,7 @@ export default function Calendar() {
                 type="text"
                 placeholder="Add a task…"
                 aria-label="Task title"
+                {...writeAttrs()}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -400,6 +402,7 @@ export default function Calendar() {
                           <button
                             aria-label={t.done ? 'Reopen task' : 'Complete task'}
                             disabled={toggleTask.isPending}
+                            {...writeAttrs()}
                             onClick={() => toggleTask.mutate(t.id)}
                             className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
                             style={{ borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))', background: t.done ? brand[700] : neutral.surface }}
@@ -430,9 +433,9 @@ export default function Calendar() {
                           */}
                           <button
                             aria-label={`Delete task ${t.title}`}
-                            title="Delete this task"
                             className="shrink-0 mt-[1px] w-6 h-6 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
                             disabled={removeTask.isPending}
+                            {...writeAttrs('Delete this task')}
                             onClick={() => {
                               if (confirm(`Delete “${t.title}”? Ticking it instead records that the work was done.`)) removeTask.mutate(t.id);
                             }}

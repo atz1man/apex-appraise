@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
-import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar } from '../components/ui';
+import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
 import { fmtBytes, n0 } from '../lib/format';
@@ -310,6 +310,7 @@ export default function DataRoom() {
               <div className="mt-4 pt-4 border-t border-border-std flex gap-2 items-center flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <input
                   aria-label="Name of the document you are waiting for"
+                  {...writeAttrs()}
                   autoFocus
                   className="flex-1"
                   placeholder="Document you are waiting for — e.g. Elemental cost plan v4.xlsx"
@@ -407,6 +408,7 @@ export default function DataRoom() {
                           aria-label={`Share ${d.name} with investors`}
                           className="w-4 h-4 mx-2 cursor-pointer disabled:opacity-50"
                           disabled={shareWithInvestors.isPending}
+                          {...writeAttrs()}
                           // shows the choice while the write is in flight, so the box does not
                           // snap back for the refetch and read as a refusal
                           checked={
@@ -426,6 +428,7 @@ export default function DataRoom() {
                           aria-label={`Share ${d.name} with a buyer`}
                           className="max-w-full text-[11.5px] bg-sunken rounded-[7px] px-1.5 py-1 text-ink-2b disabled:opacity-50"
                           disabled={shareWithBuyer.isPending || !units.length}
+                          {...writeAttrs()}
                           value={d.buyerVisible ? (d.unitId ?? '') : ''}
                           onChange={(e) => shareWithBuyer.mutate({ id: d.id, unitId: e.target.value || null })}
                         >
@@ -442,9 +445,9 @@ export default function DataRoom() {
                         <StatusChip status="amber" label="AWAITED" />
                       ) : (
                         <button
-                          title="Click to cycle extraction status"
                           className="cursor-pointer transition-opacity disabled:opacity-50"
                           disabled={setExtraction.isPending}
+                          {...writeAttrs('Click to cycle extraction status')}
                           onClick={() => setExtraction.mutate({ id: d.id, status: NEXT_STATUS[d.extraction] ?? 'EXTRACTED' })}
                         >
                           <StatusChip status={STATUS_CHIP[d.extraction] ?? 'neutral'} label={d.extraction} />
@@ -522,6 +525,7 @@ export default function DataRoom() {
           <div className="mt-2.5 flex gap-2">
             <input
               aria-label="Ask a question of this deal's documents"
+              {...writeAttrs()}
               className="flex-1 min-w-0"
               placeholder="e.g. What does the cost plan allow for M&E?"
               maxLength={500}

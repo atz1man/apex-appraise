@@ -95,10 +95,9 @@ export function TopBar({ crumb, right }: { crumb?: ReactNode; right?: ReactNode 
    * on work they have already done, which reads as a broken app rather than as
    * a permission.
    *
-   * The chip only; the write controls themselves are still rendered. Hiding
-   * them is a real piece of work across dozens of screens and forty-five
-   * mutations, and is NOT done here — it is a follow-up. What is not acceptable
-   * is a member who cannot tell which of the two they are looking at.
+   * The chip says which. The write controls themselves are greyed out by
+   * `Button writes` and `writeAttrs()`, and `lib/write-controls.test.ts` holds
+   * that every control reaching a mutation carries one of the two.
    */
   const viewOnly = isViewOnly(principal);
   return (
@@ -366,7 +365,11 @@ export function Button({
    * to disable instead. What makes that safe is that marking is an AFFORDANCE,
    * not the rule — the rule is the read-only tRPC link in `lib/trpc.ts`, which
    * sees all ninety-eight mutations and refuses them whether or not anyone
-   * remembered this prop. An unmarked write button is a rough edge, not a hole.
+   * remembered this prop. An unmarked write button is a rough edge, not a hole —
+   * and since `lib/write-controls.test.ts` it is a build failure naming the
+   * line, because "a rough edge" read from the member's side is a confirm
+   * dialog for a deletion they agree to and are then refused. A raw element
+   * that cannot take this prop spreads `writeAttrs()` instead.
    */
   writes?: boolean;
   /** Shows a spinner and disables the control — wire to mutation.isPending. */
@@ -408,6 +411,24 @@ export function Button({
       {inner}
     </button>
   );
+}
+
+/**
+ * `Button writes` for an element that is not a `Button`.
+ *
+ * The destructive controls are raw icon `<button>`s with their own chrome, and
+ * the share checkboxes, role pickers and "type then press Enter" inputs are
+ * raw elements too — none of them can take the prop, which is why every one of
+ * them was live for a view-only member (measured: the pipeline's "Advance
+ * stage →" on every card, every "Remove" on comparables and scenarios, every
+ * "Complete task" and "Delete task" on the calendar). Spread this AFTER the
+ * element's own `disabled`: when the member may write it contributes nothing
+ * but the title, so `disabled={x.isPending}` keeps its meaning; when they may
+ * not, it wins.
+ */
+export function writeAttrs(title?: string): { disabled?: true; title?: string } {
+  if (isViewOnly(getPrincipal())) return { disabled: true, title: READ_ONLY_MESSAGE };
+  return title === undefined ? {} : { title };
 }
 
 /** Segmented control — iOS-style: white pill glides on a recessed track. */
