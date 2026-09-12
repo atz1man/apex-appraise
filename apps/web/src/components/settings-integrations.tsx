@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
-import { Button, FormError, Panel, PlanLocked, StatusChip } from './ui';
+import { Button, FormError, Panel, PlanLocked, StatusChip , writeAttrs} from './ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 /**
@@ -459,6 +459,7 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
             <div className="mt-2 flex flex-wrap gap-2">
               {(cats?.categories ?? []).map((c) => (
                 <Button
+                  writes
                   key={c.id}
                   size="sm"
                   variant={status.trackingCategoryName === c.name ? 'primary' : 'secondary'}
@@ -482,6 +483,7 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
                       className="flex-1"
                       aria-label={`Deal for ${o.name}`}
                       defaultValue=""
+                      {...writeAttrs()}
                       onChange={(e) =>
                         e.target.value && mapDeal.mutate({ dealId: e.target.value, trackingOptionId: o.id, trackingOptionName: o.name })
                       }
@@ -814,6 +816,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
                     className="flex-1"
                     aria-label={`Deal for ${a.name}`}
                     value={a.dealId ?? ''}
+                    {...writeAttrs()}
                     onChange={(e) => mapAccount.mutate({ accountId: a.id, dealId: e.target.value || null })}
                   >
                     <option value="">Not mapped</option>

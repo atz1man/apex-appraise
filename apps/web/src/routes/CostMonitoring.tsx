@@ -4,7 +4,7 @@ import { accent, brand, neutral, onFill, personGradientNone, personGradients, pl
 import { getPrincipal, getToken, trpc } from '../lib/trpc';
 import { fM, formatDelta } from '../lib/format';
 import { firmDate, firmDay, firmToday, isPastDue } from '../lib/firm-day';
-import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar, useDialog } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, ProgressBar, Skeleton, SkeletonRows, StatCard, StatusChip, Td, Th, TopBar, useDialog , writeAttrs} from '../components/ui';
 import { useToast } from '../components/Toast';
 import { DealNav } from '../components/DealNav';
 
@@ -429,6 +429,7 @@ export default function CostMonitoring() {
                               aria-label={`Contractor for ${pk.name}`}
                               value={pk.contractorId ?? ''}
                               disabled={upsertPkg.isPending}
+                              {...writeAttrs()}
                               onChange={(e) =>
                                 // ONLY the contractor. Sending the row's figures
                                 // back would revert whatever the ledger sync had
@@ -674,12 +675,13 @@ export default function CostMonitoring() {
                             min={0}
                             className="flex-1 min-w-0 h-[30px] py-0 fig text-[12px]"
                             aria-label={`Log hours for ${c.name}`}
+                            {...writeAttrs()}
                             placeholder="Log hours…"
                             value={hoursDraft[c.id] ?? ''}
                             onChange={(e) => setHoursDraft((s) => ({ ...s, [c.id]: e.target.value }))}
                             onKeyDown={(e) => e.key === 'Enter' && submitWeek(c.id)}
                           />
-                          <Button variant="secondary" size="sm" disabled={logWeek.isPending} onClick={() => submitWeek(c.id)}>
+                          <Button writes variant="secondary" size="sm" disabled={logWeek.isPending} onClick={() => submitWeek(c.id)}>
                             Log week
                           </Button>
                         </div>
@@ -698,6 +700,7 @@ export default function CostMonitoring() {
                     key={t.id}
                     className="flex items-center gap-2.5 py-1 px-1 -mx-1 rounded-[8px] text-left cursor-pointer hover:bg-sunken transition-colors disabled:opacity-50"
                     disabled={toggleTask.isPending}
+                    {...writeAttrs()}
                     onClick={() => toggleTask.mutate(t.id)}
                   >
                     <span
@@ -716,6 +719,7 @@ export default function CostMonitoring() {
               <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
                   aria-label="Raise a cost-monitoring action"
+                  {...writeAttrs()}
                   className="flex-1 min-w-[140px]"
                   placeholder="Raise an action…"
                   value={taskDraft}
@@ -733,6 +737,7 @@ export default function CostMonitoring() {
                   </button>
                 ))}
                 <Button
+                  writes
                   size="sm"
                   disabled={!taskDraft.trim() || createTask.isPending}
                   onClick={() => {
@@ -758,6 +763,7 @@ export default function CostMonitoring() {
             <div className="flex items-center gap-2 bg-surface border border-border-strong rounded-[12px] p-2 pl-3 flex-wrap">
               <input
                 aria-label="Photo caption"
+                {...writeAttrs()}
                 className="w-44 h-8 py-0 border-none shadow-none px-0 !bg-transparent"
                 placeholder="Caption…"
                 value={photoCap}
@@ -861,10 +867,10 @@ export default function CostMonitoring() {
                 */}
                 <button
                   aria-label={`Remove ${lightbox.caption}`}
-                  title="Remove this photo"
                   className="w-8 h-8 rounded-[9px] inline-flex items-center justify-center text-white cursor-pointer"
                   style={{ background: 'rgba(255,255,255,0.1)' }}
                   disabled={removePhoto.isPending}
+                  {...writeAttrs('Remove this photo')}
                   onClick={() => {
                     if (confirm(`Remove “${lightbox.caption}” from the site log? The audit trail keeps a record that it was removed.`)) {
                       removePhoto.mutate(lightbox.id);

@@ -5,7 +5,7 @@ import { DEFAULT_REGION, REGION_PROFILES, REGIONS, regionProfile, type Region } 
 import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
-import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
@@ -657,7 +657,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
         <SkeletonRows rows={4} height={30} />
       ) : (
         <>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto relative">
           <table className="w-full border-collapse">
             <thead>
               <tr>
@@ -690,6 +690,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                           value={m.role}
                           aria-label={`Role for ${m.name}`}
                           disabled={setRole.isPending && setRole.variables?.userId === m.id}
+                          {...writeAttrs()}
                           onChange={(e) => setRole.mutate({ userId: m.id, role: e.target.value as Role })}
                         >
                           {ROLES.map((r) => (
@@ -869,7 +870,7 @@ function DataPrivacyPanel() {
             </Button>
           </div>
           {showAudit && (
-            <div className="mt-3 rounded-card border border-border-std bg-sunken max-h-[320px] overflow-y-auto">
+            <div className="mt-3 rounded-card border border-border-std bg-sunken max-h-[320px] overflow-y-auto overflow-x-auto">
               {auditQ.isLoading ? (
                 <div className="p-4"><SkeletonRows rows={5} height={22} /></div>
               ) : (auditQ.data ?? []).length === 0 ? (

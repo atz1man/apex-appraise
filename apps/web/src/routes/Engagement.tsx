@@ -268,7 +268,7 @@ export default function Engagement() {
             >
               Download PDF
             </Button>
-            <Button onClick={() => save.mutate({ dealId, terms, expectedUpdatedAt: stamp ?? undefined })} loading={save.isPending} disabled={!dirty || locked}>
+            <Button writes onClick={() => save.mutate({ dealId, terms, expectedUpdatedAt: stamp ?? undefined })} loading={save.isPending} disabled={!dirty || locked}>
               {dirty ? 'Save terms' : 'Saved'}
             </Button>
           </>

@@ -3,7 +3,7 @@ import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/
 import { trpc } from '../lib/trpc';
 import { firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar , writeAttrs} from '../components/ui';
 
 /**
  * The team is the workspace's real members.
@@ -154,14 +154,14 @@ export default function Calendar() {
             <Skeleton height={27} width={260} className="mt-2" />
             <Skeleton height={13} width={380} className="mt-2.5" />
           </div>
-          <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
+          <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
             {/* month grid skeleton */}
             <div className="bg-surface border border-border-strong rounded-panel shadow-rest p-3 sm:p-5">
               <div className="flex items-center gap-3">
                 <Skeleton height={20} width={160} />
                 <Skeleton height={30} width={100} />
               </div>
-              <div className="mt-4 grid grid-cols-7 gap-1.5">
+              <div className="mt-4 grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1.5">
                 {Array.from({ length: 7 }, (_, i) => (
                   <Skeleton key={`w${i}`} height={10} />
                 ))}
@@ -238,7 +238,7 @@ export default function Calendar() {
           />
         </div>
 
-        <div className="mt-5 grid gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 items-start lg:[grid-template-columns:minmax(0,1fr)_400px]">
           {/* ===== Month grid ===== */}
           <Panel className="!p-3 sm:!p-5">
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -263,7 +263,7 @@ export default function Calendar() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-7 gap-1.5">
+            <div className="mt-4 grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1.5">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
                 <div key={w} className="label-mono text-center text-ink-3 pb-1">{w}</div>
               ))}
@@ -302,11 +302,12 @@ export default function Calendar() {
                           key={t.id}
                           title={`${t.title} — ${t.deal.name} (${t.done ? 'click to reopen' : 'click to complete'})`}
                           disabled={toggleTask.isPending}
+                          {...writeAttrs()}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleTask.mutate(t.id);
                           }}
-                          className="flex items-center gap-[5px] px-1.5 py-[3px] rounded-[6px] text-left cursor-pointer transition-colors disabled:opacity-60"
+                          className="flex items-center gap-[5px] w-full min-w-0 min-h-6 px-1.5 py-[3px] rounded-[6px] text-left cursor-pointer transition-colors disabled:opacity-60"
                           style={{ background: bg }}
                         >
                           <Dot color={dot} size={5} />
@@ -339,6 +340,7 @@ export default function Calendar() {
                 type="text"
                 placeholder="Add a task…"
                 aria-label="Task title"
+                {...writeAttrs()}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -400,6 +402,7 @@ export default function Calendar() {
                           <button
                             aria-label={t.done ? 'Reopen task' : 'Complete task'}
                             disabled={toggleTask.isPending}
+                            {...writeAttrs()}
                             onClick={() => toggleTask.mutate(t.id)}
                             className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
                             style={{ borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))', background: t.done ? brand[700] : neutral.surface }}
@@ -430,9 +433,9 @@ export default function Calendar() {
                           */}
                           <button
                             aria-label={`Delete task ${t.title}`}
-                            title="Delete this task"
                             className="shrink-0 mt-[1px] w-6 h-6 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
                             disabled={removeTask.isPending}
+                            {...writeAttrs('Delete this task')}
                             onClick={() => {
                               if (confirm(`Delete “${t.title}”? Ticking it instead records that the work was done.`)) removeTask.mutate(t.id);
                             }}
