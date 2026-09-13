@@ -5,6 +5,7 @@ import { assetFamilyTag, avatarGradients, brand, brandInk, brandMarkGradient, on
 import { focusableWithin, nextFocus } from '../lib/focus-trap';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { READ_ONLY_MESSAGE, isViewOnly } from '../lib/read-only';
+import { loadFailure, type TRPCErrorLike } from '../lib/load-failure';
 
 // ---------- Brand ----------
 
@@ -521,7 +522,64 @@ export function PlanLocked({
   );
 }
 
-export function EmptyState({ icon, title, children, cta }: { icon?: ReactNode; title?: ReactNode; children: ReactNode; cta?: ReactNode }) {
+/**
+ * Nothing is here — and WHY nothing is here.
+ *
+ * "No comparable evidence yet" is a claim about the firm's record, and a
+ * screen whose query just failed does not know it. Measured by refusing every
+ * query and walking the app signed in: sixteen empty states across eleven
+ * screens asserted it anyway, among them "Nobody is on the register yet" and
+ * "No cost plan on this deal yet" — a valuer reading either would go looking
+ * for work that is in fact sitting there unreachable. The toast that appears
+ * beside them is transient and gone by the time anyone reads the panel.
+ *
+ * The failure belongs HERE rather than in a component of its own, because the
+ * empty state and the failure answer the same question in the same place, and
+ * a site that must pass `error` to say "nothing yet" cannot say it without
+ * having looked. `lib/load-failure.ts` decides what the failure means; this
+ * only renders it, and offers a retry exactly when a second attempt could
+ * plausibly work.
+ */
+export function EmptyState({
+  icon,
+  title,
+  children,
+  cta,
+  error,
+  what,
+  onRetry,
+}: {
+  icon?: ReactNode;
+  title?: ReactNode;
+  /** the copy shown when there really is nothing; omitted when a site only has a failure to show */
+  children?: ReactNode;
+  cta?: ReactNode;
+  /** the query's error — when set, the failure is shown INSTEAD of the copy above */
+  error?: TRPCErrorLike | null;
+  /** what could not be loaded, for the sentence: "the comparables may be fine…" */
+  what?: string;
+  /** re-run the query; the control appears only when the failure is retryable */
+  onRetry?: () => void;
+}) {
+  if (error) {
+    const f = loadFailure(error, what ?? 'data');
+    return (
+      <div
+        data-testid="load-error"
+        data-kind={f.kind}
+        role="alert"
+        className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center"
+      >
+        <div className="text-[14px] font-semibold text-ink-2 tracking-[-0.2px]">{f.title}</div>
+        <div className="text-[12.5px] text-ink-3b leading-relaxed max-w-[360px]">{f.detail}</div>
+        {f.retry && onRetry && (
+          <div className="mt-2.5">
+            <Button variant="secondary" size="sm" onClick={onRetry}>Try again</Button>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div data-testid="empty-state" className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[18px] py-10 px-6 flex flex-col items-center gap-1.5 text-center">
       {icon && (

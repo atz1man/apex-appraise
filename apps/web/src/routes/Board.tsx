@@ -57,7 +57,7 @@ export default function Board() {
     setSearch(search, { replace: true });
   }, [search, setSearch]);
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data, isLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const { data: exposure } = trpc.deals.exposure.useQuery(undefined, { staleTime: 30_000 });
   const setStage = trpc.deals.setStage.useMutation({ onSuccess: () => utils.deals.list.invalidate() });
   const createDeal = trpc.deals.create.useMutation({
@@ -297,7 +297,11 @@ export default function Board() {
                     <span className="fig ml-auto text-[11px] text-ink-3">{cards.length ? fM(stageGdv) : '—'}</span>
                   </header>
                   <div className="flex flex-col gap-2.5">
-                    {cards.length === 0 && <EmptyState>No deals at this stage</EmptyState>}
+                    {cards.length === 0 && (
+                      <EmptyState error={dealsError} what="pipeline" onRetry={() => refetchDeals()}>
+                        No deals at this stage
+                      </EmptyState>
+                    )}
                     {cards.map((d) => {
                       const chip = statusChip[d.figureStatus] ?? statusChip.ESTIMATE;
                       return (

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar , writeAttrs} from '../components/ui';
+import { loadFailure } from '../lib/load-failure';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
 import { fmtBytes, n0 } from '../lib/format';
@@ -89,11 +90,11 @@ export default function DataRoom() {
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
 
   const [folder, setFolder] = useState('all');
-  const { data, isLoading } = trpc.documents.list.useQuery(
+  const { data, isLoading, error: docsError, refetch: refetchDocs } = trpc.documents.list.useQuery(
     { dealId, category: folder === 'all' ? undefined : folder },
     { enabled: !!dealId },
   );
-  const { data: activity } = trpc.documents.activity.useQuery(dealId, { enabled: !!dealId });
+  const { data: activity, error: activityError, refetch: refetchActivity } = trpc.documents.activity.useQuery(dealId, { enabled: !!dealId });
   const accessQ = trpc.documents.access.useQuery(dealId, { enabled: !!dealId });
 
   const addDoc = trpc.documents.expect.useMutation({
@@ -336,7 +337,7 @@ export default function DataRoom() {
               <SkeletonRows rows={6} height={20} />
             </div>
           ) : docs.length === 0 ? (
-            <EmptyState title="This folder is empty" cta={<Button variant="secondary" onClick={openForm}>List an expected document</Button>}>
+            <EmptyState title="This folder is empty" error={docsError} what="documents" onRetry={() => refetchDocs()} cta={<Button variant="secondary" onClick={openForm}>List an expected document</Button>}>
               Drop in contracts, reports and drawings — every uploaded document becomes part of the deal workfile. You can also list one you
               are still waiting for, so the gap is visible while it is chased.
             </EmptyState>
@@ -572,7 +573,14 @@ export default function DataRoom() {
 
           <div className="mt-6 text-[13px] font-semibold">Recent activity</div>
           <div className="mt-3">
-            {(activity ?? []).length === 0 && <div className="text-[11.5px] text-ink-2b">No activity yet.</div>}
+            {(activity ?? []).length === 0 &&
+              (activityError ? (
+                <div role="alert" data-testid="load-error" className="text-[11.5px] text-status-red">
+                  {loadFailure(activityError, 'activity').title}
+                </div>
+              ) : (
+                <div className="text-[11.5px] text-ink-2b">No activity yet.</div>
+              ))}
             {(activity ?? []).map((a, i) => (
               <div key={a.id} className="flex gap-2.5 pb-3.5">
                 <div className="flex flex-col items-center">

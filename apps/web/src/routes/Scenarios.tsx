@@ -64,7 +64,7 @@ export default function Scenarios() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
-  const { data: rows, isLoading } = trpc.scenarios.list.useQuery(dealId, { enabled: !!dealId });
+  const { data: rows, isLoading, error: rowsError, refetch: refetchRows } = trpc.scenarios.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.scenarios.upsert.useMutation({ onSuccess: () => utils.scenarios.list.invalidate(dealId) });
   // this screen shows the error where it happened; see App.tsx
   const draftRisk = trpc.scenarios.draftRisk.useMutation({ meta: { inlineError: true } });
@@ -223,7 +223,7 @@ export default function Scenarios() {
               </div>
             ) : (
               <div key={col} className="px-4 py-3 border-b border-border-std" style={cellBorder}>
-                <EmptyState title="No option in this slot" cta={<Button writes variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
+                <EmptyState title="No option in this slot" error={rowsError} what="options" onRetry={() => refetchRows()} cta={<Button writes variant="secondary" onClick={() => addOption(slot.slot)} disabled={upsert.isPending}>+ Add option</Button>}>
                   Add a scheme variant to compare returns side by side.
                 </EmptyState>
               </div>

@@ -5,6 +5,7 @@ import { trpc, getPrincipal } from '../lib/trpc';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
+import { loadFailure } from '../lib/load-failure';
 import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
 
 type Room = { name: string; condition: number; photos: number; notes: string };
@@ -130,7 +131,7 @@ export default function FieldApp() {
     return () => mq.removeEventListener('change', onChange);
   }, []);
   const utils = trpc.useUtils();
-  const { data: dealsData, isLoading: dealsLoading } = trpc.deals.list.useQuery({});
+  const { data: dealsData, isLoading: dealsLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const deals = dealsData?.deals ?? [];
 
   const [screen, setScreen] = useState<Screen>('appraisals');
@@ -311,8 +312,20 @@ export default function FieldApp() {
         <div className="mx-[22px] mt-4 flex flex-col gap-2.5">
           {dealsLoading && <div className="py-10 flex justify-center"><Spinner /></div>}
           {!dealsLoading && filtered.length === 0 && (
-            <div className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[13px] py-8 px-4 text-center text-[12.5px] text-ink-3b">
-              No appraisal jobs{q ? ' match your search' : ' assigned yet'}.
+            <div
+              {...(dealsError ? { role: 'alert' as const, 'data-testid': 'load-error' } : {})}
+              className="border border-dashed border-[rgb(var(--dashed,218_217_210))] rounded-[13px] py-8 px-4 text-center text-[12.5px] text-ink-3b"
+            >
+              {dealsError ? (
+                <>
+                  {loadFailure(dealsError, 'jobs').title}
+                  <button onClick={() => refetchDeals()} className="block mx-auto mt-2 min-h-6 px-2 text-[12.5px] font-semibold text-brand-ink">
+                    Try again
+                  </button>
+                </>
+              ) : (
+                <>No appraisal jobs{q ? ' match your search' : ' assigned yet'}.</>
+              )}
             </div>
           )}
           {filtered.map((d) => {

@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (185, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (187, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -467,6 +467,29 @@ the point, so read the failure rather than adding an exemption.
   while the table it belonged to scrolled correctly. Found by walking ancestors for a
   scrolling container, not by looking at what was wide. The spec carries a fixture of two
   crowded 20px buttons, one spaced one and an inline link, so an empty walk cannot pass it.
+- `e2e/load-failure.spec.ts` — no screen claims the firm has nothing when the truth is it could
+  not look. "No comparable evidence yet" and "Nobody is on the register yet" are claims about
+  the RECORD, and a screen whose query just failed knows neither. Measured signed in with every
+  query answered 500: SIXTEEN empty states across eleven screens asserted it anyway, among them
+  "No cost plan on this deal yet" and "No deals at this stage" on all seven pipeline columns —
+  a valuer reading any of them goes looking for work that is sitting there unreachable. The
+  toast beside them is transient and gone by the time anyone reads the panel, and
+  `lib/load-failure.ts` had been written for exactly this conflation: it was wired into three
+  screens and nothing else. The failure now lives in `EmptyState` itself rather than in a
+  component of its own, because the empty state and the failure answer the same question in the
+  same place — and a site that must pass `error` to say "nothing yet" cannot say it without
+  having looked. Benchmarking was the other half and was worse: `loading || !M` is true of a
+  FAILURE as well as of a load, so the screen span forever — the exact conflation
+  `load-failure.ts`'s own comment names about the funding pack, still standing two screens over.
+  What the spec had to learn, and the reason it is trusted: the query client retries once
+  (`App.tsx`), so for about a second after navigation a refused screen still shows skeletons,
+  and the first version's fixed 1200ms sleep landed INSIDE that window — two planted mutants
+  both survived. It waits for the failure to become visible instead, and a route where it never
+  does is REPORTED rather than passed over, because a walk that cannot see the failure has not
+  checked what it claims to. That assertion is what found Benchmarking. Both directions run the
+  same matcher on the same screen: a deal of the spec's own making genuinely has no
+  comparables, so the claim must be found there, and must be gone the moment the query is
+  refused — with Try again, which recovers it once the server answers.
 - `e2e/reachable.spec.ts` — the doors, CLICKED. `route-reachable` proves a link literal
   exists in the source, which is a weaker claim than it reads as: the commit that added the
   funding-pack tile passed it, and the tile was the crash above. A link in the source is not

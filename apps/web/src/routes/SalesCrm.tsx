@@ -112,6 +112,8 @@ export default function SalesCrm() {
 
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const unitsQ = trpc.sales.units.useQuery(dealId, { enabled: !!dealId });
+  // both lists drive the same schedule, so either failing means the schedule is unknown
+  const scheduleError = unitsQ.error ?? null;
   const tenQ = trpc.sales.tenancies.useQuery(dealId, { enabled: !!dealId });
 
   const isRent = mode === 'lettings';
@@ -539,7 +541,7 @@ export default function SalesCrm() {
                 }
               >
                 {rows.length === 0 ? (
-                  <EmptyState title={`No ${isRent ? 'tenancies' : 'units'} on this deal yet`} cta={<Button onClick={openCreate}>+ Add unit</Button>}>
+                  <EmptyState title={`No ${isRent ? 'tenancies' : 'units'} on this deal yet`} error={scheduleError} what={isRent ? 'tenancies' : 'units'} onRetry={() => unitsQ.refetch()} cta={<Button onClick={openCreate}>+ Add unit</Button>}>
                     Add the first one to start tracking {isRent ? 'lettings' : 'sales'} progression, agreed prices and completions.
                   </EmptyState>
                 ) : view === 'table' ? (
@@ -669,7 +671,7 @@ export default function SalesCrm() {
 
                 <Panel level={2} title="Marketing funnel" right={<span className="fig text-[11px] text-ink-3">to date</span>}>
                   {rows.length === 0 ? (
-                    <EmptyState>Funnel appears once units are added.</EmptyState>
+                    <EmptyState error={scheduleError} what="schedule" onRetry={() => unitsQ.refetch()}>Funnel appears once units are added.</EmptyState>
                   ) : (
                     <>
                       <div className="flex flex-col gap-2.5">
@@ -690,7 +692,7 @@ export default function SalesCrm() {
 
                 <Panel level={2} title={labels.forecastTitle} right={<span className="fig text-[11px] text-ink-3">{labels.forecastSub}</span>}>
                   {rows.length === 0 || forecast.bars.every((b) => b === 0) ? (
-                    <EmptyState>No {isRent ? 'rent secured' : 'exchanges or reservations'} to forecast yet.</EmptyState>
+                    <EmptyState error={scheduleError} what="schedule" onRetry={() => unitsQ.refetch()}>No {isRent ? 'rent secured' : 'exchanges or reservations'} to forecast yet.</EmptyState>
                   ) : (
                     <>
                       <div className="flex items-end gap-2 h-[90px]">

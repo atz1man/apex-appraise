@@ -30,7 +30,7 @@ export default function Comparables() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
-  const { data, isLoading } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  const { data, isLoading, error: compsError, refetch: refetchComps } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
   const upsert = trpc.comparables.upsert.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
   const remove = trpc.comparables.remove.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
   // this screen shows the error where it happened; see App.tsx
@@ -212,7 +212,13 @@ export default function Comparables() {
               }
             >
               {comps.length === 0 ? (
-                <EmptyState title="No comparable evidence yet" cta={<Button writes onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}>
+                <EmptyState
+                  title="No comparable evidence yet"
+                  error={compsError}
+                  what="comparables"
+                  onRetry={() => refetchComps()}
+                  cta={<Button writes onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}
+                >
                   Add sold comparables to derive a supported £/{U.unit} for the valuation.
                 </EmptyState>
               ) : (
