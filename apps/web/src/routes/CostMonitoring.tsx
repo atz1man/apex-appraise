@@ -66,10 +66,10 @@ export default function CostMonitoring() {
   const todayKey = useMemo(() => firmToday(), []);
 
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
-  const { data: cost, isLoading } = trpc.cost.packages.useQuery(dealId, { enabled: !!dealId });
+  const { data: cost, isLoading, error: costError, refetch: refetchCost } = trpc.cost.packages.useQuery(dealId, { enabled: !!dealId });
   const { data: contractors } = trpc.cost.contractors.useQuery();
-  const { data: photos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
-  const { data: tasks } = trpc.tasks.list.useQuery({ dealId, aspect: 'Cost monitoring' }, { enabled: !!dealId });
+  const { data: photos, error: photosError, refetch: refetchPhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId });
+  const { data: tasks, error: tasksError, refetch: refetchTasks } = trpc.tasks.list.useQuery({ dealId, aspect: 'Cost monitoring' }, { enabled: !!dealId });
 
   const upsertPkg = trpc.cost.upsertPackage.useMutation({
     onSuccess: () => {
@@ -344,6 +344,9 @@ export default function CostMonitoring() {
           <div className="mt-5">
             <EmptyState
               title="No cost plan on this deal yet"
+              error={costError}
+              what="cost plan"
+              onRetry={() => refetchCost()}
               cta={<Button to={`/deal/${dealId}/appraisal`}>Open the appraisal →</Button>}
             >
               Cost monitoring lights up once the build cost plan is broken out into packages —
@@ -714,7 +717,11 @@ export default function CostMonitoring() {
                     <Avatar initials={t.assignee} size={20} />
                   </button>
                 ))}
-                {(tasks ?? []).length === 0 && <EmptyState>No cost-monitoring actions yet — raise one below.</EmptyState>}
+                {(tasks ?? []).length === 0 && (
+                  <EmptyState error={tasksError} what="actions" onRetry={() => refetchTasks()}>
+                    No cost-monitoring actions yet — raise one below.
+                  </EmptyState>
+                )}
               </div>
               <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                 <input
@@ -792,7 +799,11 @@ export default function CostMonitoring() {
             </div>
           </div>
 
-          {photoGroups.length === 0 && <EmptyState>No photos logged yet — add an entry above.</EmptyState>}
+          {photoGroups.length === 0 && (
+            <EmptyState error={photosError} what="site log" onRetry={() => refetchPhotos()}>
+              No photos logged yet — add an entry above.
+            </EmptyState>
+          )}
           {photoGroups.map((g) => (
             <div key={g.wc.getTime()} className="mb-5">
               <div className="flex items-center gap-2.5 mb-2.5">

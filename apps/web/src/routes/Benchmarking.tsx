@@ -3,6 +3,7 @@ import { accent, brand, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { n0, formatPct, formatPp } from '../lib/format';
 import { Button, EmptyState, FormError, Icon, PlanLocked, SPARKLE, Spinner, Td, Th, TopBar , writeAttrs} from '../components/ui';
+import { loadFailure } from '../lib/load-failure';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { workingDeal } from '../lib/working-deal';
 import { useUnits } from '../lib/region';
@@ -339,7 +340,11 @@ export default function Benchmarking() {
       ? 'Illustrative data'
       : headCohort?.published
         ? `${n0(headCohort.points)} appraisals · ${n0(headCohort.contributors)} firms`
-        : 'No benchmark yet';
+        // "No benchmark yet" is a claim about the SHARED pool, which a failed query knows
+        // nothing about — and this one reads as "no firm has contributed", the opposite
+        : metricsQ.error
+          ? 'Benchmark unavailable'
+          : 'No benchmark yet';
   const loading = metricsQ.isLoading || trendQ.isLoading;
 
   /**
@@ -399,6 +404,10 @@ export default function Benchmarking() {
               yours {n0(contribQ.data.yours)}
             </span>
           </>
+        ) : contribQ.error ? (
+          <span role="alert" data-testid="load-error" className="text-[11.5px] text-status-red">
+            {loadFailure(contribQ.error, 'contribution status').title}
+          </span>
         ) : (
           <Spinner />
         )}
@@ -483,6 +492,23 @@ export default function Benchmarking() {
               other firms. Your own deals and their figures are unaffected and stay where they are.
             </PlanLocked>
             <div className="flex flex-col gap-4">{contributionSection}</div>
+          </div>
+        ) : metricsQ.error || trendQ.error ? (
+          /*
+           * `loading || !M` is true of a FAILURE as well as of a load, so this
+           * screen span forever when the pool could not be reached — the exact
+           * conflation `lib/load-failure.ts` was written for, named in its own
+           * comment about the funding pack, and still standing here.
+           */
+          <div className="mt-8">
+            <EmptyState
+              error={metricsQ.error ?? trendQ.error}
+              what="benchmark"
+              onRetry={() => {
+                metricsQ.refetch();
+                trendQ.refetch();
+              }}
+            />
           </div>
         ) : loading || !M ? (
           <div className="mt-10 flex justify-center">

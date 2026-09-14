@@ -96,7 +96,7 @@ function rel(d: Date | string): string {
 export default function Integrations() {
   const toast = useToast();
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.integrations.list.useQuery();
+  const { data, isLoading, error: listError, refetch: refetchList } = trpc.integrations.list.useQuery();
   const rows = data?.connections;
   /**
    * Whether a provider takes the workspace's own API key — a fact about the
@@ -190,7 +190,7 @@ export default function Integrations() {
             ))}
           </div>
         ) : total === 0 ? (
-          <EmptyState>No integrations available for this workspace yet.</EmptyState>
+          <EmptyState error={listError} what="integrations" onRetry={() => refetchList()}>No integrations available for this workspace yet.</EmptyState>
         ) : (
           GROUPS.map((g) => (
             <div key={g.label} className="mb-7">

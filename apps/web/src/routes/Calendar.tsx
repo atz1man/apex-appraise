@@ -59,8 +59,8 @@ export default function Calendar() {
   const [due, setDue] = useState(todayKey);
   const titleRef = useRef<HTMLInputElement>(null);
 
-  const { data: taskData, isLoading: tasksLoading } = trpc.tasks.list.useQuery({});
-  const { data: dealData, isLoading: dealsLoading } = trpc.deals.list.useQuery({});
+  const { data: taskData, isLoading: tasksLoading, error: tasksError, refetch: refetchTasks } = trpc.tasks.list.useQuery({});
+  const { data: dealData, isLoading: dealsLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   /** the workspace's real members, in the shape this screen uses */
   const { data: members } = trpc.org.members.useQuery();
   const PEOPLE = (members ?? []).map((m) => ({
@@ -451,14 +451,14 @@ export default function Calendar() {
                 ),
               )}
               {tasks.length === 0 && (
-                <div className="py-10 px-5 text-center text-[13px] text-ink-3b">No tasks for this filter.</div>
+                <EmptyState error={tasksError} what="tasks" onRetry={() => refetchTasks()}>No tasks for this filter.</EmptyState>
               )}
             </Panel>
 
             {/* deal milestones */}
             <Panel title="Deal milestones" right={<span className="fig text-[11px] text-ink-3">{milestones.length}</span>}>
               {milestones.length === 0 ? (
-                <EmptyState>No upcoming deal milestones.</EmptyState>
+                <EmptyState error={dealsError} what="deals" onRetry={() => refetchDeals()}>No upcoming deal milestones.</EmptyState>
               ) : (
                 <div className="flex flex-col gap-2">
                   {milestones.map((d) => (

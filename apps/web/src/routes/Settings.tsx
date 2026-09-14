@@ -6,6 +6,7 @@ import { clearSession, getPrincipal, setSession, trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { ApiKeysPanel, BankPanel, SsoPanel, WebhooksPanel, XeroPanel } from '../components/settings-integrations';
 import { Avatar, Button, FirmMark, FormError, Panel, PlanLocked, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
+import { loadFailure } from '../lib/load-failure';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 
 const ROLES = ['ADMIN', 'ANALYST', 'SURVEYOR', 'VIEWER'] as const;
@@ -383,7 +384,7 @@ function DemoMailboxPanel({ isAdmin }: { isAdmin: boolean }) {
 function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
   const toast = useToast();
   const utils = trpc.useUtils();
-  const { data: logins, isLoading } = trpc.portalAccess.list.useQuery();
+  const { data: logins, isLoading, error: loginsError } = trpc.portalAccess.list.useQuery();
   const { data: candidates } = trpc.portalAccess.candidates.useQuery(undefined, { enabled: isAdmin });
 
   const [kind, setKind] = useState<'investor' | 'buyer'>('investor');
@@ -551,7 +552,9 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
         {isLoading ? (
           <SkeletonRows rows={2} />
         ) : !logins?.length ? (
-          <div className="text-[12.5px] text-ink-3">Nobody outside the firm can sign in.</div>
+          <div className={`text-[12.5px] ${loginsError ? 'text-status-red' : 'text-ink-3'}`} {...(loginsError ? { role: 'alert' as const, 'data-testid': 'load-error' } : {})}>
+            {loginsError ? loadFailure(loginsError, 'portal logins').title : 'Nobody outside the firm can sign in.'}
+          </div>
         ) : (
           <div className="flex flex-col gap-1.5">
             {logins.map((l) => (
