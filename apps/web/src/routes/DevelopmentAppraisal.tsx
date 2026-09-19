@@ -643,7 +643,7 @@ export default function DevelopmentAppraisal() {
                       return (
                         <Panel
                           key={i}
-                          title={
+                          header={
                             <input
                               className="text-[13px] font-semibold w-[220px]"
                               aria-label={`Phase ${i + 1} name`}
@@ -1588,9 +1588,9 @@ export default function DevelopmentAppraisal() {
           {/* right rail: result summary + breakdown + sensitivity + tasks */}
           <aside className="flex flex-col gap-4">
             <Panel
-              title={
+              header={
                 <div>
-                  <div className="label-mono text-ink-3">{isResidual ? 'Residual land value' : 'Fixed land price → profit'}</div>
+                  <h2 className="label-mono text-ink-3">{isResidual ? 'Residual land value' : 'Fixed land price → profit'}</h2>
                   <div className="fig text-[24px] font-semibold tracking-[-1px] text-brand-ink">{formatSigned(isResidual ? R.residualNet : R.profit)}</div>
                 </div>
               }

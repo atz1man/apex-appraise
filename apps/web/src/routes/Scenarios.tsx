@@ -352,7 +352,7 @@ export default function Scenarios() {
         <section className="mt-6 bg-surface border border-border-strong rounded-panel shadow-rest p-5">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <div className="text-[15px] font-bold tracking-[-0.3px]">AI risk view</div>
+              <h2 className="text-[15px] font-bold tracking-[-0.3px]">AI risk view</h2>
               <div className="mt-0.5 text-[12.5px] text-ink-3">
                 Compares the options&apos; risk profiles — planning, cost, sales absorption and leverage — against the figures above.
               </div>

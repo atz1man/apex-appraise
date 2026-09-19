@@ -125,7 +125,7 @@ export default function Board() {
         {exposure && exposure.totals.deals > 1 && (
           <section className="mt-4 bg-surface border border-border-strong rounded-panel shadow-rest p-4" data-exposure>
             <div className="flex items-baseline justify-between flex-wrap gap-2">
-              <span className="text-[13px] font-semibold">Debt exposure</span>
+              <h2 className="text-[13px] font-semibold">Debt exposure</h2>
               <span className="text-[11px] text-ink-3">
                 {exposure.totals.deals} funded {exposure.totals.deals === 1 ? 'deal' : 'deals'} · recomputed from each appraisal
               </span>
