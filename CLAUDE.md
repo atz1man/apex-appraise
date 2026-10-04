@@ -34,9 +34,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (288): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -307,6 +307,34 @@ the point, so read the failure rather than adding an exemption.
   `e2e/headings.spec.ts` proves the order in the browser: every route, each heading at most
   one level below the one before (`lib/outline.ts` holds the predicate). Run before the
   callers were touched it named all eight screens.
+- `section-name` (web suite + `e2e/headings.spec.ts`) — a card that shows its name shows it
+  to everyone. Every screen here is built from cards and a card's header row carries the
+  section's name; whether that name is a HEADING decides whether a screen reader can find
+  the section at all. Measured in the browser over every route, once the outline above had
+  its levels: THIRTEEN sections showed a name that no heading carried — five on the deal
+  overview (the screen a deal opens on), four on Comparables, and one each on the Pipeline
+  board, Scenarios, Benchmarking and the appraisal's result panel. On three of those screens
+  that was the whole outline below the `h1`, so jumping by heading found the page title and
+  then nothing. Every one of them read as a title to a sighted user: `<span
+  className="text-[13px] font-semibold">`. `Panel`'s half is the COMPILER's now — `title` is
+  typed `string` and the primitive renders the heading at its `level`, so a node title is a
+  build error naming the prop, which beats a sweep because it lands before the code runs.
+  `titleClassName` is what makes a string enough, and it is not a convenience: those names
+  were spans only to carry a size, and putting the same classes ON the heading renders
+  identically, while WRAPPING the span in a class-less `h2` does not — the heading takes the
+  inherited 14px/21px line box instead of the span's 13px/19.5px, which grew eight header
+  rows by a pixel and pushed their screens down. Measured both ways, 64 header boxes
+  compared, and the committed version moves none. What no type can see is a card written out
+  by hand in a route rather than from the primitive, which three of the thirteen were; that
+  is what the browser half is for, and it finds a card's header row by the layout `Panel`
+  and the hand-built cards share rather than by "the first text in the card", which would
+  report every card whose body opens with a sentence. The one shape that is NOT a missing
+  heading is an editable header — the appraisal's phase panels are titled by the field that
+  renames the phase, and a heading around a text box names nothing — so `header` is the
+  primitive's way out for a row that is not a name, used by that field and by the three rows
+  pairing a name with a sentence or a figure, where wrapping everything would fold it all
+  into the heading's accessible name. Run against the tree before the fix it names all
+  thirteen across six routes unaided.
 - `screen-heading` (web suite) — every SCREEN renders an `h1`, its own or the frame's, and
   never both. Measured in the browser, signed in, over every reachable route: 12 of 25
   rendered no `h1` at all — the Pipeline board had no heading of any level, and the Red Book

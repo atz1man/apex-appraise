@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { firstSkippedHeading } from '../src/lib/outline';
+import { unnamedSections } from '../src/lib/section-name';
 
 /**
  * Every screen renders exactly one `h1` — measured in the browser, not read
@@ -26,6 +27,20 @@ import { firstSkippedHeading } from '../src/lib/outline';
  * `level`, and this is the proof that each caller chose the right one —
  * the predicate is `lib/outline.ts`, so its boundaries are unit-tested and
  * this spec only feeds it what the browser rendered.
+ *
+ * And every CARD that shows a name has that name in a heading. A screen here
+ * is built from cards, and a name rendered as a styled `<span>` is invisible
+ * to the outline however plainly a sighted reader sees it — thirteen were,
+ * measured over this same walk, three of them the whole of a screen's outline
+ * below its `h1`. `Panel`'s half is the compiler's now (its `title` is typed
+ * `string`), so what this reaches that nothing else can is a card written out
+ * by hand in a route, which is what three of the thirteen were.
+ *
+ * A card's header row is found by the layout `Panel` and the hand-built cards
+ * share — a flex row that spaces the name from its controls — and NOT by
+ * "the first text in the card", which reports every card whose body opens
+ * with a sentence. `lib/section-name.ts` holds the judgement and says what
+ * that choice gives up.
  *
  * Soft on purpose: one run names every screen that skips, rather than the
  * first.
@@ -92,6 +107,24 @@ test('every screen has one h1, on a deal with a saved appraisal', async ({ page 
           `${route} skips a heading level: h${skip?.from} "${headings[(skip?.index ?? 1) - 1]?.text}" is followed by h${skip?.to} "${headings[skip?.index ?? 0]?.text}" — outline ${headings.map((h) => `h${h.level}`).join(' ')}`,
         )
         .toBeNull();
+
+      const cards = await page.locator('section.bg-surface').evaluateAll((sections) =>
+        sections.flatMap((section) => {
+          const row = section.firstElementChild;
+          if (!row || !row.classList.contains('justify-between')) return [];
+          const head = row.firstElementChild;
+          if (!head) return [];
+          return [{
+            text: (head.textContent ?? '').trim().slice(0, 60),
+            heading: head.matches('h1, h2, h3, h4, h5, h6') || !!head.querySelector('h1, h2, h3, h4, h5, h6'),
+            control: head.matches('input, select, textarea') || !!head.querySelector('input, select, textarea'),
+          }];
+        }),
+      );
+      const unnamed = unnamedSections(cards).map((c) => `"${c.text}"`);
+      expect
+        .soft(unnamed, `${route} shows ${unnamed.length} section name(s) that no heading carries: ${unnamed.join(', ')}`)
+        .toEqual([]);
     });
   }
 });

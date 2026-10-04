@@ -491,11 +491,11 @@ export default function DealOverview() {
           <aside className="flex flex-col gap-4">
             {/* Construction cost health */}
             {costLoading ? (
-              <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>}>
+              <Panel level={2} title="Construction cost health" titleClassName="text-[13px] font-semibold">
                 <SkeletonRows rows={3} />
               </Panel>
             ) : hasCost && costRollup ? (
-              <Panel title={<span className="text-[13px] font-semibold">Construction cost health</span>} right={
+              <Panel level={2} title="Construction cost health" titleClassName="text-[13px] font-semibold" right={
                   costMeasured ? (
                     <StatusChip status={costOver ? 'red' : 'green'} label={costOver ? 'Over' : 'On track'} />
                   ) : (
@@ -547,11 +547,11 @@ export default function DealOverview() {
 
             {/* Sales health */}
             {salesLoading ? (
-              <Panel title={<span className="text-[13px] font-semibold">Sales health</span>}>
+              <Panel level={2} title="Sales health" titleClassName="text-[13px] font-semibold">
                 <SkeletonRows rows={3} />
               </Panel>
             ) : hasSales && salesRollup ? (
-              <Panel title={<span className="text-[13px] font-semibold">Sales health</span>} right={<span className="fig text-[11px] text-ink-3">{plural(salesRollup.total, 'unit')}</span>}>
+              <Panel level={2} title="Sales health" titleClassName="text-[13px] font-semibold" right={<span className="fig text-[11px] text-ink-3">{plural(salesRollup.total, 'unit')}</span>}>
                 <div className="flex items-end justify-between">
                   <div>
                     <div className="label-mono text-ink-3">GDV realised</div>
@@ -595,7 +595,9 @@ export default function DealOverview() {
 
             {/* Open tasks */}
             <Panel
-              title={<span className="text-[13px] font-semibold">Open tasks</span>}
+              level={2}
+              title="Open tasks"
+              titleClassName="text-[13px] font-semibold"
               right={<span className="fig text-[11px] text-ink-3">{openTasks.length} open</span>}
             >
               {tasksLoading ? (
@@ -633,7 +635,9 @@ export default function DealOverview() {
 
             {/* AI use — what the reports will disclose, reviewable before issue */}
             <Panel
-              title={<span className="text-[13px] font-semibold">AI use on this deal</span>}
+              level={2}
+              title="AI use on this deal"
+              titleClassName="text-[13px] font-semibold"
               right={<StatusChip status={ai?.used ? 'amber' : 'green'} label={ai?.used ? 'DISCLOSED' : 'NONE'} />}
             >
               {!ai ? (
@@ -663,7 +667,7 @@ export default function DealOverview() {
             </Panel>
 
             {/* Recent activity */}
-            <Panel title={<span className="text-[13px] font-semibold">Recent activity</span>}>
+            <Panel level={2} title="Recent activity" titleClassName="text-[13px] font-semibold">
               {activityLoading ? (
                 <SkeletonRows rows={5} />
               ) : (activity ?? []).length === 0 ? (

@@ -863,7 +863,7 @@ export default function AutoAppraisal() {
 
               {/* ask the deal · what-if */}
               <Panel
-                title={
+                header={
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-[7px] bg-brand-700 inline-flex items-center justify-center shrink-0">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

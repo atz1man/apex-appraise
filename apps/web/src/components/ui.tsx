@@ -226,17 +226,47 @@ export function FirmMark({ logoUrl, size = 32, alt }: { logoUrl?: string | null;
  * The rendered outline is proved by `e2e/headings.spec.ts`, which walks
  * every route and refuses a heading more than one level below the one
  * before it.
+ *
+ * `title` is the section's NAME and is TYPED `string`, so it always becomes a
+ * heading and the compiler refuses anything else. It used to be a `ReactNode`
+ * rendered bare, and that silently cost thirteen sections their place in the
+ * outline: a title written as `<span className="text-[13px] font-semibold">`
+ * reads exactly like every other panel title on the screen and sat in no
+ * heading at all. Measured in the browser: five such names on the deal
+ * overview, four on Comparables, and three more on cards built by hand rather
+ * than from this primitive — every one of them a screen a valuer works in
+ * daily. The type is the guard, and it is better than a sweep because it names
+ * the prop at the call site before the code runs.
+ *
+ * `titleClassName` is why a string is enough. The nine names that were spans
+ * were spans only to carry a size (13px, 14px, 17px against the house 16px),
+ * and putting those same classes on the heading makes it render identically —
+ * measured, to the pixel. Wrapping the span in a heading instead does NOT:
+ * a class-less `h2` takes the inherited 14px/21px line box rather than the
+ * span's 13px/19.5px, which grew the header row by a pixel and pushed
+ * everything below it down. That is the whole reason the class goes on the
+ * heading rather than around it.
+ *
+ * `header` is the way out, for a header row that is NOT a name: the appraisal's
+ * phase panel, whose title is the editable phase-name field (a heading around a
+ * text box names nothing — the input carries its own `aria-label`), and the
+ * three rows that pair a name with something else, where wrapping everything
+ * would fold a sentence or a figure into the heading's accessible name. Those
+ * put the heading on the name line themselves. Anything with `header` owns its
+ * own semantics; anything with `title` gets them here.
  */
-export function Panel({ title, right, children, className = '', accent, level = 3 }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string; level?: 2 | 3 | 4 }) {
+export function Panel({ title, titleClassName, header, right, children, className = '', accent, level = 3 }: { title?: string; titleClassName?: string; header?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; accent?: string; level?: 2 | 3 | 4 }) {
   const Heading = `h${level}` as const;
+  const name = !title ? null : <Heading className={titleClassName ?? 'text-[16px] font-semibold tracking-[-0.3px]'}>{title}</Heading>;
+  const head = header ?? name;
   return (
     <section
       className={`bg-surface rounded-panel shadow-rest p-5 sm:p-6 ${className}`}
       style={accent ? { borderTop: `3px solid ${accent}` } : undefined}
     >
-      {(title || right) && (
+      {(head || right) && (
         <div className="flex items-center justify-between mb-3.5">
-          {typeof title === 'string' ? <Heading className="text-[16px] font-semibold tracking-[-0.3px]">{title}</Heading> : title}
+          {head}
           {right}
         </div>
       )}

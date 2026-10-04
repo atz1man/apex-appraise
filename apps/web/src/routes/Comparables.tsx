@@ -197,9 +197,9 @@ export default function Comparables() {
           {/* LEFT: adjustment grid + map */}
           <div className="flex flex-col gap-4">
             <Panel
-              title={
+              header={
                 <div>
-                  <div className="text-[17px] font-bold tracking-[-0.4px]">Sales comparison — adjustment grid</div>
+                  <h2 className="text-[17px] font-bold tracking-[-0.4px]">Sales comparison — adjustment grid</h2>
                   <div className="mt-0.5 text-[12.5px] text-ink-3 font-normal">
                     Adjust each comp to the subject; the grid derives a supported £/{U.unit}.
                   </div>
@@ -304,7 +304,7 @@ export default function Comparables() {
             </Panel>
 
             {/* real map — OpenStreetMap tiles, geocoded pins */}
-            <Panel title={<span className="text-[14px] font-semibold">Location of evidence</span>}>
+            <Panel level={2} title="Location of evidence" titleClassName="text-[14px] font-semibold">
               {/**
                 * The map is drawn whenever ANYTHING can be placed on it.
                 *
@@ -349,7 +349,7 @@ export default function Comparables() {
               </div>
             </div>
 
-            <Panel title={<span className="text-[13px] font-semibold">Evidence quality</span>}>
+            <Panel level={2} title="Evidence quality" titleClassName="text-[13px] font-semibold">
               <div className="flex flex-col gap-3">
                 <div>
                   <div className="flex justify-between text-[12px] text-ink-2b">
@@ -377,7 +377,7 @@ export default function Comparables() {
               </div>
             </Panel>
 
-            <Panel title={<span className="text-[13px] font-semibold">Apply to appraisal</span>}>
+            <Panel level={2} title="Apply to appraisal" titleClassName="text-[13px] font-semibold">
               <div className="text-[12px] text-ink-2b leading-relaxed">
                 Push the supported {U.rate(supported)} into the revenue tab of the development appraisal.
               </div>

@@ -695,7 +695,7 @@ export default function Benchmarking() {
               <div className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
                 <section className="bg-surface rounded-card shadow-rest p-[18px]">
                   <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold">Market index — UK HPI</span>
+                    <h2 className="text-[13px] font-semibold">Market index — UK HPI</h2>
                     <span className="label-mono rounded-[6px] bg-tint-success text-brand-ink px-1.5 py-[2px]">REAL DATA</span>
                   </div>
                   {hpiQ.isLoading ? (
