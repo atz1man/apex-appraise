@@ -42,7 +42,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function Investors() {
   const utils = trpc.useUtils();
   const toast = useToast();
-  const { data: rows, isLoading } = trpc.investors.list.useQuery();
+  const { data: rows, isLoading, error: rowsError, refetch: refetchRows } = trpc.investors.list.useQuery();
   const { data: dealsQ } = trpc.deals.list.useQuery({});
   const deals = dealsQ?.deals ?? [];
 
@@ -213,7 +213,7 @@ export default function Investors() {
           {isLoading ? (
             <SkeletonRows rows={3} />
           ) : !rows?.length ? (
-            <EmptyState>Nobody is on the register yet. Add an investor, give them a holding in a deal, and they can be invited to the portal.</EmptyState>
+            <EmptyState error={rowsError} what="register" onRetry={() => refetchRows()}>Nobody is on the register yet. Add an investor, give them a holding in a deal, and they can be invited to the portal.</EmptyState>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">

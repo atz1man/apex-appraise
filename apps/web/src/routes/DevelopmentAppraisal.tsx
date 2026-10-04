@@ -25,7 +25,7 @@ import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { startingIncome, startingIncomeLine } from '../lib/starting-income';
 import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
-import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar } from '../components/ui';
+import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { CashflowChart, ProfitBridge } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 import { assetLabel, isIncomeLed } from '@apex/types/asset-classes';
@@ -460,6 +460,7 @@ export default function DevelopmentAppraisal() {
               Export .xlsx
             </Button>
             <Button
+              writes
               onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
               loading={save.isPending}
               disabled={!dirty}
@@ -1707,6 +1708,7 @@ export default function DevelopmentAppraisal() {
                     className="flex items-center gap-2.5 py-1 text-left group disabled:opacity-60"
                     aria-pressed={t.done}
                     disabled={toggleTask.isPending}
+                    {...writeAttrs()}
                     onClick={() => toggleTask.mutate(t.id)}
                   >
                     <span
@@ -1727,6 +1729,7 @@ export default function DevelopmentAppraisal() {
                 <input
                   className="flex-1 min-w-[140px]"
                   placeholder={`Add ${aspect.toLowerCase()} task…`}
+                  {...writeAttrs()}
                   value={newTask}
                   onChange={(e) => setNewTask(e.target.value)}
                   onKeyDown={(e) => {
@@ -1753,6 +1756,7 @@ export default function DevelopmentAppraisal() {
           <input
             className="flex-1"
             placeholder="Label this version — e.g. “Post-tender build rates”"
+            {...writeAttrs()}
             value={versionLabel}
             onChange={(e) => setVersionLabel(e.target.value)}
             onKeyDown={(e) => {
@@ -1807,6 +1811,7 @@ export default function DevelopmentAppraisal() {
                 {!v.isCurrent && (
                   <div className="mt-2.5 flex gap-2">
                     <Button
+                      writes
                       variant="secondary"
                       size="sm"
                       disabled={restore.isPending}
@@ -1912,6 +1917,7 @@ function ReviewRow({
               Approve
             </Button>
             <Button
+              writes
               variant="secondary"
               size="sm"
               disabled={!note.trim() || decide.isPending}

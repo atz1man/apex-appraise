@@ -145,3 +145,30 @@ function patchShape(): Record<string, unknown> {
   const input = procedures['deals.update']!._def.inputs[0] as ZodObjectish;
   return (input._def.shape().patch as ZodObjectish)._def.shape();
 }
+
+/**
+ * A deal created with a postcode keeps it.
+ *
+ * Measured on a fresh workspace on 4 September: `deals.create` did not name
+ * `postcode` in its schema, zod strips what a schema does not name, and the
+ * row stored null — so the first thing a new deal's site pack did was ask for
+ * the postcode the caller had just supplied. The map, the site pack and the
+ * benchmark REGION all hang off that column. `update` has always taken one.
+ */
+describe('deals.create keeps the postcode it was given', () => {
+  it('stores it, and the site pack does not ask for it again', async () => {
+    const t = await makeTenant('postcode-create');
+    const created = await caller(t).deals.create({ name: 'Postcode Site', address: '1 Quay Road, Poole', postcode: ' BH15 1JF ', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' });
+    const row = await prisma.deal.findUniqueOrThrow({ where: { id: created.id }, select: { postcode: true } });
+    expect(row.postcode).toBe('BH15 1JF');
+    const pack = await caller(t).sitePack.get({ dealId: created.id });
+    expect(pack.status).not.toBe('no-postcode');
+  });
+
+  it('stores null, not an empty string, when none is given', async () => {
+    const t = await makeTenant('postcode-none');
+    const created = await caller(t).deals.create({ name: 'No Postcode', address: '2 Quay Road, Poole', assetType: 'RESIDENTIAL' });
+    const row = await prisma.deal.findUniqueOrThrow({ where: { id: created.id }, select: { postcode: true } });
+    expect(row.postcode).toBeNull();
+  });
+});

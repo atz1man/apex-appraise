@@ -32,16 +32,16 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (922). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (284): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
   firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
-  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings` and `screen-heading` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
+  `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (180, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (187, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -209,7 +209,40 @@ the point, so read the failure rather than adding an exemption.
   tRPC link chain so all 98 mutations refuse locally without 98 edits — and that copy is
   NOT trusted: the same test reads it and asserts its allowlist equals what the real
   router lets a viewer through. `Button writes` greys a control out beforehand; that part
-  IS per-site (62 marked), and an unmarked one degrades to the link, not to a hole.
+  IS per-site, and an unmarked one degrades to the link, not to a hole — but see
+  `write-controls` below for what "degrades" looked like from the member's side.
+- `write-controls` (WEB suite, `lib/write-controls.test.ts`) — every control that fires a
+  mutation a viewer may not run is marked, so it is greyed out with the reason BEFORE it is
+  pressed. Measured by walking every route signed in as a VIEWER: no screen failed, the "View
+  only" chip was on every one, and 42 of the 110 controls that reach a mutation a viewer may not run were live —
+  every destructive one among them. "Advance stage →" on all ten pipeline cards and on the
+  overview, every "Remove" on comparables and scenarios, every "Complete task" and "Delete
+  task" on the calendar, the appraisal's own Save and the terms' Save. Pressed, "Delete task"
+  asked the viewer to confirm and then refused: the confirm was the product's word that the
+  action was theirs. Not one of the destructive ones was a `Button` — they are raw icon
+  `<button>`s with their own chrome, which the `writes` prop cannot reach, so "per-site
+  marking" had no site to go to; `writeAttrs()` (`components/ui.tsx`) is the spread that
+  reaches a raw element, placed AFTER its own `disabled` so `isPending` keeps its meaning.
+  Exempt by RULE, not by list: a control is left alone when every procedure it fires is in
+  `VIEWER_MAY_RUN` (the same file the tRPC link reads) or on a router no member of the firm
+  can be a principal for (`buyer`), so the sign-in, reset and own-password forms and the
+  client's signature are not reported, and if `auth.changePassword` leaves the allowlist its
+  form is reported that day. Two things the matcher had to learn, both recorded in it: a
+  control writes if its own attributes call `.mutate(` OR name a handler declared in the same
+  file whose body does — "Add comp" calls `addComp`, three lines above `upsert.mutate` — and
+  the handler's indent is captured as spaces and tabs, not `\s*`, because under the multiline
+  flag `\s*` swallows the blank line above a declaration, the body scan ends on the
+  declaration's own line, and the real "Add comp" and "Log week" read as clean while the
+  viewer walk still listed them live. A `<form>` is judged by its `type="submit"` control,
+  since the handler sits on the form and the person presses the button. Run against the tree
+  before the fix it names 29 unaided (42 once the indent was right); `e2e/viewer.spec.ts` is
+  the browser half — a member invited through `org.invite` signs in with the temporary
+  password, and any dialog fails the test, because a disabled control opens none. NOT reached,
+  on purpose: a control that OPENS a form (New deal, Edit details, Upload) stays live, because
+  the form's own Save is marked and greying the door as well is a choice, not a rule; and the
+  appraisal's inputs stay editable for a viewer, because the engine runs in the browser and
+  exploring the figures is exactly what "view" is for — only the Save that would make them the
+  firm's position is greyed.
 - `asset-classes` (in the WEB suite, `lib/asset-classes.test.ts`) — the browser keeps no
   second copy of the asset taxonomy. `@apex/types/asset-classes` is the one table: code,
   label, chip text, report label, planning use class, colour family, whether the class is
@@ -441,6 +474,50 @@ the point, so read the failure rather than adding an exemption.
   command), not on the name `ICONS`, because the copy nobody thinks to look for is the one
   called something else. `Icon` itself also tolerates a missing `d` now: the type stops it
   reaching a build, and this stops a missing 18px glyph ever again costing a screen.
+- `e2e/target-size.spec.ts` — every screen fits a phone and every control on it can be hit
+  with a thumb: at 390px, no route scrolls sideways, and every control is 24×24 CSS px or
+  earns WCAG 2.5.8's own exceptions (a 24px circle centred on it touches no other control;
+  a link in running text). Measured before it existed, signed in over every route: SEVEN
+  routes scrolled sideways and 134 controls were under 24px — 42 once the exceptions were
+  applied, which is the number worth acting on, since a rule that flags spaced checkboxes
+  and footer links is a rule people learn to ignore. The 42 were three sites: every task
+  chip on the calendar at 21px tall, "Advance stage" on every pipeline card at 15px, and
+  the data room's share checkboxes, 16px boxes with a picker hard against them (given
+  clearance rather than redrawn, because `nontext-contrast` reads the box's OWN border and a
+  redraw would blind that guard). The overflows were three shapes: the automatic-minimum
+  gotcha one level UP from where it is usually seen — Calendar and Benchmarking name their
+  page-grid columns only from `lg:`, so below it the single implicit column was `auto` and
+  each two-column item took its min-content width; the four printed documents, whose A4
+  sheet widened the page instead of scrolling inside its frame; and Settings, the subtle
+  one — the members table scrolled inside its wrapper as intended, but the sr-only "Remove"
+  label inside it is absolutely positioned, and a scroll container that is not itself
+  positioned does not contain those, so one 1px span at x=594 widened the page by 204px
+  while the table it belonged to scrolled correctly. Found by walking ancestors for a
+  scrolling container, not by looking at what was wide. The spec carries a fixture of two
+  crowded 20px buttons, one spaced one and an inline link, so an empty walk cannot pass it.
+- `e2e/load-failure.spec.ts` — no screen claims the firm has nothing when the truth is it could
+  not look. "No comparable evidence yet" and "Nobody is on the register yet" are claims about
+  the RECORD, and a screen whose query just failed knows neither. Measured signed in with every
+  query answered 500: SIXTEEN empty states across eleven screens asserted it anyway, among them
+  "No cost plan on this deal yet" and "No deals at this stage" on all seven pipeline columns —
+  a valuer reading any of them goes looking for work that is sitting there unreachable. The
+  toast beside them is transient and gone by the time anyone reads the panel, and
+  `lib/load-failure.ts` had been written for exactly this conflation: it was wired into three
+  screens and nothing else. The failure now lives in `EmptyState` itself rather than in a
+  component of its own, because the empty state and the failure answer the same question in the
+  same place — and a site that must pass `error` to say "nothing yet" cannot say it without
+  having looked. Benchmarking was the other half and was worse: `loading || !M` is true of a
+  FAILURE as well as of a load, so the screen span forever — the exact conflation
+  `load-failure.ts`'s own comment names about the funding pack, still standing two screens over.
+  What the spec had to learn, and the reason it is trusted: the query client retries once
+  (`App.tsx`), so for about a second after navigation a refused screen still shows skeletons,
+  and the first version's fixed 1200ms sleep landed INSIDE that window — two planted mutants
+  both survived. It waits for the failure to become visible instead, and a route where it never
+  does is REPORTED rather than passed over, because a walk that cannot see the failure has not
+  checked what it claims to. That assertion is what found Benchmarking. Both directions run the
+  same matcher on the same screen: a deal of the spec's own making genuinely has no
+  comparables, so the claim must be found there, and must be gone the moment the query is
+  refused — with Try again, which recovers it once the server answers.
 - `e2e/reachable.spec.ts` — the doors, CLICKED. `route-reachable` proves a link literal
   exists in the source, which is a weaker claim than it reads as: the commit that added the
   funding-pack tile passed it, and the tile was the crash above. A link in the source is not
@@ -702,6 +779,11 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - Overpass API requires a User-Agent header (406 without).
 - Flex children default `min-width:auto` — clusters need `min-w-0` (+ internal `overflow-x-auto`)
   or they widen the page on phones; e2e guards zero horizontal scroll at 390px.
+  The same gotcha one level up: a page grid that names its columns only from `lg:` has a
+  single `auto` implicit column below it, and every item takes its min-content width. Give
+  it `grid-cols-[minmax(0,1fr)]` at every width. And a scroll wrapper needs `relative` if
+  anything inside it is `sr-only`: the hidden label is absolutely positioned and escapes an
+  unpositioned scroll container to widen the page, while the table scrolls fine.
 - Live-LLM e2e needs `test.setTimeout(120_000)`.
 - Postgres SERIALIZABLE aborts on the POSSIBILITY of a cycle, not a proven one, so two
   transactions that never touched the same row abort each other under load (SQLSTATE 40001,
@@ -715,6 +797,15 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
   it if the injected sleep returns instantly — vitest's timeout never fires because the hot
   loop starves the timers. Make injected sleeps yield (`setImmediate`) so an unbounded loop
   fails on the test timeout instead.
+- After restoring a mutated API file, PROVE the running dev API is on the restored code before
+  trusting a browser result. Measured: a create that stored the postcode passed twice, then
+  failed three times in a row on a quiet API whose `/health` uptime said it had started at the
+  MUTANT edit and never restarted on the restore — `tsx watch`'s watcher had stopped
+  restarting altogether, and neither a `touch` nor a real content change brought it back
+  (uptime kept climbing through both). The file on disk was right and the process serving it
+  was not. Read `uptimeSeconds` before and after any edit that should restart it; if it does
+  not reset, kill the `tsx watch` tree and start it again from `apps/api` with the CI limits,
+  then drive the behaviour once by hand (a `curl` create, a row read) before re-running the spec.
 - Undoing a mutation with `git checkout -- <file>` restores HEAD, not the pre-mutation state —
   on a file with uncommitted work it deletes the fix you are testing, and the next mutation runs
   against a file with no guard in it, which reads as a cascade of unrelated failures. Copy the

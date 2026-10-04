@@ -199,7 +199,7 @@ export default function FundingPack() {
   }
 
   return (
-    <div className="light min-h-screen bg-frame">
+    <div className="light min-h-screen bg-frame overflow-x-auto">
       <style>{PRINT_CSS}</style>
       <div className="a4-canvas flex flex-col items-center gap-6 px-5 pt-7 pb-14">
         {pages.map(({ rows, exceptions, continued }, pi) => (

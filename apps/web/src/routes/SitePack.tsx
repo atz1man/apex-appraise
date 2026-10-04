@@ -4,7 +4,7 @@ import { trpc } from '../lib/trpc';
 import { SQFT_PER_SQM } from '@apex/appraisal-engine';
 import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
-import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, Spinner, StatCard, StatusChip, Td, Th, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { SiteMap, type MapPin } from '../components/SiteMap';
 import { brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
@@ -171,12 +171,13 @@ export default function SitePack() {
               <input
                 className="w-36 fig uppercase"
                 placeholder={ok?.geo.postcode ?? 'e.g. BH8 8EW'}
+                {...writeAttrs()}
                 value={postcodeInput}
                 onChange={(e) => setPostcodeInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runLookup()}
               />
             </label>
-            <Button onClick={runLookup} loading={isFetching}>
+            <Button writes onClick={runLookup} loading={isFetching}>
               Pull live data
             </Button>
           </div>
@@ -198,7 +199,7 @@ export default function SitePack() {
               ))}
             </div>
             {/* sold-price table + map placeholder skeletons */}
-            <div className="mt-5 grid gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
               <Panel>
                 <Skeleton height={18} width={260} />
                 <div className="mt-4">
@@ -253,7 +254,7 @@ export default function SitePack() {
               />
             </div>
 
-            <div className="mt-5 grid gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
               {/* sold prices */}
               <Panel level={2}
                 title="Sold prices — HM Land Registry"
@@ -305,12 +306,17 @@ export default function SitePack() {
                                     e.stopPropagation();
                                     toggle(k);
                                   }}
-                                  className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center"
-                                  style={{ background: selected.has(k) ? brand[700] : neutral.surface, borderColor: selected.has(k) ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                                  className="inline-flex w-6 h-6 -m-1 items-center justify-center"
                                 >
+                                  {/* the 15px box is what a person sees; the 24px button is what a thumb hits */}
+                                  <span
+                                    className="inline-flex w-[15px] h-[15px] rounded-[4px] border items-center justify-center"
+                                    style={{ background: selected.has(k) ? brand[700] : neutral.surface, borderColor: selected.has(k) ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))' }}
+                                  >
                                   {selected.has(k) && (
                                     <svg aria-hidden="true" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="3.2"><path d="M4 12l5 5L20 7" /></svg>
                                   )}
+                                  </span>
                                 </button>
                               </Td>
                               <Td>

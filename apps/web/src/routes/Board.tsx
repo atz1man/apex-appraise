@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
-import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar } from '../components/ui';
+import { AssetTag, Avatar, Button, Dot, Drawer, EmptyState, Skeleton, Spinner, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
 import { ASSET_CLASSES } from '@apex/types/asset-classes';
 import type { StatusKey } from '@apex/ui-tokens';
 import { brand, onFill } from '@apex/ui-tokens';
@@ -57,7 +57,7 @@ export default function Board() {
     setSearch(search, { replace: true });
   }, [search, setSearch]);
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data, isLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const { data: exposure } = trpc.deals.exposure.useQuery(undefined, { staleTime: 30_000 });
   const setStage = trpc.deals.setStage.useMutation({ onSuccess: () => utils.deals.list.invalidate() });
   const createDeal = trpc.deals.create.useMutation({
@@ -73,7 +73,7 @@ export default function Board() {
       navigate(`/deal/${res.dealId}`);
     },
   });
-  const [draft, setDraft] = useState({ name: '', address: '', assetType: 'RESIDENTIAL', gdv: 0, probability: 40 });
+  const [draft, setDraft] = useState({ name: '', address: '', postcode: '', assetType: 'RESIDENTIAL', gdv: 0, probability: 40 });
 
   const filtered = useMemo(() => {
     let deals = data?.deals ?? [];
@@ -297,7 +297,11 @@ export default function Board() {
                     <span className="fig ml-auto text-[11px] text-ink-3">{cards.length ? fM(stageGdv) : '—'}</span>
                   </header>
                   <div className="flex flex-col gap-2.5">
-                    {cards.length === 0 && <EmptyState>No deals at this stage</EmptyState>}
+                    {cards.length === 0 && (
+                      <EmptyState error={dealsError} what="pipeline" onRetry={() => refetchDeals()}>
+                        No deals at this stage
+                      </EmptyState>
+                    )}
                     {cards.map((d) => {
                       const chip = statusChip[d.figureStatus] ?? statusChip.ESTIMATE;
                       return (
@@ -334,8 +338,9 @@ export default function Board() {
                           </div>
                           {st.key !== 'COMPLETED' && (
                             <button
-                              className="mt-2 w-full text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+                              className="mt-2 w-full min-h-6 text-[10.5px] label-mono text-ink-3 hover:text-brand-ink text-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
                               disabled={setStage.isPending}
+                              {...writeAttrs()}
                               onClick={(e) => {
                                 e.preventDefault();
                                 const next = STAGES[Math.min(STAGES.findIndex((s) => s.key === st.key) + 1, STAGES.length - 1)].key;
@@ -363,6 +368,10 @@ export default function Board() {
           <input id="new-deal-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Foundry Lane" />
           <label className="label-mono text-ink-3" htmlFor="new-deal-address">Address</label>
           <input id="new-deal-address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Street, town" />
+          {/* the site pack, the map and the benchmark region all read the postcode;
+              without it here the first thing a new deal's site pack did was ask for one */}
+          <label className="label-mono text-ink-3" htmlFor="new-deal-postcode">Postcode</label>
+          <input id="new-deal-postcode" value={draft.postcode} onChange={(e) => setDraft({ ...draft, postcode: e.target.value })} placeholder="e.g. BH15 1JF" autoComplete="postal-code" />
           <label className="label-mono text-ink-3" htmlFor="new-deal-asset-type">Asset type</label>
           <select id="new-deal-asset-type" value={draft.assetType} onChange={(e) => setDraft({ ...draft, assetType: e.target.value })}>
             {FILTERS.slice(1).map(([k, label]) => (
@@ -381,6 +390,7 @@ export default function Board() {
                 createDeal.mutate({
                   name: draft.name,
                   address: draft.address,
+                  postcode: draft.postcode.trim() || undefined,
                   assetType: draft.assetType as never,
                   gdv: draft.gdv,
                   probability: draft.probability,

@@ -27,9 +27,9 @@ const icon = (kind: 'subject' | 'comp') =>
         ? `<div style="width:26px;height:26px;border-radius:9px;background:${brandMarkGradient};box-shadow:0 2px 8px rgba(20,30,25,.4);display:flex;align-items:center;justify-content:center">
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${onFill}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>
            </div>`
-        : `<div style="width:14px;height:14px;border-radius:50%;background:${brand[400]};border:2.5px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,.45)"></div>`,
-    iconSize: kind === 'subject' ? [26, 26] : [14, 14],
-    iconAnchor: kind === 'subject' ? [13, 13] : [7, 7],
+        : `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center"><div style="width:14px;height:14px;border-radius:50%;background:${brand[400]};border:2.5px solid ${onFill};box-shadow:0 1px 4px rgba(20,30,25,.45)"></div></div>`,
+    iconSize: kind === 'subject' ? [26, 26] : [24, 24],
+    iconAnchor: kind === 'subject' ? [13, 13] : [12, 12],
   });
 
 /**

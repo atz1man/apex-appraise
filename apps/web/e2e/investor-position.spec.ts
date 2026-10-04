@@ -106,4 +106,10 @@ test('a capital call is shown only while one is outstanding, and says whose it i
     new Date(p.openCapitalCall.due).getTime(),
     'an outstanding capital call was already past its due date',
   ).toBeGreaterThan(Date.now());
+
+  // and the notice is a demand, not a payment: the statement's history is money
+  // that has moved, and the same call must not lead it a month early in red
+  const history = page.locator('section', { has: page.getByRole('heading', { name: 'Cashflow history' }) });
+  await expect(history).toBeVisible();
+  await expect(history.getByText(p.openCapitalCall.label, { exact: false })).toHaveCount(0);
 });

@@ -5,7 +5,7 @@ import type { Extraction } from '@apex/types';
 import { trpc } from '../lib/trpc';
 import { fM, n0, formatDelta, formatPct, formatSigned } from '../lib/format';
 import { useUnits } from '../lib/region';
-import { Button, Dot, EmptyState, FormError, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar } from '../components/ui';
+import { Button, Dot, EmptyState, FormError, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
 import { manualDefaultsFor, manualIsRunnable, type ManualState, type ManualUnit } from '../lib/auto-defaults';
@@ -892,6 +892,7 @@ export default function AutoAppraisal() {
                   <input
                     className="flex-1 h-10 rounded-[10px] text-[13px]"
                     placeholder="e.g. what if the interest rate rises to 9%?"
+                    {...writeAttrs()}
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -902,6 +903,7 @@ export default function AutoAppraisal() {
                     onClick={onAsk}
                     aria-label="Send question"
                     disabled={whatIf.isPending || !chatInput.trim()}
+                    {...writeAttrs()}
                     className="flex-none w-[46px] h-10 rounded-[10px] bg-brand-700 hover:bg-brand-600 inline-flex items-center justify-center transition-colors disabled:opacity-50"
                   >
                     {whatIf.isPending ? <Spinner /> : (

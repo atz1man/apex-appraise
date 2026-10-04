@@ -15,9 +15,13 @@
  *   1. THIS FILE, wired into the tRPC link chain. Every mutation the server
  *      would refuse is refused here first, locally, with the same words and no
  *      round trip. All ninety-eight call sites, no marking, no exceptions.
- *   2. `Button`'s `writes` prop, which greys the control out up front so the
- *      effort is never spent. That one IS per-site, and a control nobody has
- *      marked yet degrades to layer 1 rather than to a defect.
+ *   2. `Button`'s `writes` prop (and `writeAttrs()` for a raw element), which
+ *      greys the control out up front so the effort is never spent. That one
+ *      IS per-site, and a control nobody has marked yet degrades to layer 1
+ *      rather than to a hole — but not to nothing: measured as a viewer,
+ *      "Delete task" asked for confirmation and then refused. So
+ *      `write-controls.test.ts` walks every control that reaches a mutation
+ *      and fails naming the unmarked one.
  *
  * The allowlist below is the drift risk, and it is the same shape as the defect
  * this whole branch has been chasing: a rule written down in two places. So it

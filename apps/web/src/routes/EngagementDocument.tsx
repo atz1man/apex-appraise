@@ -25,7 +25,7 @@ export default function EngagementDocument() {
   const ref = `AP-${dealId.slice(0, 4).toUpperCase()}-TOE`;
 
   return (
-    <div className="light min-h-screen bg-frame">
+    <div className="light min-h-screen bg-frame overflow-x-auto">
       <style>{TERMS_PRINT_CSS}</style>
 
       <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5">
