@@ -87,6 +87,33 @@ services:
       # HTTP referrer — nothing referring to it is a browser.
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
       GOOGLE_MAPS_SIGNING_SECRET: ${GOOGLE_MAPS_SIGNING_SECRET:-}
+      # The accounting, banking and company-search integrations. Every one of
+      # these was in exactly the state the TILE_* note above describes: the code
+      # reads them, the runbook tells an operator to set them, and they reached
+      # no container — so on a deployed stack `xero.status` and `bank.status`
+      # answered "not configured on this server" however carefully the operator
+      # had filled in their .env, and the screens offering those connections
+      # could not be made to work at all. Unlike EPC and Companies House there
+      # is no per-org credential path for Xero or the bank feed (see
+      # apps/api/src/xero.ts and open-banking.ts, which read only the
+      # environment), so this file was the whole of the answer.
+      #
+      # `env-coverage.test.ts` now reads every variable the API's own source
+      # asks for and fails naming any that no deployment can supply.
+      COMPANIES_HOUSE_KEY: ${COMPANIES_HOUSE_KEY:-}
+      XERO_CLIENT_ID: ${XERO_CLIENT_ID:-}
+      XERO_CLIENT_SECRET: ${XERO_CLIENT_SECRET:-}
+      TRUELAYER_CLIENT_ID: ${TRUELAYER_CLIENT_ID:-}
+      TRUELAYER_CLIENT_SECRET: ${TRUELAYER_CLIENT_SECRET:-}
+      # Sandbox overrides; unset they default to TrueLayer's production hosts.
+      TRUELAYER_AUTH_BASE: ${TRUELAYER_AUTH_BASE:-}
+      TRUELAYER_API_BASE: ${TRUELAYER_API_BASE:-}
+      # Arms POST /admin/reset-demo, which WIPES EVERY WORKSPACE on this stack.
+      # Unset, the route plays dead with a 404 rather than advertising itself
+      # (apps/api/src/admin.ts). It belongs on a demo instance and NEVER on a
+      # stack holding a firm's real valuations — the same judgement SEED_DEMO
+      # and DEMO_MODE above are written with.
+      RESET_TOKEN: ${RESET_TOKEN:-}
     restart: unless-stopped
     depends_on:
       db:

@@ -41,9 +41,11 @@ interest), `buildSpendProfile`, `irr` (bisection, null on no root), `sdltCommerc
 `weightedComparables`, sales/lettings/portfolio roll-ups, and en-GB formatters.
 
 Run the tests: `pnpm --filter @apex/appraisal-engine test`
-(48 tests; the golden fixture is the Bournemouth trade-counter reference case from
+(289 tests; the golden fixture is the Bournemouth trade-counter reference case from
 `CALCULATIONS.md §12`, asserted to the penny / basis point against the prototype's
-own `compute()` output.)
+own `compute()` output. Its every numeric output is also hashed against
+`ENGINE_VERSION`, so changing any arithmetic fails the build until somebody bumps
+the version — the moment to say "figures approved under the old version may differ".)
 
 **Non-negotiable:** the LLM never computes financials. Auto-Appraisal extraction
 returns *inputs only* (validated by `zExtraction`); the engine computes outputs.
@@ -93,10 +95,28 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-- Engine: `pnpm --filter @apex/appraisal-engine test` (48 golden tests).
-- e2e: `pnpm --filter @apex/web test:e2e` (16 Playwright tests — golden path, portal
-  isolation, and a happy-path per screen; needs the dev stack running and
-  `npx playwright install chromium` once).
+Five suites, ~1,500 tests plus 187 browser specs. All of them run in CI on every PR.
+
+| Suite | Command | Count |
+|---|---|---|
+| Engine | `pnpm --filter @apex/appraisal-engine test` | 289 |
+| API | `cd apps/api && npx vitest run` | 925 |
+| Web unit | `cd apps/web && npx vitest run` | 295 |
+| MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 187 |
+| Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
+
+Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase
+sweeps that walk the real router or route table and fail naming the offender, each one
+written after the same defect had been found and fixed by hand more than once. `CLAUDE.md`
+lists them and, for each, what it measured and what it deliberately does not reach.
+
+The browser suite needs the dev stack up, started with the CI rate limits —
+`RATE_LIMIT_PER_MIN=5000 AUTH_RATE_LIMIT_PER_MIN=1000 pnpm dev` — because the suite signs
+in on every test from one IP and the production defaults (600/10) fail ~39 specs on the
+limiter, which reads as a pile of real regressions. Do NOT run `playwright install`: the
+browser is provisioned with the image, and see the sandbox note in `CLAUDE.md` if the
+pinned build and the installed one disagree.
 
 ## Documented deviations from the handoff spec
 
@@ -124,4 +144,10 @@ All optional vars degrade gracefully to a clearly-labelled demo mode when unset.
 - `STRIPE_SECRET_KEY` — live buyer card payments (PaymentIntents); demo mode settles instantly
 - `STRIPE_WEBHOOK_SECRET` — signature verification for `POST /webhooks/stripe`
 
-See `infra/DEPLOY.md` for the full production runbook (Docker VPS + Fly sketch).
+See `infra/DEPLOY.md` for the full production runbook. **Production runs on Fly.io**
+(two apps in `lhr`); the Docker Compose stack above is the self-hosted path and the one
+this README's quick start describes. `.github/workflows/deploy.yml` ships `main` to Fly on
+a button press rather than on merge — deliberately, because this product prints valuations
+somebody signs, so which build is live stays a decision. That workflow exists because the
+live API was once found running an image built three and a half weeks earlier: CI proves
+the code is correct, never that it is running.
