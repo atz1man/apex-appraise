@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (937). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (948). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -626,6 +626,33 @@ the point, so read the failure rather than adding an exemption.
   four e2e specs whose premise was "this seeded deal is a shell", which now make their own
   with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
   the demo being filled in.
+- `security-headers` (API suite) — the headers the docs said the front door enforced. It
+  enforced none: the ONLY `add_header` directives in `nginx.conf.template` were five
+  `Cache-Control` lines, with no CSP, no HSTS, no `X-Frame-Options`, no `nosniff` and no
+  `Referrer-Policy`, and no helmet equivalent in the API either — while `docker-compose.yml`
+  and `README.md` both said "nginx is the front door, and the security headers … are enforced
+  there". Two files asserting a protection that does not exist is worse than its absence:
+  somebody reading either stops looking. THE RULE is not presence but the nginx footgun that
+  makes a careful one-liner useless — `add_header` inside a location REPLACES the inherited
+  set rather than adding to it, so a server-level block is dropped by every location that
+  sets a header of its own, and the five that do here are `/assets/` (the JS bundle),
+  `/fonts/`, the image regex, `/ready` and `location /`, which serves index.html. A block at
+  the top alone would have protected every path except the document and its script. So the
+  headers live in `infra/security-headers.conf` and every such location re-includes it, the
+  way they already re-include `client-ip.conf`; the sweep fails naming any that forgets, and
+  removing the include from `location /` names that location unaided. It also demands
+  `always` on every line, or the one response served bare is the error page. HSTS is a
+  VARIABLE, set only when `X-Forwarded-Proto` is https: compose publishes :8080 over plain
+  HTTP and HSTS applies to the host while ignoring the port, so a literal would pin a
+  self-hoster's host — or `localhost` — to HTTPS and lock them out of a stack serving none.
+  The CSP is served `-Report-Only` ON PURPOSE and the file says why: there is no nginx binary
+  and no docker daemon in this environment, so the template is only read as text, and the one
+  clause a wrong policy would break is Stripe's injected card form (`loadStripe` pulls a
+  script from js.stripe.com at runtime), which no spec opens because a card number should
+  reach Stripe and never us. Enforcing a policy whose only untested clause is the one handling
+  money is the wrong way round; dropping `-Report-Only` is the whole of the change once a real
+  deployment reports nothing. NOT PROVEN, and said in the test: that nginx parses the result,
+  or that the policy is right.
 - `env-coverage` (API suite) — every variable the server READS can be supplied by the stacks
   that run it. Measured over every `process.env.*` in `apps/api/src`: EIGHT reached neither
   deployment file — `COMPANIES_HOUSE_KEY`, both Xero credentials, all four TrueLayer ones and

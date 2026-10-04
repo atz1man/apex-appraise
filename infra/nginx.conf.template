@@ -9,6 +9,12 @@ server {
   include /etc/nginx/demo-auth/*.conf;
   index index.html;
 
+  # Security headers for every response. A location that sets a header of its
+  # own REPLACES this set rather than adding to it, so each of those includes
+  # the file again — see the note in it, and the rule in
+  # apps/api/test/security-headers.test.ts.
+  include /etc/nginx/security-headers.conf;
+
   # Compress text assets — the main bundle drops ~70% over the wire
   gzip on;
   gzip_comp_level 6;
@@ -108,6 +114,7 @@ server {
     # `always`, or nginx applies this only to 2xx/3xx — and the response that
     # most needs never to be cached is the 503
     add_header Cache-Control "no-store" always;
+    include /etc/nginx/security-headers.conf;
   }
 
   location /webhooks/ {
@@ -127,6 +134,7 @@ server {
   # Hashed build assets never change — cache forever
   location /assets/ {
     add_header Cache-Control "public, max-age=31536000, immutable";
+    include /etc/nginx/security-headers.conf;
     try_files $uri =404;
   }
 
@@ -137,18 +145,21 @@ server {
   # copies in browsers that already hold one; ship a new face as a new filename.
   location ^~ /fonts/ {
     add_header Cache-Control "public, max-age=31536000, immutable";
+    include /etc/nginx/security-headers.conf;
     try_files $uri =404;
   }
 
   # Static icons/manifest: a day is plenty (stable names, contents rarely change)
   location ~* \.(png|webp|svg|webmanifest|txt)$ {
     add_header Cache-Control "public, max-age=86400";
+    include /etc/nginx/security-headers.conf;
     try_files $uri /index.html;
   }
 
   location / {
     # index.html must revalidate so new deploys land immediately
     add_header Cache-Control "no-cache";
+    include /etc/nginx/security-headers.conf;
     try_files $uri /index.html;
   }
 }

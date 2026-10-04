@@ -25,6 +25,8 @@ FROM nginx:alpine
 COPY infra/nginx.conf.template /etc/nginx/templates/default.conf.template
 # not a template: included verbatim by every proxied location
 COPY infra/client-ip.conf /etc/nginx/client-ip.conf
+# the security headers every location re-includes — see the note in the file
+COPY infra/security-headers.conf /etc/nginx/security-headers.conf
 ENV API_UPSTREAM=api:4100
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

@@ -67,6 +67,10 @@ docker compose up --build
 # web on :8080 — the only port published to the outside. The API (4100) and
 # Postgres (55432) bind to the loopback address: nginx is the front door, and
 # the security headers, tile proxy and download routes are enforced there.
+# (nosniff, Referrer-Policy, X-Frame-Options and HSTS enforce; the CSP is served
+#  Report-Only until it has been observed clean on a real deployment — the only
+#  clause a wrong policy breaks is Stripe's injected card form, which no spec
+#  opens. infra/security-headers.conf says so at length.)
 ```
 
 The committed Prisma schema pins `sqlite` for zero-infra local dev;

@@ -120,7 +120,10 @@ services:
         condition: service_healthy
     ports:
       # loopback only: nginx on :8080 is the front door, and it is where the
-      # security headers and the tile and download routes are enforced. A
+      # security headers and the tile and download routes are enforced — the
+      # headers from infra/security-headers.conf, which every location that sets
+      # a header of its own re-includes, because `add_header` in a location
+      # REPLACES the inherited set rather than adding to it. A
       # published 4100 is a way around all of it. Still reachable from the host
       # for the manual verification in docs/COMPLIANCE.md.
       - '127.0.0.1:4100:4100'
