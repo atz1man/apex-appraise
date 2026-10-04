@@ -78,6 +78,14 @@ export default function CostMonitoring() {
     },
   });
   const logWeek = trpc.cost.logTimesheetWeek.useMutation({ onSuccess: () => utils.cost.contractors.invalidate() });
+  /**
+   * The empty state used to send the valuer to the appraisal to make the cost
+   * plan appear, and nothing on the appraisal creates one. The derivation is the
+   * engine's (`tradeBudgets`), over the build cost the scheme was appraised at.
+   */
+  const createPlan = trpc.cost.createPlanFromAppraisal.useMutation({
+    onSuccess: () => utils.cost.packages.invalidate(dealId),
+  });
 
   /**
    * The contractor register. These cards, and the dropdown on every package
@@ -347,10 +355,27 @@ export default function CostMonitoring() {
               error={costError}
               what="cost plan"
               onRetry={() => refetchCost()}
-              cta={<Button to={`/deal/${dealId}/appraisal`}>Open the appraisal →</Button>}
+              cta={
+                // the plan is DERIVABLE only once a figure exists to derive it
+                // from; without one the appraisal is still where to go first
+                cost?.hasAppraisal ? (
+                  <Button
+                    writes
+                    onClick={() => createPlan.mutate({ dealId })}
+                    disabled={createPlan.isPending}
+                  >
+                    {createPlan.isPending ? 'Deriving…' : 'Create the cost plan from the appraisal'}
+                  </Button>
+                ) : (
+                  <Button to={`/deal/${dealId}/appraisal`}>Open the appraisal →</Button>
+                )
+              }
             >
               Cost monitoring lights up once the build cost plan is broken out into packages —
               budgets, contractor commitments and variance alerts all flow from the appraisal.
+              {cost?.hasAppraisal
+                ? ' One package per trade, budgeted at the cost this scheme was appraised at.'
+                : ' Save an appraisal first: its build cost is what the packages are derived from.'}
             </EmptyState>
           </div>
         ) : (

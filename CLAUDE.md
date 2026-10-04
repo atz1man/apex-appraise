@@ -30,9 +30,9 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (937). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (187, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (188, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -626,6 +626,33 @@ the point, so read the failure rather than adding an exemption.
   four e2e specs whose premise was "this seeded deal is a shell", which now make their own
   with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
   the demo being filled in.
+- `env-coverage` (API suite) — every variable the server READS can be supplied by the stacks
+  that run it. Measured over every `process.env.*` in `apps/api/src`: EIGHT reached neither
+  deployment file — `COMPANIES_HOUSE_KEY`, both Xero credentials, all four TrueLayer ones and
+  `RESET_TOKEN`. `xero.ts` and `open-banking.ts` read ONLY the environment (no per-org
+  credential path as EPC and Companies House have), so `xero.status` and `bank.status`
+  answered "not configured on this server" on every deployment however carefully an operator
+  had followed `infra/DEPLOY.md`, and the Integrations screen offered two connections that
+  could not be made to work by any means. `docker-compose.yml` already recorded this exact
+  defect for the TILE_* trio — "setting them did nothing at all" — found by hand and left
+  free to happen eight more times; four more (`ENCRYPTION_KEY`, the TILE_* trio) reached
+  compose but never the LIVE Fly deployment, where the file's comment is the whole of what an
+  operator is told. Same shape as `proxy-coverage` below: a variable and the stack meant to
+  supply it are two files nobody diffs. What "accounted for" MEANS differs per stack and is
+  written down — compose must carry the key in the api service's `environment:` block, which
+  is all that reaches the container; `fly.api.toml` need only name it, since secrets are set
+  with `flyctl secrets set` and what the file carries is their documentation, so a variable
+  recorded there as deliberately absent (`DEMO_MODE`, whose absence makes production refuse
+  to fabricate) counts. The defect is one nobody CONSIDERED, not one somebody decided
+  against, so the rule asks for a decision to be written down and cannot judge it.
+  `CHROMIUM_PATH` is exempt because the image sets it, verified against `api.Dockerfile`.
+  Two bugs this turned up, both caught by guards rather than by hand: compose passes these as
+  `${VAR:-}`, which arrives as an EMPTY STRING, so `??` never fires and
+  `TRUELAYER_AUTH_BASE ?? 'https://…'` would have called the empty string for TrueLayer's
+  hosts — `deployment.test.ts` already held that rule and failed the moment they were
+  plumbed; and that guard's own matcher excluded an empty-string fallback with a lookahead
+  after `\s*`, which backtracked past itself and reported three already-correct sites (the
+  same shape `benchmark-feed-sweep` records). It captures the fallback and judges it now.
 - `proxy-coverage` (API suite) — every raw route is reachable THROUGH THE FRONT DOOR: an
   nginx `location` in production and a vite `proxy` entry in development, checked by first
   path segment against the routes collected the way `raw-route-sweep` collects them. Measured
@@ -659,6 +686,24 @@ the point, so read the failure rather than adding an exemption.
   where it finds both unaided. Note its matcher reads prose too: a comment writing the
   formula out registers as an offender, so describe the rule in words. Add to its RULES
   when a fourth is found rather than widening the matchers.
+- **The cost plan is DERIVED, and the derivation is the engine's.** `tradeBudgets`
+  (`cost-report.ts`) splits the appraisal's build cost across its trades, last package taking
+  the rounding residual so the budgets sum to the appraised cost TO THE PENNY rather than
+  near it — a plan pennies short reports an overrun nobody earned, on the screen a lender
+  pack is built from. It splits the engine's own `build` figure rather than re-multiplying
+  rate by area, because `build` already carries the build-cost multiplier and a phased
+  scheme's phase builds. Measured before it existed: the arithmetic lived ONLY in
+  `demo-seed-depth.ts`, so the demo had a cost plan and a real firm could not produce one —
+  `cost.upsertPackage` is the browser's only writer and its single call site is the contractor
+  dropdown, which sends no figures, while creating demands a name, a budget and a forecast.
+  Outside the seed the only other writer is the Xero sync, so a firm with no accounting
+  integration was stopped dead, and the empty state told them to go to the appraisal, which
+  creates nothing. Same defect, same file, as `cost.createContractor`. `cost.createPlanFromAppraisal`
+  is the way in, the seed goes through the same function so there is one implementation, and
+  `e2e/cost-plan.spec.ts` presses the button — because what was missing was a CONTROL, and a
+  procedure nobody can reach is a capability the firm does not have. Forecast opens EQUAL to
+  budget: a scheme not yet let is forecast at what it was appraised at, so the variance starts
+  at zero instead of reading as the whole build saved.
 - `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
   is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
   (`rocAtAsking` is null when nobody named an asking price; `projIrr` when the cashflows

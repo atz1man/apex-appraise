@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
-import { computeAppraisal, contractorTotals, costRollup } from '@apex/appraisal-engine';
+import { computeAppraisal, contractorTotals, costRollup, tradeBudgets } from '@apex/appraisal-engine';
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
@@ -149,6 +149,96 @@ export const costRouter = router({
       hasAppraisal: !!appraisal,
     };
   }),
+
+  /**
+   * The cost plan, derived from the appraisal that priced the scheme.
+   *
+   * The screen promised this in as many words — "budgets, contractor
+   * commitments and variance alerts all flow from the appraisal" — and sent the
+   * valuer to the appraisal to make it happen, where nothing creates a package.
+   * `upsertPackage` below is the browser's only writer and its single call site
+   * is the contractor dropdown, which sends no figures at all, while creating
+   * demands a name, a budget and a forecast. Outside the demo seed and the
+   * sample-data generator the only other writer is the Xero sync, so a firm with
+   * no accounting integration could not start cost monitoring on any deal: the
+   * empty state had no way past it. This is the same defect, in the same file,
+   * that `createContractor` above was written to fix.
+   *
+   * The split is the ENGINE's (`tradeBudgets`), over the engine's own `build`
+   * figure rather than a re-multiplication of rate by area, because `build`
+   * already carries the build-cost multiplier and a phased scheme's own phase
+   * builds. `demo-seed-depth.ts` derived its packages the long way and is the
+   * reason the arithmetic existed only where a customer could not reach it.
+   *
+   * Forecast opens EQUAL to budget, which is the honest starting position: a
+   * scheme that has not yet been let is forecast at the cost it was appraised
+   * at, so the variance the cost report derives is zero until somebody enters
+   * what a package actually costs. Committed and spent open at nothing, because
+   * nothing has been.
+   *
+   * It refuses a deal that already has packages rather than adding a second
+   * plan beside the first. Two plans on one deal would double the baseline the
+   * variance is measured against, and no screen would say which was which.
+   */
+  createPlanFromAppraisal: internalProcedure
+    .input(z.object({ dealId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const deal = await ctx.prisma.deal.findFirst({
+        where: { id: input.dealId, orgId: ctx.principal.orgId },
+      });
+      if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const existing = await ctx.prisma.costPackage.count({
+        where: { dealId: input.dealId, orgId: ctx.principal.orgId },
+      });
+      if (existing > 0) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'This deal already has a cost plan. Edit the packages, or remove them first.',
+        });
+      }
+
+      const appraisal = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
+      if (!appraisal) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Save an appraisal first — the cost plan is derived from its build cost.',
+        });
+      }
+      const engine = computeAppraisal(appraisalRowToEngineInput(appraisal));
+      const trades = appraisalRowToEngineInput(appraisal).trades;
+      const plan = tradeBudgets(trades, engine.build);
+      if (plan.length === 0) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'The appraisal prices no trades, so there is no cost plan to derive.',
+        });
+      }
+
+      await ctx.prisma.costPackage.createMany({
+        data: plan.map((line) => ({
+          orgId: ctx.principal.orgId,
+          dealId: input.dealId,
+          name: line.label,
+          budget: line.budgetPence,
+          // opens at the appraised cost, so the variance starts at zero
+          forecast: line.budgetPence,
+          committed: 0n,
+          spent: 0n,
+          progressPct: 0,
+        })),
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        // deal-scoped: without it the event carries dealId null and the deal's
+        // own activity feed never shows that its cost plan was created
+        dealId: input.dealId,
+        action: 'created the cost plan from the appraisal',
+        target: `${deal.name} \u00b7 ${plan.length} packages`,
+        ip: ctx.ip,
+      });
+      return { created: plan.length };
+    }),
 
   upsertPackage: internalProcedure
     .input(
