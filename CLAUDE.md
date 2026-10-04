@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (948). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (955). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (188, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (189, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -569,6 +569,24 @@ the point, so read the failure rather than adding an exemption.
   register's writes were added. A new money-carrying mutation has to be added to it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
   a fixture that only creates leaves the update path — the one people actually hit —
   untested, which is how two of these mutations first survived.
+- **A stage is correctable, and a scheme that is no longer complete stops contributing.**
+  `deals.setStage` has always accepted any stage; both controls in the product computed
+  `stageIdx + 1` and clamped at the last, so in practice a stage only ever went FORWARD. A
+  mis-click was permanent: the stage stuck, `figureStatus` hardened with it (estimate →
+  committed → actual), and arriving at COMPLETED contributed the scheme's certified build
+  £/ft² into a pool whose medians other firms read as market evidence. Nothing on the server
+  needed changing — there was no way to ask. The overview offers "← Back a stage" now, and
+  because that made the state reachable it also made a second defect reachable:
+  `retractOutturn` withdraws the out-turn point when a deal leaves COMPLETED, since a
+  final-account figure standing for a scheme that has not finished is a wrong number in
+  another firm's appraisal and they have no way of knowing. Only the OUT-TURN goes — an
+  approved appraisal's three ratios are a statement about a signed valuation, filed at
+  approval rather than completion, and a stage correction unsigns nothing. Re-advancing
+  re-contributes (`replacePoints` writes rather than appends), so this is a correction and
+  not a withdrawal of consent; `benchmarks.optOut` is still what withdraws everything.
+  Two things the tests corrected in the writing: CONSTRUCTION hardens to ACTUAL rather than
+  COMMITTED, and consent has to be granted BEFORE approval or `feedApproved` files nothing
+  and the ratios read as missing.
 - `benchmark-feed-sweep` — every path that makes a figure the firm's committed position
   feeds the benchmark pool. The pool used to grow by a Contribute button, one deal at a
   time, and it contributed the CURRENT appraisal whatever its review state — a draft in a
