@@ -27,6 +27,14 @@ import { destructiveSites, gateFor } from './destructive';
  *                            there is no password to fall back on
  *   investors.removeHolding  an investor's position in a deal
  *   investors.deleteCashflow a capital call or a distribution: a financial record
+ *
+ * `cancel` joined `remove|delete` in the binding pattern when `billing.cancelPlan`
+ * landed, because the sharpest thing this product can be asked to end destroys no
+ * row at all — the subscription stops and the workspace goes read-only — and a
+ * rule that only knew about tables would have passed over it without a word. The
+ * withdrawal is `billing.resumePlan` rather than the same procedure taking a
+ * boolean, so the NAME carries the direction and this matcher does not have to
+ * read an argument to tell a cancellation from its undo.
  */
 
 const WEB_SRC = join(__dirname, '..');
@@ -62,6 +70,10 @@ describe('destructive controls', () => {
     expect(sites.length).toBeGreaterThanOrEqual(14);
     expect(sites.map((s) => s.procedure)).toContain('org.deleteWorkspace');
     expect(sites.map((s) => s.procedure)).toContain('comparables.remove');
+    // the verb, not the table: a cancellation deletes nothing and ends everything
+    expect(sites.map((s) => s.procedure)).toContain('billing.cancelPlan');
+    // and the undo is not reported, because its name does not claim to destroy
+    expect(sites.map((s) => s.procedure)).not.toContain('billing.resumePlan');
   });
 });
 

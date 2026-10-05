@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (962). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (998). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -175,6 +175,66 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A plan switch billed the firm twice, and there was no way to leave.** "Switch plan" called
+  `billing.checkout`, which opens a Stripe Checkout session in `mode: subscription` — so Stripe
+  did exactly what it was asked and created ANOTHER subscription against the same customer,
+  cancelling nothing. A firm moving STARTER → GROWTH paid for both every month, this product
+  showed one CURRENT chip, and `billing.sync` ran the workspace at `data.find(s => s.status ===
+  'active')` — whichever one Stripe happened to list first. The only sign of it was a card
+  statement. `billing.changePlan` updates the existing subscription ITEM's price instead, which
+  is also the only way to get proration right (Stripe credits the unused part of the old plan;
+  two subscriptions bill in full), and withdraws a scheduled cancellation because choosing a
+  plan is a statement of intent to keep paying. And there was no CANCEL at all, while the Terms
+  a customer accepts say the subscription can be cancelled at any time: leaving meant asking us
+  to do it in the Stripe dashboard, and `org.deleteWorkspace` — the GDPR erasure — was the only
+  thing in the app that stopped the billing, by destroying the firm's records to do it.
+  `billing.cancelPlan` cancels at the END of the paid period (the period is paid for; cutting
+  the features off on the spot takes away what the firm has bought and leaves the refund
+  question to be answered by hand) and `billing.resumePlan` withdraws it, because until the
+  date arrives nothing has happened. TWO procedures rather than one taking a boolean, and the
+  reason is the web sweep: `destructive` reads a verb out of the procedure NAME, so a single
+  `cancelPlan({ cancel })` made the undo button read as a cancellation that asked nobody — a
+  name carrying the direction needs no matcher cleverness to read an argument, and
+  `benchmarks.optIn`/`optOut` is the same shape already. `cancel` joined `remove|delete` in
+  `DESTRUCTIVE_BINDING` at the same time, because the sharpest thing this product can be asked
+  to end destroys no row at all. The sync body is now `reconcileSubscription`
+  (`apps/api/src/billing.ts`), shared by all four procedures for the reason `trpc.ts` gives
+  about a rule written in several places, and it leaves the plan ALONE on SEVERAL live
+  subscriptions exactly as it already did on one it cannot identify — recording
+  "subscription needs attention" in the trail, which is the one outcome where nothing changes
+  BECAUSE something is wrong and a reader has nowhere else to find out. The Stripe stub in
+  `plan-change.test.ts` ROUTES BY PATH on purpose: a stub answering everything alike passes
+  whether a switch updates a subscription or opens a second one, which is the whole claim.
+  `provenance-sweep`'s helper window had to grow with this — it read 1500 characters from the
+  declaration, and `reconcileSubscription`'s `activityEvent.create` sits past that, so it
+  reported a helper that records perfectly well as not recording. It reads to the next
+  top-level declaration now.
+- **A row this server parks on its own, a person can unpark** (`webhook-resume.test.ts`).
+  `drainWebhooks` sets `active: false` on a webhook endpoint after `FAILURE_LIMIT` = 20
+  consecutive failures, and only live endpoints are dispatched to. Nothing set it back:
+  `active: true` appeared exactly once in this server, as the column default. The only way out
+  was Remove and Add again, and that mints a NEW signing secret — a receiver down for an
+  afternoon needed a deployment before it could verify a signature again, and a customer whose
+  server came back up had no way to say so. `org.resumeWebhook` clears the failure count WITH
+  the flag (resuming on twenty parks it again on the first delivery, which is a button that
+  appears to work and does nothing) and re-checks the URL through `assertPublicHttpsUrl`,
+  because `outbound.ts`'s rule is that DNS moves and a resume is the act of pointing this
+  server at that address again. Two things the same defect hid: the PANEL showed neither
+  `active` nor `lastAttemptAt` though `org.webhooks` had always selected both, so a parked
+  endpoint was indistinguishable from a working one on the only screen about it; and the
+  parking never fired for the commonest failure, because the HTTP path stamped the endpoint row
+  and the `catch` path (refused connection, DNS gone, timeout — "the likelier failure of the
+  two", says the file's own comment) updated the delivery and left the endpoint untouched, so a
+  receiver that answered badly was parked and one whose host had vanished was posted to for
+  ever with `failureCount` at zero. Both paths go through `recordAttempt` now, which keeps the
+  atomic increment because two processes drain at once. The sweep is NARROW on purpose and the
+  narrowness is the rule: a flag a PERSON sets is not its business — `revokedAt` is one-way by
+  design and `enforced` is a one-way door guarded on its own terms — what needs an undo is a
+  flag flipped AGAINST a customer without being asked. Each matcher is verified over planted
+  source, including the two shapes that give a confident wrong answer: a comment spelling the
+  parking rule out, and a second model in the same file (a write takes its nearest binding, as
+  `destructive` learned). No e2e: parking needs twenty failures or a direct row write, neither
+  of which a browser can do, so the API test is where the claim lives.
 - **Enforcing single sign-on is a one-way door, so it cannot be opened onto a connection
   nobody has walked through.** `enforced` makes `auth.login` refuse EVERY password in the
   workspace, and `requestPasswordReset` deliberately issues no token to a firm that does not

@@ -36,6 +36,10 @@ model Organisation {
   trialEndsAt DateTime?
   stripeCustomerId String?
   stripeSubscriptionId String?
+  // When a cancellation already scheduled in Stripe takes effect. Stored rather
+  // than fetched, so the panel can say "ends on the 1st" on a plain page load
+  // without a Stripe call per view.
+  subscriptionCancelAt DateTime?
   // Contributing a client's appraisal ratios to a shared pool is a decision a
   // firm makes deliberately — the underlying figures are client-confidential —
   // so it is off until somebody with authority turns it on. Reading cohorts is

@@ -1280,6 +1280,10 @@ function AboutPanel() {
 
 // ---------- Page ----------
 
+/** The one en-GB spelling the billing panel prints a date in. */
+const longDate = (d: Date | string) =>
+  new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
 function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
   const toast = useToast();
   const utils = trpc.useUtils();
@@ -1294,6 +1298,38 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
   const checkout = trpc.billing.checkout.useMutation({
     onSuccess: (res) => {
       if (res.url) window.location.href = res.url;
+    },
+  });
+  /**
+   * The button on a workspace that already subscribes.
+   *
+   * It used to be `checkout` on every tier, which opens a Checkout session in
+   * subscription mode — so Stripe created a SECOND subscription against the
+   * same customer and cancelled nothing. A firm that switched plan paid for
+   * both, this screen showed one CURRENT chip, and the second charge turned up
+   * on a card statement.
+   */
+  const changePlan = trpc.billing.changePlan.useMutation({
+    onSuccess: (res) => {
+      utils.billing.config.invalidate();
+      toast.success(`Now on the ${res.plan} plan — Stripe credits the unused part of the old one.`);
+    },
+  });
+  const cancelPlan = trpc.billing.cancelPlan.useMutation({
+    onSuccess: (res) => {
+      utils.billing.config.invalidate();
+      toast.push(
+        'info',
+        res.cancelAt
+          ? `Cancelled — the plan runs until ${longDate(res.cancelAt)}.`
+          : 'Cancelled — the plan runs to the end of the period you have paid for.',
+      );
+    },
+  });
+  const resumePlan = trpc.billing.resumePlan.useMutation({
+    onSuccess: () => {
+      utils.billing.config.invalidate();
+      toast.success('Cancellation withdrawn — billing continues.');
     },
   });
 
@@ -1436,17 +1472,86 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                     <Button writes
                       className="mt-3 w-full"
                       variant={p.featured ? 'primary' : 'secondary'}
-                      loading={checkout.isPending && checkout.variables?.plan === p.key}
-                      disabled={checkout.isPending}
-                      onClick={() => checkout.mutate({ plan: p.key })}
+                      loading={
+                        (checkout.isPending && checkout.variables?.plan === p.key)
+                        || (changePlan.isPending && changePlan.variables?.plan === p.key)
+                      }
+                      disabled={checkout.isPending || changePlan.isPending}
+                      /**
+                       * A workspace that already subscribes CHANGES its
+                       * subscription; one that does not buys one. The same
+                       * button did the second thing in both cases, which is how
+                       * a plan switch came to mean two subscriptions.
+                       */
+                      onClick={() =>
+                        data.subscribed ? changePlan.mutate({ plan: p.key }) : checkout.mutate({ plan: p.key })
+                      }
                     >
-                      {data.plan === 'TRIAL' ? 'Subscribe' : 'Switch plan'}
+                      {data.subscribed ? 'Switch plan' : 'Subscribe'}
                     </Button>
                   )}
                 </div>
               );
             })}
           </div>
+          {(changePlan.error || cancelPlan.error || resumePlan.error) && (
+            <FormError className="mt-3 text-[12px]">
+              {(changePlan.error ?? cancelPlan.error ?? resumePlan.error)!.message}
+            </FormError>
+          )}
+          {/**
+            * Cancelling. There was no control for it anywhere in this product,
+            * while the Terms a customer accepts say the subscription can be
+            * cancelled at any time — so leaving was a support request, and
+            * `org.deleteWorkspace` was the only thing in the app that stopped
+            * the billing, by erasing the firm's records to do it.
+            *
+            * At the END of the paid period, which is why the sentence says so:
+            * the period is paid for, and cutting the features off on the spot
+            * would take away what the firm has already bought.
+            */}
+          {isAdmin && data.configured && data.subscribed && (
+            <div className="mt-4 border-t border-border-faint pt-3 flex flex-wrap items-center gap-3">
+              {data.cancelAt ? (
+                <>
+                  <span className="text-[12px]">
+                    This plan ends on{' '}
+                    <strong className="font-semibold">{longDate(data.cancelAt)}</strong>. Until then nothing changes.
+                  </span>
+                  <Button writes
+                    size="sm"
+                    variant="secondary"
+                    loading={resumePlan.isPending}
+                    onClick={() => resumePlan.mutate()}
+                  >
+                    Keep my plan
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[12px] text-ink-2">
+                    Cancel any time. The plan runs to the end of the period you have paid for, then the workspace
+                    becomes read-only — nothing is deleted.
+                  </span>
+                  <Button writes
+                    size="sm"
+                    variant="secondary"
+                    loading={cancelPlan.isPending}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Cancel this subscription? It runs to the end of the period you have paid for, then the workspace becomes read-only. You can undo this until then.',
+                        )
+                      )
+                        cancelPlan.mutate();
+                    }}
+                  >
+                    Cancel subscription
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
           {data.configured && (
             <div className="mt-3 text-[10.5px] text-ink-3">
               Card payments are processed by Stripe Checkout — no card details touch this server.

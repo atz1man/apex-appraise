@@ -43,6 +43,15 @@ const HELPERS: Array<{ call: RegExp; name: string; source: string }> = [
   { call: /\brecord\(/, name: 'record', source: 'src/routers/sales.ts' },
   // the benchmark feed records each contribution; the manual button now only calls it
   { call: /feedApproved\(/, name: 'feedApproved', source: 'src/benchmark-feed.ts' },
+  /**
+   * `billing.sync` is this one and nothing else — the body moved into
+   * `reconcileSubscription` when `changePlan` and `cancelPlan` came to need the
+   * same answer. It records every change, including the two the old inline
+   * version could not: a cancellation, and the "several live subscriptions"
+   * case where NOTHING changes because something is wrong, which is the one
+   * outcome a reader has nowhere else to learn about.
+   */
+  { call: /reconcileSubscription\(/, name: 'reconcileSubscription', source: 'src/billing.ts' },
 ];
 
 /**
@@ -111,7 +120,17 @@ describe('the sweep itself', () => {
       const src = readFileSync(resolve(API_ROOT, h.source), 'utf8');
       const at = src.indexOf(`const ${h.name} =`) >= 0 ? src.indexOf(`const ${h.name} =`) : src.indexOf(`function ${h.name}`);
       expect(at, `${h.name} was not found in ${h.source}`).toBeGreaterThanOrEqual(0);
-      const body = src.slice(at, at + 1500);
+      /**
+       * To the NEXT top-level declaration, not a fixed number of characters.
+       * The window was 1500, which is a guess about how long a function is: when
+       * `reconcileSubscription` was named here its `activityEvent.create` sat
+       * past the cut, so the sweep reported a helper that records perfectly well
+       * as not recording — a confident wrong answer, and the direction that
+       * costs an afternoon rather than a defect.
+       */
+      const rest = src.slice(at + 1);
+      const next = rest.search(/\n(?:export |function |const |class )/);
+      const body = rest.slice(0, next === -1 ? rest.length : next);
       expect(DIRECT.some((r) => r.test(body)), `${h.name} in ${h.source} does not record`).toBe(true);
     }
   });

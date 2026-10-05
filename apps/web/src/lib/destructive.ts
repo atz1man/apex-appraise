@@ -9,9 +9,18 @@
  * worse than no matcher, because somebody will act on its list.
  */
 
-/** A mutation whose whole job is to destroy a record. */
+/**
+ * A mutation whose whole job is to end something.
+ *
+ * `cancel` was added to `remove|delete` when `billing.cancelPlan` landed, and
+ * the addition is the point rather than a convenience: ending a firm's
+ * subscription destroys nothing in the database and is one of the most
+ * consequential things this product can be asked to do — the workspace goes
+ * read-only — so a name-shaped rule that only knew about rows would have passed
+ * over it in silence. It matches a verb, not a table.
+ */
 export const DESTRUCTIVE_BINDING =
-  /const\s+(\w+)\s*=\s*trpc\.([a-zA-Z]+\.(?:remove|delete)[A-Za-z]*)\.useMutation/g;
+  /const\s+(\w+)\s*=\s*trpc\.([a-zA-Z]+\.(?:remove|delete|cancel)[A-Za-z]*)\.useMutation/g;
 
 export type Site = { file: string; line: number; procedure: string; gate: Gate };
 export type Gate = 'confirm' | 'arm' | 'typed-name' | 'none';

@@ -1,12 +1,38 @@
+import type { PrismaClient } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { APP_URL } from '../email.js';
 import { PLANS, ensurePrice, stripeConfigured, stripeFetch, stripePublishableKey } from '../stripe.js';
+import { planLookupKey, reconcileSubscription, soleSubscription } from '../billing.js';
+import { recordAudit } from '../audit.js';
 import { adminProcedure, authedProcedure, internalProcedure, router } from '../trpc.js';
 import { usageFor } from '../entitlements.js';
 import { trialStateOf } from '../trial.js';
 
 /** Admin-only guard on top of internal. */
+
+/**
+ * The one live subscription to act on, or a refusal naming why there is not one.
+ *
+ * `changePlan`, `cancelPlan` and `resumePlan` all need it and all must refuse
+ * rather than pick: acting on one of two leaves the other billing at the old
+ * plan, which is the defect they exist to end, made worse by being half-fixed.
+ */
+async function theSubscription(prisma: PrismaClient, orgId: string) {
+  if (!stripeConfigured()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Stripe is not configured on this server' });
+  const found = await soleSubscription(prisma, orgId);
+  if ('reason' in found) {
+    throw new TRPCError({
+      code: found.reason === 'none' ? 'PRECONDITION_FAILED' : 'CONFLICT',
+      message:
+        found.reason === 'none'
+          ? 'There is no active subscription on this workspace. Subscribe to a plan first.'
+          : `This workspace has ${found.count} live subscriptions in Stripe and is being billed for each. `
+            + 'Acting on one would leave the others on their old plans — contact support to have the duplicates cancelled first.',
+    });
+  }
+  return { id: found.sub.id, itemId: found.itemId, sub: found.sub };
+}
 
 export const billingRouter = router({
   /** Publishable key + plan catalogue + this workspace's current plan. */
@@ -18,6 +44,18 @@ export const billingRouter = router({
       mode: stripePublishableKey()?.startsWith('pk_test') ? ('test' as const) : ('live' as const),
       plan: org?.plan ?? 'TRIAL',
       plans: PLANS,
+      /**
+       * Whether there is something to CHANGE as opposed to something to buy.
+       * Without it the panel could only offer Checkout, and a second Checkout
+       * against a customer who already subscribes is a second subscription.
+       */
+      subscribed: !!org?.stripeSubscriptionId,
+      /**
+       * A cancellation already scheduled. Read off the row rather than from
+       * Stripe, so opening Settings does not cost a Stripe call per view —
+       * `reconcileSubscription` is what keeps it true.
+       */
+      cancelAt: org?.subscriptionCancelAt ?? null,
       // the clock, so the UI can say how long is left instead of the customer
       // finding out when a save is refused
       trial: org ? trialStateOf(org) : { endsAt: null, expired: false, daysLeft: null },
@@ -67,85 +105,107 @@ export const billingRouter = router({
    * Called after Checkout returns (and safe to call any time) — no webhook
    * dependency for the tunnel/dev setup.
    */
-  sync: internalProcedure.mutation(async ({ ctx }) => {
-    const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
-    if (!org?.stripeCustomerId || !stripeConfigured()) return { plan: org?.plan ?? 'TRIAL' };
-    const subs = await stripeFetch<{
-      data: Array<{
-        id: string;
-        status: string;
-        metadata?: { plan?: string };
-        items?: { data?: Array<{ price?: { lookup_key?: string | null } }> };
-      }>;
-    }>(`/subscriptions?customer=${org.stripeCustomerId}&status=active&limit=3`, undefined, 'GET');
-    const active = subs.data.find((s) => s.status === 'active');
+  sync: internalProcedure.mutation(({ ctx }) => reconcileSubscription(ctx.prisma, ctx.principal.orgId)),
 
-    /**
-     * WHICH plan an active subscription is, decided from the subscription
-     * rather than guessed.
-     *
-     * This was: metadata if it names a known plan, otherwise **GROWTH** if any
-     * subscription is active. The fallback is a guess about what a customer
-     * bought, and it is wrong in both directions. Only `billing.checkout` writes
-     * `metadata[plan]`, so a subscription created any other way — in the Stripe
-     * dashboard, by support, by an importer, or before that metadata was added
-     * — carries none. A firm paying for STARTER was granted GROWTH; a firm
-     * paying for ENTERPRISE was cut down to GROWTH and lost features it pays
-     * for. Neither shows up as an error anywhere.
-     *
-     * Nothing needed guessing. `ensurePrice` gives every plan a deterministic
-     * `lookup_key` — `apex_starter_monthly`, `apex_growth_monthly`,
-     * `apex_enterprise_monthly` — so the PRICE on the subscription says which
-     * plan it is, and the price is what the customer actually pays. Read that
-     * first, and keep the metadata as the second source for a subscription
-     * whose price predates the lookup keys.
-     */
-    const fromLookupKey = active?.items?.data
-      ?.map((i) => PLANS.find((p) => i.price?.lookup_key === `apex_${p.key.toLowerCase()}_monthly`)?.key)
-      .find((k): k is (typeof PLANS)[number]['key'] => !!k);
-    const fromMetadata = PLANS.find((p) => p.key === active?.metadata?.plan)?.key;
-    const named = fromLookupKey ?? fromMetadata;
-
-    /**
-     * An active subscription this server cannot identify leaves the plan ALONE.
-     *
-     * Not GROWTH, and not TRIAL either. We know the customer is paying and do
-     * not know for what, so any answer is invented — and inventing one either
-     * hands out features nobody bought or takes away features somebody did.
-     * Leaving it visible and unchanged is a state a human can act on; a silent
-     * wrong tier is not. No active subscription is a different thing entirely:
-     * that is Stripe saying nobody is paying, which is TRIAL, and is not a guess.
-     */
-    const plan = active ? (named ?? org.plan) : 'TRIAL';
-
-    await ctx.prisma.organisation.update({
-      where: { id: org.id },
-      data: { plan, stripeSubscriptionId: active?.id ?? null },
-    });
-
-    /**
-     * Recorded on EVERY change, not only when a subscription is active.
-     *
-     * The audit line was inside `if (active && ...)`, so a cancellation — the
-     * change that takes features away, refuses saves and locks a firm out of
-     * work mid-task — moved the workspace to TRIAL with no trace of when or
-     * why. `provenance-sweep` exempts `billing.checkout` on the express grounds
-     * that "billing.sync records it when it arrives"; that was only half true.
-     */
-    if (org.plan !== plan) {
-      const anyDeal = await ctx.prisma.deal.findFirst({ where: { orgId: org.id }, select: { id: true } });
-      if (anyDeal) {
-        await ctx.prisma.activityEvent.create({
-          data: {
-            orgId: org.id,
-            dealId: anyDeal.id,
-            actor: 'Stripe',
-            action: active ? 'subscription active' : 'subscription ended',
-            target: active ? `${plan} plan` : `${org.plan} plan ended — workspace on TRIAL`,
-          },
+  /**
+   * Move an existing subscription to another plan, in place.
+   *
+   * What this replaces: the panel's "Switch plan" called `billing.checkout`,
+   * which opens a Checkout session in `mode: subscription`. Stripe does exactly
+   * what that asks — it creates ANOTHER subscription against the same customer
+   * and cancels nothing — so switching plan left the firm paying for both, and
+   * `billing.sync` then ran the workspace at whichever one Stripe listed first.
+   * There was no sign of it anywhere in this product: the panel showed one
+   * CURRENT chip, and the second charge appeared on a card statement.
+   *
+   * Changing the ITEM's price is the one-subscription way to do it, and it is
+   * also the only way to get proration right: Stripe credits the unused part of
+   * the old plan against the new one, where two subscriptions bill in full.
+   *
+   * It REFUSES rather than picks when there are several live subscriptions —
+   * changing one of two leaves the other billing at the old plan, which is the
+   * defect this exists to end, made worse by being half-fixed. A firm already
+   * in that state gets a message that says so, which is the first time this
+   * product has ever mentioned it.
+   */
+  changePlan: adminProcedure
+    .input(z.object({ plan: z.enum(['STARTER', 'GROWTH', 'ENTERPRISE']) }))
+    .mutation(async ({ ctx, input }) => {
+      const found = await theSubscription(ctx.prisma, ctx.principal.orgId);
+      const plan = PLANS.find((p) => p.key === input.plan)!;
+      const already = found.sub.items?.data?.[0]?.price?.lookup_key === planLookupKey(plan.key);
+      if (!already) {
+        const priceId = await ensurePrice(plan);
+        await stripeFetch(`/subscriptions/${found.id}`, {
+          'items[0][id]': found.itemId,
+          'items[0][price]': priceId,
+          // the unused part of the old plan is credited against the new one.
+          // Two subscriptions billed in full, which is what the old path did.
+          proration_behavior: 'create_prorations',
+          /**
+           * Choosing a plan is a statement of intent to keep paying, so it
+           * withdraws a cancellation that had been scheduled. The alternative —
+           * switch plan and still stop at the end of the month — is a state
+           * nobody asks for and nothing in the panel could have explained.
+           */
+          cancel_at_period_end: 'false',
+          'metadata[plan]': plan.key,
         });
       }
-    }
-    return { plan };
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: already ? 'confirmed the subscription plan' : 'changed the subscription plan',
+        target: `${plan.name} (£${(plan.pricePencePerMonth / 100).toLocaleString('en-GB')}/mo)`, ip: ctx.ip,
+      });
+      return reconcileSubscription(ctx.prisma, ctx.principal.orgId);
+    }),
+
+  /**
+   * Stop paying, and change your mind about stopping.
+   *
+   * There was no way to cancel at all. The Terms this product asks a customer
+   * to accept say the subscription can be cancelled at any time; the only
+   * control that existed was Subscribe. A firm that wanted to leave had to ask
+   * us to do it in the Stripe dashboard, which is not a product feature, and
+   * `org.deleteWorkspace` — the GDPR erasure — was the only thing in the app
+   * that stopped the billing, by destroying the firm's records to do it.
+   *
+   * At the END OF THE PERIOD, not immediately, and that is the substance of the
+   * decision rather than a default: the period is paid for. Cancelling on the
+   * spot would take away features the firm has already bought, in the middle of
+   * work, and the refund question would then be ours to answer by hand.
+   *
+   * TWO procedures rather than one taking a boolean, and the reason is the web
+   * sweep: `destructive` reads a verb out of the procedure NAME, so a single
+   * `cancelPlan({ cancel })` made the undo button look like a cancellation that
+   * asked nobody first. A name that carries the direction needs no matcher
+   * cleverness to read the argument, and `benchmarks.optIn`/`optOut` and
+   * `org.saveSso`/`deleteSso` are the same shape already.
+   */
+  cancelPlan: adminProcedure.mutation(async ({ ctx }) => {
+    const sub = await theSubscription(ctx.prisma, ctx.principal.orgId);
+    await stripeFetch(`/subscriptions/${sub.id}`, { cancel_at_period_end: 'true' });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'cancelled the subscription', target: 'ends at the end of the paid period', ip: ctx.ip,
+    });
+    return reconcileSubscription(ctx.prisma, ctx.principal.orgId);
+  }),
+
+  /**
+   * Withdraw a cancellation that has not taken effect yet.
+   *
+   * Until the date arrives nothing has happened, so a mis-click should not cost
+   * a subscription — the same reasoning as `org.resumeWebhook`, and one field in
+   * Stripe either way.
+   */
+  resumePlan: adminProcedure.mutation(async ({ ctx }) => {
+    const sub = await theSubscription(ctx.prisma, ctx.principal.orgId);
+    await stripeFetch(`/subscriptions/${sub.id}`, { cancel_at_period_end: 'false' });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'withdrew the subscription cancellation', target: 'billing continues', ip: ctx.ip,
+    });
+    return reconcileSubscription(ctx.prisma, ctx.principal.orgId);
   }),
 });
