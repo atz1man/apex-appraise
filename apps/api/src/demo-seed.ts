@@ -542,25 +542,38 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
         },
       });
     }
-    const cfRows: Array<[string, string, string, string, number]> = [
+    /**
+     * The fifth element is when a CALL was funded, where it was.
+     *
+     * Without it every call here is outstanding, because a call is now a demand
+     * until the firm records the money as arrived — so the two historic drawdowns
+     * would show as demands overdue by months and drop out of the LP's statement
+     * altogether. They were paid; the dates say so, a few days after each fell
+     * due, which is both realistic and what makes the statement's "dated by the
+     * funding, not the demand" rule visible on the demo.
+     */
+    const cfRows: Array<[string, string, string, string, number, string?]> = [
       ['dist', 'Profit distribution', 'Old Brewery Quarter', '2026-05-14', 1_360_000],
       ['dist', 'Final distribution', 'Parkstone Mews', '2026-04-02', 2_040_000],
-      ['call', 'Capital call — drawdown 3', 'Harbour Reach', '2026-02-18', -1_100_000],
-      ['call', 'Capital call — drawdown 2', 'Harbour Reach', '2025-11-06', -1_600_000],
+      ['call', 'Capital call — drawdown 3', 'Harbour Reach', '2026-02-18', -1_100_000, '2026-02-24'],
+      ['call', 'Capital call — drawdown 2', 'Harbour Reach', '2025-11-06', -1_600_000, '2025-11-11'],
       /**
-       * One drawdown notice still ahead of its due date, so the portal's
-       * capital call panel has something real to show. It used to be hardcoded
-       * in the router — the same deal, amount and due date for every investor
-       * of every firm — and by the time anybody looked that fixed date had
-       * passed, so an LP was reading an OVERDUE demand for money nobody had
+       * One drawdown notice still ahead of its due date and unfunded, so the
+       * portal's capital call panel has something real to show. It used to be
+       * hardcoded in the router — the same deal, amount and due date for every
+       * investor of every firm — and by the time anybody looked that fixed date
+       * had passed, so an LP was reading an OVERDUE demand for money nobody had
        * issued. Relative to the seed run, because a fixed date goes stale the
        * same way.
        */
       ['call', 'Capital call — drawdown 4', 'Harbour Reach', inDays(30), -900_000],
     ];
-    for (const [kind, label, dealName, date, amount] of cfRows) {
+    for (const [kind, label, dealName, date, amount, fundedAt] of cfRows) {
       await prisma.cashflow.create({
-        data: { investorId: inv.id, dealId: deals[dealName], kind, label, amount: p(amount), date: new Date(date) },
+        data: {
+          investorId: inv.id, dealId: deals[dealName], kind, label, amount: p(amount),
+          date: new Date(date), fundedAt: fundedAt ? new Date(fundedAt) : null,
+        },
       });
     }
   }

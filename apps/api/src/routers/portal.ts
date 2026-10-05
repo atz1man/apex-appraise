@@ -107,12 +107,58 @@ async function investorPosition(prisma: any, investorId: string, orgId: string, 
    * A capital call is a legal demand for cash under the LPA. Where there is no
    * outstanding notice on the record, the portal shows nothing.
    */
-  const openCall = inv.cashflows.find((c: any) => c.kind === 'call' && c.date > now);
-  // Cashflow carries a dealId but no relation, so the name is fetched only when
+  /**
+   * Outstanding calls are the ones NOBODY HAS PAID, not the ones dated ahead.
+   *
+   * This was `c.date > now`, so the instant a due date passed an unpaid drawdown
+   * notice stopped being open and appeared in the LP's payment history below —
+   * the comment there calls that list "money that has moved". An investor who had
+   * paid nothing read a payment they had made, and the firm had nowhere at all to
+   * see what was outstanding, because the product could not record that a call
+   * had been funded. `Cashflow.fundedAt` is that fact; a call is open until the
+   * firm says the money arrived, and overdue if its due date has passed.
+   *
+   * ALL of them, not `.find()`. A scheme draws down in several tranches and an LP
+   * behind on two notices was shown one.
+   */
+  const openCalls = inv.cashflows.filter((c: any) => c.kind === 'call' && !c.fundedAt);
+  // Cashflow carries a dealId but no relation, so the names are fetched only when
   // there is a notice to name — no query on the ordinary case
-  const openCallDeal = openCall?.dealId
-    ? await prisma.deal.findFirst({ where: { id: openCall.dealId, orgId }, select: { name: true } })
-    : null;
+  const callDealNames = new Map<string, string>();
+  const callDealIds = [...new Set(openCalls.map((c: any) => c.dealId).filter((d: any): d is string => !!d))];
+  if (callDealIds.length) {
+    for (const d of await prisma.deal.findMany({ where: { id: { in: callDealIds }, orgId }, select: { id: true, name: true } })) {
+      callDealNames.set(d.id, d.name);
+    }
+  }
+
+  /**
+   * Both lists are built HERE and typed, rather than chained off `inv.cashflows`
+   * in the response: that value is `any`, so a chain from it stays `any` however
+   * the callback is annotated, and the portal's own `.map(call => …)` then had an
+   * implicit-any parameter the web typecheck refused.
+   */
+  const history: Array<{ kind: string; label: string; amount: number; date: Date }> = inv.cashflows
+    .filter((c: any) => (c.kind === 'call' ? !!c.fundedAt : c.date <= now))
+    .map((c: any) => ({
+      kind: c.kind,
+      label: c.label,
+      amount: share(P(c.amount)),
+      date: (c.kind === 'call' ? c.fundedAt : c.date) as Date,
+    }));
+  history.sort((a, b) => +new Date(b.date) - +new Date(a.date));
+
+  const notices: Array<{ deal: string | null; label: string; amount: number; due: Date; overdue: boolean }> = openCalls.map(
+    (c: any) => ({
+      deal: c.dealId ? callDealNames.get(c.dealId) ?? null : null,
+      label: c.label,
+      // calls are held negative from the LP's side; a demand is shown positive
+      amount: share(Math.abs(P(c.amount))),
+      due: c.date as Date,
+      overdue: (c.date as Date) < now,
+    }),
+  );
+  notices.sort((a, b) => +new Date(a.due) - +new Date(b.due));
 
   return {
     id: inv.id,
@@ -131,31 +177,25 @@ async function investorPosition(prisma: any, investorId: string, orgId: string, 
     },
     holdings,
     /**
-     * The statement's HISTORY is money that has moved. A drawdown notice dated
-     * ahead is the open call above, and it belongs there only: measured on the
-     * demo LP on 5 September, "Cashflow history" led with "Capital call —
-     * drawdown 4 · 05 Oct 2026 · −£495k", a month in the future, printed in
-     * the same red as the three that had been paid. An LP reading that line
-     * reads a payment they have not made.
+     * The statement's HISTORY is money that has MOVED, which for a call means
+     * funded and for a distribution means paid.
+     *
+     * It was `date <= now`. Measured on the demo LP on 5 September, "Cashflow
+     * history" led with "Capital call — drawdown 4 · 05 Oct 2026 · −£495k", a
+     * month in the future, in the same red as the three that had been paid — and
+     * filtering by date fixed only half of that, because the moment 5 October
+     * arrived the same unpaid notice joined the list as settled. A call appears
+     * here when `fundedAt` is set, DATED BY IT rather than by the day the money
+     * was demanded: when the cash moved is the fact a statement is about.
      */
-    cashflows: inv.cashflows
-      .filter((c: any) => c.date <= now)
-      .map((c: any) => ({
-        kind: c.kind,
-        label: c.label,
-        amount: share(P(c.amount)),
-        date: c.date,
-      })),
+    cashflows: history,
     documents: await sharedDocuments(prisma, orgId, holdings_dealIds(inv), viewerUserId),
-    openCapitalCall: openCall
-      ? {
-          deal: openCallDeal?.name ?? null,
-          label: openCall.label,
-          // calls are held negative from the LP's side; a demand is shown positive
-          amount: share(Math.abs(P(openCall.amount))),
-          due: openCall.date,
-        }
-      : null,
+    /**
+     * Every notice still outstanding, soonest first, each saying whether it is
+     * due or already overdue — which the portal could not say before, because a
+     * notice stopped being open on the day it became most urgent.
+     */
+    openCapitalCalls: notices,
   };
 }
 
@@ -213,7 +253,7 @@ const holdingOut = (h: {
   irr: h.irr,
 });
 
-const cashflowOut = (c: { id: string; investorId: string; dealId: string | null; kind: string; label: string; amount: bigint; date: Date }) => ({
+const cashflowOut = (c: { id: string; investorId: string; dealId: string | null; kind: string; label: string; amount: bigint; date: Date; fundedAt: Date | null }) => ({
   id: c.id,
   investorId: c.investorId,
   dealId: c.dealId,
@@ -221,6 +261,8 @@ const cashflowOut = (c: { id: string; investorId: string; dealId: string | null;
   label: c.label,
   amount: P(c.amount),
   date: c.date,
+  /** null while a call is outstanding; a distribution is recorded when it is paid */
+  fundedAt: c.fundedAt,
 });
 
 const INVESTOR_LABELS: Record<string, string> = { name: 'name', contactFirst: 'contact', sharePct: 'share' };
@@ -518,6 +560,54 @@ export const investorsRouter = router({
         ip: ctx.ip,
       });
       return cashflowOut(row);
+    }),
+
+  /**
+   * Record that a capital call was funded, or that it was not after all.
+   *
+   * There was no way to say either. A call was a `Cashflow` row with a due date,
+   * and the portal decided whether the money had moved by comparing that date to
+   * today — so an unpaid drawdown notice became a payment in the LP's history on
+   * the day it fell due, and the firm had nowhere to see what was outstanding.
+   * A capital call is a legal demand for cash under the LPA; whether it has been
+   * met is the single most important thing about it.
+   *
+   * `funded: false` unsets it, because a call marked funded in error is a receipt
+   * for money that never arrived, and the only alternative was deleting the
+   * notice — which loses the demand along with the mistake.
+   *
+   * The date is the SERVER's, not the caller's. "When did the money arrive" is
+   * exactly the kind of fact `audit.ts` says must not be backdatable, and the
+   * same argument `photos.add` makes about `takenAt`: if a firm needs to record a
+   * date in the past they can say so in the label, where it reads as their
+   * assertion rather than as ours.
+   */
+  fundCashflow: internalProcedure
+    .input(z.object({ cashflowId: z.string(), funded: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      // Cashflow carries no orgId of its own; it belongs to whoever its investor does
+      const row = await ctx.prisma.cashflow.findFirst({
+        where: { id: input.cashflowId, investor: { orgId: ctx.principal.orgId } },
+        include: { investor: { select: { name: true } } },
+      });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (row.kind !== 'call') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Only a capital call is funded. A distribution is recorded when it is paid.',
+        });
+      }
+      const updated = await ctx.prisma.cashflow.update({
+        where: { id: row.id },
+        data: { fundedAt: input.funded ? new Date() : null },
+      });
+      await recordAudit(ctx.prisma, {
+        orgId: ctx.principal.orgId, dealId: row.dealId ?? undefined, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: input.funded ? 'recorded a capital call as funded' : 'marked a capital call unfunded',
+        target: `${row.investor.name} · ${row.label} · ${moneyLabel(row.amount < 0n ? -row.amount : row.amount)}`,
+        ip: ctx.ip,
+      });
+      return cashflowOut(updated);
     }),
 
   deleteCashflow: internalProcedure.input(z.object({ cashflowId: z.string() })).mutation(async ({ ctx, input }) => {

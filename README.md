@@ -99,15 +99,15 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, ~1,650 tests plus 193 browser specs. All of them run in CI on every PR.
+Five suites, ~1,665 tests plus 194 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
 | Engine | `pnpm --filter @apex/appraisal-engine test` | 296 |
-| API | `cd apps/api && npx vitest run` | 1025 |
+| API | `cd apps/api && npx vitest run` | 1039 |
 | Web unit | `cd apps/web && npx vitest run` | 313 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 193 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 194 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase

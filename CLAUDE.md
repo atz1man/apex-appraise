@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1025). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1039). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (313): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (193, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (194, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -175,6 +175,27 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A capital call is a demand until somebody says the money arrived**
+  (`capital-call-funding.test.ts`). A call was a `Cashflow` row with a due date and nothing
+  recorded whether it had been MET, so the investor portal decided by comparing that date to
+  today: `openCall` was `date > now` and the statement was `date <= now`, under a comment calling
+  that list "money that has moved". On the day a drawdown notice fell due it stopped being an open
+  demand and appeared in the LP's own statement as a payment they had made — whether or not they
+  had paid a penny. A capital call is a legal demand for cash under the LPA; the firm had nowhere
+  to see which were outstanding, and the investor was shown a receipt. `Cashflow.fundedAt` is the
+  fact, `investors.fundCashflow` records it BOTH ways (a call marked funded in error is a receipt
+  for money that never arrived, and the only alternative was deleting the notice, which loses the
+  demand with the mistake), and the date is the SERVER's for the reason `photos.add` gives about
+  `takenAt`. The statement dates a funded call by its FUNDING, not its demand: when the cash moved
+  is the fact a statement is about, and those are different days whenever an LP pays late. The
+  portal shows EVERY outstanding notice, soonest first, each saying due or OVERDUE — it was
+  `.find()`, so an LP behind on two tranches was shown one. Two existing tests encoded the old
+  rule and one was actively wrong: "drops a notice once its due date has passed, rather than
+  showing it overdue for ever" read sensibly against the HARDCODED notice it was written for,
+  whose fixed date went stale, and against real data it means an unpaid demand becomes a payment.
+  The demo seed marks its two historic drawdowns funded a few days after each fell due; without
+  that the demo's paid calls would read as months overdue and drop out of the LP's statement
+  altogether. Five mutants recorded, including both halves of the date rule.
 - **The field app takes photographs** (`inspection-photos.test.ts` + `inspection-photos.spec.ts`
   + `e2e/field-photos.spec.ts`). Its shutter did `photos + 1`: the viewfinder was a static
   gradient (`placeholderGradients.street`) with framing marks drawn over it and a chip reading

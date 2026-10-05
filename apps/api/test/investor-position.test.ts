@@ -35,7 +35,7 @@ const asInvestor = () =>
 type Position = {
   position: { committed: number; called: number; distributed: number; portfolioIrr: number | null; dpi: number | null };
   holdings: Array<{ committed: number; irr: number | null }>;
-  openCapitalCall: { deal: string | null; label: string; amount: number; due: Date } | null;
+  openCapitalCalls: Array<{ deal: string | null; label: string; amount: number; due: Date; overdue: boolean }>;
 };
 
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000);
@@ -101,10 +101,28 @@ describe('the headline figures', () => {
   });
 });
 
+/**
+ * What "outstanding" means, which this file used to get wrong in the one way that
+ * costs an investor money.
+ *
+ * The rule was `date > now`: a notice was open while its due date was ahead, and
+ * one of the cases below asserted that in so many words — "drops a notice once
+ * its due date has passed, rather than showing it overdue for ever". That read
+ * sensibly against a HARDCODED notice, whose fixed date went stale and left every
+ * LP of every firm staring at an overdue demand nobody had issued. Against real
+ * data it means the opposite: on the day a drawdown notice falls due it leaves the
+ * demand panel and joins the LP's own statement, under a comment calling that list
+ * "money that has moved". An investor who had paid nothing read a payment they
+ * had made, and the firm had nowhere to see what was outstanding.
+ *
+ * `Cashflow.fundedAt` is the missing fact. A call is a demand until the firm
+ * records the money as arrived, overdue if its date has passed, and in the
+ * statement only once it is funded — dated by the funding.
+ */
 describe('the capital call panel', () => {
   it('shows nothing when no notice is outstanding', async () => {
     const p = (await asInvestor().investors.myPosition()) as Position;
-    expect(p.openCapitalCall, 'a demand for money was shown with nothing on the record').toBeNull();
+    expect(p.openCapitalCalls, 'a demand for money was shown with nothing on the record').toEqual([]);
   });
 
   it('shows a real notice, its own deal and its own due date', async () => {
@@ -112,30 +130,59 @@ describe('the capital call panel', () => {
       data: { investorId, dealId: T.dealId, kind: 'call', label: 'Capital call — drawdown 4', amount: -900_000_00n, date: inDays(30) },
     });
     const p = (await asInvestor().investors.myPosition()) as Position;
-    expect(p.openCapitalCall).toBeTruthy();
-    expect(p.openCapitalCall!.label).toBe('Capital call — drawdown 4');
-    expect(p.openCapitalCall!.deal).toBe('Fund Wharf');
+    expect(p.openCapitalCalls).toHaveLength(1);
+    expect(p.openCapitalCalls[0]!.label).toBe('Capital call — drawdown 4');
+    expect(p.openCapitalCalls[0]!.deal).toBe('Fund Wharf');
     // held negative from the LP's side; a demand is shown positive
-    expect(p.openCapitalCall!.amount).toBe(495_000);
-    expect(p.openCapitalCall!.due.getTime()).toBeGreaterThan(Date.now());
+    expect(p.openCapitalCalls[0]!.amount).toBe(495_000);
+    expect(p.openCapitalCalls[0]!.overdue).toBe(false);
   });
 
-  it('keeps an open notice out of the history — a call dated ahead is a demand, not a payment', async () => {
+  it('keeps an open notice out of the history — a demand is not a payment', async () => {
     // measured on the demo LP: "drawdown 4 · 05 Oct 2026 · −£495k" led the history a month early
     const p = (await asInvestor().investors.myPosition()) as Position & { cashflows: Array<{ label: string; date: Date }> };
-    expect(p.openCapitalCall?.label).toBe('Capital call — drawdown 4');
+    expect(p.openCapitalCalls[0]!.label).toBe('Capital call — drawdown 4');
     expect(p.cashflows.map((c) => c.label)).not.toContain('Capital call — drawdown 4');
     for (const c of p.cashflows) expect(c.date.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  it('drops a notice once its due date has passed, rather than showing it overdue for ever', async () => {
-    // the hardcoded one had a fixed due date, so it went overdue and stayed there
+  /**
+   * The case this replaces asserted the opposite, and the replacement is the whole
+   * point of the column: an unpaid demand does not become a payment by sitting
+   * there. It says overdue instead.
+   */
+  it('keeps an unpaid notice as a demand once its due date has passed, and says it is overdue', async () => {
     await prisma.cashflow.deleteMany({ where: { investorId, kind: 'call' } });
     await prisma.cashflow.create({
       data: { investorId, dealId: T.dealId, kind: 'call', label: 'Capital call — drawdown 3', amount: -500_000_00n, date: inDays(-30) },
     });
+    const p = (await asInvestor().investors.myPosition()) as Position & { cashflows: Array<{ label: string }> };
+    expect(p.openCapitalCalls.map((c) => c.label)).toEqual(['Capital call — drawdown 3']);
+    expect(p.openCapitalCalls[0]!.overdue).toBe(true);
+    expect(
+      p.cashflows.map((c) => c.label),
+      'an unpaid demand appeared in the statement as a payment',
+    ).not.toContain('Capital call — drawdown 3');
+  });
+
+  /** And once it IS funded, it is money that moved and leaves the demand panel. */
+  it('moves into the statement when the firm records the money as arrived', async () => {
+    const row = await prisma.cashflow.findFirstOrThrow({ where: { investorId, kind: 'call' } });
+    await callerFor(T.principal).investors.fundCashflow({ cashflowId: row.id, funded: true } as never);
+    const p = (await asInvestor().investors.myPosition()) as Position & { cashflows: Array<{ label: string }> };
+    expect(p.openCapitalCalls).toEqual([]);
+    expect(p.cashflows.map((c) => c.label)).toContain('Capital call — drawdown 3');
+  });
+
+  it('shows every outstanding notice, not just the first', async () => {
+    await prisma.cashflow.deleteMany({ where: { investorId, kind: 'call' } });
+    for (const [label, days] of [['drawdown A', -5], ['drawdown B', 10], ['drawdown C', 40]] as const) {
+      await prisma.cashflow.create({
+        data: { investorId, dealId: T.dealId, kind: 'call', label, amount: -100_000_00n, date: inDays(days) },
+      });
+    }
     const p = (await asInvestor().investors.myPosition()) as Position;
-    expect(p.openCapitalCall).toBeNull();
+    expect(p.openCapitalCalls.map((c) => c.label), 'soonest first').toEqual(['drawdown A', 'drawdown B', 'drawdown C']);
   });
 
   it('never shows one investor’s notice to another', async () => {
@@ -153,6 +200,6 @@ describe('the capital call panel', () => {
       userId: user.id, orgId: T.orgId, principalType: 'investor', role: 'VIEWER',
       name: 'Rival LP', initials: 'RL', investorId: other.id, buyerUnitId: null,
     } as never).investors.myPosition()) as Position;
-    expect(p.openCapitalCall).toBeNull();
+    expect(p.openCapitalCalls).toEqual([]);
   });
 });

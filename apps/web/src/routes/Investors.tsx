@@ -126,6 +126,20 @@ export default function Investors() {
       toast.success(c.kind === 'call' ? 'Capital call issued' : 'Distribution recorded');
     },
   });
+  /**
+   * Whether a capital call has been MET, which nothing could record.
+   *
+   * A call was a line with a due date and the portal decided whether the money
+   * had moved by comparing that date to today, so an unpaid drawdown notice
+   * became a payment in the LP's history on the day it fell due — and the firm
+   * had nowhere to see what was outstanding.
+   */
+  const fundLine = trpc.investors.fundCashflow.useMutation({
+    onSuccess: (c) => {
+      toast.success(c.fundedAt ? 'Recorded as funded.' : 'Marked unfunded — it is an open demand again.');
+      void utils.investors.record.invalidate();
+    },
+  });
   const deleteLine = trpc.investors.deleteCashflow.useMutation({
     onSuccess: () => {
       if (selected) refresh(selected);
@@ -427,7 +441,10 @@ export default function Investors() {
             <section>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-[13px] font-semibold">Distributions & capital calls</h4>
-                <span className="text-[11px] text-ink-3">A call dated ahead is an open demand on the portal</span>
+                {/* it used to say "A call dated ahead is an open demand on the
+                    portal", which was the whole defect written down: the date
+                    decided whether the money had arrived */}
+                <span className="text-[11px] text-ink-3">A call is an open demand until it is marked funded</span>
               </div>
               {rec.cashflows.length === 0 ? (
                 <div className="text-[12px] text-ink-3">No statement lines yet.</div>
@@ -435,12 +452,34 @@ export default function Investors() {
                 <div className="flex flex-col">
                   {rec.cashflows.map((c) => (
                     <div key={c.id} className="flex items-center gap-3 py-2 border-b border-border-faint last:border-b-0 text-[12.5px]">
-                      <StatusChip status={c.kind === 'dist' ? 'green' : 'amber'} label={c.kind === 'dist' ? 'DIST' : 'CALL'} />
+                      <StatusChip
+                        status={c.kind === 'dist' ? 'green' : c.fundedAt ? 'green' : new Date(c.date) < new Date() ? 'red' : 'amber'}
+                        label={c.kind === 'dist' ? 'DIST' : c.fundedAt ? 'FUNDED' : new Date(c.date) < new Date() ? 'OVERDUE' : 'CALL'}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold truncate">{c.label}</div>
-                        <div className="text-[11px] text-ink-3">{dateGB(c.date)}{c.dealId ? ` · ${deals.find((d) => d.id === c.dealId)?.name ?? ''}` : ''}</div>
+                        <div className="text-[11px] text-ink-3">
+                          {c.kind === 'call' && c.fundedAt
+                            ? `due ${dateGB(c.date)} · funded ${dateGB(c.fundedAt)}`
+                            : c.kind === 'call'
+                              ? `due ${dateGB(c.date)}`
+                              : dateGB(c.date)}
+                          {c.dealId ? ` · ${deals.find((d) => d.id === c.dealId)?.name ?? ''}` : ''}
+                        </div>
                       </div>
                       <span className="fig font-semibold">{fM(Math.abs(c.amount))}</span>
+                      {c.kind === 'call' && (
+                        <Button
+                          writes
+                          size="sm"
+                          variant="secondary"
+                          loading={fundLine.isPending && fundLine.variables?.cashflowId === c.id}
+                          onClick={() => fundLine.mutate({ cashflowId: c.id, funded: !c.fundedAt })}
+                          ariaLabel={c.fundedAt ? `Mark ${c.label} unfunded` : `Record ${c.label} as funded`}
+                        >
+                          {c.fundedAt ? 'Unfund' : 'Mark funded'}
+                        </Button>
+                      )}
                       {/* a call or a distribution is a financial record, and this
                           removed one on a single click with nothing said */}
                       <Button
