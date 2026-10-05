@@ -32,16 +32,16 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1055). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1084). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (351): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (360): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, photo-queue, photo-drain, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (195, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (197, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -524,11 +524,66 @@ the point, so read the failure rather than adding an exemption.
   been opened once with the new key. Only the TRANSITION is guarded, because refusing a domain
   edit on an already-enforced connection would refuse it for a condition the firm is already
   living in. The panel disables the switch and says why, rather than letting the save be
-  rejected. STILL OPEN and not pretended otherwise: changing the issuer or client id of an
-  ALREADY enforced connection locks a firm out by the same route, and no precondition can tell
-  a broken edit from a legitimate migration to a new provider — that one needs a recovery path,
-  and until there is one the answer is the platform operator clearing `enforced` in the
-  database.
+  rejected. That is PREVENTION, and it was never going to be the whole answer — see the
+  recovery path below.
+- **A firm locked out by its own identity provider can get back in**
+  (`sso-recovery.test.ts` + `web/src/lib/sso-recovery.test.ts` + `e2e/sso-recovery.spec.ts`).
+  The precondition above stops a firm ARRIVING at a lockout on a configuration nobody has
+  tested. Three causes it cannot touch, because each happens AFTER the save: the issuer or
+  client id is edited on an already-enforced connection; the signing certificate expires; the
+  provider is simply down. No precondition can help with any of them — an IdP that worked this
+  morning passes every check there is, and an issuer edit is indistinguishable from a
+  legitimate migration — so the answer is a RECOVERY path, and until this landed the answer
+  was the platform operator editing `enforced` in the database, which is not a product but a
+  phone number. Enforcing SSO now mints ten single-use break-glass codes, returned ONCE in the
+  save's own response and stored only as SHA-256 digests; `auth.recoveryLogin` spends one to
+  sign an admin in without the identity provider. The shape is the one every identity product
+  settles on and each reason is load-bearing: it depends on nothing of the provider's (a
+  digest in this server's own table, no network call); it is WRITTEN DOWN, which is why codes
+  are short and typable and why they live outside the workspace they unlock rather than in it;
+  and spending one grants a SESSION and nothing more — clearing `enforced` automatically would
+  make one leaked code a silent way to switch a security control off. Three conditions on the
+  door, all three asserted: only a workspace that ENFORCES SSO (where passwords work there is
+  nothing to recover from, and a code that signed in anyway would be a second credential path
+  for every firm in the product), only an ADMIN (the point of getting in is `org.saveSso` or
+  `org.deleteSso`, so a code that signs in an analyst fixes nothing and widens what one leaked
+  sheet is worth), and single use, spent in the SAME statement that authenticates —
+  `updateMany` with `usedAt: null` in the WHERE, which is the compare-and-set two concurrent
+  requests need. ONE refusal message for all four failures (unknown address, unenforced
+  workspace, wrong role, wrong code), or this is an oracle for which firms enforce SSO and who
+  their administrators are. The spent row is KEPT with `usedAt`/`usedById`, because "an admin
+  signed in with a break-glass code on the 4th" is what a security review asks about and a
+  deleted row answers nothing; every admin is MAILED on a success, since a break-glass sign-in
+  nobody is told about is a backdoor, and only on success, or the endpoint is a way to mail a
+  firm's administrators as fast as the limiter allows. `normaliseRecoveryCode` is the judgement
+  with boundaries and the reason it matters is WHEN it runs: the moment a firm is locked out,
+  where a correct code refused for a transcription error is indistinguishable from a code that
+  does not work — so case, the group dash, spaces and stray punctuation are all undone, and
+  O→0 and I/L→1 are mapped, which is safe only BECAUSE the alphabet excludes those letters.
+  `regenerate` joined `remove|delete|cancel` in `DESTRUCTIVE_BINDING` at the same time, one
+  step further out than `cancel` went: what it ends is not a row anybody can see but a
+  CREDENTIAL that has already left the building, and a mis-click makes every copy of a printed
+  sheet worthless with no sign until a sign-in fails weeks later. EIGHT mutants recorded, and
+  TWO of them survived at first — both security conditions, both because the TEST was not
+  discriminating rather than the guard being fine, which is this repo's own standing warning
+  met twice in one sitting. Dropping the `enforced` check passed 28 tests because the case
+  meant to cover it passed a made-up literal code, so the refusal came from the wrong code;
+  and dropping the `orgId` scope passed because the cross-tenant case left the other firm
+  unenforced, so that refusal came from the wrong guard too. A valid code and two ENFORCED
+  workspaces are what put each under test. A third, the non-atomic spend, survived because a
+  second SEQUENTIAL attempt is refused by `matchRecoveryCode` anyway — the spent row is no
+  longer in the list it searches — so the race needed a concurrent case. NOT drivable from the
+  browser suite, and said in the spec: reaching the enforced state needs a real handshake with
+  a real provider or a direct row write, and a browser can do neither, so the e2e proves
+  everything up to the door (codes shown once, never again after a reload, the destructive
+  confirm) plus the one thing about the door that IS reachable — that an unenforced workspace
+  offers no code field at all. It registers its OWN organisation, and that is not tidiness:
+  enforcing SSO on the shared demo workspace would fail every concurrent spec at sign-in,
+  including its own cleanup. STILL OPEN: prevention on an EDIT. A changed issuer is still a
+  way to break a live connection; what has changed is that it is no longer a lockout. Making
+  the edit safe needs verify-before-promote — a pending connection, a test sign-in through it,
+  then promotion — which is a larger piece and sidesteps the migration problem rather than
+  solving it.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because

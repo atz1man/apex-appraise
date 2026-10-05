@@ -7,6 +7,7 @@ import { DEFAULT_REGION, REGIONS } from '@apex/types/regions';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
+import { newRecoveryCodes } from '../auth/sso-recovery.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
 import { exportWorkspace } from '../org-export.js';
@@ -997,6 +998,19 @@ export const orgRouter = router({
       enforced: c.enforced,
       defaultRole: c.defaultRole,
       lastLoginAt: c.lastLoginAt,
+      /**
+       * How many break-glass codes are left, so the panel can say.
+       *
+       * A count, never the codes: nothing in this server can recover one from
+       * its digest, which is the property that makes the row safe to hold. Zero
+       * on an ENFORCED connection is the state this whole feature exists to
+       * prevent — the firm's only way in is the identity provider, and if that
+       * stops working there is no second door — so the panel warns on it rather
+       * than leaving a number for somebody to notice.
+       */
+      recoveryCodesRemaining: await ctx.prisma.ssoRecoveryCode.count({
+        where: { orgId: ctx.principal.orgId, usedAt: null },
+      }),
       // the stamp the panel hands back when it saves — see saveSso
       updatedAt: c.updatedAt,
     };
@@ -1094,12 +1108,19 @@ export const orgRouter = router({
        * setting through an unrelated edit — refusing a domain change because of
        * a condition the firm is already living in helps nobody.
        *
-       * STILL OPEN, and not pretended otherwise: changing the issuer or the
-       * client id of an ALREADY enforced connection can lock a firm out by the
-       * same route, and no guard here can tell a broken edit from a legitimate
-       * migration to a new identity provider. That one needs a recovery path
-       * rather than a precondition, and until there is one the answer is the
-       * platform operator clearing `enforced` in the database.
+       * This is PREVENTION, and it was never going to be the whole answer. Three
+       * causes it cannot touch, because each happens after the save: the issuer
+       * or client id is edited on an already-enforced connection; the signing
+       * certificate expires; the provider is simply down. No precondition can
+       * help with any of them — an IdP that worked this morning passes every
+       * check there is, and an issuer edit is indistinguishable from a
+       * legitimate migration to a new provider.
+       *
+       * The RECOVERY path is below: enforcing mints single-use break-glass
+       * codes, and `auth.recoveryLogin` spends one to sign an admin in without
+       * the identity provider. `auth/sso-recovery.ts` says why that shape and
+       * not another. The answer is no longer the platform operator editing this
+       * column by hand.
        */
       if (input.enforced && !existing?.enforced && !existing?.lastLoginAt) {
         throw new TRPCError({
@@ -1137,17 +1158,92 @@ export const orgRouter = router({
         },
         update: data,
       });
+      /**
+       * Turning enforcement ON mints the break-glass codes, in the same save.
+       *
+       * This is the only moment there is to hand them over. Once `enforced` is
+       * live the firm's only way in is the identity provider, and if that stops
+       * working — a changed issuer, an expired certificate, an outage — there is
+       * nobody left who can ask for codes. So they are minted here or the
+       * workspace has no second door, and `auth/sso-recovery.ts` says why that
+       * matters more than the precondition above.
+       *
+       * Returned ONCE and never again: only digests are stored, and nothing in
+       * this server can recover a code from one. The panel says so beside them.
+       *
+       * Unused codes already on the row are KEPT rather than replaced. A firm
+       * that stood enforcement down for an afternoon and turned it back on has
+       * the printed sheet in a drawer, and silently invalidating it would make
+       * the drawer the one place the codes are not.
+       */
+      let recoveryCodes: string[] | null = null;
+      if (input.enforced) {
+        const unused = await ctx.prisma.ssoRecoveryCode.count({
+          where: { orgId: ctx.principal.orgId, usedAt: null },
+        });
+        if (unused === 0) {
+          const { codes, hashes } = newRecoveryCodes();
+          await ctx.prisma.ssoRecoveryCode.createMany({
+            data: hashes.map((codeHash) => ({ orgId: ctx.principal.orgId, codeHash })),
+          });
+          recoveryCodes = codes;
+        }
+      }
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
         action: input.enforced ? 'required single sign-on' : 'configured single sign-on',
         target: domains.join(', '), ip: ctx.ip,
       });
       // from THIS save, never a refetch — see a48b7b3
-      return { ok: true, updatedAt: saved.updatedAt };
+      return { ok: true, updatedAt: saved.updatedAt, recoveryCodes };
     }),
+
+  /**
+   * A fresh set of break-glass codes, invalidating whatever is left.
+   *
+   * Needed because codes are spent one at a time over years and a firm that has
+   * used nine of ten is one incident from the state this feature exists to
+   * prevent. Also the way in for a connection enforced BEFORE codes existed:
+   * those rows have none, the panel says so, and this is the button.
+   *
+   * It destroys the old sheet, which is why the panel asks first — `destructive`
+   * (the web sweep) now reads `regenerate` as a destroying verb for exactly this
+   * control, since what it ends is a credential rather than a row somebody can
+   * see. Refused when there is no connection at all: codes for a workspace that
+   * does not federate unlock a door that is not locked, and would be a second
+   * password path nobody asked for.
+   */
+  regenerateSsoRecoveryCodes: adminProcedure.mutation(async ({ ctx }) => {
+    const conn = await ctx.prisma.ssoConnection.findUnique({ where: { orgId: ctx.principal.orgId } });
+    if (!conn) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Set up single sign-on first — recovery codes are the way back in when it stops working.',
+      });
+    }
+    // the spent ones stay: "an admin signed in with a break-glass code on the
+    // 4th" is what a security review asks about, and a deleted row answers
+    // nothing. Only what is still live is withdrawn.
+    await ctx.prisma.ssoRecoveryCode.deleteMany({ where: { orgId: ctx.principal.orgId, usedAt: null } });
+    const { codes, hashes } = newRecoveryCodes();
+    await ctx.prisma.ssoRecoveryCode.createMany({
+      data: hashes.map((codeHash) => ({ orgId: ctx.principal.orgId, codeHash })),
+    });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'regenerated single sign-on recovery codes',
+      target: `${codes.length} codes`, ip: ctx.ip,
+    });
+    return { codes };
+  }),
 
   deleteSso: adminProcedure.mutation(async ({ ctx }) => {
     await ctx.prisma.ssoConnection.deleteMany({ where: { orgId: ctx.principal.orgId } });
+    // the break-glass goes with the door. A code left behind unlocks nothing —
+    // `recoveryLogin` refuses a workspace that does not enforce SSO — but it is
+    // still a live credential on a row, and the next time the firm federates
+    // they would be handed a sheet that is already somewhere else.
+    await ctx.prisma.ssoRecoveryCode.deleteMany({ where: { orgId: ctx.principal.orgId } });
     await recordAudit(ctx.prisma, {
       orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
       action: 'removed single sign-on', target: 'identity provider', ip: ctx.ip,

@@ -84,6 +84,8 @@ const HOLDS_NOTHING: Record<string, string> = {
     'an authorisation code and the state that was minted with it — received during the flow, never read off a row.',
   'auth.resetPassword':
     'a reset token from the emailed link and a password typed into the box beside it.',
+  'auth.recoveryLogin':
+    'an email address and a break-glass code read off a printed sheet. Neither was loaded from a row — nothing in this product will show a code after it is minted — and the row it writes is the code’s own usedAt, which no caller holds or could stale-write.',
   'auth.changePassword':
     'the current and new passwords, both typed now. Nothing was loaded to go stale.',
   'engagement.sign':

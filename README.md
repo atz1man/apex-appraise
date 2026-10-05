@@ -99,15 +99,15 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, ~1,720 tests plus 195 browser specs. All of them run in CI on every PR.
+Five suites, ~1,760 tests plus 197 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
 | Engine | `pnpm --filter @apex/appraisal-engine test` | 296 |
-| API | `cd apps/api && npx vitest run` | 1055 |
-| Web unit | `cd apps/web && npx vitest run` | 351 |
+| API | `cd apps/api && npx vitest run` | 1084 |
+| Web unit | `cd apps/web && npx vitest run` | 360 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 195 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 197 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase
@@ -129,7 +129,12 @@ pinned build and the installed one disagree.
   (SQLite/Prisma limitation) — parsed in `apps/api/src/mappers.ts`.
 - **Money over the wire is £ (number)**; the DB stores integer pence (BigInt) per the
   spec. Conversion happens once in the API mappers (`P`/`toPence`).
-- **Auth** is credential + JWT (scrypt, lockout). Swap for Auth.js/Clerk for SSO/MFA.
+- **Auth** is credential + JWT (scrypt, per-account lockout), with OIDC single sign-on
+  built in: home-realm discovery by email domain, PKCE, and an `enforced` mode that
+  refuses every password in the workspace. Because that mode has one failure
+  mode — a provider that stops letting anyone in — enforcing it issues single-use
+  break-glass codes that sign an admin in without the identity provider. No MFA of
+  our own; it belongs to the provider.
 - The field app ships as an installable PWA route (`/field`, manifest included);
   a native Expo build is a packaging exercise on the same API. A photograph taken
   with no signal is held in IndexedDB and uploaded when the connection returns, so

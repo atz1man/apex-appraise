@@ -59,7 +59,7 @@ async function main() {
   const tables = [
     'AuthThrottle',
     'BankTransaction', 'BankAccount', 'BankConnection',
-    'WebhookDelivery', 'WebhookEndpoint', 'ApiKey', 'ReportShare', 'ErrorEvent', 'XeroDealMap', 'XeroConnection', 'SsoConnection',
+    'WebhookDelivery', 'WebhookEndpoint', 'ApiKey', 'ReportShare', 'ErrorEvent', 'XeroDealMap', 'XeroConnection', 'SsoConnection', 'SsoRecoveryCode',
     'Payment', 'Cashflow', 'Holding', 'Investor', 'ActivityEvent', 'Task', 'Document', 'SitePhoto',
     'CostPackage', 'Contractor', 'SalesMilestone', 'Unit', 'Tenancy', 'Inspection',
     'Scenario', 'Comparable', 'Appraisal', 'EngagementTerms', 'OrgPolicy', 'BenchmarkPoint', 'IntegrationConnection',

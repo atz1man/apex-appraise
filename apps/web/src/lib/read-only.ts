@@ -35,6 +35,10 @@
 export const VIEWER_MAY_RUN = [
   // public: no principal at all, so a role cannot be consulted
   'auth.login',
+  // the break-glass door. Public for the same reason `auth.login` is — nobody is
+  // signed in yet, so there is no role to consult; what guards it is the code,
+  // the ADMIN check inside it and the per-account lockout
+  'auth.recoveryLogin',
   'auth.ssoStart',
   'auth.ssoComplete',
   'auth.requestPasswordReset',

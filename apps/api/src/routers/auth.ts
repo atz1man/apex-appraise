@@ -12,7 +12,8 @@ import {
   tooManyResetRequests,
   verifyPassword,
 } from '../auth/password.js';
-import { APP_URL, resetEmail, sendMail, ssoResetEmail } from '../email.js';
+import { matchRecoveryCode } from '../auth/sso-recovery.js';
+import { APP_URL, recoveryUsedEmail, resetEmail, sendMail, ssoResetEmail } from '../email.js';
 import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
@@ -130,6 +131,157 @@ export const authRouter = router({
     }),
 
   me: authedProcedure.query(({ ctx }) => ctx.principal),
+
+  /**
+   * The break-glass door: sign in with a recovery code when SSO will not let
+   * anyone in.
+   *
+   * `auth/sso-recovery.ts` holds why this exists and why it has this shape. What
+   * lives here is who may walk through it, and every one of these conditions is
+   * load-bearing:
+   *
+   *   ONLY A WORKSPACE THAT ENFORCES SSO. Where passwords still work there is
+   *   nothing to recover from, and a code that signs in anyway would be a second
+   *   credential path for every firm in the product, granted by a sheet of paper
+   *   that never expires. Refused rather than merely pointless.
+   *
+   *   ONLY AN ADMIN. The point of getting in is to correct the issuer or stand
+   *   enforcement down, and both are `adminProcedure`. A code that signs in an
+   *   analyst fixes nothing and widens what one leaked sheet is worth.
+   *
+   *   SINGLE USE, spent in the same write that authenticates — single use is not
+   *   a policy, it is the absence of a second chance, as `resetPassword` puts it.
+   *   The row is KEPT with its `usedAt` and `usedById`, because a break-glass
+   *   sign-in is exactly the event an RICS review or a security audit asks
+   *   about, and a deleted row answers nothing.
+   *
+   * ONE MESSAGE for every refusal, and the same one. An unknown address, a
+   * workspace that does not federate, an analyst rather than an admin, and a
+   * wrong code are indistinguishable from outside — otherwise this becomes an
+   * oracle for which firms enforce SSO and who their administrators are, which
+   * is the disclosure `ssoAvailable` above is already careful about.
+   *
+   * It does NOT clear `enforced`. The session is the whole grant; the admin then
+   * decides whether to fix the connection or stand the control down. Clearing it
+   * here would make one leaked code a silent way to switch off single sign-on.
+   */
+  recoveryLogin: publicProcedure
+    .input(z.object({ email: z.string().email(), code: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+      const refuse = () =>
+        new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'That recovery code is not valid for this address.',
+        });
+
+      /**
+       * The same per-account lockout a password gets, and it is what makes a
+       * 50-bit code safe: five attempts and the address is locked, so there is
+       * nothing to grind against. Checked BEFORE the user is looked up, so a
+       * locked address answers identically whether or not it exists.
+       */
+      const lock = await checkLockout(ctx.prisma, email);
+      if (lock.locked) {
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: `Too many attempts — try again in ${lock.retryAfterMins} min`,
+        });
+      }
+
+      const user = await ctx.prisma.user.findUnique({ where: { email } });
+      const sso = user ? await ctx.prisma.ssoConnection.findUnique({ where: { orgId: user.orgId } }) : null;
+      if (!user || !sso?.enforced || user.role !== 'ADMIN' || user.principalType !== 'internal') {
+        await recordFailure(ctx.prisma, email);
+        if (user) {
+          await recordAudit(ctx.prisma, {
+            orgId: user.orgId, userId: user.id, actor: user.name,
+            action: AUDIT.signInFailed, target: `${user.email} (recovery code)`, ip: ctx.ip,
+          });
+        }
+        throw refuse();
+      }
+
+      const unused = await ctx.prisma.ssoRecoveryCode.findMany({
+        where: { orgId: user.orgId, usedAt: null },
+        orderBy: { id: 'asc' },
+        select: { id: true, codeHash: true },
+      });
+      const match = matchRecoveryCode(input.code, unused);
+      if (!match) {
+        await recordFailure(ctx.prisma, email);
+        await recordAudit(ctx.prisma, {
+          orgId: user.orgId, userId: user.id, actor: user.name,
+          action: AUDIT.signInFailed, target: `${user.email} (recovery code)`, ip: ctx.ip,
+        });
+        throw refuse();
+      }
+
+      /**
+       * Spent conditionally on being unspent, in one statement.
+       *
+       * Two requests arriving with the same code must not both get a session —
+       * the whole value of single use is that a copied sheet is worth one way in
+       * per code, not one per attempt. `updateMany` with `usedAt: null` in the
+       * WHERE is the atomic compare-and-set: whoever the database serialises
+       * first gets `count: 1`, the other gets 0 and is refused like any other
+       * invalid code.
+       */
+      const spent = await ctx.prisma.ssoRecoveryCode.updateMany({
+        where: { id: match.id, usedAt: null },
+        data: { usedAt: new Date(), usedById: user.id },
+      });
+      if (spent.count !== 1) {
+        await recordFailure(ctx.prisma, email);
+        throw refuse();
+      }
+
+      await recordSuccess(ctx.prisma, email);
+      const left = unused.length - 1;
+      await recordAudit(ctx.prisma, {
+        orgId: user.orgId, userId: user.id, actor: user.name,
+        action: AUDIT.signIn,
+        target: `${user.email} (single sign-on RECOVERY CODE — ${left} left)`, ip: ctx.ip,
+      });
+
+      /**
+       * And everyone who could have done this is told.
+       *
+       * A break-glass sign-in nobody is notified of is a backdoor. Mailed to
+       * every admin in the workspace, including this one, because the person who
+       * most needs to know is the admin who did NOT do it. Only on success: a
+       * notification on a failed attempt would make this endpoint a way to mail
+       * a firm's administrators as often as the rate limiter allows.
+       *
+       * Failures are swallowed on purpose — an SMTP outage must not be the
+       * reason a locked-out firm stays locked out. The audit event above is
+       * written either way and is the record that cannot fail to be kept.
+       */
+      try {
+        const admins = await ctx.prisma.user.findMany({
+          where: { orgId: user.orgId, role: 'ADMIN', principalType: 'internal' },
+          orderBy: { id: 'asc' },
+          select: { email: true, name: true },
+        });
+        const mail = recoveryUsedEmail(user.name, left, APP_URL());
+        for (const a of admins) await sendMail(user.orgId, a.email, mail.subject, mail.text);
+      } catch {
+        // see above: the trail is the record, the email is the courtesy
+      }
+
+      const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
+      return {
+        token,
+        codesLeft: left,
+        principal: {
+          userId: user.id,
+          name: user.name,
+          initials: user.initials,
+          role: user.role,
+          principalType: user.principalType,
+        },
+      };
+    }),
 
   /**
    * Home-realm discovery: does this address belong to a firm that uses SSO?

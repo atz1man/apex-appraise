@@ -18,9 +18,19 @@
  * consequential things this product can be asked to do — the workspace goes
  * read-only — so a name-shaped rule that only knew about rows would have passed
  * over it in silence. It matches a verb, not a table.
+ *
+ * `regenerate` joined them for `org.regenerateSsoRecoveryCodes`, and for the
+ * same reason one step further out: what it destroys is not a row anybody can
+ * see but a CREDENTIAL that has already left the building. The break-glass codes
+ * that let an admin back into a workspace whose identity provider has stopped
+ * working are printed, or in a password manager, or in a safe — and a mis-click
+ * here makes every copy of that sheet worthless, silently, with the only sign
+ * being a failed sign-in weeks later at the worst possible moment. The verb must
+ * be at the START of the procedure name, so this matches that one procedure and
+ * nothing else in the router.
  */
 export const DESTRUCTIVE_BINDING =
-  /const\s+(\w+)\s*=\s*trpc\.([a-zA-Z]+\.(?:remove|delete|cancel)[A-Za-z]*)\.useMutation/g;
+  /const\s+(\w+)\s*=\s*trpc\.([a-zA-Z]+\.(?:remove|delete|cancel|regenerate)[A-Za-z]*)\.useMutation/g;
 
 export type Site = { file: string; line: number; procedure: string; gate: Gate };
 export type Gate = 'confirm' | 'arm' | 'typed-name' | 'none';
