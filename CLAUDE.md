@@ -32,16 +32,16 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1018). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1025). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (301): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (313): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (191, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (193, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -175,6 +175,40 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **The field app takes photographs** (`inspection-photos.test.ts` + `inspection-photos.spec.ts`
+  + `e2e/field-photos.spec.ts`). Its shutter did `photos + 1`: the viewfinder was a static
+  gradient (`placeholderGradients.street`) with framing marks drawn over it and a chip reading
+  "CAPTURING · KITCHEN", the thumbnails were three more gradients drawn `Math.min(photos, 3)`
+  times, and the inspection reached the workbench reporting "12 photos" of a property nobody had
+  photographed — on the record `audit.ts` names a lender's credit committee and an RICS review as
+  the readers of. `Inspection.rooms`' own schema comment has said `{name, condition, photos[],
+  notes}` since the model was written, so the data model always meant the LIST; the app degraded
+  it to a tally. The upload route it needed already existed, tenant-checked and audited
+  (`POST /uploads/photo` → `SitePhoto`), and the field app was the one surface in the product
+  that never called it. `getUserMedia` for the in-app viewfinder with `<input capture>` as the
+  fallback, which is not a consolation prize: it is what works when permission is refused, when
+  there is no camera and in an embedded web view, it opens the phone's own camera app, and it is
+  the path Playwright drives with a real JPEG through the real multipart route. Making `photos` a
+  list is only half the fix — a list the server does not CHECK is a nicer-looking tally — so
+  `inspections.save` verifies every id against `SitePhoto` on this deal AND this org (two
+  independent inputs, `auth/owned.ts`) and refuses the whole save rather than dropping the
+  unknown ids, because filing eight of the twelve photographs a surveyor took is the quietest
+  possible way to lose evidence. `lib/inspection-photos.ts` holds the judgement worth testing at
+  its boundaries: a photograph exists for this inspection only once the SERVER holds it, so a
+  shot in flight blocks the send (it is seconds away) and a FAILED one does not (a phone with no
+  signal must not be able to trap a day's work on the device) — the record then says how many
+  photographs it has rather than how many were taken. Old rows carrying `photos: 12` read as an
+  empty list and that loses nothing: the count was of photographs never taken. NOT durable across
+  a reload, and said rather than papered over — the blob is in memory, so an unuploaded shot is
+  lost if the tab closes; IndexedDB and a drain queue is the real answer to a day out of signal.
+  The demo seed wrote a count too (`1 + ((r + i) % 3)`) and now files none, which is the truth.
+  Two things this turned up: `accessible-names`' comment-stripper read `accept="image/*"` as a
+  block-comment opener and blanked everything to the next comment close — it reported a LABELLED
+  control, and could have hidden an unlabelled one in the same span; it blanks quoted strings
+  first now. And the two new browser specs matched their deal with `.first()` on a name prefix,
+  which worked once and then opened a deal left behind by the previous run (measured: three
+  photographs on screen, zero `SitePhoto` rows on the deal under test) — they open it by its
+  exact unique name.
 - **A client-facing screen shows no contact detail that is not in the record**
   (`web/src/lib/client-contact.test.ts`). The buyer portal's contact card was typed into the
   page: "Sarah Reeve · Sales progressor — your point of contact through to completion",

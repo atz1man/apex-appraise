@@ -272,7 +272,7 @@ test('the Red Book never reports an inspection it has just disclosed did not hap
   // ---- inspected: both pages say so, and neither invents a finding ----
   const inspected = await mutate(page, 'inspections.save', {
     dealId: id,
-    rooms: [{ name: 'Living room', condition: 4, photos: 0, notes: '' }],
+    rooms: [{ name: 'Living room', condition: 4, photos: [], notes: '' }],
     reconciledValue: null,
     approachWeights: { salesComparison: 100, cost: 0, income: 0 },
     status: 'submitted',

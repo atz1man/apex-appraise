@@ -19,7 +19,7 @@ import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './har
 let T: Tenant;
 const caller = () => callerFor(T.principal);
 
-const rooms = (note: string) => [{ name: 'Kitchen', condition: 4, photos: 0, notes: note }];
+const rooms = (note: string) => [{ name: 'Kitchen', condition: 4, photos: [], notes: note }];
 const weights = { salesComparison: 60, cost: 20, income: 20 };
 
 beforeAll(async () => {

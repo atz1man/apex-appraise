@@ -47,7 +47,33 @@ function walk(dir: string, out: string[] = []): string[] {
  */
 const LABEL_WRAPPERS = ['Field', 'NumField', 'NumBox', 'TextBox'] as const;
 
-const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length));
+/**
+ * Comments out, and QUOTED STRINGS left alone first.
+ *
+ * `accept="image/*"` opens a block comment as far as a bare block-comment matcher
+ * is concerned, so everything from that attribute to the next comment close in
+ * the file was blanked. The visible symptom was the opposite of the danger: it reported the
+ * field app's own file input as unnamed when its `aria-label` sat four lines
+ * below, inside the blanked span. The danger is that the same blanking HIDES
+ * every real offender in that span, silently, and a sweep whose answer depends on
+ * where an `accept` attribute happens to appear is not a sweep.
+ *
+ * So double- and single-quoted strings are replaced with same-length blanks
+ * BEFORE the comment pass, which is enough here: a JSX attribute's value is
+ * quoted, and a comment opener that is not inside quotes is a comment. Lengths are
+ * preserved throughout, because every offender is reported at a line number.
+ */
+const stripComments = (s: string) => {
+  const blank = (m: string) => ' '.repeat(m.length);
+  const noStrings = s.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, blank);
+  // the comment spans are found in the string-free copy and cut from the original,
+  // so an attribute VALUE the rules below read (`type="hidden"`) still reads
+  let out = s;
+  for (const m of noStrings.matchAll(/\/\*[\s\S]*?\*\//g)) {
+    out = out.slice(0, m.index!) + blank(m[0]!) + out.slice(m.index! + m[0]!.length);
+  }
+  return out;
+};
 
 /**
  * `id=` / `htmlFor=` in any of the three quote styles React allows.
@@ -147,6 +173,19 @@ describe('every control says what it is for', () => {
     expect(unnamedControls('<input placeholder="Region" />')).toHaveLength(1);
     // the four things that are
     expect(unnamedControls('<input aria-label="Region" />')).toEqual([]);
+    /**
+     * `accept="image/*"` is not the start of a comment. Found the hard way: the
+     * field app's file input carries an aria-label four lines below its `accept`,
+     * and a bare comment matcher blanked everything from there to the next
+     * comment close in the file — reporting a labelled control, and able to hide
+     * an unlabelled one in the same span.
+     */
+    expect(
+      unnamedControls('<input\n  type="file"\n  accept="image/*"\n  aria-label="Add a photograph"\n/>\n/* a later comment */'),
+      'a quoted /* was read as a comment',
+    ).toEqual([]);
+    // and a real comment is still removed: the control below it is named, the one inside it is not reported
+    expect(unnamedControls('/* <input /> */\n<input aria-label="Real" />')).toEqual([]);
     expect(unnamedControls('<label className="b"><span>Region</span><input /></label>')).toEqual([]);
     expect(unnamedControls('<label htmlFor="r">Region</label><input id="r" />')).toEqual([]);
     expect(unnamedControls('<Field label="Region"><input /></Field>')).toEqual([]);

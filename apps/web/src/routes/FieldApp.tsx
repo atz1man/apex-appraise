@@ -1,27 +1,43 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { assetLabel } from '@apex/types/asset-classes';
-import { trpc, getPrincipal } from '../lib/trpc';
+import { trpc, getPrincipal, getToken } from '../lib/trpc';
+import { canSend, pendingWarning, savedPhotoIds, shotTally, type Shot } from '../lib/inspection-photos';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
 import { loadFailure } from '../lib/load-failure';
 import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
 
-type Room = { name: string; condition: number; photos: number; notes: string };
+/**
+ * `photos` is a list of `SitePhoto` ids, not a count.
+ *
+ * The shutter used to do `photos + 1`. The viewfinder was a static gradient
+ * labelled "CAPTURING · <ROOM>", the thumbnails were decorative gradients out of
+ * the design tokens, and the inspection reached the workbench reporting "12
+ * photos" of a property nobody had photographed — on the record `audit.ts` names
+ * a lender's credit committee and an RICS review as the readers of. The schema's
+ * own comment on `Inspection.rooms` has said `photos[]` since the model was
+ * written; the app degraded it to a tally.
+ */
+type Room = { name: string; condition: number; photos: string[]; notes: string };
 type Weights = { salesComparison: number; cost: number; income: number };
 type Screen = 'appraisals' | 'detail' | 'inspection' | 'comps' | 'valuation' | 'sent';
 
 /** Room list per the prototype's inspection screen. */
 const DEFAULT_ROOM_NAMES = ['Exterior', 'Living areas', 'Kitchen', 'Bathrooms', 'Basement'];
-const defaultRooms = (): Room[] => DEFAULT_ROOM_NAMES.map((name) => ({ name, condition: 0, photos: 0, notes: '' }));
+const defaultRooms = (): Room[] => DEFAULT_ROOM_NAMES.map((name) => ({ name, condition: 0, photos: [], notes: '' }));
 const DEFAULT_WEIGHTS: Weights = { salesComparison: 60, cost: 20, income: 20 };
-
-/** Photo-placeholder gradients from the design handoff. */
-const THUMBS = placeholderGradients.stone;
 
 /** Unified native-feel press feedback for the phone UI's ad-hoc buttons (44px touch targets kept in markup). */
 const PRESS = 'transition-all duration-150 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100';
+
+/**
+ * Placeholder art for a deal card that has no photograph — declared placeholder,
+ * not a claim. It used to be the inspection THUMBNAILS as well, standing in for
+ * photographs the app said it had taken; those are real images now.
+ */
+const THUMBS = placeholderGradients.stone;
 
 const PIN_POS = [
   { top: 50, left: 96 },
@@ -173,7 +189,9 @@ export default function FieldApp() {
   }, [dealId, inspection, hydratedFor]);
 
   const rated = rooms.filter((r) => r.condition > 0).length;
-  const photoTotal = rooms.reduce((a, r) => a + r.photos, 0);
+  // the count of photographs FILED, which is what the record claims — a shot
+  // still uploading or failed is not one of them
+  const photoTotal = rooms.reduce((a, r) => a + r.photos.length, 0);
   const pct = rooms.length ? (rated / rooms.length) * 100 : 0;
 
   const nia = appraisal?.result.nia ?? 0;
@@ -209,7 +227,166 @@ export default function FieldApp() {
   });
 
   const setRoom = (i: number, patch: Partial<Room>) => setRooms((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const snap = () => setRoom(current, { photos: rooms[current].photos + 1 });
+
+  /* ----------------------------- the camera ----------------------------- */
+
+  /**
+   * A real camera, and a real upload.
+   *
+   * `snap()` was `photos + 1`. Everything the surveyor could see said a
+   * photograph had been taken — the viewfinder chrome, the shutter, the
+   * thumbnails, the count on the review screen — and nothing had. The upload
+   * route it needed already existed and was already tenant-checked and audited
+   * (`POST /uploads/photo` → `SitePhoto`); the field app was the one surface that
+   * never called it.
+   *
+   * Two capture paths, both real. `getUserMedia` for the in-app viewfinder, and
+   * the file input as the fallback — which is not a consolation prize: it is what
+   * works when permission is refused, when there is no camera, in an embedded
+   * web view, and it opens the phone's own camera app, which focuses better than
+   * ours will.
+   */
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [cameraState, setCameraState] = useState<'off' | 'live' | 'unavailable'>('off');
+  /** Shots this session, per room index. Ids reach the inspection; blobs do not. */
+  const [shots, setShots] = useState<Record<number, Shot[]>>({});
+  const roomShots = shots[current] ?? [];
+
+  /**
+   * The stream is released when the inspection screen closes.
+   *
+   * A field app that holds the camera open behind another screen keeps the
+   * indicator lit and drains the battery of the device somebody is standing in a
+   * building with.
+   */
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraState('off');
+  }, []);
+
+  useEffect(() => {
+    if (screen !== 'inspection') {
+      stopCamera();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setCameraState('live');
+      } catch {
+        // refused, absent, or an insecure origin. The file input is the path.
+        if (!cancelled) setCameraState('unavailable');
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [screen, stopCamera]);
+
+  /**
+   * Upload one photograph and record what came back.
+   *
+   * The shot is in the list from the moment it is taken, marked `uploading`, so
+   * the surveyor sees it immediately — but `savedPhotoIds` will not name it until
+   * the server answers with an id, which is the whole rule
+   * (`lib/inspection-photos.ts`). A failure leaves it `failed` with its local
+   * preview and a Retry; it is NOT silently dropped, and it is not counted either.
+   *
+   * NOT durable across a reload, and said rather than papered over: the blob is
+   * in memory, so a shot that has not uploaded is lost if the tab closes. Holding
+   * it in IndexedDB and draining a queue is the real answer to a day spent out of
+   * signal and is a larger piece of work than this; what this does is make the
+   * state visible instead of claiming the photograph was filed.
+   */
+  const uploadShot = useCallback(
+    async (roomIndex: number, localId: string, blob: Blob, roomName: string) => {
+      const form = new FormData();
+      form.append('dealId', dealId);
+      form.append('caption', `${roomName} — site inspection`);
+      form.append('takenAt', new Date().toISOString().slice(0, 10));
+      form.append('file', blob, `${localId}.jpg`);
+      try {
+        const res = await fetch('/uploads/photo', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${getToken() ?? ''}` },
+          body: form,
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const { id } = (await res.json()) as { id: string };
+        setShots((s) => ({
+          ...s,
+          [roomIndex]: (s[roomIndex] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'saved', photoId: id } : x)),
+        }));
+        setRooms((rs) => rs.map((r, j) => (j === roomIndex ? { ...r, photos: [...r.photos, id] } : r)));
+        utils.photos.list.invalidate(dealId);
+      } catch {
+        setShots((s) => ({
+          ...s,
+          [roomIndex]: (s[roomIndex] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'failed' } : x)),
+        }));
+      }
+    },
+    [dealId, utils],
+  );
+
+  const addShot = useCallback(
+    (blob: Blob) => {
+      const roomIndex = current;
+      const roomName = rooms[roomIndex]?.name ?? 'Area';
+      const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const url = URL.createObjectURL(blob);
+      setShots((s) => ({ ...s, [roomIndex]: [...(s[roomIndex] ?? []), { localId, url, state: 'uploading' }] }));
+      void uploadShot(roomIndex, localId, blob, roomName);
+    },
+    [current, rooms, uploadShot],
+  );
+
+  /** The shutter: the frame on screen, as a JPEG. */
+  const snap = useCallback(() => {
+    const video = videoRef.current;
+    if (cameraState !== 'live' || !video || !video.videoWidth) {
+      fileRef.current?.click();
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => blob && addShot(blob), 'image/jpeg', 0.85);
+  }, [cameraState, addShot]);
+
+  const retryShot = useCallback(
+    async (localId: string) => {
+      const shot = (shots[current] ?? []).find((x) => x.localId === localId);
+      if (!shot) return;
+      setShots((s) => ({
+        ...s,
+        [current]: (s[current] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'uploading' } : x)),
+      }));
+      const blob = await (await fetch(shot.url)).blob();
+      void uploadShot(current, localId, blob, rooms[current]?.name ?? 'Area');
+    },
+    [shots, current, rooms, uploadShot],
+  );
+
+  /** Signed URLs for photographs already on the deal, so a reopened inspection shows them. */
+  const { data: dealPhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId && screen === 'inspection' });
+  const savedUrl = (id: string) => dealPhotos?.find((p) => p.id === id)?.url;
+
+  const allShots = Object.values(shots).flat();
+  const sendBlocked = !canSend(allShots);
+  const sendWarning = pendingWarning(allShots);
 
   const saveDraft = () =>
     save.mutate({ id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'draft', expectedUpdatedAt: held ?? undefined });
@@ -496,23 +673,55 @@ export default function FieldApp() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
-        {/* camera viewfinder */}
-        <div className="relative h-[188px] rounded-[18px] overflow-hidden" style={{ background: placeholderGradients.street }}>
+        {/**
+          * The viewfinder, showing the camera.
+          *
+          * It was a static gradient (`placeholderGradients.street`) with the
+          * framing marks drawn over it and a chip reading "CAPTURING · KITCHEN".
+          * Everything a surveyor could see said a photograph was being taken.
+          *
+          * The shutter falls back to the phone's own camera app when the stream
+          * is not live — permission refused, no camera, an embedded web view —
+          * and that is a real path rather than a consolation one: it focuses
+          * better than this will, and it is the only one that works on an
+          * insecure origin.
+          */}
+        <div className="relative h-[188px] rounded-[18px] overflow-hidden" style={{ background: fixed.ink }}>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            aria-label={`Camera — ${rooms[current]?.name ?? 'area'}`}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ display: cameraState === 'live' ? 'block' : 'none' }}
+          />
+          {cameraState !== 'live' && (
+            <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+              <span className="text-[12px]" style={{ color: fixed.white }}>
+                {cameraState === 'off'
+                  ? 'Starting the camera…'
+                  : 'No camera here — the shutter opens your phone’s camera instead.'}
+              </span>
+            </div>
+          )}
           {[
             { top: 12, left: 12, borderTop: '2.5px solid rgba(255,255,255,0.85)', borderLeft: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '3px 0 0 0' },
             { top: 12, right: 12, borderTop: '2.5px solid rgba(255,255,255,0.85)', borderRight: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 3px 0 0' },
             { bottom: 60, left: 12, borderBottom: '2.5px solid rgba(255,255,255,0.85)', borderLeft: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 0 0 3px' },
             { bottom: 60, right: 12, borderBottom: '2.5px solid rgba(255,255,255,0.85)', borderRight: '2.5px solid rgba(255,255,255,0.85)', borderRadius: '0 0 3px 0' },
-          ].map((s, i) => (
-            <div key={i} className="absolute w-5 h-5" style={s} />
+          ].map((st, i) => (
+            <div key={i} className="absolute w-5 h-5" style={st} />
           ))}
+          {/* the chip says what is true: live only when a stream is running */}
           <div className="absolute top-3.5 left-1/2 -translate-x-1/2 px-[11px] py-1 rounded-[8px] label-mono text-white" style={{ background: 'rgba(12,18,14,0.5)', backdropFilter: 'blur(6px)' }}>
-            CAPTURING · {rooms[current]?.name.toUpperCase()}
+            {cameraState === 'live' ? `LIVE · ${rooms[current]?.name.toUpperCase()}` : rooms[current]?.name.toUpperCase()}
           </div>
           <div className="absolute bottom-0 left-0 right-0 h-[54px] flex items-center justify-center gap-[26px]" style={{ background: 'rgba(12,18,14,0.42)', backdropFilter: 'blur(10px)' }}>
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="14" height="14" rx="2" /><path d="m17 9 4-2v10l-4-2" /></svg>
             <button
               onClick={snap}
+              {...writeAttrs()}
               aria-label="Take photo"
               className={`w-11 h-11 rounded-full bg-surface ${PRESS}`}
               style={{ border: '3px solid rgba(255,255,255,0.55)', boxShadow: '0 0 0 2px rgba(12,18,14,0.42)' }}
@@ -520,6 +729,21 @@ export default function FieldApp() {
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" /></svg>
           </div>
         </div>
+        {/* the fallback path, and what Playwright drives: a real file, really uploaded */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          {...writeAttrs()}
+          aria-label={`Add a photograph of ${rooms[current]?.name ?? 'this area'}`}
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) addShot(file);
+            e.target.value = '';
+          }}
+        />
 
         {/* current area card */}
         {rooms[current] && (
@@ -554,15 +778,54 @@ export default function FieldApp() {
                 <span className="ml-auto self-center text-[11px] text-ink-3">1 poor — 5 excellent</span>
               </div>
             </div>
-            {/* photo thumbs */}
-            <div className="mt-3 flex gap-2">
-              {Array.from({ length: Math.min(rooms[current].photos, 3) }).map((_, i) => (
-                <div key={i} className="flex-1 aspect-square rounded-[11px]" style={{ background: THUMBS[i % THUMBS.length] }} />
+            {/**
+              * The photographs, which are photographs.
+              *
+              * These were three decorative gradients, drawn `Math.min(photos, 3)`
+              * times from a counter. A shot still uploading shows its own local
+              * preview dimmed; a failed one carries a Retry, because the
+              * alternative — dropping it — is the quietest way to lose evidence,
+              * and the inspection will not name it either way until the server
+              * has it (`lib/inspection-photos.ts`).
+              */}
+            <div className="mt-3 flex gap-2 overflow-x-auto">
+              {roomShots.map((sh) => (
+                <div key={sh.localId} className="relative flex-none w-[78px] aspect-square rounded-[11px] overflow-hidden">
+                  <img src={sh.url} alt={`${rooms[current].name} photograph`} className="w-full h-full object-cover" style={{ opacity: sh.state === 'saved' ? 1 : 0.5 }} />
+                  {sh.state === 'uploading' && (
+                    <span className="absolute inset-0 flex items-center justify-center"><Spinner /></span>
+                  )}
+                  {sh.state === 'failed' && (
+                    <button
+                      onClick={() => void retryShot(sh.localId)}
+                      {...writeAttrs()}
+                      aria-label={`Retry uploading this photograph of ${rooms[current].name}`}
+                      className="absolute inset-0 flex items-center justify-center label-mono text-white"
+                      style={{ background: 'rgba(12,18,14,0.55)' }}
+                    >
+                      RETRY
+                    </button>
+                  )}
+                </div>
               ))}
-              <button onClick={snap} aria-label="Add photo" className={`flex-1 aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', maxWidth: 78 }}>
+              {/* ones filed earlier, reopened from the server */}
+              {rooms[current].photos
+                .filter((id) => !roomShots.some((sh) => sh.photoId === id))
+                .map((id) => {
+                  const url = savedUrl(id);
+                  return url ? (
+                    <img key={id} src={url} alt={`${rooms[current].name} photograph`} className="flex-none w-[78px] aspect-square rounded-[11px] object-cover" />
+                  ) : (
+                    <div key={id} className="flex-none w-[78px] aspect-square rounded-[11px] bg-sunken-2" />
+                  );
+                })}
+              <button onClick={snap} {...writeAttrs()} aria-label={`Add a photograph of ${rooms[current].name}`} className={`flex-none w-[78px] aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed rgb(var(--checkbox-border, 210 209 202))' }}>
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
-              <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">{rooms[current].photos} photos</span>
+              <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">
+                {rooms[current].photos.length} filed
+                {shotTally(roomShots).failed > 0 ? ` · ${shotTally(roomShots).failed} not uploaded` : ''}
+              </span>
             </div>
             <input
               className="mt-3 w-full text-[12.5px]"
@@ -831,9 +1094,24 @@ export default function FieldApp() {
       </div>
 
       <CtaBar>
+        {/**
+          * What is not filed yet, said before the record is sent.
+          *
+          * A shot still uploading blocks the send — the photograph is seconds
+          * away and sending now files an inspection that does not name it. A
+          * FAILED one does not block it: a phone with no signal must not be able
+          * to trap a day's work on the device, so the sentence says what sending
+          * means instead. `lib/inspection-photos.ts` holds that decision and its
+          * boundaries.
+          */}
+        {sendWarning && (
+          <div role="status" className="mb-2 text-[11.5px] text-ink-2 leading-relaxed">
+            {sendWarning}
+          </div>
+        )}
         <button
           onClick={sendToWorkbench}
-          disabled={save.isPending || !value}
+          disabled={save.isPending || !value || sendBlocked}
           {...writeAttrs()}
           className={`w-full flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold disabled:opacity-50 disabled:active:scale-100 ${PRESS}`}
         >

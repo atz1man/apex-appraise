@@ -401,7 +401,15 @@ async function inspectionFor(prisma: PrismaClient, ctx: DepthContext, d: DealSpe
       dealId: ctx.deals[d.name]!,
       surveyorId: ctx.users.mv,
       inspectedAt: ago(8 + i * 4),
-      rooms: JSON.stringify(rooms.map((name, r) => ({ name, condition: 3 + ((r + i) % 3), photos: 1 + ((r + i) % 3), notes: r === 0 ? 'As described; no material defects noted.' : '' }))),
+      /**
+       * No photographs, because the demo has none. `photos` was a COUNT here
+       * (`1 + ((r + i) % 3)`), so the seeded inspections claimed two or three
+       * photographs per room that nothing in the database held — the same defect
+       * the field app's shutter was, written into the only workspace anyone can
+       * try. It is a list of `SitePhoto` ids now and the seed files none, which is
+       * the truth; a surveyor using the app takes real ones.
+       */
+      rooms: JSON.stringify(rooms.map((name, r) => ({ name, condition: 3 + ((r + i) % 3), photos: [], notes: r === 0 ? 'As described; no material defects noted.' : '' }))),
       reconciledValue: p(Math.round(d.gdv * (d.stage === 'COMPLETED' ? 1 : 0.985))),
       approachWeights: JSON.stringify(d.asset === 'COMMERCIAL' ? { salesComparison: 30, cost: 20, income: 50 } : { salesComparison: 60, cost: 20, income: 20 }),
       status: 'draft',
