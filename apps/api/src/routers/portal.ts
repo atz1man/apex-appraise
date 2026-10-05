@@ -796,6 +796,9 @@ export const buyerRouter = router({
      */
     const docs = await ctx.prisma.document.findMany({
       where: { unitId: unit.id, orgId: ctx.principal.orgId, buyerVisible: true },
+      // a buyer reads these in this order, and Postgres offers none of its own —
+      // `addedAt` is the order the firm shared them
+      orderBy: { addedAt: 'asc' },
     });
     const payments: Array<{ id: string; kind: string; amount: bigint; status: string; paidAt: Date | null }> =
       await ensurePayments(ctx.prisma, ctx.principal.orgId, unit);

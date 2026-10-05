@@ -1045,7 +1045,9 @@ export const appraisalRouter = router({
     assertNotApproved(row);
     const engineInput = appraisalRowToEngineInput(row);
     const { result } = fullResult({ ...engineInput, jv: engineInput.jv! } as z.infer<typeof zAppraisalInput>);
-    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    // ordered, so the same evidence produces the same prose: an unordered read
+    // hands the model a different list each time it is asked
+    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId }, orderBy: { id: 'asc' } });
     /**
      * The instruction's own terms. A special assumption is what determines what
      * the figure MEANS — "assuming planning is granted" can move a value by
@@ -1496,7 +1498,9 @@ export async function documentBlocks(
 }> {
   const { uploadPathFor } = await import('../uploads.js');
   const { readFile } = await import('node:fs/promises');
-  const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId } });
+  // ordered: `slice(0, 4)` below means the order can decide which documents are
+  // read at all, and the blocks reach a model in this sequence
+  const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
   const blocks: ContentBlock[] = [];
   const used: Array<{ id: string; name: string; dealId: string }> = [];
   const skipped: Array<{ name: string; reason: string }> = [];
@@ -1827,7 +1831,13 @@ export const autoAppraisalRouter = router({
 export const comparablesRouter = router({
   list: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
-    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    /**
+     * ORDERED. Postgres guarantees no order without one and an UPDATE moves the
+     * row, so editing a comparable reshuffled the evidence table under the
+     * valuer reading it. `id` ascending is insertion order — a cuid is
+     * timestamp-prefixed — which is the order they were gathered in.
+     */
+    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId }, orderBy: { id: 'asc' } });
     const summary = weightedComparables(
       comps.map((c: any) => ({
         address: c.address,
@@ -1961,7 +1971,9 @@ export const comparablesRouter = router({
   /** Writes the supported £/ft² onto every unit cap of the current appraisal. */
   applyToAppraisal: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
-    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    // ordered: this figure is written onto every unit cap of the appraisal, and
+    // the same evidence must produce the same number twice
+    const comps = await ctx.prisma.comparable.findMany({ where: { dealId: input, orgId: ctx.principal.orgId }, orderBy: { id: 'asc' } });
     if (!comps.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No comparables on this deal' });
     const summary = weightedComparables(
       comps.map((c: any) => ({
@@ -2008,7 +2020,8 @@ export const comparablesRouter = router({
 export const scenariosRouter = router({
   list: internalProcedure.input(z.string()).query(async ({ ctx, input }) => {
     await assertDeal(ctx, input);
-    return ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    // ordered, for the reason comparables.list gives: saving one must not move it
+    return ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId }, orderBy: { id: 'asc' } });
   }),
 
   upsert: internalProcedure
@@ -2100,7 +2113,14 @@ export const scenariosRouter = router({
    */
   draftRisk: aiProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const deal = await assertDeal(ctx, input);
-    const rows = await ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId } });
+    /**
+     * Ordered, and here the order decides WHICH rows are used: `slice(0, 3)` of an
+     * unordered read picks three scenarios arbitrarily, so on Postgres the risk
+     * commentary could discuss a different three on each run — and
+     * `unsupportedRecommendation` holds that prose to the option the ENGINE ranks
+     * best out of exactly these three.
+     */
+    const rows = await ctx.prisma.scenario.findMany({ where: { dealId: input, orgId: ctx.principal.orgId }, orderBy: { id: 'asc' } });
     const options = rows.slice(0, 3).map((s: any) => ({
       name: s.name as string,
       descriptor: s.descriptor as string,

@@ -117,7 +117,9 @@ export const dealsRouter = router({
   exposure: internalProcedure.query(async ({ ctx }) => {
     const orgId = ctx.principal.orgId;
     const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
-      ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
+      // by name: this list IS the portfolio table's row order, and Postgres gives
+      // none of its own — a deal edited anywhere moved in the rollup
+      ctx.prisma.deal.findMany({ where: { orgId }, orderBy: { name: 'asc' }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       currentAppraisals(ctx.prisma.appraisal, orgId),
       ctx.prisma.costPackage.findMany({
         where: { orgId },

@@ -130,6 +130,16 @@ export const costRouter = router({
     const packages = await ctx.prisma.costPackage.findMany({
       where: { dealId: input, orgId: ctx.principal.orgId },
       include: { contractor: true },
+      /**
+       * ORDERED, because Postgres does not guarantee one and an UPDATE moves the
+       * row. See `list-order.test.ts`: `cost.list` had no `orderBy`, SQLite
+       * returned insertion order so every local run was stable, and in CI the
+       * package a valuer had just edited jumped to a different position in the
+       * table. `id` is a cuid — timestamp-prefixed, so ascending IS insertion
+       * order, which here is the engine's own trade order from
+       * `createPlanFromAppraisal`.
+       */
+      orderBy: { id: 'asc' },
     });
     const appraisal = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     const out = packages.map(pkgOut);
@@ -725,6 +735,8 @@ export const documentsRouter = router({
       ctx.prisma.holding.findMany({
         where: { dealId: deal.id },
         select: { investor: { select: { id: true, name: true, initials: true, orgId: true } } },
+        // by name: this list is read, so its order is the reader's and not the heap's
+        orderBy: { investor: { name: 'asc' } },
       }),
       ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, buyerVisible: true } }),
       ctx.prisma.document.count({ where: { dealId: deal.id, orgId: ctx.principal.orgId, investorVisible: true } }),

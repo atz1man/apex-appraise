@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1048). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1055). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (325): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -175,6 +175,31 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A list of rows this server hands out is ORDERED** (`list-order.test.ts`). Postgres guarantees
+  no row order without `ORDER BY`, and under MVCC an UPDATE writes a new tuple — so the row
+  somebody just edited physically MOVES. SQLite returns rowid order, which is insertion order and
+  stable, so every local run of every suite agreed and nothing noticed. Found by CI, not by
+  reading: `cost.list` had no `orderBy`, and `e2e/cost-contractor.spec.ts` — which picks a
+  contractor on the first package, reloads and asserts the same select holds it — passed locally
+  for months and failed in CI with `Expected: "cmuunz1uu004i…" Received: "cmuunz1ur004c…"`, a
+  different package's dropdown, because the one just written had moved. What the test met as a
+  selector, a valuer meets as a cost table whose rows jump after every save, on the screen a lender
+  pack is built from. Nine more sites had the same shape and TWO of them chose rows rather than
+  merely ordering them: `documentBlocks` takes `docs.slice(0, 4)` and `draftRisk` takes
+  `rows.slice(0, 3)` of the scenarios — so which three scenarios the AI risk commentary discussed
+  was arbitrary, and `unsupportedRecommendation` holds that prose to the option the engine ranks
+  best out of exactly those three. Ordered now: comparables (three reads, including the one the
+  narrative drafter uses and the one that writes the supported £/ft² onto every unit cap),
+  scenarios (two), cost packages, the deal rollup, a deal's investors, the buyer's shared
+  documents, and the extraction's document blocks. `id: 'asc'` where there is no better key, which
+  is not arbitrary: a Prisma `cuid()` is timestamp-prefixed, so ascending IS insertion order — the
+  order SQLite was already showing, so the fix moves nothing on the demo while making Postgres
+  deterministic. The rule CANNOT be "every findMany orders", because most build a Map, a sum or a
+  count where order is unobservable; so the bar is a written decision, as `provenance-sweep` and
+  `lost-update-sweep` use, keyed by `file:model` rather than by line because a line number goes
+  stale and an exemption that silently stops matching is worse than none. The call's extent is
+  matched by PARENTHESES, not a character window — `upload-failure`'s own first version is the
+  standing reminder — with a case pinning that a nested `ids.map(…)` does not end it early.
 - **An upload that fails says so** (`web/src/lib/upload-failure.test.ts`). tRPC mutations get this
   free — the link chain toasts a rejection into the live regions `announcements` mounted — but the
   four places this app POSTs a FILE are raw `fetch` calls outside that chain. Three reported a
