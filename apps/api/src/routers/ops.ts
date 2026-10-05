@@ -5,7 +5,8 @@ import { computeAppraisal, contractorTotals, costRollup, tradeBudgets } from '@a
 import { appraisalRowToEngineInput } from '../mappers.js';
 import { J, P, moneyLabel, toPence } from '../mappers.js';
 import { AI_ACTOR } from '../ai-disclosure.js';
-import { INTEGRATION_PROVIDERS } from '@apex/types';
+import { INTEGRATION_CONNECTORS, INTEGRATION_PROVIDERS } from '@apex/types';
+import { demoFallbacksAllowed } from '../demo-mode.js';
 import { adminProcedure, internalProcedure, requiresFeature, router } from '../trpc.js';
 import { documentBlocks } from './appraisal.js';
 import { SELF_SERVE_PROVIDERS } from '../integration-creds.js';
@@ -1599,6 +1600,25 @@ export const integrationsRouter = router({
    */
   connect: internalProcedure.input(z.enum(INTEGRATION_PROVIDERS)).mutation(async ({ ctx, input }) => {
     /**
+     * A provider this server cannot contact cannot be connected.
+     *
+     * This upsert set `status: 'CONNECTED'` and `lastSync: new Date()` for any
+     * of the ten names, with no credential, no handshake and no request leaving
+     * the building — so the screen read "Connected · Synced just now" for four
+     * providers nothing in this codebase can talk to. A green dot is a claim
+     * about a capability, and that one was made to a paying customer on the
+     * screen whose whole purpose is to tell them what works.
+     *
+     * `INTEGRATION_CONNECTORS` is the one table, read by the screen too, and the
+     * refusal carries `instead` because a dead end with no alternative is worse
+     * than the false claim it replaces — in every case something in this product
+     * already does the job.
+     */
+    const connector = INTEGRATION_CONNECTORS[input];
+    if (!connector.connects) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: `${input} has no connector on this server. ${connector.instead}` });
+    }
+    /**
      * Upsert, not update-an-existing-row. `list` no longer materialises a
      * placeholder for every provider, so the row a firm is connecting may not
      * exist yet — and refusing NOT_FOUND would have made every Connect button
@@ -1625,14 +1645,59 @@ export const integrationsRouter = router({
   }),
 
   /**
-   * Pull provider data onto a deal. Providers run in demo/mock mode without
-   * credentials (same pattern as production connectors behind an interface):
-   * Land Registry → sold-price-paid comparables; EPC → certificate document;
-   * PriceHubble → AVM cross-check comparable. Every sync is audit-logged.
+   * Pull provider data onto a deal — the real thing, or nothing.
+   *
+   * What this used to do, and the reason it is the sharpest thing in this
+   * commit: with no credentials it FABRICATED. PriceHubble wrote a comparable at
+   * `basePsf: 212` — "Automated valuation cross-check · 80% confidence band" —
+   * straight onto a valuer's evidence file, in production, with nothing in the
+   * row marking it as invented and nothing in the product distinguishing it from
+   * a sold price. A comparable's £/ft² is what the supported rate is built from
+   * and what the valuation rests on, so that figure could reach a signed Red Book
+   * opinion. `demo-mode.ts`'s own doc comment describes exactly this hazard about
+   * a sample EXTRACTION, and the one place writing a fabricated comparable never
+   * consulted it.
+   *
+   * EPC wrote a Document row for a certificate PDF with `sizeBytes: 180_000n` and
+   * no file behind it, which is "a portal never offers a document it cannot open"
+   * one layer up: the data room listed it, the viewer could not open it, and a
+   * plot could be shared with it. EPC records are live on the site pack and the
+   * sync added nothing but a dangling row, so the branch is gone rather than
+   * gated.
+   *
+   * What is left is Land Registry, which is real: `fetchSoldPrices` against the
+   * open Price Paid data. Its own fallback — two invented PPD rows with
+   * real-looking dates — is now behind `demoFallbacksAllowed()` and marked in the
+   * address as well as the meta, because the address is the column a comparables
+   * table leads with and "· demo" at the end of a meta string is not a mark
+   * anything checks.
    */
   sync: internalProcedure
-    .input(z.object({ provider: z.string(), dealId: z.string() }))
+    /**
+     * The provider is the ENUM here too. `connect`'s own comment says why a
+     * `z.string()` was wrong — the name was never validated, it merely failed to
+     * find a row — and this one had the same shape.
+     */
+    .input(z.object({ provider: z.enum(INTEGRATION_PROVIDERS), dealId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      /**
+       * The capability question comes FIRST, before the row lookup. A provider
+       * with no connector cannot be connected, so it has no row, so looking the
+       * row up answered NOT_FOUND — which is true and says nothing: the reason is
+       * that this server cannot contact it, and that is what somebody needs to
+       * read.
+       */
+      const connector = INTEGRATION_CONNECTORS[input.provider];
+      if (!connector.connects || !connector.syncs) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            !connector.connects
+              ? `${input.provider} has no connector on this server. ${connector.instead}`
+              : `${input.provider} does not sync onto a deal. Its data appears in ${connector.feeds.toLowerCase()}.`,
+        });
+      }
+
       const conn = await ctx.prisma.integrationConnection.findFirst({
         where: { orgId: ctx.principal.orgId, provider: input.provider },
       });
@@ -1667,44 +1732,37 @@ export const integrationsRouter = router({
         }
         if (live > 0) {
           created = `${live} real sold-price comparables (HM Land Registry PPD, ${deal.postcode})`;
+        } else if (!demoFallbacksAllowed()) {
+          /**
+           * The real lookup found nothing, or could not be reached. That is an
+           * honest "no evidence yet", and inventing two comparables in its place
+           * puts figures nobody can source into the file the valuation rests on.
+           * The absence of a postcode is not consent to fabricate, which is the
+           * whole argument `demo-mode.ts` makes.
+           */
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: deal.postcode
+              ? `No Price Paid records came back for ${deal.postcode}. Nothing has been added — add comparables by hand, or try again later.`
+              : 'This deal has no postcode, so there is nothing to look up. Add one on the deal first.',
+          });
         } else {
+          /**
+           * Sample rows, and marked as such in the ADDRESS as well as the meta.
+           * They used to carry "· demo" at the end of a meta string, which is
+           * not a mark anything checks — and the comparables table leads with
+           * the address, so that was the one column where an invented row read
+           * as evidence.
+           */
           const rows = [
-            { address: 'Unit 4, Roundways Trade Park', meta: 'PPD Feb 2026 · freehold · 21,300 ft² · demo', basePsf: 221, adjSize: 2, adjCondition: 1, adjDate: 4, adjLocation: -2 },
-            { address: '19 Cobham Gate Industrial', meta: 'PPD Dec 2025 · freehold · 19,750 ft² · demo', basePsf: 214, adjSize: 3, adjCondition: -2, adjDate: 6, adjLocation: 0 },
+            { address: 'SAMPLE — Unit 4, Roundways Trade Park', meta: 'SAMPLE DATA, not evidence · PPD Feb 2026 · freehold · 21,300 ft²', basePsf: 221, adjSize: 2, adjCondition: 1, adjDate: 4, adjLocation: -2 },
+            { address: 'SAMPLE — 19 Cobham Gate Industrial', meta: 'SAMPLE DATA, not evidence · PPD Dec 2025 · freehold · 19,750 ft²', basePsf: 214, adjSize: 3, adjCondition: -2, adjDate: 6, adjLocation: 0 },
           ];
           for (const r of rows) {
             await ctx.prisma.comparable.create({ data: { ...r, orgId: ctx.principal.orgId, dealId: deal.id } });
           }
-          created = `${rows.length} demo comparables (no postcode on deal / PPD unreachable)`;
+          created = `${rows.length} SAMPLE comparables (no postcode on deal / PPD unreachable)`;
         }
-      } else if (input.provider === 'EPC Register') {
-        await ctx.prisma.document.create({
-          data: {
-            orgId: ctx.principal.orgId,
-            dealId: deal.id,
-            name: `EPC certificate — ${deal.address.split(',')[0]}.pdf`,
-            category: 'Planning',
-            ext: 'pdf',
-            sizeBytes: 180_000n,
-            extraction: 'LINKED',
-            addedById: ctx.principal.userId,
-          },
-        });
-        created = 'EPC certificate (linked)';
-      } else if (input.provider === 'PriceHubble AVM') {
-        await ctx.prisma.comparable.create({
-          data: {
-            orgId: ctx.principal.orgId,
-            dealId: deal.id,
-            address: 'PriceHubble AVM estimate',
-            meta: 'Automated valuation cross-check · 80% confidence band',
-            basePsf: 212,
-            adjSize: 0, adjCondition: 0, adjDate: 0, adjLocation: 0,
-          },
-        });
-        created = 'AVM cross-check comparable';
-      } else {
-        created = 'sync acknowledged (no demo dataset for this provider yet)';
       }
       await ctx.prisma.activityEvent.create({
         data: { orgId: ctx.principal.orgId, dealId: deal.id, actor: input.provider, action: 'synced', target: created },

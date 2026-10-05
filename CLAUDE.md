@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (998). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1013). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (189, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (191, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -175,6 +175,51 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A figure nobody supplied is named as a sample, or it is refused**
+  (`invented-figures.test.ts`). `integrations.sync` FABRICATED: with no credentials it wrote a
+  comparable at `basePsf: 212` — address "PriceHubble AVM estimate", meta "Automated valuation
+  cross-check · 80% confidence band" — onto a valuer's evidence file, in production, with
+  nothing in the row marking it invented and nothing in the product distinguishing it from a
+  sold price. A comparable's £/ft² is what the supported rate is built from, so that number
+  could reach a signed Red Book opinion under somebody's name. `demo-mode.ts` was written for
+  exactly this hazard and says so about a sample EXTRACTION; the one place writing a fabricated
+  COMPARABLE never called it, and the absence of a credential is not consent — a firm that has
+  deployed and not yet pasted an API key is in that state on day one. The rule keys on a
+  money-shaped field assigned a LITERAL, excluding `0` (a cost package opening at `spent: 0`
+  invents nothing: a scheme that has not started has spent nothing, and without the exclusion
+  the two cost procedures are permanent false positives, which is how a sweep's list stops
+  being read). Two sanctions, both earned: behind `demoFallbacksAllowed()`, which is a DECISION
+  the deployment took, or written into rows that say SAMPLE in their own text — `org.loadSampleDeal`
+  is the second, a button that says sample writing a deal called "Sample — Kingfisher Wharf".
+  The Land Registry fallback is gated now and marked in the ADDRESS as well as the meta, because
+  the address is the column a comparables table leads with and "· demo" at the end of a meta
+  string is not a mark anything checks. EPC's branch is GONE rather than gated: it created a
+  Document row for a certificate PDF with `sizeBytes: 180_000n` and no file behind it, which is
+  "a portal never offers a document it cannot open" one layer up, and the records are live on
+  the site pack anyway.
+- **A green dot is a claim about a capability, so `integrations.connect` refuses what this
+  server cannot contact.** It was an upsert setting `status: 'CONNECTED'` and
+  `lastSync: new Date()` for ANY of the ten provider names, with no credential and no handshake
+  — so the Integrations screen, whose whole purpose is to tell a paying customer what works,
+  read "Connected · Synced just now" for four providers nothing in this codebase can talk to,
+  and the demo seed marked Ordnance Survey CONNECTED on the one workspace anyone can try.
+  `@apex/types`'s `INTEGRATION_CONNECTORS` is the one table, read by the server and the screen:
+  `connects` with the auth kind and what it FEEDS, or `instead` naming what does the job — and
+  `instead` is not consolation copy, because a dead end with no alternative is worse than the
+  false claim it replaces and in every case this product already does the job (its own
+  comparables for an AVM, Benchmarking's completed-scheme medians for BCIS, `engagement.sign`
+  for DocuSign, this server's own tile proxy for OS). Five providers are real and were already
+  built, just never wired to a card: PPD (`fetchSoldPrices`), EPC (`fetchEpc`),
+  Companies House, planning.data.gov.uk (`fetchConstraints`) and the Environment Agency's
+  flood-monitoring (`fetchFloodWarnings`). The "Planning Portal" CARD is renamed to Planning
+  data and its description corrected — it promised application history and decision notices,
+  which is the commercial submission service, while the connector answers designations and
+  constraints; the DB value keeps its old spelling because rows carry it. A card with no
+  connector renders NO button, whatever a leftover row says, because a control that exists to
+  be rejected is worse than no control. `e2e/integration-honesty.spec.ts` is the half that
+  counts what is rendered, in both directions on the same screen. Two existing cases in
+  `query-side-effects.test.ts` drove `connect('Ordnance Survey')` and `connect('BCIS')`; their
+  premise is the missing ROW, not the provider, so they drive a connectable one now.
 - **A plan switch billed the firm twice, and there was no way to leave.** "Switch plan" called
   `billing.checkout`, which opens a Stripe Checkout session in `mode: subscription` — so Stripe
   did exactly what it was asked and created ANOTHER subscription against the same customer,

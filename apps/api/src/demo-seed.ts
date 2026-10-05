@@ -626,17 +626,30 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     });
   }
 
-  // ---- Integrations ----
+  /**
+   * ---- Integrations ----
+   *
+   * Only what this server can actually contact, and only connected where no
+   * credential is needed. The old list marked Ordnance Survey CONNECTED and
+   * PriceHubble ATTENTION — two providers with no connector in this codebase at
+   * all — so the demo, which is the only workspace anyone can try, advertised a
+   * live mapping feed that does not exist and an automated valuation that was a
+   * hardcoded number. EPC and Companies House stay NOT_CONNECTED because they
+   * take the workspace's OWN free API key and the demo has none, which is the
+   * true state and the one the credentials drawer is for. The four with no
+   * connector get no row: `integrations.connect` refuses them now, so a row
+   * would be the record of a click the server would not accept.
+   */
   const integrations: Array<[string, string]> = [
+    // open Price Paid data, no key — `fetchSoldPrices`
     ['HM Land Registry', 'CONNECTED'],
-    ['EPC Register', 'CONNECTED'],
-    ['PriceHubble AVM', 'ATTENTION'],
-    ['Planning Portal', 'NOT_CONNECTED'],
-    ['Ordnance Survey', 'CONNECTED'],
-    ['Environment Agency', 'NOT_CONNECTED'],
-    ['BCIS', 'NOT_CONNECTED'],
+    // planning.data.gov.uk, no key — `fetchConstraints`
+    ['Planning Portal', 'CONNECTED'],
+    // flood-monitoring, no key — `fetchFloodWarnings`
+    ['Environment Agency', 'CONNECTED'],
+    ['EPC Register', 'NOT_CONNECTED'],
+    ['Companies House', 'NOT_CONNECTED'],
     ['Xero', 'NOT_CONNECTED'],
-    ['DocuSign', 'NOT_CONNECTED'],
   ];
   for (const [provider, status] of integrations) {
     await prisma.integrationConnection.create({
