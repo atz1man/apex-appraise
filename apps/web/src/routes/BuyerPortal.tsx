@@ -372,35 +372,47 @@ export default function BuyerPortal() {
               </div>
             </div>
 
-            {/* contact the sales team */}
+            {/**
+              * The real person at the real firm.
+              *
+              * This card was typed into the page: "Sarah Reeve · Sales
+              * progressor — your point of contact through to completion", with
+              * the initials SR, `mailto:sales@apexappraise.co.uk` and
+              * `tel:+441202555555`. Nobody of that name exists, the address is
+              * the SOFTWARE VENDOR's rather than the developer's, and 555555 is
+              * the fictional-number range — so a buyer who has reserved a plot
+              * and paid a deposit was handed a made-up person, an inbox at the
+              * wrong company and a number that does not ring. The investor
+              * portal beside it already named a real administrator; this screen
+              * was the one left with the mock.
+              *
+              * No telephone link: nothing in the schema stores a number, and
+              * inventing a second one is how the first got there.
+              */}
             <section className="mt-[18px] bg-surface border border-border-strong rounded-card shadow-rest px-5 py-4 flex items-center gap-[13px]">
-              <Avatar initials="SR" size={40} />
-              <div className="flex-1">
-                <div className="text-[13px] font-semibold">Sarah Reeve · Sales progressor</div>
-                <div className="text-[11.5px] text-ink-3">Your point of contact through to completion</div>
+              <Avatar initials={data.contact.person?.initials ?? '—'} size={40} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold truncate">
+                  {data.contact.person?.name ?? 'Your developer'}
+                  {data.contact.firm ? ` · ${data.contact.firm}` : ''}
+                </div>
+                <div className="text-[11.5px] text-ink-3">
+                  {data.contact.person
+                    ? 'Your point of contact through to completion'
+                    : 'Contact the developer directly for anything about this reservation'}
+                </div>
               </div>
               <div className="flex gap-2">
+                {data.contact.person && (
                 <a
-                  href="mailto:sales@apexappraise.co.uk"
+                  href={`mailto:${data.contact.person.email}`}
                   className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
-                  title="Email your sales team"
-                  aria-label="Email your sales team"
+                  title={`Email ${data.contact.person.name}`}
+                  aria-label={`Email ${data.contact.person.name}`}
                 >
                   <Icon d="M4 4h16v12H5.2L4 17.2z" size={17} color={brand[700]} strokeWidth={1.9} />
                 </a>
-                <a
-                  href="tel:+441202555555"
-                  className="w-[38px] h-[38px] rounded-[10px] border border-border-strong flex items-center justify-center hover:bg-sunken transition-colors"
-                  title="Call your sales team"
-                  aria-label="Call your sales team"
-                >
-                  <Icon
-                    d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.5a16 16 0 0 0 6 6l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2Z"
-                    size={17}
-                    color={brand[700]}
-                    strokeWidth={1.9}
-                  />
-                </a>
+                )}
               </div>
             </section>
           </>

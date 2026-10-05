@@ -32,7 +32,17 @@ test('a provider with no connector offers nothing and says what to use instead',
   for (const name of NO_CONNECTOR) {
     const card = page.locator('.rounded-card', { hasText: name }).first();
     await expect(card, `${name} has no card`).toBeVisible();
-    await expect(card.getByText('No connector'), `${name} does not say it has no connector`).toBeVisible();
+    /**
+      * EXACT, which is the meta chip rather than the description. The first
+      * version matched both and died on strict mode — the four descriptions each
+      * ALSO opened with "No connector on this server", so the card said it three
+      * times over (chip, description, alternative). The descriptions describe the
+      * provider now and the status is said once.
+      */
+    await expect(
+      card.getByText('No connector', { exact: true }),
+      `${name} does not say it has no connector`,
+    ).toBeVisible();
     await expect(
       card.getByRole('button', { name: /Connect|Reconnect|Manage|Sync to deal/ }),
       `${name} offers a control the server refuses`,

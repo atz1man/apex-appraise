@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { INTEGRATION_CONNECTORS, type IntegrationProvider } from '@apex/types';
+import { INTEGRATION_CONNECTORS, type IntegrationProvider } from '@apex/types/integrations';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
@@ -43,7 +43,7 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
       { provider: 'HM Land Registry', name: 'HM Land Registry', mark: 'LR', desc: 'Sold price paid data and title information for comparable evidence and ownership.' },
       { provider: 'EPC Register', name: 'EPC Register', mark: 'EP', desc: 'Energy performance certificates — floor areas and ratings for the subject and comps.' },
       { provider: 'Companies House', name: 'Companies House', mark: 'CH', desc: 'Counterparty due diligence — officers, charges and filing status on the site pack.' },
-      { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Third-party automated valuation. No connector on this server — the cross-check comes from your own comparables.' },
+      { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Third-party automated valuation and market intelligence, sold as a subscription.' },
     ],
   },
   {
@@ -57,16 +57,16 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
        * because rows carry it.
        */
       { provider: 'Planning Portal', name: 'Planning data', mark: 'PD', desc: 'Designations and constraints intersecting the site, from planning.data.gov.uk — conservation areas, listed buildings, flood zones, green belt.' },
-      { provider: 'Ordnance Survey', name: 'Ordnance Survey', mark: 'OS', desc: 'OS Data Hub mapping. No connector on this server — the site map is served from here already.' },
+      { provider: 'Ordnance Survey', name: 'Ordnance Survey', mark: 'OS', desc: 'Ordnance Survey mapping and boundaries, through the OS Data Hub.' },
       { provider: 'Environment Agency', name: 'Environment Agency', mark: 'EA', desc: 'Flood-risk zones and contaminated-land screening for site due diligence.' },
     ],
   },
   {
     label: 'Cost, finance & workflow',
     items: [
-      { provider: 'BCIS', name: 'BCIS cost data', mark: 'BC', desc: 'RICS published cost indices. No connector on this server — Benchmarking carries real completed-scheme medians instead.' },
+      { provider: 'BCIS', name: 'BCIS cost data', mark: 'BC', desc: 'RICS published building-cost indices by use and region.' },
       { provider: 'Xero', name: 'Xero', mark: 'XE', desc: 'Push committed costs and drawdowns into accounting for live cost monitoring.' },
-      { provider: 'DocuSign', name: 'DocuSign', mark: 'DS', desc: 'Third-party e-signature. No connector on this server — terms of engagement are signed in the product.' },
+      { provider: 'DocuSign', name: 'DocuSign', mark: 'DS', desc: 'Third-party e-signature for sending documents out to be signed.' },
     ],
   },
 ];
@@ -179,7 +179,15 @@ export default function Integrations() {
           </span>
         }
         right={
-          total > 0 && (
+          /**
+            * `!!data`, not just a count. "0 of 6 connected" is as much a claim
+            * about the firm's record as any empty state, and the catalogue's own
+            * length is now a constant — so without this the header asserted that
+            * nothing was connected on a query that had failed. The sweep's
+            * matcher does not read a figure as a claim; the rule is not the
+            * sweep's wording.
+            */
+          !!data && total > 0 && (
             <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               <Dot color="rgb(var(--status-green, 30 122 85))" /> {connected} of {total} connected
             </span>
@@ -214,8 +222,29 @@ export default function Integrations() {
               <Skeleton key={i} height={196} className="rounded-card" />
             ))}
           </div>
-        ) : total === 0 ? (
-          <EmptyState error={listError} what="integrations" onRetry={() => refetchList()}>No integrations available for this workspace yet.</EmptyState>
+        ) : listError || !data ? (
+          /**
+            * The failure, not the catalogue.
+            *
+            * The catalogue is a constant and could be drawn without the server —
+            * but the STATUSES cannot, and a card reading "Not connected" on a
+            * query that failed is precisely the conflation `lib/load-failure.ts`
+            * exists to end: it says the firm has not connected this provider when
+            * the truth is we could not look.
+            *
+            * The condition used to be `total === 0`, over `rows?.length ?? 0`,
+            * which handled the failure by accident and brought a defect of its own
+            * — a workspace that has never connected anything has NO rows, so a
+            * newly registered firm was shown "No integrations available for this
+            * workspace yet" and no cards at all, which is every firm on its first
+            * day since `integrations.list` stopped backfilling a placeholder row
+            * per provider. The demo seed had rows, so nobody saw it. There is no
+            * "no integrations" state any more, because the catalogue is ours and
+            * always exists; what varies is whether each one is connected.
+            */
+          <EmptyState error={listError} what="your integrations" onRetry={() => refetchList()}>
+            Integrations could not be loaded.
+          </EmptyState>
         ) : (
           GROUPS.map((g) => (
             <div key={g.label} className="mb-7">

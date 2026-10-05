@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { signFileUrl } from '../uploads.js';
@@ -565,6 +566,30 @@ export const investorsRouter = router({
 });
 
 /**
+ * Who a buyer should actually contact, and the firm they work for.
+ *
+ * The deal's owner is the firm member whose name is on the scheme; where a deal
+ * has none (`Deal.ownerId` is nullable) the account's first administrator is the
+ * person who can route the enquiry, which is the same fallback
+ * `investors.myContact` uses. Null where there is neither, because a portal
+ * naming nobody is better than one naming an invention.
+ */
+async function buyerContact(
+  prisma: PrismaClient,
+  orgId: string,
+  owner: { name: string; email: string; initials: string } | null,
+): Promise<{ firm: string; person: { name: string; email: string; initials: string } | null }> {
+  const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { name: true } });
+  if (owner) return { firm: org?.name ?? '', person: owner };
+  const admin = await prisma.user.findFirst({
+    where: { orgId, principalType: 'internal', role: 'ADMIN' },
+    select: { name: true, email: true, initials: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return { firm: org?.name ?? '', person: admin };
+}
+
+/**
  * The buyer's payment schedule, kept in step with the plot.
  *
  * Three things were wrong here and each was visible on the buyer's own screen.
@@ -657,7 +682,14 @@ export const buyerRouter = router({
       where: { id: ctx.principal.buyerUnitId, orgId: ctx.principal.orgId },
       include: {
         milestones: { orderBy: { index: 'asc' } },
-        deal: { select: { name: true, address: true } },
+        deal: {
+          select: {
+            name: true,
+            address: true,
+            // the real person the buyer is dealing with — see `contact` below
+            owner: { select: { name: true, email: true, initials: true } },
+          },
+        },
       },
     });
     if (!unit) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -689,6 +721,28 @@ export const buyerRouter = router({
         depositHeld: unit.depositHeld != null ? P(unit.depositHeld) : null,
       },
       development: { name: unit.deal.name, address: unit.deal.address },
+      /**
+       * A REAL person at the real firm.
+       *
+       * The portal's contact card was typed into the page: "Sarah Reeve · Sales
+       * progressor — your point of contact through to completion", with the
+       * initials SR, `mailto:sales@apexappraise.co.uk` and `tel:+441202555555`.
+       * Nobody of that name exists, the email address is the SOFTWARE VENDOR's
+       * rather than the developer's, and 555555 is the fictional-number range —
+       * so a buyer who has reserved a plot and paid a deposit was given a made-up
+       * person, an inbox at the wrong company, and a number that does not ring.
+       *
+       * The investor portal beside it had this right already (`myContact`: "the
+       * real administrator at the managing firm"), so the convention existed and
+       * this screen was the one left with the mock. Same shape: the deal's owner
+       * where there is one, the first administrator otherwise, and NULL rather
+       * than a plausible substitute — an unowned deal is a real state, and the
+       * screen says "contact the developer" instead of naming somebody.
+       *
+       * No telephone number: nothing in this schema stores one, so there is none
+       * to show, and inventing a second one is how the first got there.
+       */
+      contact: await buyerContact(ctx.prisma, ctx.principal.orgId, unit.deal.owner),
       milestones: unit.milestones.map((m) => ({ name: m.name, index: m.index, done: m.done, date: m.date })),
       /**
        * With the file behind it. The panel offered "Review & sign" on a document

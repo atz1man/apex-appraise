@@ -32,11 +32,11 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1013). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1018). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (301): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -175,6 +175,33 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A client-facing screen shows no contact detail that is not in the record**
+  (`web/src/lib/client-contact.test.ts`). The buyer portal's contact card was typed into the
+  page: "Sarah Reeve · Sales progressor — your point of contact through to completion",
+  initials SR, `mailto:sales@apexappraise.co.uk`, `tel:+441202555555`. Nobody of that name
+  exists; the address is the SOFTWARE VENDOR's rather than the developer's; and 555555 is the
+  UK fictional-number range — so a buyer who had reserved a plot and paid a deposit was handed
+  a made-up person, an inbox at the wrong company and a number that does not ring, and a
+  question about their own house purchase either reached a software firm with no account to
+  look up or went nowhere. The INVESTOR portal beside it already did this properly
+  (`investors.myContact` — "the real administrator at the managing firm"), so the convention
+  existed and this one screen was left with the design mock in it, which is what made it worth
+  a rule rather than a fix. `buyer.myUnit` answers the deal's owner, the firm's first
+  administrator where a deal has none (`ownerId` is nullable — a real state), and NULL rather
+  than a substitute, with the screen saying "contact the developer directly" instead of naming
+  somebody. No telephone link at all: nothing in the schema stores a number, and inventing a
+  second one is how the first got there. The rule reads `CLIENT_FACING` out of `page-title.ts`
+  — the same set that decides which tabs carry no product suffix, for the same reason — so a
+  fourth client-facing screen is covered the day it is added, and it keys on `tel:`/`mailto:`
+  followed by a LITERAL rather than a `${`, because an address out of the record is the fix and
+  not the defect. `Landing.tsx` keeps its own address and should: the marketing page is the
+  VENDOR's surface and a firm's client never reads it. NOT reachable statically, and said in
+  the test: an invented NAME. "Sarah Reeve" is a string like any other and no matcher separates
+  a fabricated person from a label; a contact DETAIL is matchable because its shape is a
+  protocol, and in practice the invented person and the invented mailto arrived together.
+  The first draft imported `declaredScreens`/`lazyFiles` from `screen-heading.test.ts` and
+  re-ran that file's seven tests inside this one; this is the FOURTH local reader of `App.tsx`'s
+  route table and that is the convention — what must not be copied is the answer, not the regex.
 - **A figure nobody supplied is named as a sample, or it is refused**
   (`invented-figures.test.ts`). `integrations.sync` FABRICATED: with no credentials it wrote a
   comparable at `basePsf: 212` — address "PriceHubble AVM estimate", meta "Automated valuation
@@ -989,6 +1016,13 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - SQLite dev / Postgres prod: JSON columns are String (JSON.stringify/parse via mappers);
   no native enums.
 - Heavy deps (exceljs, leaflet) must stay lazy-loaded (dynamic import) — never in the main bundle.
+  The same rule bites one level down: importing a VALUE from `@apex/types`'s index pulls the
+  index in for real, zod and all, where importing a `type` from it is erased and costs nothing.
+  The Integrations screen swapped `type IntegrationProvider` for the connector TABLE and
+  `check:bundle` failed naming the route — Integrations grew 60K to 69K, nine-tenths of it
+  schemas a settings screen never opens. `plan`, `asset-classes`, `regions`, `uk-regions` and
+  now `integrations` are separate entry points for exactly this reason; put a browser-read table
+  in its own module rather than raising the baseline.
 - Prisma on alpine needs `apk add openssl` before generate; web image needs tsconfig.base.json
   copied and `prisma generate` run.
 - Docker CLI in sandboxed shells: `export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin"`.
