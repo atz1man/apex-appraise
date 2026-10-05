@@ -82,34 +82,54 @@ test('the return figures are this investor’s own, not a constant', async ({ pa
   expect(irr).not.toBe('21.4%');
 });
 
-test('a capital call is shown only while one is outstanding, and says whose it is', async ({ page }) => {
+test('every outstanding capital call is shown, overdue or not, and none of them as paid', async ({ page }) => {
   await signInAsInvestor(page);
   const p = (await position(page)) as {
-    openCapitalCall: { deal: string | null; label: string; amount: number; due: string } | null;
+    openCapitalCalls: Array<{ deal: string | null; label: string; amount: number; due: string; overdue: boolean }>;
+    cashflows: Array<{ kind: string; label: string }>;
   };
 
-  const panel = page.getByText('Capital call open');
-  if (!p.openCapitalCall) {
+  /**
+   * This spec used to read `openCapitalCall` — one notice — and assert its due
+   * date was still ahead:
+   *
+   *     expect(new Date(due).getTime()).toBeGreaterThan(Date.now())
+   *
+   * which was the defect written down as a requirement. A call was "open" only
+   * while `date > now`, so on the day a drawdown notice fell due it left the
+   * panel and joined the LP's payment history as money they had sent. An
+   * outstanding call is now one nobody has FUNDED, however old, and the panel
+   * says overdue when its date has passed.
+   */
+  const open = page.getByText(/Capital call (open|overdue)/);
+  if (p.openCapitalCalls.length === 0) {
     // no notice on the record, so no demand for money on the screen
-    await expect(panel).toHaveCount(0);
-    return;
+    await expect(open).toHaveCount(0);
+  } else {
+    await expect(open).toHaveCount(p.openCapitalCalls.length);
+    for (const call of p.openCapitalCalls) {
+      const rail = page.locator('section', { hasText: call.label });
+      await expect(rail.first()).toBeVisible();
+      const text = await rail.first().innerText();
+      if (call.deal) expect(text).toContain(call.deal);
+      // the wording follows the date rather than hiding it
+      expect(text).toContain(call.overdue ? 'Capital call overdue' : 'Capital call open');
+      expect(text).toContain(call.overdue ? 'was due' : 'due');
+    }
   }
 
-  await expect(panel).toBeVisible();
-  const rail = page.locator('section', { has: panel });
-  const text = await rail.innerText();
-  expect(text).toContain(p.openCapitalCall.label);
-  if (p.openCapitalCall.deal) expect(text).toContain(p.openCapitalCall.deal);
-
-  // the thing that made the hardcoded one indefensible: it went overdue and stayed
-  expect(
-    new Date(p.openCapitalCall.due).getTime(),
-    'an outstanding capital call was already past its due date',
-  ).toBeGreaterThan(Date.now());
-
-  // and the notice is a demand, not a payment: the statement's history is money
-  // that has moved, and the same call must not lead it a month early in red
+  /**
+   * And no outstanding notice is in the statement. The history is money that has
+   * MOVED — a funded call or a paid distribution — which is the claim the date
+   * filter could not make.
+   */
   const history = page.locator('section', { has: page.getByRole('heading', { name: 'Cashflow history' }) });
   await expect(history).toBeVisible();
-  await expect(history.getByText(p.openCapitalCall.label, { exact: false })).toHaveCount(0);
+  for (const call of p.openCapitalCalls) {
+    await expect(
+      history.getByText(call.label, { exact: false }),
+      `an outstanding demand appeared as a payment: ${call.label}`,
+    ).toHaveCount(0);
+    expect(p.cashflows.map((c) => c.label)).not.toContain(call.label);
+  }
 });

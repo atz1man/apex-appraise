@@ -53,7 +53,7 @@
  * they are, which is the correct thing for a demo to say about a live feed.
  */
 import type { PrismaClient } from '@prisma/client';
-import { depositsHeldAt } from '@apex/appraisal-engine';
+import { depositsHeldAt, tradeBudgets } from '@apex/appraisal-engine';
 
 /** pounds → integer pence */
 const p = (pounds: number) => BigInt(Math.round(pounds * 100));
@@ -401,7 +401,15 @@ async function inspectionFor(prisma: PrismaClient, ctx: DepthContext, d: DealSpe
       dealId: ctx.deals[d.name]!,
       surveyorId: ctx.users.mv,
       inspectedAt: ago(8 + i * 4),
-      rooms: JSON.stringify(rooms.map((name, r) => ({ name, condition: 3 + ((r + i) % 3), photos: 1 + ((r + i) % 3), notes: r === 0 ? 'As described; no material defects noted.' : '' }))),
+      /**
+       * No photographs, because the demo has none. `photos` was a COUNT here
+       * (`1 + ((r + i) % 3)`), so the seeded inspections claimed two or three
+       * photographs per room that nothing in the database held — the same defect
+       * the field app's shutter was, written into the only workspace anyone can
+       * try. It is a list of `SitePhoto` ids now and the seed files none, which is
+       * the truth; a surveyor using the app takes real ones.
+       */
+      rooms: JSON.stringify(rooms.map((name, r) => ({ name, condition: 3 + ((r + i) % 3), photos: [], notes: r === 0 ? 'As described; no material defects noted.' : '' }))),
       reconciledValue: p(Math.round(d.gdv * (d.stage === 'COMPLETED' ? 1 : 0.985))),
       approachWeights: JSON.stringify(d.asset === 'COMMERCIAL' ? { salesComparison: 30, cost: 20, income: 50 } : { salesComparison: 60, cost: 20, income: 20 }),
       status: 'draft',
@@ -479,20 +487,26 @@ async function closedOutCosts(prisma: PrismaClient, ctx: DepthContext, d: DealSp
   // final-account variance per package, as a fraction of budget; sums close to zero on purpose
   const variances = [0.012, 0.031, 0.044, 0.027, -0.008, -0.035, 0.0];
   const trades = TRADES[d.asset];
-  const buildPence = BigInt(Math.round(trades.reduce((a, t) => a + t.rate, 0) * gia * 100));
-  let allocated = 0n;
-  for (let i = 0; i < trades.length; i++) {
-    const t = trades[i]!;
-    // the last package takes the rounding residual so the sum is exact
-    const budget = i === trades.length - 1 ? buildPence - allocated : BigInt(Math.round(t.rate * gia * 100));
-    allocated += budget;
+  /**
+   * The split is the ENGINE's, not this file's.
+   *
+   * This loop was the only implementation of it, which is why a real firm could
+   * not produce a cost plan at all: the demo had one because this ran, and
+   * `cost.createPlanFromAppraisal` had nothing to call. Both go through
+   * `tradeBudgets` now — including the rule that makes `seed-depth` pass, that
+   * the last package takes the rounding residual so the budgets sum to the
+   * appraised build cost to the penny rather than near it.
+   */
+  const plan = tradeBudgets(trades, trades.reduce((a, t) => a + t.rate, 0) * gia);
+  for (let i = 0; i < plan.length; i++) {
+    const budget = plan[i]!.budgetPence;
     const final = BigInt(Math.round(Number(budget) * (1 + (variances[i] ?? 0))));
     await prisma.costPackage.create({
       data: {
         orgId: ctx.orgId,
         dealId,
-        name: t.label,
-        contractorId: contractorFor(t.label),
+        name: plan[i]!.label,
+        contractorId: contractorFor(plan[i]!.label),
         budget,
         committed: final,
         spent: final,

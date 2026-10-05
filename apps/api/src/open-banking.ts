@@ -16,8 +16,13 @@ import { openFor, sealFor } from './sealed-fields.js';
  * stored at connection time and surfaced before it bites.
  */
 
-const AUTH_BASE = process.env.TRUELAYER_AUTH_BASE ?? 'https://auth.truelayer.com';
-const API_BASE = process.env.TRUELAYER_API_BASE ?? 'https://api.truelayer.com';
+// `||`, not `??`: docker-compose.yml passes these as ${VAR:-}, which reaches the
+// process as an EMPTY STRING rather than unset, and `??` only fires on null or
+// undefined. With `??` a compose deployment would call `` for TrueLayer's hosts
+// and the bank feed would fail with nothing naming the cause.
+// `deployment.test.ts` holds this rule for every empty-defaulted variable.
+const AUTH_BASE = process.env.TRUELAYER_AUTH_BASE || 'https://auth.truelayer.com';
+const API_BASE = process.env.TRUELAYER_API_BASE || 'https://api.truelayer.com';
 
 /** Read-only. `accounts` and `transactions`, plus offline access to refresh. */
 export const BANK_SCOPES = 'info accounts transactions offline_access';

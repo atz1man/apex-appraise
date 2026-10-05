@@ -236,3 +236,69 @@ export function outturnBuildPsf(certifiedSpend: number, gia: number): number | n
   if (!(gia > 0) || !(certifiedSpend > 0)) return null;
   return certifiedSpend / gia;
 }
+
+/** One trade line of the appraisal's build cost — a label and its £/ft² rate. */
+export interface TradeLike {
+  label: string;
+  rate: number;
+}
+
+/** One package of a cost plan derived from the appraisal, in integer pence. */
+export interface TradeBudget {
+  label: string;
+  budgetPence: bigint;
+}
+
+/**
+ * The appraisal's build cost, split across its trades — the cost plan a scheme
+ * starts monitoring against.
+ *
+ * This existed already, and only in the demo seed. `demo-seed-depth.ts` derived
+ * a package per trade so the demo workspace would have a cost plan to show, and
+ * a REAL firm had no way to produce one: `cost.upsertPackage` is the browser's
+ * only writer and its single call site is the contractor dropdown, which sends
+ * no figures, while creating demands a name, a budget and a forecast. So the
+ * cost monitor's empty state — which promises in as many words that "budgets,
+ * contractor commitments and variance alerts all flow from the appraisal" and
+ * sends the valuer to the appraisal to make it happen — opened onto a screen
+ * that creates nothing, and without a Xero ledger to sync there was no way past
+ * it at all. The arithmetic was in the one place the customer could not reach.
+ *
+ * It splits the engine's OWN `build` figure rather than recomputing rate × area.
+ * That is the difference between a derivation and a second opinion: `build` is
+ * `Σ rates × buildMult × gia` unphased, and the sum of each phase's build plus
+ * the unphased remainder when a scheme is phased, so recomputing it from rates
+ * drifts from the engine the moment a scheme has phases or a build-cost
+ * multiplier. `seed-depth` asserts the packages sum to `round(build × 100)`
+ * pence, and the one bug that assertion has already caught was this same class:
+ * pricing over NET area where the engine prices over GROSS.
+ *
+ * The LAST package takes the rounding residual, so the sum is exact rather than
+ * near. Apportioning by rate and rounding each share leaves pennies on the
+ * table; a cost plan whose budgets do not add up to the appraised cost would
+ * report a variance nobody has earned, on the screen a lender pack is built
+ * from.
+ *
+ * When the rates sum to zero the apportionment has no basis, so the whole
+ * figure falls to the last package rather than being silently dropped. That
+ * cannot arise from an unphased appraisal — a zero rate sum makes `build` zero
+ * too — but a phased scheme carries its build in the phases, and a figure that
+ * vanished would be worse than one that is visibly in the wrong place.
+ */
+export function tradeBudgets(trades: readonly TradeLike[], build: number): TradeBudget[] {
+  if (trades.length === 0) return [];
+  const total = BigInt(Math.round(build * 100));
+  const rateSum = trades.reduce((a, t) => a + t.rate, 0);
+  const out: TradeBudget[] = [];
+  let allocated = 0n;
+  for (let i = 0; i < trades.length; i++) {
+    const trade = trades[i]!;
+    const last = i === trades.length - 1;
+    const budgetPence = last
+      ? total - allocated
+      : BigInt(Math.round((Number(total) * trade.rate) / (rateSum || 1)));
+    allocated += budgetPence;
+    out.push({ label: trade.label, budgetPence });
+  }
+  return out;
+}

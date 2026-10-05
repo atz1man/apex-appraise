@@ -202,6 +202,12 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
       void utils.org.webhookDeliveries.invalidate();
     },
   });
+  const resume = trpc.org.resumeWebhook.useMutation({
+    onSuccess: () => {
+      toast.success('Endpoint resumed — the next matching event is sent to it.');
+      void utils.org.webhooks.invalidate();
+    },
+  });
 
   // same shape as the API keys above: creating is what the plan gates, and
   // listing and DELETING stay open so a downgraded workspace can still stop
@@ -222,7 +228,8 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
         signed, so you can tell it came from us and was not altered: the <code className="fig text-[11.5px]">apex-signature</code>{' '}
         header is <code className="fig text-[11.5px]">t=&lt;unix&gt;,v1=&lt;HMAC-SHA256 of "&lt;t&gt;.&lt;body&gt;" with your
         endpoint secret&gt;</code>. Sign the timestamp with the body, not the body alone, or a delivery captured today
-        stays valid for ever. Failed deliveries are retried four times over half an hour.
+        stays valid for ever. Failed deliveries are retried four times over half an hour, and an endpoint that fails twenty
+        times in a row is paused — Resume puts it back without changing its secret.
       </div>
 
       {minted && (
@@ -304,7 +311,32 @@ export function WebhooksPanel({ isAdmin }: { isAdmin: boolean }) {
               <span className="fig min-w-0 truncate">{e.url}</span>
               <span className="fig text-[10.5px] text-ink-3 min-w-0 truncate">{e.events.join(' · ')}</span>
               <span className="flex-1" />
-              {e.failureCount > 0 && <StatusChip status="amber" label={`${e.failureCount} FAILED`} />}
+              {/**
+                * The query has always SELECTED `active` and `lastAttemptAt` and
+                * the row showed neither, so an endpoint the server had parked
+                * after twenty failures looked exactly like a working one. The
+                * "N active" chip in the header counts them and cannot name one.
+                * A customer whose integration had gone silent could read this
+                * panel in full and learn nothing about why.
+                */}
+              {!e.active && <StatusChip status="red" label="PAUSED" />}
+              {e.active && e.failureCount > 0 && <StatusChip status="amber" label={`${e.failureCount} FAILED`} />}
+              {e.lastAttemptAt && (
+                <span className="fig text-[10.5px] text-ink-3 whitespace-nowrap">
+                  last tried {shortDate(e.lastAttemptAt)}
+                </span>
+              )}
+              {!e.active && (
+                <Button
+                  writes
+                  size="sm"
+                  variant="secondary"
+                  loading={resume.isPending && resume.variables?.id === e.id}
+                  onClick={() => resume.mutate({ id: e.id })}
+                >
+                  Resume
+                </Button>
+              )}
               {/* one click used to stop a customer's system receiving events,
                   with nothing said and nothing to undo it — the same row-level
                   question a comparable or a task is asked */}
@@ -639,21 +671,39 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
         </label>
       </div>
 
-      <label className="mt-3 flex items-start gap-2 text-[12px]">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={form.enforced}
-          onChange={(e) => setForm({ ...form, enforced: e.target.checked })}
-        />
-        <span>
-          <b className="font-semibold">Require single sign-on.</b>{' '}
-          <span className="text-ink-2">
-            Password sign-in is refused for everyone here, including accounts that already have one. Make sure you can sign
-            in this way before turning it on.
-          </span>
-        </span>
-      </label>
+      {/*
+        The switch is UNAVAILABLE until a sign-in has succeeded through this
+        connection, because turning it on refuses every password in the
+        workspace — and turning it back off needs an admin who can sign in,
+        which by then means only through the identity provider. The copy used to
+        say "make sure you can sign in this way before turning it on", which put
+        the whole weight of a permanent lockout on the administrator reading
+        carefully. `org.saveSso` refuses it too; this is so the reason is on
+        screen rather than arriving as a rejected save.
+      */}
+      {(() => {
+        const proven = !!sso?.lastLoginAt || !!sso?.enforced;
+        return (
+          <label className="mt-3 flex items-start gap-2 text-[12px]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.enforced}
+              disabled={!proven}
+              onChange={(e) => setForm({ ...form, enforced: e.target.checked })}
+            />
+            <span>
+              <b className="font-semibold">Require single sign-on.</b>{' '}
+              <span className="text-ink-2">
+                Password sign-in is refused for everyone here, including accounts that already have one.
+                {proven
+                  ? ' Turning it off again needs an admin who can sign in, so it will have to be through this provider.'
+                  : ' Save this configuration and sign in with it once first — until a sign-in has succeeded, enforcing it would lock this workspace out with no way back in.'}
+              </span>
+            </span>
+          </label>
+        );
+      })()}
 
       <div className="mt-3 flex items-center gap-2">
         <Button writes

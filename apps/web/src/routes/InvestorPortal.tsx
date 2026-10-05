@@ -276,33 +276,63 @@ export default function InvestorPortal() {
 
               {/* side rail */}
               <div className="flex flex-col gap-4 lg:sticky lg:top-[78px]">
-                {/* open capital call */}
-                {inv.openCapitalCall && (
-                  <section className="rounded-card px-[18px] py-4" style={{ background: 'rgb(var(--notice-bg, 251 243 230))', border: '1px solid rgb(var(--notice-border, 235 220 188))' }}>
+                {/**
+                  * Every notice still outstanding, soonest first, each saying
+                  * whether it is due or already OVERDUE.
+                  *
+                  * There was one, and it was chosen by date: a call stopped being
+                  * "open" the instant its due date passed, which is the moment it
+                  * becomes most urgent — and it then appeared in the payment
+                  * history below as money the LP had sent. A scheme also draws
+                  * down in tranches, so an investor behind on two notices was
+                  * shown one.
+                  */}
+                {inv.openCapitalCalls.map((call, i) => (
+                  <section
+                    key={`${call.label}-${i}`}
+                    className="rounded-card px-[18px] py-4"
+                    style={
+                      call.overdue
+                        ? { background: 'rgb(var(--status-red-bg, 253 242 240))', border: '1px solid rgb(var(--status-red, 178 58 46) / 0.4)' }
+                        : { background: 'rgb(var(--notice-bg, 251 243 230))', border: '1px solid rgb(var(--notice-border, 235 220 188))' }
+                    }
+                  >
                     <div className="flex items-center gap-[9px]">
                       <span
                         className="w-[26px] h-[26px] rounded-[8px] flex items-center justify-center"
-                        style={{ background: statusTokens.amber.text }}
+                        style={{ background: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : statusTokens.amber.text }}
                       >
                         <Icon d="M12 8v5|M12 16h.01|M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" size={15} color={onFill} />
                       </span>
-                      <span className="text-[13px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
-                        Capital call open
+                      <span
+                        className="text-[13px] font-semibold"
+                        style={{ color: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--notice-ink, 122 78 14))' }}
+                      >
+                        {call.overdue ? 'Capital call overdue' : 'Capital call open'}
                       </span>
                     </div>
-                    <p className="mt-2.5 text-[12.5px] leading-[1.5] m-0" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
-                      {inv.openCapitalCall.label}{inv.openCapitalCall.deal ? ` — ${inv.openCapitalCall.deal}` : ''}.
+                    <p
+                      className="mt-2.5 text-[12.5px] leading-[1.5] m-0"
+                      style={{ color: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--notice-ink, 122 78 14))' }}
+                    >
+                      {call.label}{call.deal ? ` — ${call.deal}` : ''}.
                     </p>
                     <div className="mt-3 flex items-baseline justify-between">
-                      <span className="text-[11px]" style={{ color: statusTokens.amber.text }}>
+                      <span className="text-[11px]" style={{ color: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : statusTokens.amber.text }}>
                         Your share
                       </span>
-                      <span className="fig text-[18px] font-semibold" style={{ color: 'rgb(var(--notice-ink, 122 78 14))' }}>
-                        {fM(inv.openCapitalCall.amount)}
+                      <span
+                        className="fig text-[18px] font-semibold"
+                        style={{ color: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : 'rgb(var(--notice-ink, 122 78 14))' }}
+                      >
+                        {fM(call.amount)}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11px] text-right" style={{ color: statusTokens.amber.text }}>
-                      due {fdate(inv.openCapitalCall.due)}
+                    <div
+                      className="mt-1 text-[11px] text-right"
+                      style={{ color: call.overdue ? 'rgb(var(--status-red, 178 58 46))' : statusTokens.amber.text }}
+                    >
+                      {call.overdue ? 'was due ' : 'due '}{fdate(call.due)}
                     </div>
                     {/*
                       * No "View drawdown notice" button: it had no handler and
@@ -310,7 +340,7 @@ export default function InvestorPortal() {
                       * shares it, is a document in the panel below.
                       */}
                   </section>
-                )}
+                ))}
 
                 {/*
                   * Documents shared with this investor.

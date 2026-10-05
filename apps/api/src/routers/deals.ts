@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { currentAppraisals, currentByDeal } from '../current-appraisal.js';
-import { feedOutturn } from '../benchmark-feed.js';
+import { feedOutturn, retractOutturn } from '../benchmark-feed.js';
 import { portfolioRollup } from '@apex/appraisal-engine';
 import { figureStatusForStage, zAssetType, zDealStage } from '@apex/types';
 import { P, moneyLabel, toPence } from '../mappers.js';
@@ -117,7 +117,9 @@ export const dealsRouter = router({
   exposure: internalProcedure.query(async ({ ctx }) => {
     const orgId = ctx.principal.orgId;
     const [deals, appraisals, packages, policy, bankAccounts] = await Promise.all([
-      ctx.prisma.deal.findMany({ where: { orgId }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
+      // by name: this list IS the portfolio table's row order, and Postgres gives
+      // none of its own — a deal edited anywhere moved in the rollup
+      ctx.prisma.deal.findMany({ where: { orgId }, orderBy: { name: 'asc' }, select: { id: true, name: true, assetType: true, postcode: true, stage: true } }),
       currentAppraisals(ctx.prisma.appraisal, orgId),
       ctx.prisma.costPackage.findMany({
         where: { orgId },
@@ -349,6 +351,18 @@ export const dealsRouter = router({
       await feedOutturn(ctx.prisma, ctx.principal.orgId, updated, {
         userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
       });
+      /**
+       * And a scheme moved BACK off completion stops contributing it. Until
+       * the overview could move a stage back this was unreachable — a deal was
+       * completed once and stayed completed — so a mis-advance left a certified
+       * final-account figure in a pool other firms read as market evidence, for
+       * a scheme that had not finished.
+       */
+      if (deal.stage === 'COMPLETED' && input.stage !== 'COMPLETED') {
+        await retractOutturn(ctx.prisma, ctx.principal.orgId, updated, {
+          userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
+        });
+      }
       return dealOut(updated);
     }),
 

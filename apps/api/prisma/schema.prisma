@@ -36,6 +36,10 @@ model Organisation {
   trialEndsAt DateTime?
   stripeCustomerId String?
   stripeSubscriptionId String?
+  // When a cancellation already scheduled in Stripe takes effect. Stored rather
+  // than fetched, so the panel can say "ends on the 1st" on a plain page load
+  // without a Stripe call per view.
+  subscriptionCancelAt DateTime?
   // Contributing a client's appraisal ratios to a shared pool is a decision a
   // firm makes deliberately — the underlying figures are client-confidential —
   // so it is off until somebody with authority turns it on. Reading cohorts is
@@ -834,7 +838,17 @@ model Cashflow {
   kind       String // dist | call
   label      String @default("")
   amount     BigInt // pence, signed on 100% basis
+  /// For a call, the date the money is DUE. For a distribution, the date it was paid.
   date       DateTime
+  /// When a capital call was actually funded, or null while it is outstanding.
+  ///
+  /// There was no such column, so the portal split calls by DATE — "money that
+  /// has moved" was everything dated on or before today — and the moment a due
+  /// date passed, an unpaid drawdown notice moved from "open" into the LP's
+  /// payment history. An investor who had paid nothing read a payment they had
+  /// made, and the firm had nowhere to see what was outstanding. Null on a
+  /// distribution, which is recorded when it is paid.
+  fundedAt   DateTime?
 }
 
 // ---- Buyer payments (Stripe when configured; demo mode otherwise) ----

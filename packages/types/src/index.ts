@@ -248,36 +248,11 @@ export * from './asset-classes.js';
  * firm-level region setting. Words and units only; money stays in pounds.
  */
 export * from './regions.js';
-
 /**
- * The data providers a workspace can connect.
- *
- * `integrations.connect` took `z.string()` and looked the provider up with
- * `findFirst`, so an unknown name simply found no row and 404'd — the provider
- * was never validated, it merely failed. `isolation-sweep` relied on that
- * accident: it feeds every procedure another firm's ids, and this one refused
- * them because no IntegrationConnection had a cuid for a provider name. The
- * moment `connect` became an upsert (so a firm could connect a provider it had
- * no placeholder row for) the accident stopped holding, and the sweep said so
- * immediately.
- *
- * So the set is named. Shared rather than kept in the router because the
- * Integrations screen renders a card per provider and typed its own copy of
- * these strings; `ProviderMeta.provider` is this type, so a card naming a
- * provider the server will not accept is now a typecheck failure rather than a
- * button that 400s.
+ * Which data providers this server can actually contact, and what to use where
+ * it cannot. Its own module (`@apex/types/integrations`) so the Integrations
+ * screen can read the table without pulling zod into that route — see the
+ * measurement there. Re-exported so every existing import still resolves.
  */
-export const INTEGRATION_PROVIDERS = [
-  'HM Land Registry',
-  'EPC Register',
-  'Companies House',
-  'PriceHubble AVM',
-  'Planning Portal',
-  'Ordnance Survey',
-  'Environment Agency',
-  'BCIS',
-  'Xero',
-  'DocuSign',
-] as const;
+export * from './integrations.js';
 
-export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];

@@ -212,6 +212,46 @@ export async function feedOutturn(prisma: PrismaClient, orgId: string, deal: Fee
 }
 
 /**
+ * A scheme that is no longer complete stops contributing its out-turn.
+ *
+ * Completion contributes the certified build £/ft² — "the one figure in
+ * construction nobody publishes" — into a pool whose medians OTHER FIRMS read
+ * as market evidence. Until there was a way to move a deal back, nothing could
+ * reach this state: a scheme was completed once and stayed completed. Now that
+ * a stage can be corrected, a deal mis-advanced to COMPLETED would otherwise
+ * leave a final-account figure standing for a scheme that has not finished, and
+ * the firm that reads it in their own appraisal has no way of knowing.
+ *
+ * Only the OUT-TURN point goes. The three ratios an approved appraisal
+ * contributes are a statement about a signed valuation and are still true —
+ * `feedApproved` filed them on approval, not on completion, and a stage
+ * correction does not unsign anything.
+ *
+ * Re-advancing re-contributes, because `feedOutturn` runs on every arrival at
+ * COMPLETED and `replacePoints` writes rather than appends. So this is a
+ * reversible correction, not a withdrawal of consent: `benchmarks.optOut` is
+ * what withdraws everything.
+ */
+export async function retractOutturn(
+  prisma: PrismaClient,
+  orgId: string,
+  deal: FeedDeal,
+  actor: FeedActor,
+): Promise<number> {
+  const { count } = await prisma.benchmarkPoint.deleteMany({
+    where: { source: 'contributed', orgId, metric: OUTTURN_METRIC, dealId: deal.id },
+  });
+  if (count > 0) {
+    await recordAudit(prisma, {
+      orgId, dealId: deal.id, userId: actor.userId, actor: actor.name, ip: actor.ip ?? null,
+      action: 'withdrew out-turn from benchmark',
+      target: `${deal.name} \u00b7 no longer a completed scheme`,
+    });
+  }
+  return count;
+}
+
+/**
  * Everything a newly consenting firm has already signed off. Returns how many
  * deals contributed something.
  */

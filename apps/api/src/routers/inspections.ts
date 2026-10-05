@@ -9,9 +9,41 @@ import { recordAudit } from '../audit.js';
 const zRoom = z.object({
   name: z.string(),
   condition: z.number().min(0).max(5), // 0 = not yet rated
-  photos: z.number().int().min(0).default(0),
+  /**
+   * The PHOTOGRAPHS, by id, not a count of them.
+   *
+   * This was `z.number().int().min(0)`, and the field app's shutter incremented
+   * it: the viewfinder was a static gradient labelled "CAPTURING · KITCHEN", the
+   * thumbnails were decorative gradients from the design tokens, and the
+   * inspection went to the workbench reporting "12 photos" of a property nobody
+   * had photographed. A surveyor's record of what they saw is the evidence a Red
+   * Book valuation rests on, and `audit.ts` names a lender's credit committee and
+   * an RICS review as its readers.
+   *
+   * The schema's own comment on `Inspection.rooms` has said `photos[]` since the
+   * model was written, so the data model always meant the list; the app degraded
+   * it to a tally.
+   */
+  photos: z.array(z.string()).max(60).default([]),
   notes: z.string().default(''),
 });
+
+/**
+ * An inspection loaded from a row written before the photographs were real.
+ *
+ * Those rows carry `photos: 12` — a number. It becomes an empty list, and that is
+ * not information lost: the count was of photographs that were never taken, so
+ * there is nothing for an id to point at. Accepting both shapes on READ is what
+ * stops an old inspection throwing inside `inspectionOut` the first time somebody
+ * opens it.
+ */
+const roomsIn = (raw: unknown): Array<z.infer<typeof zRoom>> =>
+  (Array.isArray(raw) ? raw : []).map((r: any) => ({
+    name: String(r?.name ?? ''),
+    condition: Number(r?.condition ?? 0),
+    photos: Array.isArray(r?.photos) ? r.photos.filter((x: unknown): x is string => typeof x === 'string') : [],
+    notes: String(r?.notes ?? ''),
+  }));
 
 const zWeights = z.object({
   salesComparison: z.number().min(0).max(100),
@@ -24,7 +56,7 @@ const inspectionOut = (i: any) => ({
   dealId: i.dealId,
   surveyorId: i.surveyorId,
   inspectedAt: i.inspectedAt,
-  rooms: J<Array<z.infer<typeof zRoom>>>(i.rooms, []),
+  rooms: roomsIn(J<unknown[]>(i.rooms, [])),
   reconciledValue: i.reconciledValue != null ? P(i.reconciledValue) : null,
   approachWeights: J<z.infer<typeof zWeights>>(i.approachWeights, { salesComparison: 60, cost: 20, income: 20 }),
   status: i.status,
@@ -95,6 +127,38 @@ export const inspectionsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      /**
+       * Every photograph named is one this server HOLDS, on this deal.
+       *
+       * Without this the list is only a nicer-looking tally: a client could send
+       * any ids it liked and the inspection would claim photographs that are not
+       * there, which is the defect the list replaced wearing a different shape.
+       * Filtered on `orgId` as well as `dealId`, because the two are independent
+       * inputs (`auth/owned.ts`) and a photograph of another firm's site in a
+       * valuation record is worse than a missing one.
+       *
+       * It REFUSES rather than dropping the unknown ids: a save that silently
+       * files eight of the twelve photographs a surveyor took would be the
+       * quietest possible way to lose evidence.
+       */
+      const named = [...new Set(input.rooms.flatMap((r) => r.photos))];
+      if (named.length) {
+        const held = await ctx.prisma.sitePhoto.findMany({
+          where: { id: { in: named }, orgId: ctx.principal.orgId, dealId: input.dealId },
+          select: { id: true },
+        });
+        const missing = named.filter((id) => !held.some((h) => h.id === id));
+        if (missing.length) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              `${missing.length} photograph${missing.length === 1 ? '' : 's'} named by this inspection `
+              + 'could not be found on this deal. Nothing has been saved — retry the uploads that failed.',
+          });
+        }
+      }
+
       const data = {
         rooms: JSON.stringify(input.rooms),
         reconciledValue: input.reconciledValue != null ? toPence(input.reconciledValue) : null,
@@ -120,9 +184,12 @@ export const inspectionsRouter = router({
           actor: ctx.principal.name,
           action,
           target:
-            input.reconciledValue != null
+            // the photograph count is now a count of photographs, so it is worth
+            // recording: it is part of what the inspection claims to have seen
+            (input.reconciledValue != null
               ? `${input.rooms.length} rooms, reconciled at ${moneyLabel(toPence(input.reconciledValue))}`
-              : `${input.rooms.length} rooms, no reconciled value`,
+              : `${input.rooms.length} rooms, no reconciled value`)
+            + `, ${named.length} photograph${named.length === 1 ? '' : 's'}`,
           ip: ctx.ip,
         });
       };

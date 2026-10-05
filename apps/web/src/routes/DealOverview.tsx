@@ -201,6 +201,8 @@ export default function DealOverview() {
   const viability = viabilityPill[deal.viability] ?? viabilityPill.CAUTION;
   const stageIdx = Math.max(0, STAGES.findIndex((s) => s.key === deal.stage));
   const nextStage = STAGES[stageIdx + 1];
+  // a stage is correctable, not only advanceable — see the note by the controls
+  const prevStage = stageIdx > 0 ? STAGES[stageIdx - 1] : undefined;
   const result = appraisal?.result ?? null;
 
   const counts = deal.counts;
@@ -408,14 +410,42 @@ export default function DealOverview() {
                 );
               })}
             </div>
-            <Button
-              writes
-              variant="secondary"
-              disabled={!nextStage || setStage.isPending}
-              onClick={() => nextStage && setStage.mutate({ id: dealId, stage: nextStage.key as never })}
-            >
-              {setStage.isPending ? <Spinner /> : nextStage ? `Advance stage →` : 'Completed'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/*
+                A stage could only ever go FORWARD. Both controls in the product
+                — this one and the pipeline card's — computed `stageIdx + 1` and
+                clamped at the last stage, so a mis-click was permanent: the
+                stage stuck, `figureStatus` hardened with it (estimate →
+                committed → actual), and arriving at COMPLETED contributed the
+                scheme's certified build £/ft² to a pool other firms read as
+                market evidence. `deals.setStage` has always accepted any stage
+                — nothing on the server needed changing, there was simply no way
+                to ask.
+
+                Leaving COMPLETED withdraws that out-turn contribution; see
+                `retractOutturn`. Re-advancing re-contributes, so this is a
+                correction rather than a withdrawal of consent.
+              */}
+              {prevStage && (
+                <Button
+                  writes
+                  variant="secondary"
+                  disabled={setStage.isPending}
+                  onClick={() => setStage.mutate({ id: dealId, stage: prevStage.key as never })}
+                  title={`Move this deal back to ${prevStage.label.toLowerCase()}`}
+                >
+                  ← Back a stage
+                </Button>
+              )}
+              <Button
+                writes
+                variant="secondary"
+                disabled={!nextStage || setStage.isPending}
+                onClick={() => nextStage && setStage.mutate({ id: dealId, stage: nextStage.key as never })}
+              >
+                {setStage.isPending ? <Spinner /> : nextStage ? `Advance stage →` : 'Completed'}
+              </Button>
+            </div>
           </div>
           {setStage.error && <FormError className="mt-2 text-[11.5px]">{setStage.error.message}</FormError>}
         </Panel>

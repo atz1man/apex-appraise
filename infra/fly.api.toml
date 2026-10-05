@@ -11,6 +11,48 @@
 # Optional: ANTHROPIC_API_KEY, EPC_BEARER_TOKEN, STRIPE_SECRET_KEY,
 #   STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, SMTP_URL, EMAIL_FROM
 #
+# Optional, and worth setting BEFORE the first real customer:
+#   ENCRYPTION_KEY — 32 bytes, hex or base64. Unset, the key sealing integration
+#                    credentials at rest is DERIVED from JWT_SECRET, so rotating
+#                    the signing key makes every sealed credential unreadable.
+#                    Set them apart and each rotates on its own. A malformed
+#                    value stops the boot on purpose, rather than quietly
+#                    sealing nothing.
+#   COMPANIES_HOUSE_KEY, XERO_CLIENT_ID, XERO_CLIENT_SECRET,
+#   TRUELAYER_CLIENT_ID, TRUELAYER_CLIENT_SECRET
+#                  — the company-search, accounting and bank-feed connections.
+#                    Xero and the bank feed read ONLY the environment (there is
+#                    no per-org credential path for them as there is for EPC and
+#                    Companies House), so until these are set those screens
+#                    cannot be made to work on this deployment by any means.
+#                    Xero also needs its redirect URI registered as
+#                    ${APP_URL}/integrations/xero/callback.
+#   TRUELAYER_AUTH_BASE, TRUELAYER_API_BASE — sandbox overrides; they default to
+#                    TrueLayer's production hosts.
+#
+# Optional, and a COMMERCIAL decision rather than a technical one:
+#   TILE_URL, TILE_ATTRIBUTION, TILE_USER_AGENT — the map tiles. Unset, every
+#                    map in the product is served from tile.openstreetmap.org
+#                    under a User-Agent naming this repository, and the OSM tile
+#                    usage policy does not license that for a commercial
+#                    product. infra/DEPLOY.md says the same under a heading
+#                    saying the choice has to be made before selling this.
+#
+# Deliberately NOT set here, and the absence is the guard:
+#   DEMO_MODE      — fabricates a result where a real integration is missing: a
+#                    buyer payment settled with no card processor, Auto-Appraisal
+#                    answering from a built-in worked example. Production refuses
+#                    every one of those fallbacks, and that refusal is what its
+#                    absence buys.
+#   RESET_TOKEN    — arms POST /admin/reset-demo, which wipes every workspace.
+#                    It belongs on a demo instance. Never set it here.
+#
+# CHROMIUM_PATH is set by the image (infra/api.Dockerfile), not as a secret.
+#
+# `apps/api/test/env-coverage.test.ts` reads every variable the API's own source
+# asks for and fails naming any that neither this file nor docker-compose.yml
+# can supply. Both lists above are therefore load-bearing, not prose.
+#
 # Optional, and the pair that decides what the MAPS look like:
 #   GOOGLE_MAPS_API_KEY        — Static Maps API, restricted BY IP, not by HTTP
 #                                referrer: the requests come from this server,

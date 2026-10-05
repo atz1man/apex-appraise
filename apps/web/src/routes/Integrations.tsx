@@ -1,14 +1,25 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { IntegrationProvider } from '@apex/types';
+import { INTEGRATION_CONNECTORS, type IntegrationProvider } from '@apex/types/integrations';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Button, Dot, Drawer, EmptyState, Listbox, Skeleton, TopBar } from '../components/ui';
 import { neutral } from '@apex/ui-tokens';
 import { workingDeal } from '../lib/working-deal';
 
-/** providers with a demo/mock sync that populates real deal data */
-const SYNCABLE = new Set(['HM Land Registry', 'EPC Register', 'PriceHubble AVM']);
+/**
+ * Which providers do what, read from the one table rather than listed here.
+ *
+ * `SYNCABLE` was a hand-kept set of three — Land Registry, EPC and PriceHubble —
+ * and two of them did not sync anything real: EPC created a Document row for a
+ * certificate PDF that did not exist, and PriceHubble wrote an invented £212/ft²
+ * comparable onto the deal's evidence. `INTEGRATION_CONNECTORS` says which
+ * providers this server can contact, which of those sync onto a deal, and what a
+ * firm should use instead where there is no connector, and the server refuses on
+ * the same table — so a card cannot offer a button the procedure behind it will
+ * reject.
+ */
+const connectorFor = (provider: IntegrationProvider) => INTEGRATION_CONNECTORS[provider];
 
 type Status = 'CONNECTED' | 'ATTENTION' | 'NOT_CONNECTED';
 
@@ -32,23 +43,30 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
       { provider: 'HM Land Registry', name: 'HM Land Registry', mark: 'LR', desc: 'Sold price paid data and title information for comparable evidence and ownership.' },
       { provider: 'EPC Register', name: 'EPC Register', mark: 'EP', desc: 'Energy performance certificates — floor areas and ratings for the subject and comps.' },
       { provider: 'Companies House', name: 'Companies House', mark: 'CH', desc: 'Counterparty due diligence — officers, charges and filing status on the site pack.' },
-      { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Automated valuation and market intelligence as a cross-check band on every appraisal.' },
+      { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Third-party automated valuation and market intelligence, sold as a subscription.' },
     ],
   },
   {
     label: 'Planning & geospatial',
     items: [
-      { provider: 'Planning Portal', name: 'Planning Portal', mark: 'PP', desc: 'Application history, decision notices and conditions pulled by site address.' },
-      { provider: 'Ordnance Survey', name: 'Ordnance Survey', mark: 'OS', desc: 'Mapping, site boundaries and area measurement for plans and red-line sites.' },
+      /**
+       * Renamed to what it reads. The card said "application history, decision
+       * notices and conditions", which is the commercial submission service; the
+       * connector behind it is planning.data.gov.uk, whose answer is
+       * designations and constraints. The DB value stays 'Planning Portal'
+       * because rows carry it.
+       */
+      { provider: 'Planning Portal', name: 'Planning data', mark: 'PD', desc: 'Designations and constraints intersecting the site, from planning.data.gov.uk — conservation areas, listed buildings, flood zones, green belt.' },
+      { provider: 'Ordnance Survey', name: 'Ordnance Survey', mark: 'OS', desc: 'Ordnance Survey mapping and boundaries, through the OS Data Hub.' },
       { provider: 'Environment Agency', name: 'Environment Agency', mark: 'EA', desc: 'Flood-risk zones and contaminated-land screening for site due diligence.' },
     ],
   },
   {
     label: 'Cost, finance & workflow',
     items: [
-      { provider: 'BCIS', name: 'BCIS cost data', mark: 'BC', desc: 'RICS building-cost benchmarks to validate build rates by use and region.' },
+      { provider: 'BCIS', name: 'BCIS cost data', mark: 'BC', desc: 'RICS published building-cost indices by use and region.' },
       { provider: 'Xero', name: 'Xero', mark: 'XE', desc: 'Push committed costs and drawdowns into accounting for live cost monitoring.' },
-      { provider: 'DocuSign', name: 'DocuSign', mark: 'DS', desc: 'Issue reports and term sheets for signature directly from the data room.' },
+      { provider: 'DocuSign', name: 'DocuSign', mark: 'DS', desc: 'Third-party e-signature for sending documents out to be signed.' },
     ],
   },
 ];
@@ -141,8 +159,15 @@ export default function Integrations() {
   const effectiveDealId = syncDealId || workingDeal(deals)?.id || '';
 
   const byProvider = new Map((rows ?? []).map((r) => [r.provider, r]));
-  const connected = (rows ?? []).filter((r) => r.status === 'CONNECTED').length;
-  const total = rows?.length ?? 0;
+  /**
+   * Counted over the providers that CAN be connected, not over the rows that
+   * happen to exist. A leftover row for a provider with no connector would
+   * otherwise be counted as connected, and the total would be however many rows
+   * a workspace had rather than how many connections are on offer.
+   */
+  const offered = GROUPS.flatMap((g) => g.items).filter((i) => connectorFor(i.provider).connects);
+  const connected = offered.filter((i) => byProvider.get(i.provider)?.status === 'CONNECTED').length;
+  const total = offered.length;
 
   return (
     <div className="min-h-screen">
@@ -154,7 +179,15 @@ export default function Integrations() {
           </span>
         }
         right={
-          total > 0 && (
+          /**
+            * `!!data`, not just a count. "0 of 6 connected" is as much a claim
+            * about the firm's record as any empty state, and the catalogue's own
+            * length is now a constant — so without this the header asserted that
+            * nothing was connected on a query that had failed. The sweep's
+            * matcher does not read a figure as a claim; the rule is not the
+            * sweep's wording.
+            */
+          !!data && total > 0 && (
             <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
               <Dot color="rgb(var(--status-green, 30 122 85))" /> {connected} of {total} connected
             </span>
@@ -189,8 +222,29 @@ export default function Integrations() {
               <Skeleton key={i} height={196} className="rounded-card" />
             ))}
           </div>
-        ) : total === 0 ? (
-          <EmptyState error={listError} what="integrations" onRetry={() => refetchList()}>No integrations available for this workspace yet.</EmptyState>
+        ) : listError || !data ? (
+          /**
+            * The failure, not the catalogue.
+            *
+            * The catalogue is a constant and could be drawn without the server —
+            * but the STATUSES cannot, and a card reading "Not connected" on a
+            * query that failed is precisely the conflation `lib/load-failure.ts`
+            * exists to end: it says the firm has not connected this provider when
+            * the truth is we could not look.
+            *
+            * The condition used to be `total === 0`, over `rows?.length ?? 0`,
+            * which handled the failure by accident and brought a defect of its own
+            * — a workspace that has never connected anything has NO rows, so a
+            * newly registered firm was shown "No integrations available for this
+            * workspace yet" and no cards at all, which is every firm on its first
+            * day since `integrations.list` stopped backfilling a placeholder row
+            * per provider. The demo seed had rows, so nobody saw it. There is no
+            * "no integrations" state any more, because the catalogue is ours and
+            * always exists; what varies is whether each one is connected.
+            */
+          <EmptyState error={listError} what="your integrations" onRetry={() => refetchList()}>
+            Integrations could not be loaded.
+          </EmptyState>
         ) : (
           GROUPS.map((g) => (
             <div key={g.label} className="mb-7">
@@ -198,14 +252,25 @@ export default function Integrations() {
               <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
                 {g.items.map((item) => {
                   const row = byProvider.get(item.provider);
-                  const status = (row?.status ?? 'NOT_CONNECTED') as Status;
+                  const connector = connectorFor(item.provider);
+                  /**
+                   * A provider with no connector is never CONNECTED, whatever a
+                   * row left over from before this table says — a stored
+                   * `status` is the record of a click the server should not have
+                   * accepted, and showing a green dot for it would keep the old
+                   * claim alive on exactly the screen that made it.
+                   */
+                  const status = (connector.connects ? (row?.status ?? 'NOT_CONNECTED') : 'NOT_CONNECTED') as Status;
                   const st = STATUS_STYLE[status];
-                  const meta =
-                    status === 'CONNECTED' && row?.lastSync
+                  const meta = !connector.connects
+                    ? 'No connector'
+                    : status === 'CONNECTED' && row?.lastSync
                       ? `Synced ${rel(row.lastSync)}`
                       : status === 'ATTENTION'
                         ? 'Action needed'
-                        : 'Available';
+                        : connector.auth === 'key'
+                          ? 'Needs your API key'
+                          : 'Available';
                   const pending = connect.isPending && connect.variables === item.provider;
                   return (
                     <div key={item.provider} className="bg-surface rounded-card flex flex-col shadow-rest" style={{ border: `1px solid ${st.border}`, padding: 18 }}>
@@ -223,6 +288,16 @@ export default function Integrations() {
                       </div>
                       <div className="mt-3.5 text-[15px] font-semibold">{item.name}</div>
                       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed flex-1">{item.desc}</div>
+                      {/* what a firm should use instead, because a dead end with
+                          no alternative is worse than the false claim it replaces */}
+                      {!connector.connects && (
+                        <div className="mt-2.5 rounded-[8px] px-2.5 py-1.5 text-[11px] text-ink-2" style={{ background: 'rgb(var(--sunken, 251 252 251))' }}>
+                          {connector.instead}
+                        </div>
+                      )}
+                      {connector.connects && (
+                        <div className="mt-2.5 fig text-[10.5px] text-ink-3">Feeds {connector.feeds.toLowerCase()}</div>
+                      )}
                       {syncResult[item.provider] && (
                         <div className="mt-2.5 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">
                           Pulled {syncResult[item.provider]} onto the selected deal.
@@ -232,7 +307,7 @@ export default function Integrations() {
                         <span className="fig text-[10.5px] text-ink-3">{meta}</span>
                         {status === 'CONNECTED' ? (
                           <div className="flex gap-1.5">
-                            {SYNCABLE.has(item.provider) && effectiveDealId && (
+                            {connector.connects && connector.syncs && effectiveDealId && (
                               <Button writes
                                 size="sm"
                                 className="min-h-10 sm:min-h-0"
@@ -252,6 +327,11 @@ export default function Integrations() {
                               Manage
                             </Button>
                           </div>
+                        ) : !connector.connects ? (
+                          /* no button at all: the server refuses this provider,
+                             and a control that exists to be rejected is worse
+                             than no control. The sentence above says what to use. */
+                          null
                         ) : status === 'ATTENTION' ? (
                           <Button writes size="sm" className="min-h-10 sm:min-h-0" loading={pending} onClick={() => connect.mutate(item.provider)}>
                             Reconnect

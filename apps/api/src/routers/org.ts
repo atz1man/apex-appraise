@@ -916,6 +916,51 @@ export const orgRouter = router({
       return { id: row.id, url: row.url, events, secret };
     }),
 
+  /**
+   * Put a parked endpoint back into service.
+   *
+   * `drainWebhooks` sets `active: false` after FAILURE_LIMIT consecutive
+   * failures, and that is right — an endpoint that does not answer should stop
+   * being posted to. NOTHING set it back. Not a procedure, not an admin tool,
+   * not a timer: `active: true` appeared exactly once in this server, as the
+   * column default. So the one way out was Remove and Add again, which mints a
+   * NEW signing secret — a receiver that had been down for an afternoon had to
+   * be re-keyed by hand, in their deployment, before it could verify a
+   * signature again. A customer whose server came back up had no way to tell
+   * us so.
+   *
+   * The URL is re-checked here rather than trusted from when it was added.
+   * `outbound.ts` holds that rule — DNS moves, so the answer is only true at
+   * the moment it is given — and a resume IS one of those moments: it is the
+   * act of pointing this server at that address again.
+   */
+  resumeWebhook: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.webhookEndpoint, input.id, ctx.principal.orgId);
+    try {
+      await assertPublicHttpsUrl(row.url);
+    } catch (e) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: e instanceof OutboundUrlError ? e.message : 'That webhook URL cannot be used.',
+      });
+    }
+    await ctx.prisma.webhookEndpoint.update({
+      where: { id: row.id },
+      /**
+       * The count goes with it. Resuming on twenty failures would park the
+       * endpoint again on its first delivery, which is a button that appears
+       * to work and does nothing — the shape of defect this whole procedure
+       * exists to end.
+       */
+      data: { active: true, failureCount: 0 },
+    });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'resumed a webhook endpoint', target: row.url, ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+
   deleteWebhook: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const row = await assertOwned(ctx.prisma.webhookEndpoint, input.id, ctx.principal.orgId);
     await ctx.prisma.webhookDelivery.deleteMany({ where: { endpointId: row.id } });
@@ -1021,6 +1066,47 @@ export const orgRouter = router({
           current: existing.updatedAt,
           expected: input.expectedUpdatedAt,
           advice: 'Reload to see the current settings before saving yours — nothing you can see here has been lost.',
+        });
+      }
+      /**
+       * Enforcement cannot be switched on until the connection has been PROVEN
+       * to work, which means somebody has signed in through it at least once.
+       *
+       * `enforced` is the switch that makes `auth.login` refuse every password
+       * in the workspace, and `requestPasswordReset` deliberately issues no
+       * token to a firm that does not use passwords. Turning it back off needs
+       * `org.saveSso` or `org.deleteSso` — both `adminProcedure`, reachable only
+       * by an admin who can sign IN, which by then means only through the
+       * identity provider. So a wrong issuer, a wrong client id or an IdP that
+       * is simply down locked the whole firm out of its own workspace
+       * permanently, and nothing stopped an administrator from arriving there in
+       * one save on a configuration nobody had ever tested. `a9cbb50` found the
+       * lockout and answered it with the optimistic stamp above, which stops a
+       * SECOND admin restoring the switch — not a first admin setting it.
+       *
+       * `lastLoginAt` is stamped by `auth.ssoCallback` the moment a sign-in
+       * resolves to a user, so it is exactly "has this ever worked", and the
+       * panel already shows it. No new state, and no weakening of the control:
+       * the door still refuses every password once locked. You just cannot lock
+       * it until it has been opened once with the new key.
+       *
+       * Only the TRANSITION is guarded. A connection already enforced keeps its
+       * setting through an unrelated edit — refusing a domain change because of
+       * a condition the firm is already living in helps nobody.
+       *
+       * STILL OPEN, and not pretended otherwise: changing the issuer or the
+       * client id of an ALREADY enforced connection can lock a firm out by the
+       * same route, and no guard here can tell a broken edit from a legitimate
+       * migration to a new identity provider. That one needs a recovery path
+       * rather than a precondition, and until there is one the answer is the
+       * platform operator clearing `enforced` in the database.
+       */
+      if (input.enforced && !existing?.enforced && !existing?.lastLoginAt) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'Sign in with single sign-on once before enforcing it. Until a sign-in has succeeded, ' +
+            'enforcing would refuse every password in this workspace with no way back in.',
         });
       }
       const data = {

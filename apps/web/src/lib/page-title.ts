@@ -29,7 +29,7 @@ const PRODUCT = 'Apex Appraise';
  * their unit's page, or a client opening an emailed engagement to sign, should
  * not be handing on a tab that advertises their valuer's software.
  */
-const CLIENT_FACING = new Set(['/portal/buyer', '/portal/investor', '/terms/:token']);
+export const CLIENT_FACING = new Set(['/portal/buyer', '/portal/investor', '/terms/:token']);
 
 export const ROUTE_TITLES: Record<string, string> = {
   '/': 'Home',

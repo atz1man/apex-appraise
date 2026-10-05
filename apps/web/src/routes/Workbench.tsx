@@ -142,7 +142,10 @@ export default function Workbench() {
 
   const rooms = inspection?.rooms ?? [];
   const ratedRooms = rooms.filter((r) => r.condition > 0);
-  const photoTotal = rooms.reduce((a, r) => a + r.photos, 0);
+  // `photos` is a list of SitePhoto ids now, not a count: the field app's shutter
+  // used to increment a number and the desk reported a total of photographs that
+  // had never been taken
+  const photoTotal = rooms.reduce((a, r) => a + r.photos.length, 0);
   const isSynced = inspection?.status === 'submitted';
   const inspectedOn = inspection
     ? new Date(inspection.inspectedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })

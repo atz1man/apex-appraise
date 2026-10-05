@@ -30,18 +30,18 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (289; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (925). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1055). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (325): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (187, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (194, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -175,6 +175,294 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A list of rows this server hands out is ORDERED** (`list-order.test.ts`). Postgres guarantees
+  no row order without `ORDER BY`, and under MVCC an UPDATE writes a new tuple — so the row
+  somebody just edited physically MOVES. SQLite returns rowid order, which is insertion order and
+  stable, so every local run of every suite agreed and nothing noticed. Found by CI, not by
+  reading: `cost.list` had no `orderBy`, and `e2e/cost-contractor.spec.ts` — which picks a
+  contractor on the first package, reloads and asserts the same select holds it — passed locally
+  for months and failed in CI with `Expected: "cmuunz1uu004i…" Received: "cmuunz1ur004c…"`, a
+  different package's dropdown, because the one just written had moved. What the test met as a
+  selector, a valuer meets as a cost table whose rows jump after every save, on the screen a lender
+  pack is built from. Nine more sites had the same shape and TWO of them chose rows rather than
+  merely ordering them: `documentBlocks` takes `docs.slice(0, 4)` and `draftRisk` takes
+  `rows.slice(0, 3)` of the scenarios — so which three scenarios the AI risk commentary discussed
+  was arbitrary, and `unsupportedRecommendation` holds that prose to the option the engine ranks
+  best out of exactly those three. Ordered now: comparables (three reads, including the one the
+  narrative drafter uses and the one that writes the supported £/ft² onto every unit cap),
+  scenarios (two), cost packages, the deal rollup, a deal's investors, the buyer's shared
+  documents, and the extraction's document blocks. `id: 'asc'` where there is no better key, which
+  is not arbitrary: a Prisma `cuid()` is timestamp-prefixed, so ascending IS insertion order — the
+  order SQLite was already showing, so the fix moves nothing on the demo while making Postgres
+  deterministic. The rule CANNOT be "every findMany orders", because most build a Map, a sum or a
+  count where order is unobservable; so the bar is a written decision, as `provenance-sweep` and
+  `lost-update-sweep` use, keyed by `file:model` rather than by line because a line number goes
+  stale and an exemption that silently stops matching is worse than none. The call's extent is
+  matched by PARENTHESES, not a character window — `upload-failure`'s own first version is the
+  standing reminder — with a case pinning that a nested `ids.map(…)` does not end it early.
+- **An upload that fails says so** (`web/src/lib/upload-failure.test.ts`). tRPC mutations get this
+  free — the link chain toasts a rejection into the live regions `announcements` mounted — but the
+  four places this app POSTs a FILE are raw `fetch` calls outside that chain. Three reported a
+  failure; the cost monitor's site-photo upload was `if (res.ok) { … }` with no else, so the
+  spinner stopped, the caption stayed in the box, no photograph appeared and nothing said why — a
+  surveyor on a phone with a dropped connection could not tell a refused upload from a slow one,
+  on the log that route's own comment calls "what a disputed valuation of works-in-progress is
+  argued from". Three siblings getting it right is what makes the fourth an omission, the same
+  argument `destructive` makes about its four unguarded controls. The window is 600 characters of
+  CONTENT after the fetch, not of raw text: comments are blanked rather than removed so line
+  numbers stay true, and the first version measured those blanks — the paragraph explaining the fix
+  sat between the fetch and its `if (!res.ok)` and pushed the check out of range, so the sweep
+  reported the very site it was written for. `provenance-sweep`'s helper window was the same
+  mistake with a different number; a fixed character count is a guess about how far away the thing
+  you are looking for is. NOT PROVEN and said in the test: that the message reaches anybody — a
+  `throw` into a swallowing `catch` passes it. The audible channel is `announcements`' business.
+- **A figure the marketing page says this product computes, something computes**
+  (`web/src/lib/landing-claims.test.ts`). `Landing.tsx` listed "CIL, S106, SDLT & VAT computed,
+  not guessed". Three are true — `cilCharge`, `sdltCommercial`, and S106 as a figure stated in the
+  planning agreement and carried into the residual — and nothing anywhere computes VAT; there is
+  no VAT in the engine at all. Worse, the appraisal's own tax table said `['VAT', 'Opted —
+  neutral']` beside figures the engine HAD computed, which is not a missing figure but a
+  substantive professional assertion: it says the scheme has opted to tax and VAT is therefore
+  cash-neutral, and for new-build residential — zero-rated, and not capable of being opted — that
+  is usually wrong. The row now reads "Not modelled — figures are net of VAT", which is more
+  useful than either the claim or silence: it tells the valuer the figures are net and the
+  treatment is theirs. NOT modelled on purpose, and the reason is in the code: doing it properly
+  means zero-rated new residential, standard-rated commercial, the option to tax, partial
+  exemption and the capital goods scheme, and a VAT figure computed wrongly under a signature is
+  worse than none. The guard ties each name in that sentence to the engine export that keeps it,
+  in both directions — the exports exist, and the sentence names nothing the table covers — so
+  putting VAT back needs either a function or a written reason there is none. NOT a general prose
+  check and it could not be: no matcher reads a marketing sentence and decides whether the product
+  keeps its promise; what it does is make adding a name a two-line change. Its "finds what it is
+  meant to find" case runs the same parse over the old sentence and names VAT.
+- **A document the extraction cannot read is NAMED, not dropped**
+  (`extraction-documents.test.ts`). The data room's upload control said "PDF, DWG, XLSX · up to
+  100 MB. Documents feed the AI extraction", and `documentBlocks` handled pdf, png, jpg and jpeg
+  — everything else fell through a bare `continue`. A valuer who selected their elemental cost
+  plan, the example that control's own placeholder uses ("Elemental cost plan v4.xlsx"), got an
+  extraction that had never seen it and nothing saying so; a DWG the same; and a PARTIAL skip read
+  as a complete success, because the procedure returned only `documentsRead` and the screen said
+  "Generated by AI from 1 document". Two halves. Spreadsheets are READ now, as the text of their
+  cells (`exceljs`, dynamically imported so it stays out of the API's startup path — the same rule
+  the browser follows), bounded at the first worksheet's first 400 rows and 40 columns, which is a
+  DECISION and not a guard: a cost plan's figures are at the top left, and the bound is reported
+  when it bites. And every skip carries a reason the caller shows — a DWG says "CAD with no text
+  to read — export the sheet as PDF and upload that", because DWG never will be readable and a
+  model handed the bytes would invent; a row with no file, a file gone from storage, a workbook
+  that will not open and the 20 MB budget each say what happened. The upload copy no longer
+  promises DWG feeds extraction (it is still stored and shared). NOT drivable from the browser
+  suite, and said in the test: `extract` refuses a document read without `ANTHROPIC_API_KEY`, and
+  CI has none — so the API test calls `documentBlocks` directly, which needs no key, and builds
+  its fixture workbook with the same library the server reads it back with. Five mutants recorded,
+  the silent `continue` among them.
+- **A capital call is a demand until somebody says the money arrived**
+  (`capital-call-funding.test.ts`). A call was a `Cashflow` row with a due date and nothing
+  recorded whether it had been MET, so the investor portal decided by comparing that date to
+  today: `openCall` was `date > now` and the statement was `date <= now`, under a comment calling
+  that list "money that has moved". On the day a drawdown notice fell due it stopped being an open
+  demand and appeared in the LP's own statement as a payment they had made — whether or not they
+  had paid a penny. A capital call is a legal demand for cash under the LPA; the firm had nowhere
+  to see which were outstanding, and the investor was shown a receipt. `Cashflow.fundedAt` is the
+  fact, `investors.fundCashflow` records it BOTH ways (a call marked funded in error is a receipt
+  for money that never arrived, and the only alternative was deleting the notice, which loses the
+  demand with the mistake), and the date is the SERVER's for the reason `photos.add` gives about
+  `takenAt`. The statement dates a funded call by its FUNDING, not its demand: when the cash moved
+  is the fact a statement is about, and those are different days whenever an LP pays late. The
+  portal shows EVERY outstanding notice, soonest first, each saying due or OVERDUE — it was
+  `.find()`, so an LP behind on two tranches was shown one. Two existing tests encoded the old
+  rule and one was actively wrong: "drops a notice once its due date has passed, rather than
+  showing it overdue for ever" read sensibly against the HARDCODED notice it was written for,
+  whose fixed date went stale, and against real data it means an unpaid demand becomes a payment.
+  The demo seed marks its two historic drawdowns funded a few days after each fell due; without
+  that the demo's paid calls would read as months overdue and drop out of the LP's statement
+  altogether. Five mutants recorded, including both halves of the date rule.
+- **The field app takes photographs** (`inspection-photos.test.ts` + `inspection-photos.spec.ts`
+  + `e2e/field-photos.spec.ts`). Its shutter did `photos + 1`: the viewfinder was a static
+  gradient (`placeholderGradients.street`) with framing marks drawn over it and a chip reading
+  "CAPTURING · KITCHEN", the thumbnails were three more gradients drawn `Math.min(photos, 3)`
+  times, and the inspection reached the workbench reporting "12 photos" of a property nobody had
+  photographed — on the record `audit.ts` names a lender's credit committee and an RICS review as
+  the readers of. `Inspection.rooms`' own schema comment has said `{name, condition, photos[],
+  notes}` since the model was written, so the data model always meant the LIST; the app degraded
+  it to a tally. The upload route it needed already existed, tenant-checked and audited
+  (`POST /uploads/photo` → `SitePhoto`), and the field app was the one surface in the product
+  that never called it. `getUserMedia` for the in-app viewfinder with `<input capture>` as the
+  fallback, which is not a consolation prize: it is what works when permission is refused, when
+  there is no camera and in an embedded web view, it opens the phone's own camera app, and it is
+  the path Playwright drives with a real JPEG through the real multipart route. Making `photos` a
+  list is only half the fix — a list the server does not CHECK is a nicer-looking tally — so
+  `inspections.save` verifies every id against `SitePhoto` on this deal AND this org (two
+  independent inputs, `auth/owned.ts`) and refuses the whole save rather than dropping the
+  unknown ids, because filing eight of the twelve photographs a surveyor took is the quietest
+  possible way to lose evidence. `lib/inspection-photos.ts` holds the judgement worth testing at
+  its boundaries: a photograph exists for this inspection only once the SERVER holds it, so a
+  shot in flight blocks the send (it is seconds away) and a FAILED one does not (a phone with no
+  signal must not be able to trap a day's work on the device) — the record then says how many
+  photographs it has rather than how many were taken. Old rows carrying `photos: 12` read as an
+  empty list and that loses nothing: the count was of photographs never taken. NOT durable across
+  a reload, and said rather than papered over — the blob is in memory, so an unuploaded shot is
+  lost if the tab closes; IndexedDB and a drain queue is the real answer to a day out of signal.
+  The demo seed wrote a count too (`1 + ((r + i) % 3)`) and now files none, which is the truth.
+  Two things this turned up: `accessible-names`' comment-stripper read `accept="image/*"` as a
+  block-comment opener and blanked everything to the next comment close — it reported a LABELLED
+  control, and could have hidden an unlabelled one in the same span; it blanks quoted strings
+  first now. And the two new browser specs matched their deal with `.first()` on a name prefix,
+  which worked once and then opened a deal left behind by the previous run (measured: three
+  photographs on screen, zero `SitePhoto` rows on the deal under test) — they open it by its
+  exact unique name.
+- **A client-facing screen shows no contact detail that is not in the record**
+  (`web/src/lib/client-contact.test.ts`). The buyer portal's contact card was typed into the
+  page: "Sarah Reeve · Sales progressor — your point of contact through to completion",
+  initials SR, `mailto:sales@apexappraise.co.uk`, `tel:+441202555555`. Nobody of that name
+  exists; the address is the SOFTWARE VENDOR's rather than the developer's; and 555555 is the
+  UK fictional-number range — so a buyer who had reserved a plot and paid a deposit was handed
+  a made-up person, an inbox at the wrong company and a number that does not ring, and a
+  question about their own house purchase either reached a software firm with no account to
+  look up or went nowhere. The INVESTOR portal beside it already did this properly
+  (`investors.myContact` — "the real administrator at the managing firm"), so the convention
+  existed and this one screen was left with the design mock in it, which is what made it worth
+  a rule rather than a fix. `buyer.myUnit` answers the deal's owner, the firm's first
+  administrator where a deal has none (`ownerId` is nullable — a real state), and NULL rather
+  than a substitute, with the screen saying "contact the developer directly" instead of naming
+  somebody. No telephone link at all: nothing in the schema stores a number, and inventing a
+  second one is how the first got there. The rule reads `CLIENT_FACING` out of `page-title.ts`
+  — the same set that decides which tabs carry no product suffix, for the same reason — so a
+  fourth client-facing screen is covered the day it is added, and it keys on `tel:`/`mailto:`
+  followed by a LITERAL rather than a `${`, because an address out of the record is the fix and
+  not the defect. `Landing.tsx` keeps its own address and should: the marketing page is the
+  VENDOR's surface and a firm's client never reads it. NOT reachable statically, and said in
+  the test: an invented NAME. "Sarah Reeve" is a string like any other and no matcher separates
+  a fabricated person from a label; a contact DETAIL is matchable because its shape is a
+  protocol, and in practice the invented person and the invented mailto arrived together.
+  The first draft imported `declaredScreens`/`lazyFiles` from `screen-heading.test.ts` and
+  re-ran that file's seven tests inside this one; this is the FOURTH local reader of `App.tsx`'s
+  route table and that is the convention — what must not be copied is the answer, not the regex.
+- **A figure nobody supplied is named as a sample, or it is refused**
+  (`invented-figures.test.ts`). `integrations.sync` FABRICATED: with no credentials it wrote a
+  comparable at `basePsf: 212` — address "PriceHubble AVM estimate", meta "Automated valuation
+  cross-check · 80% confidence band" — onto a valuer's evidence file, in production, with
+  nothing in the row marking it invented and nothing in the product distinguishing it from a
+  sold price. A comparable's £/ft² is what the supported rate is built from, so that number
+  could reach a signed Red Book opinion under somebody's name. `demo-mode.ts` was written for
+  exactly this hazard and says so about a sample EXTRACTION; the one place writing a fabricated
+  COMPARABLE never called it, and the absence of a credential is not consent — a firm that has
+  deployed and not yet pasted an API key is in that state on day one. The rule keys on a
+  money-shaped field assigned a LITERAL, excluding `0` (a cost package opening at `spent: 0`
+  invents nothing: a scheme that has not started has spent nothing, and without the exclusion
+  the two cost procedures are permanent false positives, which is how a sweep's list stops
+  being read). Two sanctions, both earned: behind `demoFallbacksAllowed()`, which is a DECISION
+  the deployment took, or written into rows that say SAMPLE in their own text — `org.loadSampleDeal`
+  is the second, a button that says sample writing a deal called "Sample — Kingfisher Wharf".
+  The Land Registry fallback is gated now and marked in the ADDRESS as well as the meta, because
+  the address is the column a comparables table leads with and "· demo" at the end of a meta
+  string is not a mark anything checks. EPC's branch is GONE rather than gated: it created a
+  Document row for a certificate PDF with `sizeBytes: 180_000n` and no file behind it, which is
+  "a portal never offers a document it cannot open" one layer up, and the records are live on
+  the site pack anyway.
+- **A green dot is a claim about a capability, so `integrations.connect` refuses what this
+  server cannot contact.** It was an upsert setting `status: 'CONNECTED'` and
+  `lastSync: new Date()` for ANY of the ten provider names, with no credential and no handshake
+  — so the Integrations screen, whose whole purpose is to tell a paying customer what works,
+  read "Connected · Synced just now" for four providers nothing in this codebase can talk to,
+  and the demo seed marked Ordnance Survey CONNECTED on the one workspace anyone can try.
+  `@apex/types`'s `INTEGRATION_CONNECTORS` is the one table, read by the server and the screen:
+  `connects` with the auth kind and what it FEEDS, or `instead` naming what does the job — and
+  `instead` is not consolation copy, because a dead end with no alternative is worse than the
+  false claim it replaces and in every case this product already does the job (its own
+  comparables for an AVM, Benchmarking's completed-scheme medians for BCIS, `engagement.sign`
+  for DocuSign, this server's own tile proxy for OS). Five providers are real and were already
+  built, just never wired to a card: PPD (`fetchSoldPrices`), EPC (`fetchEpc`),
+  Companies House, planning.data.gov.uk (`fetchConstraints`) and the Environment Agency's
+  flood-monitoring (`fetchFloodWarnings`). The "Planning Portal" CARD is renamed to Planning
+  data and its description corrected — it promised application history and decision notices,
+  which is the commercial submission service, while the connector answers designations and
+  constraints; the DB value keeps its old spelling because rows carry it. A card with no
+  connector renders NO button, whatever a leftover row says, because a control that exists to
+  be rejected is worse than no control. `e2e/integration-honesty.spec.ts` is the half that
+  counts what is rendered, in both directions on the same screen. Two existing cases in
+  `query-side-effects.test.ts` drove `connect('Ordnance Survey')` and `connect('BCIS')`; their
+  premise is the missing ROW, not the provider, so they drive a connectable one now.
+- **A plan switch billed the firm twice, and there was no way to leave.** "Switch plan" called
+  `billing.checkout`, which opens a Stripe Checkout session in `mode: subscription` — so Stripe
+  did exactly what it was asked and created ANOTHER subscription against the same customer,
+  cancelling nothing. A firm moving STARTER → GROWTH paid for both every month, this product
+  showed one CURRENT chip, and `billing.sync` ran the workspace at `data.find(s => s.status ===
+  'active')` — whichever one Stripe happened to list first. The only sign of it was a card
+  statement. `billing.changePlan` updates the existing subscription ITEM's price instead, which
+  is also the only way to get proration right (Stripe credits the unused part of the old plan;
+  two subscriptions bill in full), and withdraws a scheduled cancellation because choosing a
+  plan is a statement of intent to keep paying. And there was no CANCEL at all, while the Terms
+  a customer accepts say the subscription can be cancelled at any time: leaving meant asking us
+  to do it in the Stripe dashboard, and `org.deleteWorkspace` — the GDPR erasure — was the only
+  thing in the app that stopped the billing, by destroying the firm's records to do it.
+  `billing.cancelPlan` cancels at the END of the paid period (the period is paid for; cutting
+  the features off on the spot takes away what the firm has bought and leaves the refund
+  question to be answered by hand) and `billing.resumePlan` withdraws it, because until the
+  date arrives nothing has happened. TWO procedures rather than one taking a boolean, and the
+  reason is the web sweep: `destructive` reads a verb out of the procedure NAME, so a single
+  `cancelPlan({ cancel })` made the undo button read as a cancellation that asked nobody — a
+  name carrying the direction needs no matcher cleverness to read an argument, and
+  `benchmarks.optIn`/`optOut` is the same shape already. `cancel` joined `remove|delete` in
+  `DESTRUCTIVE_BINDING` at the same time, because the sharpest thing this product can be asked
+  to end destroys no row at all. The sync body is now `reconcileSubscription`
+  (`apps/api/src/billing.ts`), shared by all four procedures for the reason `trpc.ts` gives
+  about a rule written in several places, and it leaves the plan ALONE on SEVERAL live
+  subscriptions exactly as it already did on one it cannot identify — recording
+  "subscription needs attention" in the trail, which is the one outcome where nothing changes
+  BECAUSE something is wrong and a reader has nowhere else to find out. The Stripe stub in
+  `plan-change.test.ts` ROUTES BY PATH on purpose: a stub answering everything alike passes
+  whether a switch updates a subscription or opens a second one, which is the whole claim.
+  `provenance-sweep`'s helper window had to grow with this — it read 1500 characters from the
+  declaration, and `reconcileSubscription`'s `activityEvent.create` sits past that, so it
+  reported a helper that records perfectly well as not recording. It reads to the next
+  top-level declaration now.
+- **A row this server parks on its own, a person can unpark** (`webhook-resume.test.ts`).
+  `drainWebhooks` sets `active: false` on a webhook endpoint after `FAILURE_LIMIT` = 20
+  consecutive failures, and only live endpoints are dispatched to. Nothing set it back:
+  `active: true` appeared exactly once in this server, as the column default. The only way out
+  was Remove and Add again, and that mints a NEW signing secret — a receiver down for an
+  afternoon needed a deployment before it could verify a signature again, and a customer whose
+  server came back up had no way to say so. `org.resumeWebhook` clears the failure count WITH
+  the flag (resuming on twenty parks it again on the first delivery, which is a button that
+  appears to work and does nothing) and re-checks the URL through `assertPublicHttpsUrl`,
+  because `outbound.ts`'s rule is that DNS moves and a resume is the act of pointing this
+  server at that address again. Two things the same defect hid: the PANEL showed neither
+  `active` nor `lastAttemptAt` though `org.webhooks` had always selected both, so a parked
+  endpoint was indistinguishable from a working one on the only screen about it; and the
+  parking never fired for the commonest failure, because the HTTP path stamped the endpoint row
+  and the `catch` path (refused connection, DNS gone, timeout — "the likelier failure of the
+  two", says the file's own comment) updated the delivery and left the endpoint untouched, so a
+  receiver that answered badly was parked and one whose host had vanished was posted to for
+  ever with `failureCount` at zero. Both paths go through `recordAttempt` now, which keeps the
+  atomic increment because two processes drain at once. The sweep is NARROW on purpose and the
+  narrowness is the rule: a flag a PERSON sets is not its business — `revokedAt` is one-way by
+  design and `enforced` is a one-way door guarded on its own terms — what needs an undo is a
+  flag flipped AGAINST a customer without being asked. Each matcher is verified over planted
+  source, including the two shapes that give a confident wrong answer: a comment spelling the
+  parking rule out, and a second model in the same file (a write takes its nearest binding, as
+  `destructive` learned). No e2e: parking needs twenty failures or a direct row write, neither
+  of which a browser can do, so the API test is where the claim lives.
+- **Enforcing single sign-on is a one-way door, so it cannot be opened onto a connection
+  nobody has walked through.** `enforced` makes `auth.login` refuse EVERY password in the
+  workspace, and `requestPasswordReset` deliberately issues no token to a firm that does not
+  use passwords — so turning it back off needs `org.saveSso` or `org.deleteSso`, both
+  `adminProcedure`, reachable only by an admin who can sign IN, which by then means only
+  through the identity provider. A wrong issuer, a wrong client id or an IdP that is simply
+  down locked a firm out of its own workspace PERMANENTLY, and nothing stopped an
+  administrator arriving there in one save on a configuration nobody had tested. `a9cbb50`
+  found the lockout and answered it with the optimistic stamp, which stops a SECOND admin
+  restoring the switch — not a first admin setting it. The precondition is `lastLoginAt`,
+  stamped by the SSO callback the moment a sign-in resolves to a user: exactly "has this ever
+  worked", already stored, already shown in the panel, so no new state. The control is not
+  widened — the door still refuses every password once locked; you cannot lock it until it has
+  been opened once with the new key. Only the TRANSITION is guarded, because refusing a domain
+  edit on an already-enforced connection would refuse it for a condition the firm is already
+  living in. The panel disables the switch and says why, rather than letting the save be
+  rejected. STILL OPEN and not pretended otherwise: changing the issuer or client id of an
+  ALREADY enforced connection locks a firm out by the same route, and no precondition can tell
+  a broken edit from a legitimate migration to a new provider — that one needs a recovery path,
+  and until there is one the answer is the platform operator clearing `enforced` in the
+  database.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because
@@ -569,6 +857,24 @@ the point, so read the failure rather than adding an exemption.
   register's writes were added. A new money-carrying mutation has to be added to it. Note both `upsertUnit` and `upsertTenancy` return from TWO places:
   a fixture that only creates leaves the update path — the one people actually hit —
   untested, which is how two of these mutations first survived.
+- **A stage is correctable, and a scheme that is no longer complete stops contributing.**
+  `deals.setStage` has always accepted any stage; both controls in the product computed
+  `stageIdx + 1` and clamped at the last, so in practice a stage only ever went FORWARD. A
+  mis-click was permanent: the stage stuck, `figureStatus` hardened with it (estimate →
+  committed → actual), and arriving at COMPLETED contributed the scheme's certified build
+  £/ft² into a pool whose medians other firms read as market evidence. Nothing on the server
+  needed changing — there was no way to ask. The overview offers "← Back a stage" now, and
+  because that made the state reachable it also made a second defect reachable:
+  `retractOutturn` withdraws the out-turn point when a deal leaves COMPLETED, since a
+  final-account figure standing for a scheme that has not finished is a wrong number in
+  another firm's appraisal and they have no way of knowing. Only the OUT-TURN goes — an
+  approved appraisal's three ratios are a statement about a signed valuation, filed at
+  approval rather than completion, and a stage correction unsigns nothing. Re-advancing
+  re-contributes (`replacePoints` writes rather than appends), so this is a correction and
+  not a withdrawal of consent; `benchmarks.optOut` is still what withdraws everything.
+  Two things the tests corrected in the writing: CONSTRUCTION hardens to ACTUAL rather than
+  COMMITTED, and consent has to be granted BEFORE approval or `feedApproved` files nothing
+  and the ratios read as missing.
 - `benchmark-feed-sweep` — every path that makes a figure the firm's committed position
   feeds the benchmark pool. The pool used to grow by a Contribute button, one deal at a
   time, and it contributed the CURRENT appraisal whatever its review state — a draft in a
@@ -626,6 +932,60 @@ the point, so read the failure rather than adding an exemption.
   four e2e specs whose premise was "this seeded deal is a shell", which now make their own
   with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
   the demo being filled in.
+- `security-headers` (API suite) — the headers the docs said the front door enforced. It
+  enforced none: the ONLY `add_header` directives in `nginx.conf.template` were five
+  `Cache-Control` lines, with no CSP, no HSTS, no `X-Frame-Options`, no `nosniff` and no
+  `Referrer-Policy`, and no helmet equivalent in the API either — while `docker-compose.yml`
+  and `README.md` both said "nginx is the front door, and the security headers … are enforced
+  there". Two files asserting a protection that does not exist is worse than its absence:
+  somebody reading either stops looking. THE RULE is not presence but the nginx footgun that
+  makes a careful one-liner useless — `add_header` inside a location REPLACES the inherited
+  set rather than adding to it, so a server-level block is dropped by every location that
+  sets a header of its own, and the five that do here are `/assets/` (the JS bundle),
+  `/fonts/`, the image regex, `/ready` and `location /`, which serves index.html. A block at
+  the top alone would have protected every path except the document and its script. So the
+  headers live in `infra/security-headers.conf` and every such location re-includes it, the
+  way they already re-include `client-ip.conf`; the sweep fails naming any that forgets, and
+  removing the include from `location /` names that location unaided. It also demands
+  `always` on every line, or the one response served bare is the error page. HSTS is a
+  VARIABLE, set only when `X-Forwarded-Proto` is https: compose publishes :8080 over plain
+  HTTP and HSTS applies to the host while ignoring the port, so a literal would pin a
+  self-hoster's host — or `localhost` — to HTTPS and lock them out of a stack serving none.
+  The CSP is served `-Report-Only` ON PURPOSE and the file says why: there is no nginx binary
+  and no docker daemon in this environment, so the template is only read as text, and the one
+  clause a wrong policy would break is Stripe's injected card form (`loadStripe` pulls a
+  script from js.stripe.com at runtime), which no spec opens because a card number should
+  reach Stripe and never us. Enforcing a policy whose only untested clause is the one handling
+  money is the wrong way round; dropping `-Report-Only` is the whole of the change once a real
+  deployment reports nothing. NOT PROVEN, and said in the test: that nginx parses the result,
+  or that the policy is right.
+- `env-coverage` (API suite) — every variable the server READS can be supplied by the stacks
+  that run it. Measured over every `process.env.*` in `apps/api/src`: EIGHT reached neither
+  deployment file — `COMPANIES_HOUSE_KEY`, both Xero credentials, all four TrueLayer ones and
+  `RESET_TOKEN`. `xero.ts` and `open-banking.ts` read ONLY the environment (no per-org
+  credential path as EPC and Companies House have), so `xero.status` and `bank.status`
+  answered "not configured on this server" on every deployment however carefully an operator
+  had followed `infra/DEPLOY.md`, and the Integrations screen offered two connections that
+  could not be made to work by any means. `docker-compose.yml` already recorded this exact
+  defect for the TILE_* trio — "setting them did nothing at all" — found by hand and left
+  free to happen eight more times; four more (`ENCRYPTION_KEY`, the TILE_* trio) reached
+  compose but never the LIVE Fly deployment, where the file's comment is the whole of what an
+  operator is told. Same shape as `proxy-coverage` below: a variable and the stack meant to
+  supply it are two files nobody diffs. What "accounted for" MEANS differs per stack and is
+  written down — compose must carry the key in the api service's `environment:` block, which
+  is all that reaches the container; `fly.api.toml` need only name it, since secrets are set
+  with `flyctl secrets set` and what the file carries is their documentation, so a variable
+  recorded there as deliberately absent (`DEMO_MODE`, whose absence makes production refuse
+  to fabricate) counts. The defect is one nobody CONSIDERED, not one somebody decided
+  against, so the rule asks for a decision to be written down and cannot judge it.
+  `CHROMIUM_PATH` is exempt because the image sets it, verified against `api.Dockerfile`.
+  Two bugs this turned up, both caught by guards rather than by hand: compose passes these as
+  `${VAR:-}`, which arrives as an EMPTY STRING, so `??` never fires and
+  `TRUELAYER_AUTH_BASE ?? 'https://…'` would have called the empty string for TrueLayer's
+  hosts — `deployment.test.ts` already held that rule and failed the moment they were
+  plumbed; and that guard's own matcher excluded an empty-string fallback with a lookahead
+  after `\s*`, which backtracked past itself and reported three already-correct sites (the
+  same shape `benchmark-feed-sweep` records). It captures the fallback and judges it now.
 - `proxy-coverage` (API suite) — every raw route is reachable THROUGH THE FRONT DOOR: an
   nginx `location` in production and a vite `proxy` entry in development, checked by first
   path segment against the routes collected the way `raw-route-sweep` collects them. Measured
@@ -659,6 +1019,24 @@ the point, so read the failure rather than adding an exemption.
   where it finds both unaided. Note its matcher reads prose too: a comment writing the
   formula out registers as an offender, so describe the rule in words. Add to its RULES
   when a fourth is found rather than widening the matchers.
+- **The cost plan is DERIVED, and the derivation is the engine's.** `tradeBudgets`
+  (`cost-report.ts`) splits the appraisal's build cost across its trades, last package taking
+  the rounding residual so the budgets sum to the appraised cost TO THE PENNY rather than
+  near it — a plan pennies short reports an overrun nobody earned, on the screen a lender
+  pack is built from. It splits the engine's own `build` figure rather than re-multiplying
+  rate by area, because `build` already carries the build-cost multiplier and a phased
+  scheme's phase builds. Measured before it existed: the arithmetic lived ONLY in
+  `demo-seed-depth.ts`, so the demo had a cost plan and a real firm could not produce one —
+  `cost.upsertPackage` is the browser's only writer and its single call site is the contractor
+  dropdown, which sends no figures, while creating demands a name, a budget and a forecast.
+  Outside the seed the only other writer is the Xero sync, so a firm with no accounting
+  integration was stopped dead, and the empty state told them to go to the appraisal, which
+  creates nothing. Same defect, same file, as `cost.createContractor`. `cost.createPlanFromAppraisal`
+  is the way in, the seed goes through the same function so there is one implementation, and
+  `e2e/cost-plan.spec.ts` presses the button — because what was missing was a CONTROL, and a
+  procedure nobody can reach is a capability the firm does not have. Forecast opens EQUAL to
+  budget: a scheme not yet let is forecast at what it was appraised at, so the variance starts
+  at zero instead of reading as the whole build saved.
 - `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
   is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
   (`rocAtAsking` is null when nobody named an asking price; `projIrr` when the cashflows
@@ -773,6 +1151,13 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 - SQLite dev / Postgres prod: JSON columns are String (JSON.stringify/parse via mappers);
   no native enums.
 - Heavy deps (exceljs, leaflet) must stay lazy-loaded (dynamic import) — never in the main bundle.
+  The same rule bites one level down: importing a VALUE from `@apex/types`'s index pulls the
+  index in for real, zod and all, where importing a `type` from it is erased and costs nothing.
+  The Integrations screen swapped `type IntegrationProvider` for the connector TABLE and
+  `check:bundle` failed naming the route — Integrations grew 60K to 69K, nine-tenths of it
+  schemas a settings screen never opens. `plan`, `asset-classes`, `regions`, `uk-regions` and
+  now `integrations` are separate entry points for exactly this reason; put a browser-read table
+  in its own module rather than raising the baseline.
 - Prisma on alpine needs `apk add openssl` before generate; web image needs tsconfig.base.json
   copied and `prisma generate` run.
 - Docker CLI in sandboxed shells: `export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin"`.

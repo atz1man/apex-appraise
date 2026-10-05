@@ -41,7 +41,7 @@ type Position = {
   position: { committed: number; called: number; distributed: number; portfolioIrr: number | null; dpi: number | null };
   holdings: Array<{ dealName: string; committed: number; irr: number | null }>;
   cashflows: Array<{ kind: string; label: string; amount: number }>;
-  openCapitalCall: { deal: string | null; label: string; amount: number; due: Date } | null;
+  openCapitalCalls: Array<{ deal: string | null; label: string; amount: number; due: Date; overdue: boolean }>;
 };
 
 /** every procedure whose resolver writes a create on the named model */
@@ -130,8 +130,11 @@ describe('from nothing to an LP reading their own position, without the seed', (
     // the history is money that has MOVED: the distribution ten days ago, and not
     // the drawdown notice still ahead of its date, which is the open demand below
     expect(p.cashflows.map((c) => c.label)).toEqual(['Profit distribution']);
-    // the drawdown notice still ahead of its date is the open demand, shown positive
-    expect(p.openCapitalCall).toMatchObject({ label: 'Capital call — drawdown 2', amount: 275_000 });
+    // the drawdown nobody has funded is the open demand, shown positive. It used
+    // to be chosen by date — the day a notice fell due it became a payment in the
+    // statement above — so it is now every call with no `fundedAt`.
+    expect(p.openCapitalCalls).toHaveLength(1);
+    expect(p.openCapitalCalls[0]).toMatchObject({ label: 'Capital call — drawdown 2', amount: 275_000, overdue: false });
   });
 
   it('shows the firm the same figures the LP reads', async () => {

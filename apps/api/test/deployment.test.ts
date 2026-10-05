@@ -145,10 +145,24 @@ describe('an unset variable reaches the code as one', () => {
 
   it.each([['??']])('never falls back with %s on one of them', () => {
     const src = sources();
-    const offenders = emptyDefaulted.filter((key) =>
-      // `process.env.KEY ?? <something that is not empty>`
-      new RegExp(`process\\.env\\.${key}\\s*\\?\\?\\s*(?!['"\`]{2})`).test(src),
-    );
+    /**
+     * The fallback is CAPTURED and then judged, rather than excluded by a
+     * lookahead placed after `\s*`.
+     *
+     * The lookahead version read `\s*(?!['"`]{2})` and reported
+     * `process.env.XERO_CLIENT_ID ?? ''` — a site that is correct — because
+     * `\s*` backtracks to match nothing, which puts the lookahead in front of
+     * ` ''` whose first two characters are a space and a quote. It found three
+     * such sites the moment those variables were empty-defaulted in compose,
+     * each one already written the right way. CLAUDE.md records the same shape
+     * in `benchmark-feed-sweep`: "a lookahead placed after `\s*` backtracked
+     * past itself and matched the very literal it was written to exclude".
+     */
+    const emptyLiteral = /^(''|""|``)$/;
+    const offenders = emptyDefaulted.filter((key) => {
+      const m = src.match(new RegExp(`process\\.env\\.${key}\\s*\\?\\?\\s*(\\S+)`));
+      return !!m && !emptyLiteral.test(m[1]!.replace(/[;,)].*$/, ''));
+    });
     expect(
       offenders,
       `these use ?? against a compose empty-default, so the fallback can never fire: ${offenders.join(', ')}. Use || instead.`,

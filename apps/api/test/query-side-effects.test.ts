@@ -91,7 +91,13 @@ describe('listing integrations', () => {
    */
   it('still lets a firm connect a provider it has no row for', async () => {
     await prisma.integrationConnection.deleteMany({ where: { orgId: A.orgId } });
-    await callerFor(A.principal).integrations.connect('Ordnance Survey' as never);
+    /**
+     * A CONNECTABLE provider, which this used to spell 'Ordnance Survey'. That
+     * is now refused — there is no OS connector in this codebase and
+     * `INTEGRATION_CONNECTORS` says so — and the premise of this case is the
+     * missing ROW, not the provider, so it drives one the server will accept.
+     */
+    await callerFor(A.principal).integrations.connect('Environment Agency' as never);
     const rows = await rowsFor();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('CONNECTED');
@@ -100,7 +106,7 @@ describe('listing integrations', () => {
       connections: Array<{ provider: string }>;
       selfServe: Record<string, unknown>;
     };
-    expect(listed.connections.map((r) => r.provider)).toContain('Ordnance Survey');
+    expect(listed.connections.map((r) => r.provider)).toContain('Environment Agency');
   });
 
   /**
@@ -143,12 +149,13 @@ describe('listing integrations', () => {
     await prisma.integrationConnection.deleteMany({ where: { orgId: A.orgId } });
     const c = callerFor(A.principal);
     const outcomes = await Promise.allSettled([
-      c.integrations.connect('BCIS' as never),
-      c.integrations.connect('BCIS' as never),
-      c.integrations.connect('BCIS' as never),
+      // 'BCIS' before — a provider with no connector, which `connect` refuses now
+      c.integrations.connect('Planning Portal' as never),
+      c.integrations.connect('Planning Portal' as never),
+      c.integrations.connect('Planning Portal' as never),
     ]);
 
-    const rows = (await rowsFor()).filter((r) => r.provider === 'BCIS');
+    const rows = (await rowsFor()).filter((r) => r.provider === 'Planning Portal');
     expect(rows, 'a provider ended up with two rows — a saved key can be read from the wrong one').toHaveLength(1);
 
     /**
