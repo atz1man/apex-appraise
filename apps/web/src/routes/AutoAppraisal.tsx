@@ -429,7 +429,23 @@ export default function AutoAppraisal() {
             U.profile.landTaxModelled ? `${U.terms.landTax} (on land)` : `${U.terms.landTax} (on land, at UK SDLT bands)`,
             fM(ind.sdlt),
           ],
-          ['VAT', 'Opted — neutral', true],
+          /**
+           * VAT is NOT modelled, and this row used to assert it was settled:
+           * "Opted — neutral", greyed but stated, beside figures the engine had
+           * actually computed. That is a substantive professional assertion —
+           * it says the scheme has opted to tax and VAT is therefore cash-
+           * neutral — and for new-build residential, which is zero-rated and
+           * cannot be opted, it is usually wrong. Nothing in the engine computes
+           * VAT and nobody had entered a treatment.
+           *
+           * The honest row is more useful than either the claim or silence: it
+           * tells the valuer the figures are net of VAT and that the treatment
+           * is theirs to determine. Modelling it properly means zero-rated new
+           * residential, standard-rated commercial, the option to tax, partial
+           * exemption and the capital goods scheme — and a VAT figure computed
+           * wrongly under a signature is worse than none.
+           */
+          ['VAT', 'Not modelled — figures are net of VAT', true],
         ]
       : [];
 

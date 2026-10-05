@@ -832,7 +832,15 @@ export default function Landing() {
           body="Drop in drawings, a cost plan and the planning decision. Apex extracts the areas and assumptions, runs the residual appraisal, and hands you a defensible result — or do it all by hand. Your call."
           checks={[
             'GIA take-off, unit mix & values extracted',
-            'CIL, S106, SDLT & VAT computed, not guessed',
+            /*
+             * VAT was in this list and is not computed anywhere: nothing in the
+             * engine models it, and the appraisal's own row said "Opted —
+             * neutral", which asserts a treatment nobody entered. The other
+             * three are real — `cilCharge`, `sdltCommercial` and S106 as a
+             * stated input — and `landing-claims.test.ts` now ties each name
+             * here to the engine export that keeps the promise.
+             */
+            'CIL, S106 & SDLT computed, not guessed',
             'Planning-risk score & recommendation',
           ]}
           mock={<AppraisalMock />}

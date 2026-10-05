@@ -34,9 +34,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (1048). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (313): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (318): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, landing-claims, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -175,6 +175,25 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **A figure the marketing page says this product computes, something computes**
+  (`web/src/lib/landing-claims.test.ts`). `Landing.tsx` listed "CIL, S106, SDLT & VAT computed,
+  not guessed". Three are true — `cilCharge`, `sdltCommercial`, and S106 as a figure stated in the
+  planning agreement and carried into the residual — and nothing anywhere computes VAT; there is
+  no VAT in the engine at all. Worse, the appraisal's own tax table said `['VAT', 'Opted —
+  neutral']` beside figures the engine HAD computed, which is not a missing figure but a
+  substantive professional assertion: it says the scheme has opted to tax and VAT is therefore
+  cash-neutral, and for new-build residential — zero-rated, and not capable of being opted — that
+  is usually wrong. The row now reads "Not modelled — figures are net of VAT", which is more
+  useful than either the claim or silence: it tells the valuer the figures are net and the
+  treatment is theirs. NOT modelled on purpose, and the reason is in the code: doing it properly
+  means zero-rated new residential, standard-rated commercial, the option to tax, partial
+  exemption and the capital goods scheme, and a VAT figure computed wrongly under a signature is
+  worse than none. The guard ties each name in that sentence to the engine export that keeps it,
+  in both directions — the exports exist, and the sentence names nothing the table covers — so
+  putting VAT back needs either a function or a written reason there is none. NOT a general prose
+  check and it could not be: no matcher reads a marketing sentence and decides whether the product
+  keeps its promise; what it does is make adding a name a two-line change. Its "finds what it is
+  meant to find" case runs the same parse over the old sentence and names VAT.
 - **A document the extraction cannot read is NAMED, not dropped**
   (`extraction-documents.test.ts`). The data room's upload control said "PDF, DWG, XLSX · up to
   100 MB. Documents feed the AI extraction", and `documentBlocks` handled pdf, png, jpg and jpeg
