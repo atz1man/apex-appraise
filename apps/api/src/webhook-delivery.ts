@@ -232,6 +232,42 @@ export async function emitWebhook(
 }
 
 /**
+ * What an attempt says about the ENDPOINT, as distinct from the delivery.
+ *
+ * It is a function because BOTH paths below have to write it, and only one did.
+ * The HTTP path stamped the row; the `catch` path — a refused connection, a
+ * DNS failure, a timeout — updated the delivery and never touched the endpoint
+ * at all. So a receiver that ANSWERED, however badly, climbed towards
+ * FAILURE_LIMIT and was parked, while one whose host had simply gone never
+ * did: `failureCount` stayed at zero, `lastAttemptAt` stayed null, the panel
+ * showed a healthy endpoint, and we went on posting deal figures at a dead
+ * address for as long as the workspace kept emitting events. The comment on
+ * the catch block calls that "the likelier failure of the two".
+ *
+ * `failureCount` stays an atomic increment rather than a computed value: two
+ * processes drain at once (see CLAIM_LEASE_MS), and they can be carrying two
+ * deliveries to the same endpoint. The parking decision reads the count as it
+ * was loaded, which is what it has always done.
+ */
+async function recordAttempt(
+  prisma: PrismaClient,
+  endpoint: { id: string; failureCount: number },
+  ok: boolean,
+  at: Date,
+): Promise<void> {
+  await prisma.webhookEndpoint.update({
+    where: { id: endpoint.id },
+    data: {
+      lastAttemptAt: at,
+      // a run of failures parks the endpoint; one success clears the count,
+      // because an integration that recovers should not stay punished
+      failureCount: ok ? 0 : { increment: 1 },
+      ...(!ok && endpoint.failureCount + 1 >= FAILURE_LIMIT ? { active: false } : {}),
+    },
+  });
+}
+
+/**
  * Attempt the pending deliveries.
  *
  * Called on a timer. Deliberately simple: no queue server, because one more piece
@@ -292,16 +328,7 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
           ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
         },
       });
-      await prisma.webhookEndpoint.update({
-        where: { id: d.endpointId },
-        data: {
-          lastAttemptAt: new Date(),
-          // a run of failures parks the endpoint; one success clears the count,
-          // because an integration that recovers should not stay punished
-          failureCount: ok ? 0 : { increment: 1 },
-          ...(!ok && d.endpoint.failureCount + 1 >= FAILURE_LIMIT ? { active: false } : {}),
-        },
-      });
+      await recordAttempt(prisma, d.endpoint, ok, now);
       ok ? sent++ : failed++;
     } catch (e) {
       failed++;
@@ -317,6 +344,8 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
           nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)),
         },
       });
+      // and the endpoint hears about it, which until now it did not
+      await recordAttempt(prisma, d.endpoint, false, now);
     }
   }
   return { sent, failed };

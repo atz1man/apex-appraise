@@ -916,6 +916,51 @@ export const orgRouter = router({
       return { id: row.id, url: row.url, events, secret };
     }),
 
+  /**
+   * Put a parked endpoint back into service.
+   *
+   * `drainWebhooks` sets `active: false` after FAILURE_LIMIT consecutive
+   * failures, and that is right — an endpoint that does not answer should stop
+   * being posted to. NOTHING set it back. Not a procedure, not an admin tool,
+   * not a timer: `active: true` appeared exactly once in this server, as the
+   * column default. So the one way out was Remove and Add again, which mints a
+   * NEW signing secret — a receiver that had been down for an afternoon had to
+   * be re-keyed by hand, in their deployment, before it could verify a
+   * signature again. A customer whose server came back up had no way to tell
+   * us so.
+   *
+   * The URL is re-checked here rather than trusted from when it was added.
+   * `outbound.ts` holds that rule — DNS moves, so the answer is only true at
+   * the moment it is given — and a resume IS one of those moments: it is the
+   * act of pointing this server at that address again.
+   */
+  resumeWebhook: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const row = await assertOwned(ctx.prisma.webhookEndpoint, input.id, ctx.principal.orgId);
+    try {
+      await assertPublicHttpsUrl(row.url);
+    } catch (e) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: e instanceof OutboundUrlError ? e.message : 'That webhook URL cannot be used.',
+      });
+    }
+    await ctx.prisma.webhookEndpoint.update({
+      where: { id: row.id },
+      /**
+       * The count goes with it. Resuming on twenty failures would park the
+       * endpoint again on its first delivery, which is a button that appears
+       * to work and does nothing — the shape of defect this whole procedure
+       * exists to end.
+       */
+      data: { active: true, failureCount: 0 },
+    });
+    await recordAudit(ctx.prisma, {
+      orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'resumed a webhook endpoint', target: row.url, ip: ctx.ip,
+    });
+    return { ok: true };
+  }),
+
   deleteWebhook: adminProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const row = await assertOwned(ctx.prisma.webhookEndpoint, input.id, ctx.principal.orgId);
     await ctx.prisma.webhookDelivery.deleteMany({ where: { endpointId: row.id } });
