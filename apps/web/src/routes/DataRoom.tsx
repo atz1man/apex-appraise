@@ -293,7 +293,12 @@ export default function DataRoom() {
                   {uploading ? 'Uploading…' : 'Drop drawings, cost plans or planning docs here'}
                 </div>
                 <div className="mt-0.5 text-[12px] text-ink-3">
-                  PDF, DWG, XLSX · up to 100 MB. Documents feed the AI extraction.{' '}
+                  {/* it said "PDF, DWG, XLSX · up to 100 MB. Documents feed the AI
+                      extraction", and a DWG was dropped from the extraction by a
+                      silent `continue`: it is binary CAD with no text to read. It
+                      is still worth storing here; it is not an input. */}
+                  PDF, XLSX, PNG, JPG · up to 100 MB — these feed the AI extraction. DWG and other formats are stored and
+                  shared, but cannot be read.{' '}
                   <button
                     className="text-brand-ink font-semibold hover:text-brand-ink"
                     onClick={(e) => {
