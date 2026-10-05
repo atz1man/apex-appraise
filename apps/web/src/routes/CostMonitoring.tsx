@@ -277,10 +277,26 @@ export default function CostMonitoring() {
         headers: { authorization: `Bearer ${getToken() ?? ''}` },
         body: form,
       });
-      if (res.ok) {
-        setPhotoCap('');
-        utils.photos.list.invalidate(dealId);
+      /**
+       * A failed upload SAYS so. This was `if (res.ok) { … }` with no else: the
+       * spinner stopped, the caption stayed in the box, no photograph appeared
+       * and nothing said why — so a surveyor on a phone with a dropped
+       * connection had no way to tell a refused upload from a slow one. The site
+       * log is what a disputed valuation of works-in-progress is argued from, by
+       * this route's own account of it.
+       *
+       * The data room's upload, the logo upload and the field app's shutter all
+       * already reported a failure; this was the one that did not, which is what
+       * makes it an omission rather than a decision.
+       */
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Upload failed (${res.status})`);
       }
+      setPhotoCap('');
+      utils.photos.list.invalidate(dealId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The photograph could not be uploaded — nothing has been added.');
     } finally {
       setPhotoUploading(false);
       if (photoFileRef.current) photoFileRef.current.value = '';

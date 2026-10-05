@@ -34,9 +34,9 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (1048). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (318): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (325): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, landing-claims, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -175,6 +175,22 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **An upload that fails says so** (`web/src/lib/upload-failure.test.ts`). tRPC mutations get this
+  free — the link chain toasts a rejection into the live regions `announcements` mounted — but the
+  four places this app POSTs a FILE are raw `fetch` calls outside that chain. Three reported a
+  failure; the cost monitor's site-photo upload was `if (res.ok) { … }` with no else, so the
+  spinner stopped, the caption stayed in the box, no photograph appeared and nothing said why — a
+  surveyor on a phone with a dropped connection could not tell a refused upload from a slow one,
+  on the log that route's own comment calls "what a disputed valuation of works-in-progress is
+  argued from". Three siblings getting it right is what makes the fourth an omission, the same
+  argument `destructive` makes about its four unguarded controls. The window is 600 characters of
+  CONTENT after the fetch, not of raw text: comments are blanked rather than removed so line
+  numbers stay true, and the first version measured those blanks — the paragraph explaining the fix
+  sat between the fetch and its `if (!res.ok)` and pushed the check out of range, so the sweep
+  reported the very site it was written for. `provenance-sweep`'s helper window was the same
+  mistake with a different number; a fixed character count is a guess about how far away the thing
+  you are looking for is. NOT PROVEN and said in the test: that the message reaches anybody — a
+  `throw` into a swallowing `catch` passes it. The audible channel is `announcements`' business.
 - **A figure the marketing page says this product computes, something computes**
   (`web/src/lib/landing-claims.test.ts`). `Landing.tsx` listed "CIL, S106, SDLT & VAT computed,
   not guessed". Three are true — `cilCharge`, `sdltCommercial`, and S106 as a figure stated in the
