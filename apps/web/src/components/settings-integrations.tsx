@@ -639,21 +639,39 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
         </label>
       </div>
 
-      <label className="mt-3 flex items-start gap-2 text-[12px]">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={form.enforced}
-          onChange={(e) => setForm({ ...form, enforced: e.target.checked })}
-        />
-        <span>
-          <b className="font-semibold">Require single sign-on.</b>{' '}
-          <span className="text-ink-2">
-            Password sign-in is refused for everyone here, including accounts that already have one. Make sure you can sign
-            in this way before turning it on.
-          </span>
-        </span>
-      </label>
+      {/*
+        The switch is UNAVAILABLE until a sign-in has succeeded through this
+        connection, because turning it on refuses every password in the
+        workspace — and turning it back off needs an admin who can sign in,
+        which by then means only through the identity provider. The copy used to
+        say "make sure you can sign in this way before turning it on", which put
+        the whole weight of a permanent lockout on the administrator reading
+        carefully. `org.saveSso` refuses it too; this is so the reason is on
+        screen rather than arriving as a rejected save.
+      */}
+      {(() => {
+        const proven = !!sso?.lastLoginAt || !!sso?.enforced;
+        return (
+          <label className="mt-3 flex items-start gap-2 text-[12px]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.enforced}
+              disabled={!proven}
+              onChange={(e) => setForm({ ...form, enforced: e.target.checked })}
+            />
+            <span>
+              <b className="font-semibold">Require single sign-on.</b>{' '}
+              <span className="text-ink-2">
+                Password sign-in is refused for everyone here, including accounts that already have one.
+                {proven
+                  ? ' Turning it off again needs an admin who can sign in, so it will have to be through this provider.'
+                  : ' Save this configuration and sign in with it once first — until a sign-in has succeeded, enforcing it would lock this workspace out with no way back in.'}
+              </span>
+            </span>
+          </label>
+        );
+      })()}
 
       <div className="mt-3 flex items-center gap-2">
         <Button writes

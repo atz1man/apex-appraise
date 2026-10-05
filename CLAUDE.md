@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (955). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (962). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (295): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -175,6 +175,27 @@ the point, so read the failure rather than adding an exemption.
   vs delete vs refuse-once-approved is the firm's decision, not this sweep's.
 - `cascade` — every model appears in the GDPR delete list and the seed wipe list.
 - `isolation-sweep` — every procedure refuses another firm's ids.
+- **Enforcing single sign-on is a one-way door, so it cannot be opened onto a connection
+  nobody has walked through.** `enforced` makes `auth.login` refuse EVERY password in the
+  workspace, and `requestPasswordReset` deliberately issues no token to a firm that does not
+  use passwords — so turning it back off needs `org.saveSso` or `org.deleteSso`, both
+  `adminProcedure`, reachable only by an admin who can sign IN, which by then means only
+  through the identity provider. A wrong issuer, a wrong client id or an IdP that is simply
+  down locked a firm out of its own workspace PERMANENTLY, and nothing stopped an
+  administrator arriving there in one save on a configuration nobody had tested. `a9cbb50`
+  found the lockout and answered it with the optimistic stamp, which stops a SECOND admin
+  restoring the switch — not a first admin setting it. The precondition is `lastLoginAt`,
+  stamped by the SSO callback the moment a sign-in resolves to a user: exactly "has this ever
+  worked", already stored, already shown in the panel, so no new state. The control is not
+  widened — the door still refuses every password once locked; you cannot lock it until it has
+  been opened once with the new key. Only the TRANSITION is guarded, because refusing a domain
+  edit on an already-enforced connection would refuse it for a condition the firm is already
+  living in. The panel disables the switch and says why, rather than letting the save be
+  rejected. STILL OPEN and not pretended otherwise: changing the issuer or client id of an
+  ALREADY enforced connection locks a firm out by the same route, and no precondition can tell
+  a broken edit from a legitimate migration to a new provider — that one needs a recovery path,
+  and until there is one the answer is the platform operator clearing `enforced` in the
+  database.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because

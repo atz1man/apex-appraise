@@ -1023,6 +1023,47 @@ export const orgRouter = router({
           advice: 'Reload to see the current settings before saving yours — nothing you can see here has been lost.',
         });
       }
+      /**
+       * Enforcement cannot be switched on until the connection has been PROVEN
+       * to work, which means somebody has signed in through it at least once.
+       *
+       * `enforced` is the switch that makes `auth.login` refuse every password
+       * in the workspace, and `requestPasswordReset` deliberately issues no
+       * token to a firm that does not use passwords. Turning it back off needs
+       * `org.saveSso` or `org.deleteSso` — both `adminProcedure`, reachable only
+       * by an admin who can sign IN, which by then means only through the
+       * identity provider. So a wrong issuer, a wrong client id or an IdP that
+       * is simply down locked the whole firm out of its own workspace
+       * permanently, and nothing stopped an administrator from arriving there in
+       * one save on a configuration nobody had ever tested. `a9cbb50` found the
+       * lockout and answered it with the optimistic stamp above, which stops a
+       * SECOND admin restoring the switch — not a first admin setting it.
+       *
+       * `lastLoginAt` is stamped by `auth.ssoCallback` the moment a sign-in
+       * resolves to a user, so it is exactly "has this ever worked", and the
+       * panel already shows it. No new state, and no weakening of the control:
+       * the door still refuses every password once locked. You just cannot lock
+       * it until it has been opened once with the new key.
+       *
+       * Only the TRANSITION is guarded. A connection already enforced keeps its
+       * setting through an unrelated edit — refusing a domain change because of
+       * a condition the firm is already living in helps nobody.
+       *
+       * STILL OPEN, and not pretended otherwise: changing the issuer or the
+       * client id of an ALREADY enforced connection can lock a firm out by the
+       * same route, and no guard here can tell a broken edit from a legitimate
+       * migration to a new identity provider. That one needs a recovery path
+       * rather than a precondition, and until there is one the answer is the
+       * platform operator clearing `enforced` in the database.
+       */
+      if (input.enforced && !existing?.enforced && !existing?.lastLoginAt) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message:
+            'Sign in with single sign-on once before enforcing it. Until a sign-in has succeeded, ' +
+            'enforcing would refuse every password in this workspace with no way back in.',
+        });
+      }
       const data = {
         issuer: input.issuer.replace(/\/$/, ''),
         clientId: input.clientId,
