@@ -99,15 +99,15 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, ~1,700 tests plus 194 browser specs. All of them run in CI on every PR.
+Five suites, ~1,720 tests plus 195 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
 | Engine | `pnpm --filter @apex/appraisal-engine test` | 296 |
 | API | `cd apps/api && npx vitest run` | 1055 |
-| Web unit | `cd apps/web && npx vitest run` | 325 |
+| Web unit | `cd apps/web && npx vitest run` | 351 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 194 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 195 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase
@@ -131,10 +131,13 @@ pinned build and the installed one disagree.
   spec. Conversion happens once in the API mappers (`P`/`toPence`).
 - **Auth** is credential + JWT (scrypt, lockout). Swap for Auth.js/Clerk for SSO/MFA.
 - The field app ships as an installable PWA route (`/field`, manifest included);
-  a native Expo build is a packaging exercise on the same API.
-- Integrations run in demo/mock mode without credentials (Land Registry → PPD
-  comparables, EPC → linked certificate, AVM → cross-check comp), behind the same
-  interface a production connector would implement.
+  a native Expo build is a packaging exercise on the same API. A photograph taken
+  with no signal is held in IndexedDB and uploaded when the connection returns, so
+  closing the tab does not lose it.
+- Integrations that have a real connector are listed with what they feed, and the
+  rest say what does the job instead — a green dot is a claim about a capability.
+  Sample figures are written only where the deployment has opted in
+  (`demoFallbacksAllowed()`) and only into rows that say so in their own text.
 
 ## Env vars (apps/api)
 

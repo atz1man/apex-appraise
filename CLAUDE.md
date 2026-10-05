@@ -34,14 +34,14 @@ memory, or commits between the two.
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (1055). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (325): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (351): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, inspection-photos, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, photo-queue, photo-drain, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (194, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (195, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -276,8 +276,7 @@ the point, so read the failure rather than adding an exemption.
   The demo seed marks its two historic drawdowns funded a few days after each fell due; without
   that the demo's paid calls would read as months overdue and drop out of the LP's statement
   altogether. Five mutants recorded, including both halves of the date rule.
-- **The field app takes photographs** (`inspection-photos.test.ts` + `inspection-photos.spec.ts`
-  + `e2e/field-photos.spec.ts`). Its shutter did `photos + 1`: the viewfinder was a static
+- **The field app takes photographs** (`e2e/field-photos.spec.ts`). Its shutter did `photos + 1`: the viewfinder was a static
   gradient (`placeholderGradients.street`) with framing marks drawn over it and a chip reading
   "CAPTURING · KITCHEN", the thumbnails were three more gradients drawn `Math.min(photos, 3)`
   times, and the inspection reached the workbench reporting "12 photos" of a property nobody had
@@ -294,14 +293,18 @@ the point, so read the failure rather than adding an exemption.
   `inspections.save` verifies every id against `SitePhoto` on this deal AND this org (two
   independent inputs, `auth/owned.ts`) and refuses the whole save rather than dropping the
   unknown ids, because filing eight of the twelve photographs a surveyor took is the quietest
-  possible way to lose evidence. `lib/inspection-photos.ts` holds the judgement worth testing at
+  possible way to lose evidence. `lib/inspection-photos.ts` held the judgement worth testing at
   its boundaries: a photograph exists for this inspection only once the SERVER holds it, so a
   shot in flight blocks the send (it is seconds away) and a FAILED one does not (a phone with no
   signal must not be able to trap a day's work on the device) — the record then says how many
-  photographs it has rather than how many were taken. Old rows carrying `photos: 12` read as an
-  empty list and that loses nothing: the count was of photographs never taken. NOT durable across
-  a reload, and said rather than papered over — the blob is in memory, so an unuploaded shot is
-  lost if the tab closes; IndexedDB and a drain queue is the real answer to a day out of signal.
+  photographs it has rather than how many were taken. That file is GONE, folded into
+  `lib/photo-queue.ts` by the queue below: with the blob on the device a failure is not a
+  dilemma, and what was left of `canSend` once the `failed` state went was `!== 'uploading'`
+  against an array nothing could put anything in. Its reasoning survives, in `canSend` and in
+  `queueSentence`'s first branch; what went is a module that read as coverage. Old rows carrying `photos: 12` read as an
+  empty list and that loses nothing: the count was of photographs never taken. Durable across a
+  reload since the queue below; that commit's own caveat ("the blob is in memory, so an unuploaded
+  shot is lost if the tab closes") no longer holds.
   The demo seed wrote a count too (`1 + ((r + i) % 3)`) and now files none, which is the truth.
   Two things this turned up: `accessible-names`' comment-stripper read `accept="image/*"` as a
   block-comment opener and blanked everything to the next comment close — it reported a LABELLED
@@ -310,6 +313,69 @@ the point, so read the failure rather than adding an exemption.
   which worked once and then opened a deal left behind by the previous run (measured: three
   photographs on screen, zero `SitePhoto` rows on the deal under test) — they open it by its
   exact unique name.
+- **A photograph taken out of signal survives the tab closing** (`photo-queue.test.ts` +
+  `photo-drain.test.ts` + `e2e/field-offline.spec.ts`). The camera above held its blob in an
+  object URL in React state, and that commit said so rather than papering over it — so a surveyor
+  who lost signal in a basement, finished the inspection and closed the tab lost every photograph
+  they had taken, silently, on the evidence `audit.ts` names a lender's credit committee and an
+  RICS review as the readers of. IndexedDB is the only browser store that holds a Blob
+  (`localStorage` takes strings, base64 is a third larger against a 5 MB shared budget, and a
+  camera photograph is 2–4 MB), with the in-memory store as the FALLBACK rather than the plan: a
+  private window or a full quota loses durability, not the camera. Two things make the queue
+  honest rather than merely present, and each is a test file. IT NEVER GIVES UP — no attempt limit
+  and no expiry, because a queue that drops a photograph after five tries recreates the defect it
+  was built to end, quietly, at the moment the surveyor has stopped watching; it backs off instead
+  (0s, 5s, 15s, 1m, 5m, capped at 15m, since a phone retrying every second for an afternoon is a
+  flat battery, which loses the photographs by another route), and `backoffFor` is asserted finite
+  at every attempt count. And UPLOADED IS NOT FILED — a record stays in the store carrying its
+  `photoId` until the inspection NAMES it, because deleting on upload loses the attribution and
+  leaves a photograph in the deal's site log with nothing saying which room it is of. `drainOnce`
+  runs for EVERY deal (a surveyor who regains signal in the car must not have to open three deals
+  to flush them) and the room is written separately, while that inspection is in hand, BY NAME:
+  the stored index is positional and the room list is rebuilt from the inspection on every open,
+  so an index alone can file a kitchen as a basement, and a room that has gone leaves the
+  photograph unattributed rather than attached to whatever now sits at that index.
+  `forgetAttributed` is called with the ids the SERVER returned, never with what the screen held,
+  because `inspections.save` verifies every id and refuses the whole save if one is unknown.
+  The send is held ONLY by an upload in flight, which is seconds and is the one case that
+  matters: the server is about to hold the photograph, so a save taken now names an inspection
+  short of it and the attribution would wait for a next save the surveyor, being finished, may
+  never make. A merely QUEUED photograph does not hold it, and that is the reasoning that
+  changed — it used to be "a phone with no signal must not trap a day's work on the device",
+  true but a choice between two losses, because the blob was in memory. The in-flight set lives
+  in the component and is cleared in a `finally`, since a throw in the uploader would otherwise
+  hold the send for the rest of the session on a photograph nothing is doing.
+  `bringForward` spends the backoff on the `online` event — the backoff was waiting for exactly
+  that, and one that outlives its reason is just a wait — while leaving the attempt COUNT alone,
+  so a connection that turns out not to reach this server does not go back to a one-second retry.
+  It sets `queuedAt` to `now - backoffFor(attempts)` rather than to 0, which is the correction the
+  test made: `queuedAt: 0` is "due now" only because a real clock is thirteen digits. There is no
+  Retry button, deliberately — the blob is on the device and the drain is on a timer, so a control
+  whose only effect is to ask sooner is furniture. Two defects this turned up: the area checklist
+  rendered `{r.photos} ph`, and `photos` is a LIST now, so React concatenated the ids and the row
+  read "cmx1…cmx2… ph" — a type cannot see it, since JSX children accept an array of strings; and
+  the reassurance that the photograph is safe was only on the VALUATION screen, two taps from the
+  dimmed tile it explains; and a WAITING thumbnail was a grey square where the old failed-shot
+  tile had shown the photograph, which is how a blurred shot of the floor gets caught. The object
+  URLs for those previews are minted and revoked OUTSIDE any `setState` updater — React
+  double-invokes those under StrictMode, which leaks one URL per shot or revokes one still on
+  screen, and the built app CI drives has no StrictMode to show it — and the chip over the image
+  is an OPAQUE band rather than a scrim, because a translucent label's contrast depends on the
+  photograph under it, which `e2e/contrast.spec.ts` cannot measure and a surveyor cannot control.
+  `photo-store.ts`'s `patch` reads and writes in ONE transaction: a get in its own transaction
+  followed by a put in another is a read-modify-write with a gap, and the two writes that land in
+  it are `photoId` from a success and `attempts` from a failure. NOT closed and said rather than
+  implied: two TABS share the store and could both upload the same record, filing the photograph
+  twice — the drain guard is per-tab and a claim needs a lease with an expiry, since a tab that
+  dies holding one must not park the photograph for ever. A visible duplicate in the site log is
+  the right way round for that to fail. NOT PROVEN by the browser half, and said in the spec: dropping
+  `bringForward` passes it (the 20s timer drains the queue anyway, in 24.3s against 6.6s — a
+  deadline below the interval would discriminate it only probabilistically), and attributing by
+  the stored index passes it too, because the spec's room list has not changed since the
+  photograph was taken and so index and name agree. Both are `lib/`'s to prove and both are
+  proven there. STILL OPEN: the drain writes an uploaded id into local `rooms` state, so a
+  photograph that lands after the inspection was last saved reaches the server on the NEXT save —
+  there is no background re-save of an inspection nobody is looking at.
 - **A client-facing screen shows no contact detail that is not in the record**
   (`web/src/lib/client-contact.test.ts`). The buyer portal's contact card was typed into the
   page: "Sarah Reeve · Sales progressor — your point of contact through to completion",
