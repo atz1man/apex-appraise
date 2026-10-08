@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc';
 import { useToast } from './Toast';
 import { Button, FormError, Panel, PlanLocked, StatusChip , writeAttrs} from './ui';
 import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
+import { codeCount, recoveryStatus } from '../lib/sso-recovery';
 
 /**
  * The three surfaces that make Apex something other systems talk to: API keys,
@@ -576,6 +577,17 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
    * heavyweight removals use — a member, an investor, a contractor.
    */
   const [removing, setRemoving] = useState(false);
+  /**
+   * The codes, held for exactly as long as the admin is looking at them.
+   *
+   * In component state and nowhere else: only digests are stored server-side and
+   * nothing can recover a code from one, so this is the single moment they
+   * exist in readable form. Putting them in `localStorage` to survive a reload
+   * would be keeping the key to the workspace inside the workspace, which is the
+   * circle the printed sheet exists to break.
+   */
+  const [fresh, setFresh] = useState<string[] | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     if (!sso || loaded) return;
@@ -598,6 +610,16 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
       setStamp(res.updatedAt ? new Date(res.updatedAt) : null);
       toast.success('Single sign-on saved.');
       setForm((f) => ({ ...f, clientSecret: '' }));
+      // minted by the save that turned enforcement on, and returned once
+      if (res.recoveryCodes?.length) setFresh(res.recoveryCodes);
+      void utils.org.ssoConfig.invalidate();
+    },
+  });
+  const regenerate = trpc.org.regenerateSsoRecoveryCodes.useMutation({
+    onSuccess: (res) => {
+      setFresh(res.codes);
+      setRegenerating(false);
+      toast.push('info', 'New recovery codes generated. The previous set no longer works.');
       void utils.org.ssoConfig.invalidate();
     },
   });
@@ -702,6 +724,122 @@ export function SsoPanel({ isAdmin }: { isAdmin: boolean }) {
               </span>
             </span>
           </label>
+        );
+      })()}
+
+      {/**
+        * Recovery codes: the way back in when the provider will not let anyone in.
+        *
+        * This section is the half of the lockout problem a precondition cannot
+        * reach. The switch above refuses enforcement on a connection nobody has
+        * signed in through, which stops a firm ARRIVING at a lockout — it cannot
+        * help with a changed issuer, an expired certificate or an IdP that is
+        * simply down, and no check here could: an outage passes every test there
+        * is, and an issuer edit is indistinguishable from a migration to a new
+        * provider. `lib/sso-recovery.ts` holds which states are worth saying
+        * something about, and `apps/api/src/auth/sso-recovery.ts` why they exist.
+        */}
+      {(() => {
+        const status = recoveryStatus({
+          hasConnection: !!sso,
+          enforced: !!sso?.enforced,
+          remaining: sso?.recoveryCodesRemaining ?? 0,
+        });
+        if (!sso) return null;
+        return (
+          <div className="mt-3.5 pt-3.5" style={{ borderTop: '1px solid rgb(var(--border-std, 236 235 229))' }}>
+            {/* h3, not h4: this sits directly under `Panel level={2}`’s own heading, and
+                h2 → h4 is a gap in the outline a screen reader traverses. `headings`
+                cannot see it — the panel renders its tag in `ui.tsx` — but
+                `e2e/headings.spec.ts` walks what is rendered. */}
+            <h3 className="text-[12.5px] font-semibold">Recovery codes</h3>
+            {status && (
+              /* an ALERT is announced: a firm that has run out looks perfectly
+                 healthy on this screen, which is exactly why a colour is not
+                 enough — see `announcements` */
+              status.level === 'alert' ? (
+                <FormError className="mt-1.5">{status.text}</FormError>
+              ) : (
+                <p className={`mt-1.5 text-[11.5px] leading-relaxed ${status.level === 'warn' ? 'text-status-amber' : 'text-ink-2'}`}>
+                  {status.text}
+                </p>
+              )
+            )}
+            {/* only where the firm holds none: with a sheet in hand the status
+                line above already says what they have, and saying both reads as
+                a contradiction */}
+            {!sso.enforced && sso.recoveryCodesRemaining === 0 && (
+              <p className="mt-1.5 text-[11.5px] text-ink-2 leading-relaxed">
+                Codes are generated when you require single sign-on. Until then passwords still work, so
+                there is nothing to recover from.
+              </p>
+            )}
+
+            {/**
+              * Shown ONCE, and the copy says so because it is true rather than
+              * cautious: the server keeps only digests and nothing can turn one
+              * back into a code. There is no "show again" to offer.
+              */}
+            {fresh && (
+              <div
+                role="status"
+                className="mt-2.5 rounded-[11px] p-3"
+                style={{ background: 'rgb(var(--sunken-2, 246 245 241))', border: '1px solid rgb(var(--brand-ink, 20 80 59))' }}
+              >
+                <div className="text-[11.5px] font-semibold">
+                  {codeCount(fresh.length)} — copy these now. They cannot be shown again.
+                </div>
+                <div className="mt-1 text-[11px] text-ink-2 leading-relaxed">
+                  Keep them somewhere outside this workspace: printed, or in a password manager. Each one
+                  signs an admin in once, without the identity provider.
+                </div>
+                <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                  {fresh.map((c) => (
+                    <li key={c} className="fig text-[13px] tracking-[0.5px]">{c}</li>
+                  ))}
+                </ul>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(fresh.join('\n')).then(
+                        () => toast.success('Recovery codes copied.'),
+                        // a refused clipboard must not read as a copy that worked:
+                        // the codes are on screen and this is the only chance to take them
+                        () => toast.push('error', 'Could not copy — select the codes above and copy them by hand.'),
+                      );
+                    }}
+                  >
+                    Copy
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setFresh(null)}>I have saved them</Button>
+                </div>
+              </div>
+            )}
+
+            {!fresh && (
+              <div className="mt-2.5 flex items-center gap-2">
+                {regenerating ? (
+                  <>
+                    <span className="text-[11.5px] text-ink-2">
+                      {sso.recoveryCodesRemaining > 0
+                        ? `The ${codeCount(sso.recoveryCodesRemaining)} you hold now will stop working.`
+                        : 'A new set will be shown once.'}
+                    </span>
+                    <Button writes size="sm" variant="danger" loading={regenerate.isPending} onClick={() => regenerate.mutate()}>
+                      Generate new codes
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setRegenerating(false)}>Cancel</Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="secondary" onClick={() => setRegenerating(true)}>
+                    {sso.recoveryCodesRemaining > 0 ? 'Generate new codes…' : 'Generate codes…'}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         );
       })()}
 

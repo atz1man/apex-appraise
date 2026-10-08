@@ -187,6 +187,29 @@ export function ssoResetEmail(name: string, appUrl: string) {
   };
 }
 
+/**
+ * A break-glass sign-in happened, and every admin is told.
+ *
+ * Sent to all of them rather than only the person who did it, because the one
+ * who most needs to know is the admin who did NOT. It names no code and carries
+ * no link: there is nothing to act on except knowing, and a link in a message
+ * about a credential being used is how the next phishing attempt gets written.
+ */
+export function recoveryUsedEmail(name: string, codesLeft: number, appUrl: string) {
+  return {
+    subject: 'A single sign-on recovery code was used',
+    text:
+      `${name} signed in to your Apex Appraise workspace using a single sign-on recovery code.\n\n`
+      + 'Recovery codes exist for when your identity provider will not let anyone in. A code can be '
+      + 'used once, and this one has now been spent.\n\n'
+      + `${codesLeft} ${codesLeft === 1 ? 'code remains' : 'codes remain'}.\n\n`
+      + 'If this was expected, nothing needs doing — check that single sign-on is working again, and '
+      + `generate a fresh set under Settings when you are running low: ${appUrl}/settings\n\n`
+      + 'If it was NOT expected, treat the printed codes as compromised: sign in, generate a new set '
+      + 'to withdraw the old ones, and review the audit trail in Settings.\n',
+  };
+}
+
 export function resetEmail(name: string, appUrl: string, token: string) {
   const link = `${appUrl}/reset?token=${token}`;
   return {

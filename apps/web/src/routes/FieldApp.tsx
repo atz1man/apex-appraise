@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom';
 import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal, getToken } from '../lib/trpc';
-import { canSend, pendingWarning, savedPhotoIds, shotTally, type Shot } from '../lib/inspection-photos';
+import { awaitingAttribution, canSend, queueSentence, roomIndexFor, type QueuedPhoto } from '../lib/photo-queue';
+import { bringForward, drainOnce, forgetAttributed } from '../lib/photo-drain';
+import { indexedDbPhotoStore, memoryPhotoStore, type PhotoStore } from '../lib/photo-store';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
@@ -223,6 +225,20 @@ export default function FieldApp() {
     onSuccess: (res) => {
       setHeld(res.updatedAt);
       utils.inspections.get.invalidate();
+      /**
+       * Forget the queue records this save has FILED — and only on the strength
+       * of the response.
+       *
+       * `inspections.save` verifies every photograph id against `SitePhoto` and
+       * refuses the whole save if one is unknown, so the ids that come BACK are
+       * the only proof the inspection names them. Clearing the queue on what the
+       * screen was holding would, on a refused save, lose the attribution of a
+       * photograph that is safely uploaded — and nothing would ever put it back.
+       */
+      const named = res.rooms.flatMap((r) => r.photos);
+      void forgetAttributed(storeRef.current!, named).then((gone) => {
+        if (gone) void refreshQueue();
+      });
     },
   });
 
@@ -250,9 +266,6 @@ export default function FieldApp() {
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [cameraState, setCameraState] = useState<'off' | 'live' | 'unavailable'>('off');
-  /** Shots this session, per room index. Ids reach the inspection; blobs do not. */
-  const [shots, setShots] = useState<Record<number, Shot[]>>({});
-  const roomShots = shots[current] ?? [];
 
   /**
    * The stream is released when the inspection screen closes.
@@ -295,61 +308,205 @@ export default function FieldApp() {
   }, [screen, stopCamera]);
 
   /**
-   * Upload one photograph and record what came back.
+   * Where a photograph waits for a connection.
    *
-   * The shot is in the list from the moment it is taken, marked `uploading`, so
-   * the surveyor sees it immediately — but `savedPhotoIds` will not name it until
-   * the server answers with an id, which is the whole rule
-   * (`lib/inspection-photos.ts`). A failure leaves it `failed` with its local
-   * preview and a Retry; it is NOT silently dropped, and it is not counted either.
-   *
-   * NOT durable across a reload, and said rather than papered over: the blob is
-   * in memory, so a shot that has not uploaded is lost if the tab closes. Holding
-   * it in IndexedDB and draining a queue is the real answer to a day spent out of
-   * signal and is a larger piece of work than this; what this does is make the
-   * state visible instead of claiming the photograph was filed.
+   * IndexedDB, with the in-memory store as the fallback — a browser that refuses
+   * it (a private window, a full quota) loses durability, not the camera. Chosen
+   * once per mount, because the store is identity for the drain.
    */
-  const uploadShot = useCallback(
-    async (roomIndex: number, localId: string, blob: Blob, roomName: string) => {
-      const form = new FormData();
-      form.append('dealId', dealId);
-      form.append('caption', `${roomName} — site inspection`);
-      form.append('takenAt', new Date().toISOString().slice(0, 10));
-      form.append('file', blob, `${localId}.jpg`);
-      try {
-        const res = await fetch('/uploads/photo', {
-          method: 'POST',
-          headers: { authorization: `Bearer ${getToken() ?? ''}` },
-          body: form,
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const { id } = (await res.json()) as { id: string };
-        setShots((s) => ({
-          ...s,
-          [roomIndex]: (s[roomIndex] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'saved', photoId: id } : x)),
-        }));
-        setRooms((rs) => rs.map((r, j) => (j === roomIndex ? { ...r, photos: [...r.photos, id] } : r)));
-        utils.photos.list.invalidate(dealId);
-      } catch {
-        setShots((s) => ({
-          ...s,
-          [roomIndex]: (s[roomIndex] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'failed' } : x)),
-        }));
-      }
+  const storeRef = useRef<PhotoStore | null>(null);
+  if (!storeRef.current) {
+    storeRef.current = typeof indexedDB === 'undefined' ? memoryPhotoStore() : indexedDbPhotoStore;
+  }
+  const [queued, setQueued] = useState<QueuedPhoto[]>([]);
+  /** Records whose upload is in the air right now — what holds the send. */
+  const [inFlight, setInFlight] = useState<string[]>([]);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+
+  /**
+   * Local previews of what is still waiting, so a WAITING thumbnail is the
+   * PHOTOGRAPH and not a grey square.
+   *
+   * A review thumbnail is how a surveyor catches a blurred shot of the floor,
+   * and it is needed most on the one the server has not got yet. The URLs are
+   * minted and revoked HERE rather than inside a `setState` updater: React
+   * double-invokes those under StrictMode, which would leak one URL per shot or
+   * revoke one still on screen, and the built app CI drives has no StrictMode to
+   * show it (`CLAUDE.md` records that asymmetry). The ref is the authority;
+   * state is only how the render learns.
+   */
+  const previewsRef = useRef<Record<string, string>>({});
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  /** The queue as the screen reads it, refreshed after anything touches the store. */
+  const refreshQueue = useCallback(async () => {
+    const rows = await storeRef.current!.all();
+    setQueued(rows.map((r) => r.record));
+    const prev = previewsRef.current;
+    const next: Record<string, string> = {};
+    for (const { record, blob } of rows) {
+      // an uploaded one is shown from the server's own signed URL instead
+      if (record.photoId) continue;
+      next[record.localId] = prev[record.localId] ?? URL.createObjectURL(blob);
+    }
+    for (const [id, url] of Object.entries(prev)) if (!next[id]) URL.revokeObjectURL(url);
+    previewsRef.current = next;
+    setPreviews(next);
+    return rows;
+  }, []);
+
+  // and released when the app closes, whatever state the queue is in
+  useEffect(
+    () => () => {
+      for (const url of Object.values(previewsRef.current)) URL.revokeObjectURL(url);
+      previewsRef.current = {};
     },
-    [dealId, utils],
+    [],
   );
 
+  /**
+   * One pass of the queue: upload what is due, then show what came back.
+   *
+   * `drainOnce` owns the record bookkeeping (`lib/photo-drain.ts`); this owns the
+   * token, the route and what the screen does with the answer. It runs for EVERY
+   * deal, not just the one open — a surveyor who regains signal in the car must
+   * not have to open three deals to flush them — and the attribution to a room
+   * happens separately, below, because a room can only be written while its
+   * inspection is in hand.
+   */
+  const draining = useRef(false);
+  const drain = useCallback(async () => {
+    if (draining.current) return;
+    draining.current = true;
+    try {
+      await drainOnce(storeRef.current!, async (record, blob) => {
+        setInFlight((f) => [...f, record.localId]);
+        const form = new FormData();
+        form.append('dealId', record.dealId);
+        form.append('caption', `${record.roomName} — site inspection`);
+        form.append('takenAt', record.takenAt);
+        form.append('file', blob, `${record.localId}.jpg`);
+        try {
+          const res = await fetch('/uploads/photo', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${getToken() ?? ''}` },
+            body: form,
+          });
+          if (!res.ok) return { ok: false as const, error: `HTTP ${res.status}` };
+          const { id } = (await res.json()) as { id: string };
+          return { ok: true as const, photoId: id };
+        } catch (e) {
+          return { ok: false as const, error: e instanceof Error ? e.message : 'no connection' };
+        } finally {
+          // in a `finally`, because a throw here would otherwise hold the send
+          // for the rest of the session on a photograph nothing is doing
+          setInFlight((f) => f.filter((id) => id !== record.localId));
+        }
+      });
+      await refreshQueue();
+      utils.photos.list.invalidate(dealId);
+    } finally {
+      draining.current = false;
+    }
+  }, [dealId, refreshQueue, utils]);
+
+  /**
+   * When to come back.
+   *
+   * On mount, so a tab reopened after a lost connection flushes what the last
+   * session could not. On `online`, which is the event that matters — it fires
+   * the moment the phone has signal again. And on a slow timer while anything is
+   * waiting, because `navigator.onLine` is true on a network that cannot reach
+   * this server, which is exactly a site with wifi and no route out.
+   */
+  useEffect(() => {
+    void refreshQueue().then(() => drain());
+    const wake = () => {
+      setOnline(true);
+      // the backoff was waiting for exactly this, so it is spent rather than
+      // served out — `bringForward` says why the attempt count survives it
+      void bringForward(storeRef.current!).then(() => drain());
+    };
+    const sleep = () => setOnline(false);
+    window.addEventListener('online', wake);
+    window.addEventListener('offline', sleep);
+    return () => {
+      window.removeEventListener('online', wake);
+      window.removeEventListener('offline', sleep);
+    };
+  }, [drain, refreshQueue]);
+
+  const waiting = queued.filter((q) => !q.photoId).length;
+  useEffect(() => {
+    if (waiting === 0) return;
+    const t = setInterval(() => void drain(), 20_000);
+    return () => clearInterval(t);
+  }, [waiting, drain]);
+
+  /**
+   * Uploaded photographs this deal's inspection does not name yet.
+   *
+   * Written into the room the record names — by NAME, because the room list is
+   * rebuilt from the inspection on every open and a stored index can attribute a
+   * kitchen to a basement. A room that no longer exists leaves the photograph
+   * where it is: on the deal, in the site log, unattributed rather than attached
+   * to whichever room now sits at that index.
+   */
+  useEffect(() => {
+    if (!dealId || !rooms.length) return;
+    const mine = awaitingAttribution(queued, dealId);
+    if (!mine.length) return;
+    setRooms((rs) => {
+      let changed = false;
+      const next = rs.map((r) => ({ ...r, photos: [...r.photos] }));
+      for (const q of mine) {
+        const i = roomIndexFor(q, next);
+        if (i == null) continue;
+        if (!next[i]!.photos.includes(q.photoId!)) {
+          next[i]!.photos.push(q.photoId!);
+          changed = true;
+        }
+      }
+      return changed ? next : rs;
+    });
+  }, [queued, dealId, rooms.length]);
+
+  /** Queued photographs of THIS deal, as thumbnails in their own rooms. */
+  const queuedForRoom = useCallback(
+    (roomIndex: number) =>
+      queued.filter((q) => q.dealId === dealId && !q.photoId && roomIndexFor(q, rooms) === roomIndex),
+    [queued, dealId, rooms],
+  );
+
+  /**
+   * Take the photograph: store it first, then try to send it.
+   *
+   * The write to the store comes BEFORE the upload attempt and before anything is
+   * put on screen, because a crash between the two is the one window in which a
+   * photograph can be lost — and the whole point of the queue is that there is no
+   * such window.
+   */
   const addShot = useCallback(
-    (blob: Blob) => {
+    async (blob: Blob) => {
       const roomIndex = current;
       const roomName = rooms[roomIndex]?.name ?? 'Area';
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const url = URL.createObjectURL(blob);
-      setShots((s) => ({ ...s, [roomIndex]: [...(s[roomIndex] ?? []), { localId, url, state: 'uploading' }] }));
-      void uploadShot(roomIndex, localId, blob, roomName);
+      await storeRef.current!.put(
+        {
+          localId,
+          dealId,
+          roomName,
+          roomIndex,
+          takenAt: new Date().toISOString().slice(0, 10),
+          queuedAt: Date.now(),
+          attempts: 0,
+        },
+        blob,
+      );
+      await refreshQueue();
+      void drain();
     },
-    [current, rooms, uploadShot],
+    [current, rooms, dealId, refreshQueue, drain],
   );
 
   /** The shutter: the frame on screen, as a JPEG. */
@@ -363,30 +520,25 @@ export default function FieldApp() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d')?.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => blob && addShot(blob), 'image/jpeg', 0.85);
+    canvas.toBlob((blob) => blob && void addShot(blob), 'image/jpeg', 0.85);
   }, [cameraState, addShot]);
-
-  const retryShot = useCallback(
-    async (localId: string) => {
-      const shot = (shots[current] ?? []).find((x) => x.localId === localId);
-      if (!shot) return;
-      setShots((s) => ({
-        ...s,
-        [current]: (s[current] ?? []).map((x) => (x.localId === localId ? { ...x, state: 'uploading' } : x)),
-      }));
-      const blob = await (await fetch(shot.url)).blob();
-      void uploadShot(current, localId, blob, rooms[current]?.name ?? 'Area');
-    },
-    [shots, current, rooms, uploadShot],
-  );
 
   /** Signed URLs for photographs already on the deal, so a reopened inspection shows them. */
   const { data: dealPhotos } = trpc.photos.list.useQuery(dealId, { enabled: !!dealId && screen === 'inspection' });
   const savedUrl = (id: string) => dealPhotos?.find((p) => p.id === id)?.url;
 
-  const allShots = Object.values(shots).flat();
-  const sendBlocked = !canSend(allShots);
-  const sendWarning = pendingWarning(allShots);
+  /**
+   * Both scoped to THIS deal, though the drain is not.
+   *
+   * A photograph queued or uploading against another deal still goes up — that
+   * is the point of draining every deal — but it is not what this inspection
+   * will or will not name, so it is neither a reason to hold this send nor
+   * something to mention beside it.
+   */
+  const mine = queued.filter((q) => q.dealId === dealId);
+  const mineInFlight = mine.filter((q) => inFlight.includes(q.localId)).length;
+  const sendBlocked = !canSend(mineInFlight);
+  const queueWarning = queueSentence(mine, online, mineInFlight);
 
   const saveDraft = () =>
     save.mutate({ id: inspection?.id, dealId, rooms, reconciledValue: value, approachWeights: weights, status: 'draft', expectedUpdatedAt: held ?? undefined });
@@ -782,51 +934,67 @@ export default function FieldApp() {
               * The photographs, which are photographs.
               *
               * These were three decorative gradients, drawn `Math.min(photos, 3)`
-              * times from a counter. A shot still uploading shows its own local
-              * preview dimmed; a failed one carries a Retry, because the
-              * alternative — dropping it — is the quietest way to lose evidence,
-              * and the inspection will not name it either way until the server
-              * has it (`lib/inspection-photos.ts`).
+              * times from a counter.
+              *
+              * A WAITING one is marked rather than hidden, and has no Retry on it:
+              * the blob is in IndexedDB, the drain is on a backoff, and a control
+              * whose only effect is to ask sooner is furniture. It is dimmed with
+              * a count of its attempts so the surveyor can see the queue working.
               */}
             <div className="mt-3 flex gap-2 overflow-x-auto">
-              {roomShots.map((sh) => (
-                <div key={sh.localId} className="relative flex-none w-[78px] aspect-square rounded-[11px] overflow-hidden">
-                  <img src={sh.url} alt={`${rooms[current].name} photograph`} className="w-full h-full object-cover" style={{ opacity: sh.state === 'saved' ? 1 : 0.5 }} />
-                  {sh.state === 'uploading' && (
-                    <span className="absolute inset-0 flex items-center justify-center"><Spinner /></span>
+              {queuedForRoom(current).map((q) => (
+                <div key={q.localId} className="relative flex-none w-[78px] aspect-square rounded-[11px] overflow-hidden bg-sunken-2">
+                  {previews[q.localId] && (
+                    <img
+                      src={previews[q.localId]}
+                      alt={`${rooms[current].name} photograph, waiting to upload`}
+                      className="w-full h-full object-cover"
+                      style={{ opacity: 0.45 }}
+                    />
                   )}
-                  {sh.state === 'failed' && (
-                    <button
-                      onClick={() => void retryShot(sh.localId)}
-                      {...writeAttrs()}
-                      aria-label={`Retry uploading this photograph of ${rooms[current].name}`}
-                      className="absolute inset-0 flex items-center justify-center label-mono text-white"
-                      style={{ background: 'rgba(12,18,14,0.55)' }}
-                    >
-                      RETRY
-                    </button>
-                  )}
+                  {/* an OPAQUE band rather than a scrim over the image: a
+                      translucent label's contrast depends on the photograph
+                      under it, which `e2e/contrast.spec.ts` cannot measure and a
+                      surveyor cannot control. This is the pair the tile already
+                      used, so the sweep's answer for it still holds. */}
+                  <span className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center label-mono text-center px-1 py-0.5 bg-sunken-2 text-ink-2b">
+                    WAITING
+                    {q.attempts > 0 && <span className="fig text-[9px]">{q.attempts} tries</span>}
+                  </span>
                 </div>
               ))}
-              {/* ones filed earlier, reopened from the server */}
-              {rooms[current].photos
-                .filter((id) => !roomShots.some((sh) => sh.photoId === id))
-                .map((id) => {
-                  const url = savedUrl(id);
-                  return url ? (
-                    <img key={id} src={url} alt={`${rooms[current].name} photograph`} className="flex-none w-[78px] aspect-square rounded-[11px] object-cover" />
-                  ) : (
-                    <div key={id} className="flex-none w-[78px] aspect-square rounded-[11px] bg-sunken-2" />
-                  );
-                })}
+              {/* the ones the server holds, including any attributed this session */}
+              {rooms[current].photos.map((id) => {
+                const url = savedUrl(id);
+                return url ? (
+                  <img key={id} src={url} alt={`${rooms[current].name} photograph`} className="flex-none w-[78px] aspect-square rounded-[11px] object-cover" />
+                ) : (
+                  <div key={id} className="flex-none w-[78px] aspect-square rounded-[11px] bg-sunken-2" />
+                );
+              })}
               <button onClick={snap} {...writeAttrs()} aria-label={`Add a photograph of ${rooms[current].name}`} className={`flex-none w-[78px] aspect-square rounded-[11px] flex items-center justify-center ${PRESS}`} style={{ border: '1.5px dashed rgb(var(--checkbox-border, 210 209 202))' }}>
                 <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={brandInk} strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
               </button>
               <span className="fig self-center text-[11px] text-ink-2 whitespace-nowrap">
                 {rooms[current].photos.length} filed
-                {shotTally(roomShots).failed > 0 ? ` · ${shotTally(roomShots).failed} not uploaded` : ''}
+                {queuedForRoom(current).length > 0 ? ` · ${queuedForRoom(current).length} waiting` : ''}
               </span>
             </div>
+            {/**
+              * What a WAITING tile means, said beside the tile.
+              *
+              * The valuation screen says this too, before the record is sent,
+              * which is the decision point. This is the other moment it is
+              * needed: a surveyor watching an upload not complete has to know
+              * whether to take the photograph again, and the answer — it is on
+              * this device and the tab can close — is not inferable from a
+              * dimmed square.
+              */}
+            {queueWarning && (
+              <div role="status" className="mt-2.5 text-[11.5px] text-ink-2 leading-relaxed">
+                {queueWarning}
+              </div>
+            )}
             <input
               className="mt-3 w-full text-[12.5px]"
               aria-label={`Notes for ${rooms[current].name}`}
@@ -853,7 +1021,12 @@ export default function FieldApp() {
               )}
               <span className={`flex-1 text-[13.5px] font-medium ${r.condition > 0 ? 'text-ink' : 'text-ink-2b'}`}>{r.name}</span>
               <span className="fig text-[11px] font-medium" style={{ color: r.condition > 0 ? 'rgb(var(--status-green, 30 122 85))' : 'rgb(var(--ink-faint, 192 191 184))' }}>
-                {r.photos} ph · {r.condition > 0 ? `C${r.condition}` : 'C—'}
+                {/* `photos` is a LIST now, and `{r.photos}` rendered the ids
+                    themselves — React concatenates an array of strings, so the
+                    checklist read "cmx1…cmx2… ph". Counted, and the count
+                    includes what is still queued: the surveyor photographed the
+                    area whether or not the server has it yet. */}
+                {r.photos.length + queuedForRoom(i).length} ph · {r.condition > 0 ? `C${r.condition}` : 'C—'}
               </span>
             </button>
           ))}
@@ -1097,16 +1270,15 @@ export default function FieldApp() {
         {/**
           * What is not filed yet, said before the record is sent.
           *
-          * A shot still uploading blocks the send — the photograph is seconds
-          * away and sending now files an inspection that does not name it. A
-          * FAILED one does not block it: a phone with no signal must not be able
-          * to trap a day's work on the device, so the sentence says what sending
-          * means instead. `lib/inspection-photos.ts` holds that decision and its
-          * boundaries.
+          * An upload IN FLIGHT holds the send — the photograph is a second away
+          * and sending now files an inspection that does not name it. A queued
+          * one does not: it is on the device and will go on its own, so the
+          * sentence reassures rather than warns. `lib/photo-queue.ts` holds that
+          * decision and its boundaries.
           */}
-        {sendWarning && (
+        {queueWarning && (
           <div role="status" className="mb-2 text-[11.5px] text-ink-2 leading-relaxed">
-            {sendWarning}
+            {queueWarning}
           </div>
         )}
         <button

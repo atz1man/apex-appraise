@@ -67,8 +67,12 @@ describe('destructive controls', () => {
    */
   it('finds the destructive controls it is meant to be checking', () => {
     const sites = allSites();
-    expect(sites.length).toBeGreaterThanOrEqual(14);
+    expect(sites.length).toBeGreaterThanOrEqual(15);
     expect(sites.map((s) => s.procedure)).toContain('org.deleteWorkspace');
+    // the verb, not the table, one step further out: what this ends is a printed
+    // credential, and every copy of the sheet stops working with no sign until a
+    // sign-in fails weeks later
+    expect(sites.map((s) => s.procedure)).toContain('org.regenerateSsoRecoveryCodes');
     expect(sites.map((s) => s.procedure)).toContain('comparables.remove');
     // the verb, not the table: a cancellation deletes nothing and ends everything
     expect(sites.map((s) => s.procedure)).toContain('billing.cancelPlan');

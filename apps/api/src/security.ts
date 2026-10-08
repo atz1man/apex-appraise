@@ -62,7 +62,20 @@ const num = (name: string, fallback: number) => {
  * taken, so it limits probing ONE address and not registering a thousand new
  * ones — which is the case that costs something.
  */
-const SENSITIVE = ['auth.login', 'auth.requestPasswordReset', 'auth.resetPassword', 'org.register'];
+/**
+ * `auth.recoveryLogin` belongs here twice over: it accepts a SECRET from a
+ * stranger, and on success it mails every administrator in the workspace. The
+ * per-account lockout inside it is what makes a 50-bit code unguessable, and
+ * this is what stops the endpoint being used to mail-bomb a firm's admins or to
+ * sweep addresses faster than the lockout notices.
+ */
+const SENSITIVE = [
+  'auth.login',
+  'auth.recoveryLogin',
+  'auth.requestPasswordReset',
+  'auth.resetPassword',
+  'org.register',
+];
 
 export const isSensitive = (url: string) => SENSITIVE.some((p) => url.includes(p));
 

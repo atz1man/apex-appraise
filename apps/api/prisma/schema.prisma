@@ -590,6 +590,34 @@ model SsoConnection {
   lastLoginAt  DateTime?
 }
 
+// The way back in when the identity provider stops letting anyone in.
+//
+// `enforced` refuses every password in the workspace, so a wrong issuer, an
+// expired signing certificate or an IdP that is simply down locked a firm out of
+// its own records with no remedy but a platform operator editing the column.
+// These are single-use codes, shown once when enforcement is turned on and
+// stored only as SHA-256 digests — see `auth/sso-recovery.ts` for why the shape
+// is this one, and why spending a code grants a SESSION rather than clearing
+// `enforced`.
+//
+// Per ORG rather than per user: the break-glass belongs to the firm, and the
+// admin holding the printed sheet need not be the admin who set SSO up.
+model SsoRecoveryCode {
+  id        String    @id @default(cuid())
+  orgId     String
+  // SHA-256 of the normalised code. Nothing in this server can recover the code
+  // from it, which is the property that makes the row safe to hold.
+  codeHash  String    @unique
+  // the fact. Null is unspent; a spent code is KEPT rather than deleted, because
+  // "an admin signed in with a break-glass code on the 4th" is exactly the event
+  // a security review asks about, and a deleted row answers nothing.
+  usedAt    DateTime?
+  usedById  String?
+  createdAt DateTime  @default(now())
+
+  @@index([orgId])
+}
+
 // A firm's bank feed, under UK Open Banking (PSD2).
 //
 // Xero says what suppliers INVOICED. This says what actually left the account,

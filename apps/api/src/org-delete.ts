@@ -61,6 +61,9 @@ export async function orgCascadeDeletes(
     prisma.xeroConnection.deleteMany({ where: { orgId } }),
     // the client secret goes with the workspace that owned it
     prisma.ssoConnection.deleteMany({ where: { orgId } }),
+    // and the break-glass codes with it: a code that outlives the workspace it
+    // unlocks unlocks nothing, but it is still a credential on a dead firm's row
+    prisma.ssoRecoveryCode.deleteMany({ where: { orgId } }),
     prisma.errorEvent.deleteMany({ where: { orgId } }),
     prisma.benchmarkPoint.deleteMany({ where: { orgId } }),
     prisma.integrationConnection.deleteMany({ where: { orgId } }),

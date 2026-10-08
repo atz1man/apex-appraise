@@ -16,3 +16,13 @@ test-results/
 # with pnpm-lock.yaml. Anchored to the root because that is where the stray
 # appears; a lockfile turning up under apps/ or packages/ should stay VISIBLE.
 /package-lock.json
+
+# The browser-override config CLAUDE.md describes, and says must NEVER be
+# committed: a cloud or sandbox container can carry a different Playwright
+# browser build from the one the pinned @playwright/test wants, and the suite is
+# pointed at the installed binary with a local config of this name. Committing it
+# would pin every machine — CI included — to one absolute path under
+# /opt/pw-browsers. It reached `git add -A` twice before this line existed, and a
+# rule that depends on remembering it is not a rule.
+apps/web/playwright.local.config.ts
+playwright-report/

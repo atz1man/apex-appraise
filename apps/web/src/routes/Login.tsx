@@ -41,6 +41,16 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  /**
+   * The break-glass door, closed until somebody asks for it.
+   *
+   * Offered only on an ENFORCED workspace, which is the only state where a
+   * password is impossible and a code is the one way in — and the only state
+   * `auth.recoveryLogin` accepts. A code field on every sign-in screen would
+   * read as a second password, which is the opposite of what enforcement is for.
+   */
+  const [recovering, setRecovering] = useState(false);
+  const [code, setCode] = useState('');
   // arriving from a completed reset — say so, or the redirect looks like a failure
   const justReset = new URLSearchParams(window.location.search).get('reset') === '1';
   /**
@@ -79,6 +89,18 @@ export default function Login() {
    */
   const passwordAllowed = !sso?.enforced;
 
+  const recovery = trpc.auth.recoveryLogin.useMutation({
+    // this screen shows the error where it happened; see App.tsx
+    meta: { inlineError: true },
+    onSuccess: (res) => {
+      setSession(res.token, res.principal as StoredPrincipal);
+      // straight to Settings, because the reason anybody is here is to repair
+      // or stand down the connection that would not let them in
+      navigate('/settings', { replace: true });
+    },
+    onError: (e) => setError(plainMessage(e.message)),
+  });
+
   const login = trpc.auth.login.useMutation({
     // this screen shows the error where it happened; see App.tsx
     meta: { inlineError: true },
@@ -110,8 +132,9 @@ export default function Login() {
               const offered = demos ?? (await demoQ.refetch()).data;
               if (offered?.[0]) creds = { email: offered[0].email, password: DEMO_PASSWORD };
             }
-            // enter, on an enforced workspace, goes where the only button goes
-            if (!passwordAllowed) ssoStart.mutate({ email: creds.email });
+            // enter goes where the visible button goes, in all three states
+            if (recovering) recovery.mutate({ email: creds.email, code });
+            else if (!passwordAllowed) ssoStart.mutate({ email: creds.email });
             else login.mutate(creds);
           }}
         >
@@ -130,10 +153,38 @@ export default function Login() {
               <input className="w-full mb-4" type="password" aria-label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </>
           )}
-          {sso?.enforced && (
+          {sso?.enforced && !recovering && (
             <div className="mb-4 text-[12px] text-ink-2 leading-relaxed">
               Your organisation signs in with single sign-on. There is no password to enter.
             </div>
+          )}
+          {/**
+            * The break-glass field.
+            *
+            * Deliberately plain about what this is for — somebody reaches it
+            * because the provider is refusing everyone, and the printed sheet is
+            * the only thing left. It says "an administrator" because that is who
+            * a code works for (`auth.recoveryLogin` refuses anyone else, and
+            * says nothing about why, so the screen is the only place that can
+            * explain it).
+            */}
+          {sso?.enforced && recovering && (
+            <>
+              <div className="mb-3 text-[12px] text-ink-2 leading-relaxed">
+                If single sign-on will not let anyone in, an administrator can use one of the recovery
+                codes generated when it was switched on. Each code works once.
+              </div>
+              <label className="label-mono text-ink-3 block mb-1" htmlFor="recovery-code">Recovery code</label>
+              <input
+                id="recovery-code"
+                className="w-full mb-4 fig tracking-[0.5px]"
+                autoComplete="one-time-code"
+                spellCheck={false}
+                placeholder="A1B2C-D3E4F"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </>
           )}
           {justReset && !error && (
             <div className="text-[12px] text-status-green mb-3">Password updated — sign in with it below.</div>
@@ -144,19 +195,39 @@ export default function Login() {
               Sign in
             </Button>
           )}
-          {sso?.sso && (
-            <Button
+          {recovering ? (
+            <Button type="submit" className="w-full" loading={recovery.isPending} disabled={!code.trim()}>
+              Sign in with recovery code
+            </Button>
+          ) : (
+            sso?.sso && (
+              <Button
+                type="button"
+                variant={sso.enforced ? 'primary' : 'secondary'}
+                className={passwordAllowed ? 'w-full mt-2' : 'w-full'}
+                loading={ssoStart.isPending}
+                onClick={() => {
+                  setError('');
+                  ssoStart.mutate({ email });
+                }}
+              >
+                Continue with single sign-on
+              </Button>
+            )
+          )}
+          {/* the way to the break-glass, and the way back from it */}
+          {sso?.enforced && (
+            <button
               type="button"
-              variant={sso.enforced ? 'primary' : 'secondary'}
-              className={passwordAllowed ? 'w-full mt-2' : 'w-full'}
-              loading={ssoStart.isPending}
+              className="mt-2.5 w-full min-h-[44px] text-[11.5px] font-semibold text-ink-2 hover:text-brand-ink"
               onClick={() => {
                 setError('');
-                ssoStart.mutate({ email });
+                setCode('');
+                setRecovering((r) => !r);
               }}
             >
-              Continue with single sign-on
-            </Button>
+              {recovering ? 'Back to single sign-on' : 'Single sign-on not working? Use a recovery code'}
+            </button>
           )}
           <div className="mt-3 text-center text-[12px] text-ink-2">
             New here?{' '}

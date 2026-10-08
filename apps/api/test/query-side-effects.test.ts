@@ -220,7 +220,19 @@ describe('listing integrations', () => {
  *
  * Not a new sweep file: this is the same subject as the role guards already
  * swept here, and asks the router the same way they do.
+ *
+ * It keys on the PRINCIPAL's role, not on the word ADMIN, and the narrowing was
+ * earned. The rule `adminProcedure` owns is "is the CALLER an admin", and the
+ * first matcher read any `role !== 'ADMIN'` anywhere in a resolver — which
+ * reported `auth.recoveryLogin`, a PUBLIC procedure that asks a different
+ * question about a different subject: does the address somebody typed belong to
+ * an admin. There is no caller to check, so `adminProcedure` cannot express it
+ * and the sweep was demanding something impossible. Both historical offenders
+ * were `ctx.principal.role`, so nothing is given up; what is excluded is a
+ * predicate over a row the resolver fetched.
  */
+const PRINCIPAL_ADMIN_CHECK = /principal\s*(?:\??\.)\s*role\s*!==\s*['"]ADMIN['"]/;
+
 describe('the ADMIN check', () => {
   it('is written in the procedure builder and nowhere else', async () => {
     const { appRouter } = await import('../src/router.js');
@@ -228,7 +240,7 @@ describe('the ADMIN check', () => {
       ._def.procedures;
 
     const offenders = Object.entries(procedures)
-      .filter(([, p]) => /role\s*!==\s*['"]ADMIN['"]/.test(String(p._def.resolver)))
+      .filter(([, p]) => PRINCIPAL_ADMIN_CHECK.test(String(p._def.resolver)))
       .map(([name]) => name);
 
     expect(
@@ -240,13 +252,23 @@ describe('the ADMIN check', () => {
 
   /**
    * And the matcher has teeth: a list that quietly stopped matching would pass
-   * over the exact thing it was written for.
+   * over the exact thing it was written for. All three directions, because the
+   * third is the one that made the rule wrong before it was narrowed.
    */
   it('recognises a hand-rolled check when it sees one', () => {
     const planted = `async ({ ctx }) => { if (ctx.principal.role !== 'ADMIN') throw new TRPCError({ code: 'FORBIDDEN' }); }`;
-    expect(/role\s*!==\s*['"]ADMIN['"]/.test(planted)).toBe(true);
+    expect(PRINCIPAL_ADMIN_CHECK.test(planted)).toBe(true);
     const clean = `async ({ ctx }) => ctx.prisma.deal.findMany({ where: { orgId: ctx.principal.orgId } })`;
-    expect(/role\s*!==\s*['"]ADMIN['"]/.test(clean)).toBe(false);
+    expect(PRINCIPAL_ADMIN_CHECK.test(clean)).toBe(false);
+    /**
+     * NOT an offender, and the distinction is the whole point: this asks whether
+     * a row fetched by email belongs to an admin, before any session exists.
+     * `auth.recoveryLogin` does exactly this, because a break-glass code has to
+     * be verified for somebody who cannot sign in — so there is no principal for
+     * `adminProcedure` to consult.
+     */
+    const lookedUp = `async ({ ctx, input }) => { const user = await ctx.prisma.user.findUnique(...); if (user.role !== 'ADMIN') throw refuse(); }`;
+    expect(PRINCIPAL_ADMIN_CHECK.test(lookedUp)).toBe(false);
   });
 
   /**
