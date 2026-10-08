@@ -30,13 +30,13 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (313; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (319; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1084). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1085). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (360): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (371): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, comp-proximity, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
@@ -216,6 +216,47 @@ the point, so read the failure rather than adding an exemption.
   mistake with a different number; a fixed character count is a guess about how far away the thing
   you are looking for is. NOT PROVEN and said in the test: that the message reaches anybody — a
   `throw` into a swallowing `catch` passes it. The audible channel is `announcements`' business.
+- **A panel that reports an analysis has done the analysis** (`web/src/lib/comp-proximity.test.ts`
+  + `packages/appraisal-engine/test/geo.test.ts` + a case in `seed-depth.test.ts`). The
+  Comparables screen's "Evidence quality" panel — the panel a valuer reads to decide whether the
+  evidence supports the rate they are about to sign — printed the row "Comps within 0.8 mi" as
+  `{comps.length} / {comps.length}`. Every comparable, always, on every deal. Nothing in this
+  repository computed a DISTANCE at all, so a file of evidence twenty miles from the subject read
+  as entirely local. It is not a cosmetic figure: proximity is the first thing comparable evidence
+  is argued on, the adjustment grid carries a Location column precisely because distance has to be
+  priced, and the row sat two inches under a map that already knew which comparables were located
+  and said "3 of 5 geolocated" — the screen held the facts, drew them, and asserted something else
+  beside them. `distanceMiles` (`engine/geo.ts`) is the engine's for the reason
+  `one-engine-sweep` keeps; haversine rather than the law of cosines, which is the same arithmetic
+  rearranged and loses precision at exactly the range this is used over, where two comparables on
+  the same street must not come back zero. THE JUDGEMENT WITH BOUNDARIES, and why it is a module
+  rather than a line in the route: **unknown is not far.** The obvious fix counts the comps inside
+  the radius and divides by the total, and that is wrong in the two states where a distance cannot
+  be had — a subject with no usable postcode, and a comparable nobody has geocoded. Both come out
+  as "0 of 5 within 0.8 mi", which a reader takes as "none of your evidence is local" and which is
+  the original defect's mirror image: a confident claim about data that does not exist. Each of
+  those states says what it does not know, and a PARTIAL measurement counts over the located
+  comparables and NAMES the ones it left out, because dividing by the full count scores an
+  ungeocoded comp as distant and dividing by the located ones silently answers about a subset of
+  the file. The panel also prints the FURTHEST, which is the figure a valuer is actually looking
+  for and the one a ratio hides. Deliberately NOT done: folding any of this into the confidence
+  badge beside it — the grid already has `adjLocation`, where the valuer prices location
+  themselves, and a product that asks for that judgement and then silently re-scores it has taken
+  the same fact into account twice, once without saying so. The DEMO was the same defect one layer
+  down: every seeded comparable wrote a distance into its own text ("Sold Apr 2026 · 0.6 mi ·")
+  and stored no coordinates, so the honest panel would have read "none of the 4 comparables are
+  geolocated" beside a meta claiming a distance, on the one workspace anyone can try. They are
+  placed now, from ONE `miles` feeding both the offset and the sentence, through one `offsetFrom`
+  that `demo-seed.ts` imports rather than restating (Northgate keeps its hand-written evidence and
+  predates the depth seed, which is exactly how two copies of the trigonometry would have got in),
+  and `seed-depth.test.ts` measures every one of them back with the engine against the deal's
+  cached geocode. That guard found a real one in the writing: a 0.25-mile step puts a comparable
+  at 0.55 mi whose text rounds to "0.6", so the step is 0.3 — every distance exact to the decimal
+  the meta prints, and the last two outside the radius, so the demo reads "2 / 4" and exercises
+  the counting instead of showing another hundred per cent. NOT reachable statically, and said in
+  the test: whether a comparable's stored coordinate is the RIGHT building. A distance is checkable
+  because it is arithmetic over two points; that the points are the ones the addresses name is a
+  geocoding question, and `lat`/`lng` are nullable on purpose because that lookup can fail.
 - **A figure the marketing page says this product computes, something computes**
   (`web/src/lib/landing-claims.test.ts`). `Landing.tsx` listed "CIL, S106, SDLT & VAT computed,
   not guessed". Three are true — `cilCharge`, `sdltCommercial`, and S106 as a figure stated in the

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { assetLabel } from '@apex/types/asset-classes';
 import { useUnits } from '../lib/region';
+import { NEAR_MILES, compProximity, formatMiles } from '../lib/comp-proximity';
 import { trpc } from '../lib/trpc';
 import { Button, Dot, EmptyState, FormError, Icon, Panel, ProgressBar, Skeleton, SkeletonRows, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
@@ -67,6 +68,16 @@ export default function Comparables() {
     () => comps.filter((c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null),
     [comps],
   );
+
+  /**
+   * How close the evidence actually is.
+   *
+   * This row used to print `{comps.length} / {comps.length}` — every
+   * comparable, always. `lib/comp-proximity.ts` holds why that mattered and why
+   * the two states where a distance cannot be had say so instead of counting as
+   * zero.
+   */
+  const proximity = useMemo(() => compProximity(subjectCoords, comps), [subjectCoords, comps]);
 
   const mappable = useMemo(
     () => [
@@ -360,10 +371,25 @@ export default function Comparables() {
                     <ProgressBar pct={Math.min(100, avgGross * 5)} color={conf.color} />
                   </div>
                 </div>
-                <div className="flex justify-between text-[12.5px] text-ink-2b">
-                  <span>Comps within 0.8 mi</span>
-                  <span className="fig font-semibold text-ink">{comps.length} / {comps.length}</span>
-                </div>
+                {proximity && (
+                  <div>
+                    <div className="flex justify-between text-[12.5px] text-ink-2b">
+                      <span>Comps within {NEAR_MILES} mi</span>
+                      <span className="fig font-semibold text-ink">{proximity.value}</span>
+                    </div>
+                    {proximity.furthest && (
+                      <div className="mt-1 flex justify-between text-[12.5px] text-ink-2b">
+                        <span>Furthest</span>
+                        <span className="fig font-semibold text-ink">
+                          {formatMiles(proximity.furthest.miles)}
+                        </span>
+                      </div>
+                    )}
+                    {proximity.note && (
+                      <div className="mt-1 text-[11px] text-ink-3 leading-snug">{proximity.note}</div>
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-between text-[12.5px] text-ink-2b">
                   <span>Range</span>
                   <span className="fig font-semibold text-ink">

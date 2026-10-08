@@ -535,8 +535,18 @@ export function ProfitDistribution({
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} role="img" aria-label={summary}>
-        {/* the P10–P90 span, so the eye finds the middle 80% without reading a number */}
+        {/**
+          * The P10–P90 span, so the eye finds the middle 80% without reading a
+          * number. STRUCTURAL, like the area washes above it: the extent it
+          * marks is also printed as P10 and P90 beneath the chart, so nothing
+          * here is carried by this wash alone, and a band drawn at 3:1 across
+          * the middle of the plot would compete with the bars and the median
+          * rule it exists to frame. Found by `e2e/graphics-contrast.spec.ts`,
+          * which measures everything not declared decorative — 1.10:1 on light
+          * and 1.07:1 on dark.
+          */}
         <rect
+          data-decorative
           x={xOf(p10)}
           y={0}
           width={Math.max(0, xOf(p90) - xOf(p10))}
@@ -569,7 +579,8 @@ export function ProfitDistribution({
         {lo < 0 && hi > 0 && (
           <line x1={xOf(0)} x2={xOf(0)} y1={0} y2={H - 10} stroke="rgb(var(--status-red, 178 58 46))" strokeWidth={1} strokeDasharray="2 2" />
         )}
-        <line x1={0} x2={W} y1={H - 10} y2={H - 10} stroke={GRID} strokeWidth={1} />
+        {/* the baseline the columns stand on — a rule, not a mark, as everywhere above */}
+        <line x1={0} x2={W} y1={H - 10} y2={H - 10} stroke={GRID} strokeWidth={1} data-decorative />
       </svg>
       <div className="flex justify-between text-[10.5px] fig text-ink-3">
         <span>P10 {fM(p10)}</span>
