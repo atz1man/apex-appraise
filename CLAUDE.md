@@ -30,7 +30,7 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (313; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
 - `cd apps/api && npx vitest run` — API tests (1084). See the container gotcha below before
   trusting a green run.
@@ -1158,6 +1158,55 @@ the point, so read the failure rather than adding an exemption.
   procedure nobody can reach is a capability the firm does not have. Forecast opens EQUAL to
   budget: a scheme not yet let is forecast at what it was appraised at, so the variance starts
   at zero instead of reading as the whole build saved.
+- **A sensitivity grid says something, or it says why it cannot**
+  (`sensitivity-structure.test.ts`). Measured in the browser on the demo workspace: the
+  appraisal's "Sensitivity — GDV × build" panel showed **23% in all twenty-five cells**, and the
+  printed investment report carried a whole page of the same under the heading "Sensitivity —
+  profit on cost". The arithmetic was right and the panel was a lie by omission — a valuer reads
+  a 5×5 grid of one number as "insensitive to a ten per cent swing in values and costs", which is
+  the opposite of what it means. The report was worse than the screen, because its closing
+  sentence READ THE SAME TWO NUMBERS: "a +10% build-cost overrun combined with a −10% fall in GDV
+  moves the return on cost from 23% to 23%" — a signed document telling a lender that a cost
+  overrun and a revenue fall have no effect, with no toggle to escape it as the screen had.
+  The cause is structural, not a bug in `sensitivityGrid`. In RESIDUAL mode — the mode every
+  appraisal starts in — profit is `gdv × t` and the land takes the remainder, so
+  `totalCost = gdv − profit` and RoC ≡ `t / (1 − t)`: the target restated, unmovable by any shock.
+  Profit moves with GDV alone, since build cost never enters `gdv × t`. PROFIT mode pins the other
+  end — `residualNet` IS `landFixed`, so a grid of it echoes an input back. `sensitivityStructure`
+  (the ENGINE, because it is a fact about the engine's own arithmetic: change how a mode solves
+  and this must change with it) declares `varies | gdvOnly | pinned` per metric plus the metric to
+  open on, and the test checks the declaration against the REAL grid in both directions — a metric
+  declared pinned must be constant to the penny, one declared `varies` must move on BOTH axes, and
+  one declared `gdvOnly` must move along the columns and not the rows. The identity is asserted
+  as algebra at three target rates rather than observed once. The panel now opens on the metric
+  the mode can move, follows a mode change until the valuer chooses for themselves, and renders a
+  pinned metric as its ONE value with the reason and a way out rather than twenty-five copies.
+  Three mutants recorded: the default back to RoC, `gdvOnly` mislabelled `varies`, and the
+  histogram off-by-one below. NOT caught by anything that existed: `one-engine-sweep` watches for
+  a figure re-derived outside the engine, and this was the engine's own figure displayed in a
+  context that made it meaningless. A first version asserted `varies` means 25 distinct values and
+  failed on priced-land RoC at 24 — two cells coincide to the penny, which is a coincidence of one
+  fixture and not the property being claimed; it asserts both AXES move.
+- **The risk panel shows the distribution, not three numbers.** `monteCarlo` ran 400 iterations
+  and threw the samples away, and the screen drew P10–P90 as a flat rectangle — which draws every
+  distribution identically whatever its tail, and the tail is the question a lender is asking.
+  `MonteCarloResult.histogram` is equal-WIDTH bins (equal count would redraw the same rectangle),
+  computed in the engine so the screen, the printed report and a customer's integration describe
+  one distribution rather than three roundings of it; the samples are not returned, because 400
+  figures re-binned at the far end is the same arithmetic twice with two chances to differ. Every
+  sample lands in exactly one bin and the counts sum to `iterations`, asserted — a histogram that
+  silently drops its own maximum understates the tail, which is the one thing it is read for, so
+  the top bin is closed at both ends. A degenerate sample answers ONE bin rather than dividing by
+  zero. `ProfitDistribution` (`components/charts.tsx`) is one series, so one hue and no legend;
+  the bins wholly at or below zero are a STATUS rather than a second series and carry a sentence
+  and a marked zero rule as well as a colour, because a reader who cannot separate the hues must
+  still find the losses.
+- **The engine is typechecked.** The package where ALL money maths lives was the one package
+  nothing ran `tsc` over: `site: { mode: 'fixed' }` sat in its own tests against a `SiteMode` of
+  `'residual' | 'profit'`, passing only because an unknown mode falls into the else branch and
+  behaves like `'profit'` — so a test named "holds for a fixed land price too" covered a third
+  mode that does not exist. `pnpm --filter @apex/appraisal-engine lint` runs in CI before the
+  golden tests.
 - `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
   is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
   (`rocAtAsking` is null when nobody named an asking price; `projIrr` when the cashflows

@@ -17,10 +17,13 @@ import type {
   IncomeResult,
   JvInput,
   JvResult,
+  MonteCarloBin,
   MonteCarloOptions,
   MonteCarloResult,
   SensitivityCell,
   SensitivityMetric,
+  SensitivityStructure,
+  SiteMode,
   SpendProfileKey,
 } from './types.js';
 import { SQFT_PER_SQM } from './format.js';
@@ -845,6 +848,72 @@ export function jvWaterfall(equity: number, profit: number, holdYears: number, j
  * Rows are build deltas (top = most positive, matching the prototype's reversed rows),
  * columns are sales/GDV deltas left→right.
  */
+/**
+ * Which metrics this mode can actually move — and which the model PINS.
+ *
+ * A sensitivity grid is 25 recomputes of the appraisal under ±10% on GDV and
+ * build cost. Two of the three metrics are structurally constant depending on
+ * which way round the model is solved, and the algebra is exact rather than
+ * observed:
+ *
+ *   RESIDUAL mode (land is the OUTPUT). With t = targetProfitOnGdvPct/100,
+ *
+ *     profit    = gdv × t
+ *     landGross = gdv − saleCosts − build − fees − cont − other − finance − profit
+ *     totalCost = saleCosts + build + fees + cont + other + finance + landGross
+ *               = gdv − profit
+ *     RoC       = profit / totalCost = t·gdv / (gdv − t·gdv) = t / (1 − t)
+ *
+ *   So RoC is a CONSTANT — it is the target restated, and no shock to GDV or
+ *   build cost can move it, because the land value absorbs every one. Profit
+ *   moves with GDV alone, since build cost never enters `gdv × t`.
+ *
+ *   PROFIT mode (land is an INPUT) pins the other end: `residualNet` IS
+ *   `landFixed`, so a grid of it echoes a number the user typed.
+ *
+ * WHY THIS IS NOT COSMETIC. Rendered, a pinned metric is a 5×5 grid showing one
+ * number 25 times, which a valuer reads as "this scheme is insensitive to a ten
+ * per cent swing in sales values and build costs". That is the opposite of what
+ * it means, and it is read on the screen a lender's credit committee is briefed
+ * from. The grid opened on RoC whatever the mode, and RESIDUAL is the mode every
+ * appraisal starts in — so the default view of the default mode was the
+ * uninformative one.
+ *
+ * It lives in the engine rather than the browser because it is a fact about the
+ * engine's own arithmetic: change how a mode solves and this must change with
+ * it. `sensitivity-structure.test.ts` checks the declaration against the real
+ * grid rather than trusting it.
+ */
+export function sensitivityStructure(mode: SiteMode): SensitivityStructure {
+  if (mode === 'residual') {
+    return {
+      preferred: 'residual',
+      responseOf: { roc: 'pinned', profit: 'gdvOnly', residual: 'varies' },
+      noteOf: {
+        roc:
+          'Return on cost is fixed by the target profit in a residual appraisal — it works out at '
+          + 'target ÷ (1 − target) whatever happens to values or costs, because the land value takes '
+          + 'the strain. Sensitise the residual land value instead.',
+        profit:
+          'Profit is the target percentage of GDV, so it follows sales values and is unmoved by build '
+          + 'cost. The columns vary; the rows cannot.',
+        residual: null,
+      },
+    };
+  }
+  return {
+    preferred: 'roc',
+    responseOf: { roc: 'varies', profit: 'varies', residual: 'pinned' },
+    noteOf: {
+      roc: null,
+      profit: null,
+      residual:
+        'The land price is an input in this appraisal, so the residual simply reports it back. '
+        + 'Sensitise return on cost or profit instead.',
+    },
+  };
+}
+
 export function sensitivityGrid(
   input: AppraisalInput,
   metric: SensitivityMetric,
@@ -1008,7 +1077,46 @@ export function monteCarlo(input: AppraisalInput, opts: MonteCarloOptions = {}):
     poc: { p10: percentile(pocs, 0.1), p50: percentile(pocs, 0.5), p90: percentile(pocs, 0.9) },
     probAtTarget: profits.filter((p) => p >= targetProfit).length / profits.length,
     probLoss: profits.filter((p) => p < 0).length / profits.length,
+    histogram: binned(profits, MC_BINS),
   };
+}
+
+/** Columns for the profit distribution. Odd, so one bin straddles the middle. */
+const MC_BINS = 25;
+
+/**
+ * Equal-width bins over the whole sample range.
+ *
+ * Equal WIDTH rather than equal count, because the shape is the point: equal
+ * count draws every distribution as a flat rectangle, which is the failure the
+ * three-percentile band already had. `sorted` is ascending, as `monteCarlo`
+ * leaves it.
+ *
+ * Every sample lands in exactly one bin and the counts sum to the sample size —
+ * asserted, because a histogram that quietly drops its own maximum understates
+ * the tail, and the tail is what the panel is read for. The top bin is closed at
+ * both ends for that reason; the rest are half-open.
+ *
+ * A degenerate sample (every run identical, which a scheme with no variable
+ * inputs produces) gets ONE bin holding everything rather than a divide by zero.
+ */
+export function binned(sorted: readonly number[], bins = MC_BINS): MonteCarloBin[] {
+  if (sorted.length === 0) return [];
+  const lo = sorted[0]!;
+  const hi = sorted[sorted.length - 1]!;
+  if (!(hi > lo)) return [{ from: lo, to: hi, count: sorted.length }];
+  const width = (hi - lo) / bins;
+  const out: MonteCarloBin[] = Array.from({ length: bins }, (_, i) => ({
+    from: lo + i * width,
+    to: lo + (i + 1) * width,
+    count: 0,
+  }));
+  for (const v of sorted) {
+    // the maximum belongs to the last bin, not to a bin past the end
+    const i = Math.min(bins - 1, Math.floor((v - lo) / width));
+    out[i]!.count++;
+  }
+  return out;
 }
 
 /**
