@@ -632,6 +632,11 @@ the point, so read the failure rather than adding an exemption.
   not apply old figures; editing, adding or removing evidence resets the applied
   confirmation. The browser guard delays and refuses saves without changing the
   shared demo appraisal; its batched mock runs operations concurrently like tRPC.
+  Add comp opens a blank evidence form rather than inventing a £220/ft² sale;
+  the address, entered rate and source are saved only on submission. Rates convert
+  from the workspace unit through the shared unit helper. Unsaved evidence warns
+  before navigation. `comparable-entry.test.ts` rejects blank addresses and
+  non-positive or non-finite rates at the API, including patches.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because

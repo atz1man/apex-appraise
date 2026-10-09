@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { weightedComparables } from '@apex/appraisal-engine';
+import { ratePerAreaIn, weightedComparables } from '@apex/appraisal-engine';
 
 // Intercept mutations so the shared demo appraisal is never changed.
 async function evidence(page: Page, opts: { metric?: boolean; empty?: boolean; delaySave?: Promise<void>; failSave?: boolean } = {}) {
@@ -13,7 +13,8 @@ async function evidence(page: Page, opts: { metric?: boolean; empty?: boolean; d
   });
   const comp = { id: 'integrity-comp', dealId: id, address: 'Test evidence', meta: 'Recorded sale', basePsf: 220,
     adjSize: 0, adjCondition: 0, adjDate: 0, adjLocation: 0, lat: null, lng: null };
-  const calls = { saves: 0, applies: 0 };
+  const calls = { saves: 0, applies: 0, writes: [] as Array<Record<string, unknown>> };
+  let hasEvidence = !opts.empty;
   await page.route('**/trpc/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -26,7 +27,7 @@ async function evidence(page: Page, opts: { metric?: boolean; empty?: boolean; d
     } else results = ops.map(() => ({ result: { data: { json: {} } } }));
     await Promise.all(ops.map(async (op, i) => {
       let data: unknown;
-      if (op === 'comparables.list') data = { comps: opts.empty ? [] : [comp], subject: { status: 'no-postcode' } };
+      if (op === 'comparables.list') data = { comps: hasEvidence ? [comp] : [], subject: { status: 'no-postcode' } };
       else if (op === 'org.policy' && opts.metric) data = { ...results[i]?.result?.data?.json, region: 'AU' };
       else if (op === 'comparables.upsert') {
         calls.saves++;
@@ -36,7 +37,10 @@ async function evidence(page: Page, opts: { metric?: boolean; empty?: boolean; d
           return;
         }
         const body = JSON.parse(request.postData()!);
-        Object.assign(comp, (batched ? body[i] : body).json);
+        const patch = (batched ? body[i] : body).json;
+        calls.writes.push(patch);
+        Object.assign(comp, patch);
+        hasEvidence = true;
         data = comp;
       } else if (op === 'comparables.applyToAppraisal') {
         calls.applies++;
@@ -92,4 +96,49 @@ test('a failed evidence save never applies the old server figures', async ({ pag
   await expect(page.getByText(/Evidence was not saved: Save refused/)).toBeVisible();
   expect(calls.applies).toBe(0);
   await expect(page.getByRole('spinbutton', { name: 'Test evidence Size adjustment %', exact: true })).toHaveValue('15');
+});
+
+
+test('adding evidence asks for real inputs instead of creating a placeholder rate', async ({ page }) => {
+  const calls = await evidence(page, { empty: true, metric: true });
+  await page.getByRole('button', { name: 'Add comp', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Add comparable evidence', exact: true });
+  await expect(form).toBeVisible();
+  expect(calls.saves).toBe(0);
+  await expect(page.getByLabel('Sale rate (£/m²)', { exact: true })).toHaveValue('');
+  await page.getByLabel('Property address', { exact: true }).fill('12 Recorded Road');
+  await page.getByLabel('Sale rate (£/m²)', { exact: true }).fill('220');
+  await page.getByLabel('Source and sale details', { exact: true }).fill('Recorded sale, 1 October 2026');
+  await page.getByRole('button', { name: 'Save comparable', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  expect(calls.writes).toHaveLength(1);
+  expect(calls.writes[0]).toMatchObject({ address: '12 Recorded Road', meta: 'Recorded sale, 1 October 2026' });
+  expect(ratePerAreaIn(Number(calls.writes[0].basePsf), 'm²')).toBeCloseTo(220, 8);
+  await expect(page.getByText('12 Recorded Road', { exact: true })).toBeVisible();
+});
+
+test('cancelling new evidence discards the draft without saving invented data', async ({ page }) => {
+  const calls = await evidence(page, { empty: true });
+  await page.getByRole('button', { name: 'Add comp', exact: true }).click();
+  await page.getByLabel('Property address', { exact: true }).fill('Unsaved property');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('form', { name: 'Add comparable evidence', exact: true })).toHaveCount(0);
+  expect(calls.saves).toBe(0);
+  await expect(page.getByText('Not assessed — no evidence', { exact: true })).toBeVisible();
+});
+
+test('a failed new-evidence save retains every entered field for retry', async ({ page }) => {
+  const calls = await evidence(page, { empty: true, failSave: true });
+  await page.getByRole('button', { name: 'Add comp', exact: true }).click();
+  await page.getByLabel('Property address', { exact: true }).fill('12 Recorded Road');
+  await page.getByLabel('Sale rate (£/ft²)', { exact: true }).fill('220');
+  await page.getByLabel('Source and sale details', { exact: true }).fill('Recorded sale evidence');
+  await page.getByRole('button', { name: 'Save comparable', exact: true }).click();
+  await expect(page.getByText(/Evidence was not saved: Save refused/)).toBeVisible();
+  await expect(page.getByLabel('Property address', { exact: true })).toHaveValue('12 Recorded Road');
+  await expect(page.getByLabel('Sale rate (£/ft²)', { exact: true })).toHaveValue('220');
+  await expect(page.getByLabel('Source and sale details', { exact: true })).toHaveValue('Recorded sale evidence');
+  expect(calls.saves).toBe(1);
+  expect(calls.applies).toBe(0);
 });
