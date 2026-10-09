@@ -1880,9 +1880,9 @@ export const comparablesRouter = router({
          * columns should both land. Only the same column is last-write-wins,
          * which is what editing one number means.
          */
-        address: z.string().optional(),
+        address: z.string().trim().min(1).optional(),
         meta: z.string().optional(),
-        basePsf: z.number().optional(),
+        basePsf: z.number().finite().positive().optional(),
         adjSize: z.number().optional(),
         adjCondition: z.number().optional(),
         adjDate: z.number().optional(),

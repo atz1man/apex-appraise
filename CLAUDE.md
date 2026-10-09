@@ -625,6 +625,18 @@ the point, so read the failure rather than adding an exemption.
   the edit safe needs verify-before-promote — a pending connection, a test sign-in through it,
   then promotion — which is a larger piece and sidesteps the migration problem rather than
   solving it.
+- `comparable-integrity.spec.ts` — the evidence grid's total and range use the
+  workspace's rate unit. Missing evidence is not high confidence or a zero value.
+  Blur saves are serialized, and Apply waits for them and any remaining edits
+  before the API reads the evidence. A failed save leaves edits visible and does
+  not apply old figures; editing, adding or removing evidence resets the applied
+  confirmation. The browser guard delays and refuses saves without changing the
+  shared demo appraisal; its batched mock runs operations concurrently like tRPC.
+  Add comp opens a blank evidence form rather than inventing a £220/ft² sale;
+  the address, entered rate and source are saved only on submission. Rates convert
+  from the workspace unit through the shared unit helper. Unsaved evidence warns
+  before navigation. `comparable-entry.test.ts` rejects blank addresses and
+  non-positive or non-finite rates at the API, including patches.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because
@@ -634,8 +646,11 @@ the point, so read the failure rather than adding an exemption.
   resolve — a name with no answer reaches nothing, and refusing here would make the guard
   depend on the machine running it having DNS, which is green on a laptop and red in CI.
   Both fetches also set `redirect: 'manual'`: a checked address stops being the address
-  reached the moment a 302 is honoured. NOT closed: DNS rebinding, which needs the
-  connection pinned to the checked address and so needs undici as a real dependency.
+  reached the moment a 302 is honoured. `publicHttpsFetch` also uses an undici
+  dispatcher whose socket lookup validates the exact addresses it returns, closing
+  DNS rebinding without changing Host, TLS SNI or certificate verification. DNS
+  failure at connection time fails closed. `outbound-connection.test.ts` drives a
+  public preflight followed by private socket resolution through real fetch.
 - `security.ts` batch rule — the rate limiter counts REQUESTS and tRPC batching puts many
   operations in one, so the 10/min `auth` budget was 10 BATCHES/min. Measured: one request
   carrying 60 logins was accepted whole and counted once; at maxParamLength 5000 a single
