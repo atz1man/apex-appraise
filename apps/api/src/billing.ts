@@ -7,8 +7,23 @@
  * state onto the workspace; `changePlan` and `cancelPlan` change that state and
  * then reflect it, through this.
  */
+import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@prisma/client';
 import { PLANS, stripeConfigured, stripeFetch, type PlanDef } from './stripe.js';
+
+/** Corrupt/legacy duplicate customer mappings must not grant access to another tenant's billing. */
+export async function assertExclusiveStripeCustomer(prisma: PrismaClient, customerId: string, orgId: string) {
+  if (await prisma.organisation.count({ where: { stripeCustomerId: customerId, id: { not: orgId } } })) {
+    throw new TRPCError({ code: 'CONFLICT', message: 'This billing customer is assigned to multiple workspaces. Contact support before changing billing.' });
+  }
+}
+
+export async function assertStripeCustomerOpen(customerId: string) {
+  const customer = await stripeFetch<{ deleted?: boolean }>(`/customers/${customerId}`, undefined, 'GET');
+  if (customer.deleted) throw new TRPCError({
+    code: 'PRECONDITION_FAILED', message: 'Billing has been closed for workspace deletion. Retry Delete workspace to complete the deletion.',
+  });
+}
 
 export type PlanKey = PlanDef['key'];
 
@@ -24,20 +39,20 @@ export type StripeSubscription = {
   items?: { data?: Array<{ id?: string; price?: { id?: string; lookup_key?: string | null } }> };
 };
 
-/**
- * Every live subscription for a customer.
- *
- * `limit` was 3 and nothing counted the results, which mattered once it turned
- * out a plan switch could leave two. Ten is enough to tell "one" from "more
- * than one", which is the only distinction anything here draws.
- */
-export const activeSubscriptions = async (customerId: string): Promise<StripeSubscription[]> => {
-  const subs = await stripeFetch<{ data: StripeSubscription[] }>(
-    `/subscriptions?customer=${customerId}&status=active&limit=10`,
-    undefined,
-    'GET',
-  );
-  return (subs.data ?? []).filter((s) => s.status === 'active');
+/** Nonterminal subscriptions, including payment recovery, across every page. */
+export const liveSubscriptions = async (customerId: string): Promise<StripeSubscription[]> => {
+  const live: StripeSubscription[] = [];
+  let after: string | undefined;
+  do {
+    const page: { data: StripeSubscription[]; has_more?: boolean } = await stripeFetch(
+      `/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=100${after ? `&starting_after=${encodeURIComponent(after)}` : ''}`,
+      undefined, 'GET',
+    );
+    live.push(...page.data.filter(s => !['canceled', 'incomplete_expired'].includes(s.status)));
+    after = page.has_more ? page.data.at(-1)?.id : undefined;
+    if (page.has_more && !after) throw new Error('Stripe returned an incomplete subscription list');
+  } while (after);
+  return live;
 };
 
 /**
@@ -96,23 +111,17 @@ export async function reconcileSubscription(prisma: PrismaClient, orgId: string)
     return { plan: org.plan, cancelAt: org.subscriptionCancelAt, ambiguous: false };
   }
 
-  const live = await activeSubscriptions(org.stripeCustomerId);
+  await assertExclusiveStripeCustomer(prisma, org.stripeCustomerId, orgId);
+  const live = await liveSubscriptions(org.stripeCustomerId);
   const ambiguous = live.length > 1;
   const active = ambiguous ? undefined : live[0];
   const named = planOfSubscription(active);
-  const plan = ambiguous ? org.plan : active ? (named ?? org.plan) : 'TRIAL';
-  const cancelAt = active?.cancel_at ? new Date(active.cancel_at * 1000) : null;
-
-  await prisma.organisation.update({
-    where: { id: org.id },
-    data: {
-      plan,
-      // on ambiguity the id is left as it was: naming one of two is the same
-      // invention as naming one of their plans
-      ...(ambiguous ? {} : { stripeSubscriptionId: active?.id ?? null }),
-      subscriptionCancelAt: ambiguous ? org.subscriptionCancelAt : cancelAt,
-    },
-  });
+  // Stripe retries past-due invoices; retain access while those retries run.
+  // Unpaid, incomplete or paused subscriptions still exist but grant no paid access.
+  const grantsAccess = active && ['active', 'trialing', 'past_due'].includes(active.status);
+  const plan = ambiguous ? org.plan : grantsAccess ? (named ?? org.plan) : 'TRIAL';
+  const status = ambiguous ? org.subscriptionStatus : active?.status ?? null;
+  const cancelAt = ambiguous ? org.subscriptionCancelAt : active?.cancel_at ? new Date(active.cancel_at * 1000) : null;
 
   /**
    * Recorded on EVERY change, not only when a subscription is active.
@@ -128,26 +137,49 @@ export async function reconcileSubscription(prisma: PrismaClient, orgId: string)
    * why their plan is not moving has nowhere else to find out.
    */
   const changed = org.plan !== plan;
+  const statusChanged = org.subscriptionStatus !== status;
   const cancellationChanged = (org.subscriptionCancelAt?.getTime() ?? 0) !== (cancelAt?.getTime() ?? 0);
-  if (changed || cancellationChanged || ambiguous) {
-    const anyDeal = await prisma.deal.findFirst({ where: { orgId: org.id }, select: { id: true } });
-    if (anyDeal) {
-      await prisma.activityEvent.create({
+  await prisma.$transaction(async tx => {
+    // Fetching current Stripe state handles reordered events, but two fetches
+    // can still overlap. A late response must not overwrite a newer committed
+    // plan. The webhook returns an error so Stripe retries with a fresh read.
+    const saved = await tx.organisation.updateMany({
+      where: {
+        id: org.id, plan: org.plan, stripeCustomerId: org.stripeCustomerId,
+        stripeSubscriptionId: org.stripeSubscriptionId, subscriptionStatus: org.subscriptionStatus, subscriptionCancelAt: org.subscriptionCancelAt,
+      },
+      data: {
+        plan, subscriptionStatus: status,
+        // On ambiguity no subscription is singled out as the right one.
+        ...(ambiguous ? {} : { stripeSubscriptionId: active?.id ?? null }),
+        subscriptionCancelAt: ambiguous ? org.subscriptionCancelAt : cancelAt,
+      },
+    });
+    if (saved.count !== 1) throw new Error('Subscription changed during reconciliation; retry with current Stripe state');
+    if (changed || statusChanged || cancellationChanged || ambiguous) {
+      const anyDeal = await tx.deal.findFirst({ where: { orgId: org.id }, select: { id: true } });
+      // A new subscriber may not have a deal yet. Record the access change and
+      // its audit event atomically, including for those empty workspaces.
+      await tx.activityEvent.create({
         data: {
           orgId: org.id,
-          dealId: anyDeal.id,
+          dealId: anyDeal?.id ?? null,
           actor: 'Stripe',
           action: ambiguous
             ? 'subscription needs attention'
+            : statusChanged && active && !changed
+              ? 'subscription payment status changed'
             : !active
               ? 'subscription ended'
               : changed
-                ? 'subscription active'
+                ? grantsAccess ? 'subscription active' : 'subscription access suspended'
                 : cancelAt
                   ? 'subscription cancellation scheduled'
                   : 'subscription cancellation withdrawn',
           target: ambiguous
             ? `${live.length} live subscriptions on one customer — plan left on ${org.plan}`
+            : statusChanged && active && !changed
+              ? `${plan} plan — ${status}`
             : !active
               ? `${org.plan} plan ended — workspace on TRIAL`
               : changed
@@ -158,7 +190,7 @@ export async function reconcileSubscription(prisma: PrismaClient, orgId: string)
         },
       });
     }
-  }
+  });
 
   return { plan, cancelAt, ambiguous };
 }
@@ -177,7 +209,8 @@ export async function soleSubscription(
 ): Promise<{ sub: StripeSubscription; itemId: string } | { reason: 'none' | 'several'; count: number }> {
   const org = await prisma.organisation.findUnique({ where: { id: orgId } });
   if (!org?.stripeCustomerId) return { reason: 'none', count: 0 };
-  const live = await activeSubscriptions(org.stripeCustomerId);
+  await assertExclusiveStripeCustomer(prisma, org.stripeCustomerId, orgId);
+  const live = await liveSubscriptions(org.stripeCustomerId);
   if (live.length !== 1) return { reason: live.length === 0 ? 'none' : 'several', count: live.length };
   const sub = live[0]!;
   const itemId = sub.items?.data?.[0]?.id;
@@ -185,4 +218,29 @@ export async function soleSubscription(
   // them, so this is a shape we were handed rather than a case to design for
   if (!itemId) return { reason: 'none', count: 1 };
   return { sub, itemId };
+}
+
+/** Stop every future charge before erasing the only tenant/customer mapping. */
+export async function stopWorkspaceBilling(customerId: string | null) {
+  if (!customerId) return;
+  if (!stripeConfigured()) throw new Error('Billing is not configured; cannot confirm subscription cancellation. The workspace has been kept.');
+  const customer = await stripeFetch<{ deleted?: boolean }>(`/customers/${customerId}`, undefined, 'GET');
+  // Deletion may have succeeded before a local database failure. Retrying the
+  // workspace erasure must not get stuck on its already-deleted customer.
+  if (customer.deleted) return;
+  let after: string | undefined;
+  do {
+    const page: { data: Array<{ id: string; mode: string }>; has_more?: boolean } = await stripeFetch(
+      '/checkout/sessions', { customer: customerId, status: 'open', limit: '100', ...(after ? { starting_after: after } : {}) }, 'GET',
+    );
+    for (const session of page.data) {
+      if (session.mode === 'subscription') await stripeFetch(`/checkout/sessions/${session.id}/expire`, {});
+    }
+    after = page.has_more ? page.data.at(-1)?.id : undefined;
+    if (page.has_more && !after) throw new Error('Stripe returned an incomplete checkout list; workspace has been kept.');
+  } while (after);
+  // Stripe deletes stored card details, cancels subscriptions and prevents new
+  // subscriptions. This also closes the race with checkout in another tab.
+  const deleted = await stripeFetch<{ deleted?: boolean }>(`/customers/${customerId}`, undefined, 'DELETE');
+  if (!deleted.deleted) throw new Error('Stripe did not confirm billing closure; workspace has been kept.');
 }

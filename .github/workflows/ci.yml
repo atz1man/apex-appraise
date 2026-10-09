@@ -17,6 +17,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install
+      - name: Release gate tests
+        run: node --test .github/scripts/require-ci.test.cjs
       # The package where ALL money maths lives was the one package nothing
       # typechecked: `mode: 'fixed'` sat in its tests against a `SiteMode` of
       # 'residual' | 'profit', passing only because an unknown mode falls into
@@ -36,6 +38,8 @@ jobs:
         run: pnpm --filter @apex/mcp-server build && pnpm --filter @apex/mcp-server test
       - name: Typecheck web
         run: pnpm --filter @apex/web lint
+      - name: Web unit tests and component safeguards
+        run: pnpm --filter @apex/web test
       # The heavy dependencies must arrive on demand, not with the screen. A
       # static import does not fail the build — it just moves a megabyte into a
       # route chunk, and the person who pays is a valuer on a site with no

@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { currentAppraisal } from './current-appraisal.js';
 import jwt from 'jsonwebtoken';
-import { chromium, type Browser, type Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
+import { getReportBrowser } from './report-browser.js';
 import { JWT_SECRET, prisma } from './context.js';
 import { recordAudit } from './audit.js';
 import { SHARE_REFUSAL_MESSAGE, hashShareToken, shareRefusal } from './share.js';
@@ -47,18 +48,6 @@ async function typographySettled(page: Page): Promise<{ loaded: boolean; missing
 }
 
 
-let browserPromise: Promise<Browser> | null = null;
-// CHROMIUM_PATH lets the Docker image use the system chromium (apk) instead of
-// Playwright's downloaded browser. Launch failures surface as a graceful 501.
-const getBrowser = () => {
-  browserPromise ??= chromium
-    .launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined })
-    .catch((e) => {
-      browserPromise = null;
-      throw e;
-    });
-  return browserPromise;
-};
 
 /**
  * Server-rendered PDF reports (Appraisal + Red Book). Renders the same React
@@ -99,7 +88,7 @@ export function registerReports(app: FastifyInstance) {
 
     let browser: Browser;
     try {
-      browser = await getBrowser();
+      browser = await getReportBrowser();
     } catch (e) {
       req.log.error(e, 'chromium unavailable for shared report');
       return reply.code(503).send({ error: 'This report cannot be produced right now — please try again shortly.' });
@@ -162,7 +151,7 @@ export function registerReports(app: FastifyInstance) {
 
     let browser: Browser;
     try {
-      browser = await getBrowser();
+      browser = await getReportBrowser();
     } catch (e) {
       req.log.error(e, 'chromium unavailable for PDF rendering');
       return reply.code(501).send({ error: 'PDF rendering unavailable on this server — use Print / Save PDF instead.' });
@@ -239,7 +228,7 @@ export function registerReports(app: FastifyInstance) {
 
       let browser: Browser;
       try {
-        browser = await getBrowser();
+        browser = await getReportBrowser();
       } catch (e) {
         req.log.error(e, 'chromium unavailable for PDF rendering');
         return reply.code(501).send({

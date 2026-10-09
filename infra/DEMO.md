@@ -223,7 +223,7 @@ Say these up front and they cost nothing; discovered mid-test they read as defec
 | Not exercised | Why | What the tester sees instead |
 |---|---|---|
 | Real card payments | No Stripe key | The buyer's payment settles instantly, labelled as demo mode |
-| Email delivery | No SMTP | Invites, welcome and reset emails print into the API log — `docker compose logs api` shows them, reset links included |
+| Email delivery | No SMTP | Workspace admins read invites, welcome and reset emails in Settings → Demo mailbox. Server logs report delivery failures without exposing message contents |
 | EPC register | No bearer token | The panel reports the integration as unconfigured |
 | Companies House, Xero, open banking | Customer-supplied credentials | Connect screens work; a live sync needs a key pasted in |
 

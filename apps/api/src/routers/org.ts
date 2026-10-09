@@ -11,6 +11,7 @@ import { newRecoveryCodes } from '../auth/sso-recovery.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
 import { exportWorkspace } from '../org-export.js';
+import { assertExclusiveStripeCustomer, stopWorkspaceBilling } from '../billing.js';
 import { trialEndFrom } from '../trial.js';
 import { captureError } from '../errors.js';
 import { adminProcedure, authedProcedure, internalProcedure, publicProcedure, requiresFeature, router } from '../trpc.js';
@@ -125,25 +126,34 @@ export const orgRouter = router({
         await recordFailure(ctx.prisma, `register:${email}`);
         throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
       }
-      // the clock starts here, and it is the only place a trial is ever granted
-      const org = await ctx.prisma.organisation.create({
-        data: { name: input.orgName, trialEndsAt: trialEndFrom(new Date()) },
-      });
-      const user = await ctx.prisma.user.create({
-        data: {
-          orgId: org.id,
-          email,
-          password: hashPassword(input.password),
-          name: input.name,
-          role: 'ADMIN',
-          principalType: 'internal',
-          initials: initialsOf(input.name),
-        },
-      });
-      // every workspace starts with the connector catalogue available
-      for (const provider of DEFAULT_INTEGRATIONS) {
-        await ctx.prisma.integrationConnection.create({ data: { orgId: org.id, provider, status: 'NOT_CONNECTED' } });
+      // A signup either creates a usable workspace or creates nothing. In
+      // particular, concurrent requests for one email must not strand an org
+      // after the unique User.email constraint rejects the losing request.
+      let registered;
+      try {
+        registered = await ctx.prisma.$transaction(async tx => {
+          const org = await tx.organisation.create({
+            data: { name: input.orgName, trialEndsAt: trialEndFrom(new Date()) },
+          });
+          const user = await tx.user.create({
+            data: {
+              orgId: org.id, email, password: hashPassword(input.password),
+              name: input.name, role: 'ADMIN', principalType: 'internal',
+              initials: initialsOf(input.name),
+            },
+          });
+          await tx.integrationConnection.createMany({
+            data: DEFAULT_INTEGRATIONS.map(provider => ({ orgId: org.id, provider, status: 'NOT_CONNECTED' })),
+          });
+          return { org, user };
+        });
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
+        }
+        throw error;
       }
+      const { org, user } = registered;
       const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
       const welcome = welcomeEmail(user.name, org.name, APP_URL());
       void sendMail(org.id, email, welcome.subject, welcome.text);
@@ -1284,7 +1294,7 @@ export const orgRouter = router({
     await ctx.prisma.activityEvent.create({
       data: {
         orgId,
-        dealId: anyDeal?.id ?? '',
+        dealId: anyDeal?.id ?? null,
         actor: ctx.principal.name,
         action: 'exported workspace data',
         target: `${Object.keys(file.data).length} tables`,
@@ -1306,6 +1316,10 @@ export const orgRouter = router({
       if (input.confirmName.trim() !== org.name) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Type the workspace name exactly to confirm deletion' });
       }
+      // Do not erase the customer mapping while a subscription can still bill.
+      // A failed Stripe call leaves the workspace intact so deletion is retryable.
+      if (org.stripeCustomerId) await assertExclusiveStripeCustomer(ctx.prisma, org.stripeCustomerId, org.id);
+      await stopWorkspaceBilling(org.stripeCustomerId);
       // Children first (no orgId of their own), then org-scoped rows, then the org
       await ctx.prisma.$transaction(await orgCascadeDeletes(ctx.prisma, orgId));
       return { deleted: true };

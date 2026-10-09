@@ -1,3 +1,4 @@
+import { PLANS } from '../src/stripe.js';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
@@ -49,7 +50,11 @@ const stripeIs = (subs: Sub[]) => {
       // Stripe answers the updated subscription; the code re-reads anyway
       return json(subs[0] ?? {});
     }
-    if (u.pathname === '/v1/prices') return json({ data: [{ id: 'price_new' }] });
+    if (u.pathname === '/v1/prices') {
+      const key = u.searchParams.get('lookup_keys[]');
+      const plan = PLANS.find(p => key === `apex_${p.key.toLowerCase()}_monthly`)!;
+      return json({ data: [{ id: 'price_new', active: true, unit_amount: plan.pricePencePerMonth, currency: 'gbp', recurring: { interval: 'month', interval_count: 1 } }] });
+    }
     return json({ id: 'obj_1' });
   }) as never;
 };
@@ -113,6 +118,11 @@ describe('switching plan changes the subscription there is', () => {
     expect(updatesTo('sub_1')[0]!.body['cancel_at_period_end']).toBe('false');
   });
 
+  it('withdraws a cancellation even when the customer chooses the same plan', async () => {
+    stripeIs([sub('apex_growth_monthly', { cancel_at_period_end: true })]);
+    await admin().billing.changePlan({ plan: 'GROWTH' });
+    expect(updatesTo('sub_1')[0]!.body).toEqual({ cancel_at_period_end: 'false' });
+  });
   it('reflects the new plan on the workspace', async () => {
     stripeIs([sub('apex_growth_monthly')]);
     expect(await admin().billing.changePlan({ plan: 'GROWTH' } as never)).toMatchObject({ plan: 'GROWTH' });
@@ -181,6 +191,18 @@ describe('two live subscriptions are not guessed between', () => {
     await admin().billing.sync();
     expect((await org()).stripeSubscriptionId, 'one of two was picked').toBe('sub_1');
   });
+});
+
+it('keeps the stored cancellation date in an ambiguous reconciliation answer', async () => {
+  const cancellation = new Date('2027-01-01T00:00:00Z');
+  await prisma.organisation.update({ where: { id: T.orgId }, data: { subscriptionCancelAt: cancellation } });
+  try {
+    stripeIs([sub('apex_growth_monthly'), sub('apex_enterprise_monthly', { id: 'sub_other' })]);
+    expect((await admin().billing.sync()).cancelAt).toEqual(cancellation);
+    expect((await org()).subscriptionCancelAt).toEqual(cancellation);
+  } finally {
+    await prisma.organisation.update({ where: { id: T.orgId }, data: { subscriptionCancelAt: null } });
+  }
 });
 
 describe('a subscription can be cancelled, and the cancellation withdrawn', () => {

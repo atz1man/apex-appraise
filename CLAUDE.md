@@ -132,6 +132,27 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 ## Mechanical guards (whole-codebase sweeps)
 
+Release checks are part of the contract too: CI runs the web unit suite, including
+its component sweeps. The manual Deploy workflow requires a successful `ci.yml`
+push run on main for the exact release commit (`.github/scripts/require-ci.cjs`;
+tested with `node --test .github/scripts/require-ci.test.cjs`). An older green
+commit or an unfinished run cannot authorise a release. Hand deployments must
+check that evidence themselves. The root `.dockerignore` excludes local secrets,
+databases and uploads from remote build contexts; never remove those exclusions
+to fix a build. Email logs record delivery failures only, never message contents,
+recipients or raw SMTP errors (`apps/api/test/email-logging.test.ts`); demo admins
+read undelivered messages through the scoped mailbox in Settings.
+
+Subscription access also reconciles from signed Stripe subscription/invoice
+webhooks, not only from Settings (`subscription-webhook.test.ts`). Match the
+stored customer to exactly one workspace; metadata is not a tenant selector.
+Read current Stripe state rather than replaying an event's plan, and return a
+failure if reconciliation fails so Stripe retries. The plan update compares the
+stored billing fields with the pre-fetch snapshot and writes its audit event in
+the same transaction; an overlapping stale response must not replace a newer
+plan. Empty workspaces still get an organisation-level audit event. Existing
+Stripe endpoints must enable the additional event types listed in `infra/DEPLOY.md`.
+
 Each of these walks the REAL router or schema rather than a hand-kept list, because each
 was written after the same defect was found and fixed by hand several times over. Adding a
 procedure or a model without satisfying them fails CI with a message naming yours — that is
@@ -1469,3 +1490,24 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 Long-running project state (roadmap, iteration journal, mistake log) lives in this project's
 Claude memory: `~/.claude/projects/-Users-ahmedosman-Desktop-apex-appraise/memory/` —
 read `loop-log.md` before starting improvement work.
+
+## Customer lifecycle release guards
+
+- Signup is transactional: the organisation, first administrator and connector catalogue
+  either all exist or none exist. `signup-atomic.test.ts` drives concurrent requests for
+  one email and counts the resulting organisations.
+- `billing.checkout` refuses any nonterminal subscription server-side and reuses an open
+  checkout rather than opening another. Customer and checkout creation use Stripe
+  idempotency keys; price lookup failures must not be interpreted as missing prices.
+- Stripe payment status is stored separately from the feature plan. `past_due` retains
+  access during Stripe retries; `unpaid`, `incomplete` and `paused` retain the subscription
+  for recovery but grant no paid access. The Stripe retry policy must terminate prolonged
+  nonpayment. `billing.paymentPortal` is admin-only, tenant-scoped and reachable on expiry.
+- Workspace erasure first closes the Stripe customer, which cancels billing and prevents
+  new subscriptions; a failed external close preserves local data. Retry accepts a customer
+  already deleted by a prior attempt. `billing-customer-lifecycle.test.ts` checks this.
+- Manual/AI/what-if runs retain their origin when opened as a full appraisal. The customer
+  browser journey checks the exported manual origin as well as signup, report and erasure.
+- `pnpm release:check` checks configuration without exposing secrets. The remaining real
+  delivery, payment, valuation and recovery evidence belongs in `docs/SAAS-RELEASE.md`;
+  neither configuration shape nor green CI proves those external acceptance steps.

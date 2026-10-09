@@ -17,6 +17,7 @@ type Verdict = 'Proceed' | 'Caution' | 'Decline';
 type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict };
 
 interface RunState {
+  source: 'manual' | 'ai' | 'whatif';
   extraction: Extraction;
   buildPerSqft: number;
   indicative: Indicative;
@@ -278,6 +279,7 @@ export default function AutoAppraisal() {
       const res = await extract.mutateAsync({ notes, documentIds: docIds, buildPerSqft: buildRate });
       if (docIds.length) utils.documents.list.invalidate();
       setRun({
+        source: 'ai',
         extraction: res.extraction,
         buildPerSqft: buildRate,
         indicative: res.indicative,
@@ -329,7 +331,7 @@ export default function AutoAppraisal() {
     setPhase('loading');
     try {
       const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: buildRate });
-      setRun({ extraction, buildPerSqft: buildRate, indicative, assetLabel: m.assetType, sourceNote: 'Calculated from your manual inputs.', skipped: [] });
+      setRun({ source: 'manual', extraction, buildPerSqft: buildRate, indicative, assetLabel: m.assetType, sourceNote: 'Calculated from your manual inputs.', skipped: [] });
       setChat([]);
       setPhase('result');
     } catch (e) {
@@ -346,7 +348,7 @@ export default function AutoAppraisal() {
     setChatInput('');
     try {
       const res = await whatIf.mutateAsync({ extraction: run.extraction, buildPerSqft: run.buildPerSqft, prompt: q });
-      setRun((r) => (r ? { ...r, extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
+      setRun((r) => (r ? { ...r, source: 'whatif', extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
       setChat((c) => [...c, { role: 'ai', text: res.reply }]);
     } catch {
       setChat((c) => [...c, { role: 'ai', text: 'Something went wrong — try again.' }]);
@@ -361,9 +363,9 @@ export default function AutoAppraisal() {
     try {
       await save.mutateAsync({
         dealId,
-        source: 'ai',
+        source: run.source,
         asNewVersion: !!existingAppraisal,
-        label: existingAppraisal ? 'Auto-Appraisal' : undefined,
+        label: existingAppraisal ? run.source === 'manual' ? 'Manual appraisal' : run.source === 'whatif' ? 'What-if appraisal' : 'Auto-Appraisal' : undefined,
         input: {
           units: x.units.map((u) => ({ label: u.label, count: u.count, area: u.area, cap: u.value, conf: u.conf, source: u.source })),
           efficiency: x.efficiency,

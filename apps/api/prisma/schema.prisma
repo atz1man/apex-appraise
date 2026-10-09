@@ -36,6 +36,7 @@ model Organisation {
   trialEndsAt DateTime?
   stripeCustomerId String?
   stripeSubscriptionId String?
+  subscriptionStatus String?
   // When a cancellation already scheduled in Stripe takes effect. Stored rather
   // than fetched, so the panel can say "ends on the 1st" on a plain page load
   // without a Stripe call per view.

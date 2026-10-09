@@ -117,7 +117,7 @@ describe('who may read it', () => {
 });
 
 describe('what still happens when it is off', () => {
-  it('logs, so an operator can find what would have been sent', async () => {
+  it('logs the delivery failure without disclosing the message or recipient', async () => {
     process.env.NODE_ENV = 'production';
     delete process.env.DEMO_MODE;
     delete process.env.SMTP_URL;
@@ -126,11 +126,14 @@ describe('what still happens when it is off', () => {
     const original = console.log;
     console.log = (...args: unknown[]) => void lines.push(args.join(' '));
     try {
-      const res = await sendMail(A.orgId, 'nobody@firm.test', 'Welcome', 'body');
+      const res = await sendMail(A.orgId, 'nobody@firm.test', 'Private subject', 'https://app/reset?token=private-reset-token');
       // a deployment with neither SMTP nor demo mode is misconfigured rather
       // than malicious; silence would leave nothing to diagnose it with
       expect(res.emailed).toBe(false);
-      expect(lines.join('\n')).toContain('nobody@firm.test');
+      expect(lines.join('\n')).toContain('SMTP is not configured');
+      for (const secret of ['nobody@firm.test', 'Private subject', 'private-reset-token']) {
+        expect(lines.join('\n')).not.toContain(secret);
+      }
     } finally {
       console.log = original;
     }

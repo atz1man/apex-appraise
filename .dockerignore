@@ -1,0 +1,19 @@
+# Remote builders must receive source, never credentials or customer records.
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+.aws
+.codex
+.claude
+**/node_modules
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/*.db
+**/*.db-*
+**/uploads
+**/*.log
+.DS_Store
