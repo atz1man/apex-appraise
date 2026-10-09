@@ -154,3 +154,8 @@ it('explains a partially completed erasure rather than reopening billing', async
   await expect(admin().billing.checkout({ plan: 'STARTER' })).rejects.toThrow(/Retry Delete workspace/);
   await expect(admin().billing.paymentPortal()).rejects.toThrow(/Retry Delete workspace/);
 });
+
+it('explains payment suspension instead of telling an existing customer to buy another plan', async () => {
+  await prisma.organisation.update({ where: { id: A.orgId }, data: { plan: 'TRIAL', trialEndsAt: new Date(0), subscriptionStatus: 'unpaid' } });
+  await expect(admin().deals.create({ name: 'Suspended edit', address: '3 Quay Road, Poole', assetType: 'RESIDENTIAL' })).rejects.toThrow(/subscription needs payment attention/);
+});
