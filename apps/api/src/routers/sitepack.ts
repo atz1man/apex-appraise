@@ -71,8 +71,13 @@ export const sitePackRouter = router({
         return { status: located.status, dealName: deal.name, address: deal.address, postcode };
       }
       const geo = located.geo;
+      // Empty results outside a provider's territory are not a negative search.
+      // Old caches lack country; unknown remains unknown, never guessed.
+      const outsideEW = geo.country === 'Scotland' || geo.country === 'Northern Ireland';
+      const outsideEngland = outsideEW || geo.country === 'Wales';
 
       const epcCreds = await getIntegrationCreds(ctx.prisma, ctx.principal.orgId, 'EPC Register');
+      const epcConfigured = Boolean(epcCreds?.key || process.env.EPC_BEARER_TOKEN);
       const cc = coordKey(geo.latitude, geo.longitude);
 
       /**
@@ -107,10 +112,12 @@ export const sitePackRouter = router({
       };
 
       const [soldRes, constraintsRes, epcRes, floodRes, amenityRes] = await Promise.all([
-        withDeadline(cached(ctx.prisma, { key: `sold:${geo.postcode}`, source: 'HM Land Registry', ttlMs: TTL.sold }, () => fetchSoldPrices(geo.postcode))).catch(() => null),
-        withDeadline(cached(ctx.prisma, { key: `constraints:${cc}`, source: 'planning.data.gov.uk', ttlMs: TTL.constraints }, () => fetchConstraints(geo.latitude, geo.longitude))).catch(() => null),
-        withDeadline(cached(ctx.prisma, { key: `epc:${geo.postcode}`, source: 'EPC register', ttlMs: TTL.epc }, () => fetchEpc(geo.postcode, epcCreds))).catch(() => null),
-        withDeadline(cached(ctx.prisma, { key: `flood:${cc}`, source: 'Environment Agency', ttlMs: TTL.flood }, () => fetchFloodWarnings(geo.latitude, geo.longitude))).catch(() => null),
+        // Old entries may contain an outage cached as an empty successful
+        // search, or an unsorted first page. Do not reuse those as evidence.
+        withDeadline(outsideEW ? Promise.resolve(null) : cached(ctx.prisma, { key: `sold:v2:${geo.postcode}`, source: 'HM Land Registry', ttlMs: TTL.sold }, () => fetchSoldPrices(geo.postcode))).catch(() => null),
+        withDeadline(outsideEngland ? Promise.resolve(null) : cached(ctx.prisma, { key: `constraints:${cc}`, source: 'planning.data.gov.uk', ttlMs: TTL.constraints }, () => fetchConstraints(geo.latitude, geo.longitude))).catch(() => null),
+        withDeadline(outsideEW ? Promise.resolve(null) : !epcConfigured ? Promise.resolve({ value: { status: 'not-configured' as const, records: [], note: 'Connect EPC Register in Integrations to obtain certificate records and verified floor-area matches.' }, fetchedAt: new Date() }) : cached(ctx.prisma, { key: `epc:v4:${ctx.principal.orgId}:${geo.postcode}`, source: 'EPC register', ttlMs: TTL.epc }, async () => { const result = await fetchEpc(geo.postcode, epcCreds); if (result.status === 'error') throw new Error('EPC source unavailable'); return result; })).catch(() => null),
+        withDeadline(outsideEngland ? Promise.resolve(null) : cached(ctx.prisma, { key: `flood:${cc}`, source: 'Environment Agency', ttlMs: TTL.flood }, () => fetchFloodWarnings(geo.latitude, geo.longitude))).catch(() => null),
         withDeadline(cached(ctx.prisma, { key: `amenities:${cc}`, source: 'OpenStreetMap', ttlMs: TTL.amenities }, () => fetchAmenities(geo.latitude, geo.longitude))).catch(() => null),
       ]);
 
@@ -131,12 +138,12 @@ export const sitePackRouter = router({
       const amenityS = settle(amenityRes);
 
       const epc =
-        epcS.state === 'ok'
+        outsideEW ? { status: 'out-of-coverage' as const, records: [], note: 'This EPC data service covers England and Wales. Obtain local certificate evidence separately.' } : epcS.state === 'ok'
           ? (epcS.value as Awaited<ReturnType<typeof fetchEpc>>)
-          : { status: (epcS.state === 'slow' ? 'slow' : 'error') as 'slow' | 'error', records: [], note: epcS.state === 'slow' ? 'Still fetching from the EPC register.' : 'EPC fetch failed' };
+          : { status: (epcS.state === 'slow' ? 'slow' : 'error') as 'slow' | 'error', records: [], note: epcS.state === 'slow' ? 'Still fetching from the EPC register.' : 'EPC register unavailable. Check the connection in Integrations or retry shortly.' };
       const sold = soldS.state === 'ok' ? (soldS.value as Awaited<ReturnType<typeof fetchSoldPrices>>) : null;
       const coords = sold?.length
-        ? (await cached(ctx.prisma, { key: `geo:${geo.postcode}`, source: 'postcodes.io', ttlMs: TTL.geo }, async () => Object.fromEntries(await bulkGeocode(sold.map((s) => s.postcode))))
+        ? (await cached(ctx.prisma, { key: `geo:v2:${geo.postcode}`, source: 'postcodes.io', ttlMs: TTL.geo }, async () => Object.fromEntries(await bulkGeocode(sold.map((s) => s.postcode))))
             .then((c) => new Map(Object.entries(c.value as Record<string, { lat: number; lng: number }>)))
             .catch(() => new Map<string, { lat: number; lng: number }>()))
         : new Map<string, { lat: number; lng: number }>();
@@ -146,7 +153,7 @@ export const sitePackRouter = router({
         dealName: deal.name,
         address: deal.address,
         geo,
-        soldPrices: sold
+        soldPrices: outsideEW ? { status: 'out-of-coverage' as const, items: [] } : sold
           ? {
               status: 'ok' as const,
               asAt: (soldS as { fetchedAt: Date }).fetchedAt.toISOString(),
@@ -157,12 +164,12 @@ export const sitePackRouter = router({
             }
           : { status: soldS.state, items: [] },
         constraints:
-          constraintsS.state === 'ok'
+          outsideEngland ? { status: 'out-of-coverage' as const, checked: [], hits: [] } : constraintsS.state === 'ok'
             ? { status: 'ok' as const, asAt: (constraintsS as { fetchedAt: Date }).fetchedAt.toISOString(), ...(constraintsS.value as Awaited<ReturnType<typeof fetchConstraints>>) }
             : { status: constraintsS.state, checked: [], hits: [] },
         epc,
         floodWarnings:
-          floodS.state === 'ok'
+          outsideEngland ? { status: 'out-of-coverage' as const, items: [] } : floodS.state === 'ok'
             ? { status: 'ok' as const, asAt: (floodS as { fetchedAt: Date }).fetchedAt.toISOString(), items: floodS.value as Awaited<ReturnType<typeof fetchFloodWarnings>> }
             : { status: floodS.state, items: [] },
         amenities:

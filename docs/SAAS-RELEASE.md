@@ -65,3 +65,5 @@ The existing Fly service is not changed or declared customer-ready by these code
 changes. As of 9 October 2026, the web machine reports its last update on 4
 September 2026. A fresh release and the acceptance above are needed; restarting a
 machine does not ship this branch.
+
+Mapping acceptance: configure `TILE_URL`, `TILE_ATTRIBUTION` and `TILE_USER_AGENT` for a production service with agreed capacity and appropriate proxy/cache/export rights. `release:check` rejects the best-effort public OSM tile default. See [product and source readiness](PRODUCT-READINESS.md) for the evidence coverage and commercial provider decisions.

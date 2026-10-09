@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * The site pack's five sources run in parallel, so the response used to take as
@@ -38,10 +38,12 @@ type Tenant = Awaited<ReturnType<typeof makeTenant>>;
 let T: Tenant;
 
 beforeAll(async () => {
+  vi.stubEnv('EPC_BEARER_TOKEN', 'epc-fixture');
   resetDatabase();
   T = await makeTenant('SitePack');
   await prisma.deal.update({ where: { id: T.dealId }, data: { postcode: 'BH8 8EW' } });
 }, 120_000);
+afterAll(() => vi.unstubAllEnvs());
 
 describe('a slow source', () => {
   it('does not hold the page, and is reported as still fetching rather than as clear', async () => {
@@ -80,4 +82,79 @@ describe('a slow source', () => {
       'a second open must not re-ask the Land Registry',
     ).toBe(soldCalls);
   });
+});
+
+describe('sold-price lookup failure', () => {
+  it('reports unavailable evidence, leaves no successful cache, and accepts a real empty search after recovery', async () => {
+    const opendata = await import('../src/opendata.js');
+    const { resetCooloff } = await import('../src/opendata-cache.js');
+    await prisma.openDataCache.deleteMany({ where: { key: { startsWith: 'sold:' } } });
+    resetCooloff();
+    vi.mocked(opendata.fetchSoldPrices).mockRejectedValueOnce(new Error('HM Land Registry search incomplete'));
+    vi.mocked(opendata.fetchFloodWarnings).mockResolvedValueOnce([]);
+
+    const failed = await callerFor(T.principal).sitePack.get({ dealId: T.dealId } as never);
+    expect(failed.status).toBe('ok');
+    if (failed.status !== 'ok') throw new Error('Expected located site');
+    expect(failed.soldPrices.status).toBe('error');
+    expect(failed.soldPrices.items).toEqual([]);
+    expect('asAt' in failed.soldPrices).toBe(false);
+    expect(await prisma.openDataCache.findUnique({ where: { key: 'sold:v2:BH8 8EW' } })).toBeNull();
+
+    resetCooloff();
+    vi.mocked(opendata.fetchSoldPrices).mockResolvedValueOnce([]);
+    const recovered = await callerFor(T.principal).sitePack.get({ dealId: T.dealId } as never);
+    if (recovered.status !== 'ok') throw new Error('Expected located site');
+    expect(recovered.soldPrices.status).toBe('ok');
+    expect(recovered.soldPrices.items).toEqual([]);
+    expect('asAt' in recovered.soldPrices).toBe(true);
+  });
+});
+
+describe('source territory and recovery', () => {
+  it.each([
+    ['Scotland', 'EH1 1AA', 'out-of-coverage', 'out-of-coverage'],
+    ['Northern Ireland', 'BT1 1AA', 'out-of-coverage', 'out-of-coverage'],
+    ['Wales', 'CF10 1AA', 'ok', 'out-of-coverage'],
+  ] as const)('does not report empty English searches as evidence for %s', async (country, postcode, soldStatus, planningStatus) => {
+    const opendata = await import('../src/opendata.js');
+    vi.mocked(opendata.geocodePostcode).mockResolvedValueOnce({ postcode, country, latitude: 55, longitude: -3, district: 'Fixture', region: 'Fixture' });
+    const res = await callerFor(T.principal).sitePack.get({ dealId: T.dealId, postcode });
+    expect(res.status).toBe('ok');
+    if (res.status !== 'ok') throw new Error('Expected a located site');
+    expect(res.soldPrices.status).toBe(soldStatus);
+    expect(res.constraints.status).toBe(planningStatus);
+    expect(res.floodWarnings.status).toBe('out-of-coverage');
+    if (country !== 'Wales') expect(res.epc.status).toBe('out-of-coverage');
+  });
+
+  it('does not cache a failed EPC response as two weeks of unavailable evidence', async () => {
+    const opendata = await import('../src/opendata.js');
+    vi.mocked(opendata.geocodePostcode).mockResolvedValueOnce({ postcode: 'CF10 2AA', country: 'Wales', latitude: 51, longitude: -3, district: 'Fixture', region: 'Fixture' });
+    vi.mocked(opendata.fetchEpc).mockResolvedValueOnce({ status: 'error', records: [], note: 'Fixture upstream failure' });
+    const input = { dealId: T.dealId, postcode: 'CF10 2AA' };
+    const before = vi.mocked(opendata.fetchEpc).mock.calls.length;
+    const first = await callerFor(T.principal).sitePack.get(input);
+    expect(first.status === 'ok' && first.epc.status).toBe('error');
+    expect(await prisma.openDataCache.findUnique({ where: { key: `epc:v4:${T.orgId}:CF10 2AA` } })).toBeNull();
+    // Simulate the short upstream cool-off elapsing; no fortnight-long failure cache.
+    (await import('../src/opendata-cache.js')).resetCooloff();
+    const second = await callerFor(T.principal).sitePack.get(input);
+    expect(second.status === 'ok' && second.epc.status).toBe('ok');
+    expect(vi.mocked(opendata.fetchEpc).mock.calls.length).toBe(before + 2);
+  });
+});
+
+// A missing-key result must not prevent an immediate later configured lookup.
+it('keeps missing EPC configuration out of shared successful caches', async () => {
+  const opendata = await import('../src/opendata.js');
+  vi.mocked(opendata.geocodePostcode).mockResolvedValueOnce({ postcode: 'CF10 3AA', country: 'Wales', latitude: 51, longitude: -3, district: 'Fixture', region: 'Fixture' });
+  vi.stubEnv('EPC_BEARER_TOKEN', '');
+  const input = { dealId: T.dealId, postcode: 'CF10 3AA' };
+  const missing = await callerFor(T.principal).sitePack.get(input);
+  expect(missing.status === 'ok' && missing.epc.status).toBe('not-configured');
+  expect(await prisma.openDataCache.findUnique({ where: { key: `epc:v4:${T.orgId}:CF10 3AA` } })).toBeNull();
+  vi.stubEnv('EPC_BEARER_TOKEN', 'epc-fixture');
+  const connected = await callerFor(T.principal).sitePack.get(input);
+  expect(connected.status === 'ok' && connected.epc.status).toBe('ok');
 });

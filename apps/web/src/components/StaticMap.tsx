@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { MapPin } from './SiteMapImpl';
 
 /**
@@ -20,6 +21,7 @@ export function StaticMap({
   attribution,
   maptype = 'hybrid',
   zoom,
+  onError,
 }: {
   pins: MapPin[];
   height?: number;
@@ -27,20 +29,31 @@ export function StaticMap({
   attribution: string;
   maptype?: 'roadmap' | 'satellite' | 'hybrid' | 'terrain';
   zoom?: number;
+  onError?: () => void;
 }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(640);
+  useEffect(() => {
+    if (!container.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry && entry.contentRect.width > 0) setWidth(Math.min(640, Math.round(entry.contentRect.width)));
+    });
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, []);
   /**
    * No `center` and no `zoom` by default: given markers alone Google frames
    * them itself, which is what a comparables map wants — every pin in view
    * without computing a bounding box the projection would then disagree with.
    */
   const encoded = pins.map((p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)},${p.kind === 'comp' ? '0' : '1'}`).join(';');
-  const src = `${urlPrefix}&pins=${encodeURIComponent(encoded)}&h=${Math.round(height)}${zoom ? `&zoom=${zoom}` : ''}&maptype=${maptype}`;
+  const src = `${urlPrefix}&pins=${encodeURIComponent(encoded)}&w=${width}&h=${Math.round(height)}${zoom ? `&zoom=${zoom}` : ''}&maptype=${maptype}`;
 
   const subject = pins.find((p) => p.kind !== 'comp');
   const others = pins.length - (subject ? 1 : 0);
 
   return (
-    <div className="relative rounded-card overflow-hidden" style={{ height }}>
+    <div ref={container} className="relative rounded-card overflow-hidden bg-sunken" style={{ height }}>
       {/*
         The alt text is the map's content, not its existence. "Map" tells a
         screen-reader user nothing they could not infer; naming the subject and
@@ -49,6 +62,7 @@ export function StaticMap({
       */}
       <img
         src={src}
+        onError={onError}
         alt={
           subject
             ? `Aerial map of ${subject.label}${others > 0 ? `, with ${others} comparable ${others === 1 ? 'property' : 'properties'} marked` : ''}`
@@ -57,7 +71,7 @@ export function StaticMap({
         width="100%"
         height={height}
         loading="lazy"
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
       />
       <div
         className="absolute bottom-0 right-0 px-1.5 py-0.5 text-[9.5px] text-ink-2"

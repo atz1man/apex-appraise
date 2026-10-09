@@ -9,7 +9,7 @@ import { ENTITY, type LegalEntity } from '../apps/web/src/legal/entity.js';
 export function releaseConfigurationIssues(env: Record<string, string | undefined>, entity: LegalEntity): string[] {
   const issues: string[] = [];
   const required = ['DATABASE_URL', 'JWT_SECRET', 'ENCRYPTION_KEY', 'APP_URL', 'WEB_URL', 'SMTP_URL', 'EMAIL_FROM',
-    'STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'];
+    'STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET', 'TILE_URL', 'TILE_ATTRIBUTION', 'TILE_USER_AGENT'];
   for (const name of required) if (!env[name]?.trim()) issues.push(`${name} is missing`);
   if (env.NODE_ENV !== 'production') issues.push('NODE_ENV must be production');
   for (const name of ['DEMO_MODE', 'SEED_DEMO']) if (env[name] === '1') issues.push(`${name} must be disabled on the customer deployment`);
@@ -28,6 +28,15 @@ export function releaseConfigurationIssues(env: Record<string, string | undefine
       const url = new URL(env[name]);
       if (url.protocol !== 'https:' || url.username || url.password || url.hostname === 'localhost' || (isIP(url.hostname.replace(/^\[|\]$/g, '')) !== 0 && !isPublicAddress(url.hostname.replace(/^\[|\]$/g, '')))) throw new Error();
     } catch { issues.push(`${name} must be a public HTTPS URL`); }
+  }
+  if (env.TILE_URL) {
+    try {
+      const url = new URL(env.TILE_URL);
+      const host = url.hostname.replace(/^\[|\]$/g, '');
+      if (url.protocol !== 'https:' || url.username || url.password || host === 'localhost' || (isIP(host) && !isPublicAddress(host))) throw new Error();
+      if (!['{z}', '{x}', '{y}'].every((placeholder) => env.TILE_URL!.includes(placeholder))) throw new Error();
+      if (host === 'tile.openstreetmap.org' || host.endsWith('.tile.openstreetmap.org')) issues.push('TILE_URL must use a production mapping service with agreed capacity; the public OSM service has no SLA');
+    } catch { issues.push('TILE_URL must be a public HTTPS tile template containing {z}, {x} and {y}'); }
   }
   if (env.STRIPE_SECRET_KEY && !env.STRIPE_SECRET_KEY.startsWith('sk_live_')) issues.push('STRIPE_SECRET_KEY must use live mode for customer billing');
   if (env.STRIPE_PUBLISHABLE_KEY && !env.STRIPE_PUBLISHABLE_KEY.startsWith('pk_live_')) issues.push('STRIPE_PUBLISHABLE_KEY must use live mode for customer billing');

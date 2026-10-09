@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (319; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1093). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1216). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (371): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (197, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (213, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -1511,3 +1511,19 @@ read `loop-log.md` before starting improvement work.
 - `pnpm release:check` checks configuration without exposing secrets. The remaining real
   delivery, payment, valuation and recovery evidence belongs in `docs/SAAS-RELEASE.md`;
   neither configuration shape nor green CI proves those external acceptance steps.
+
+## Location evidence contracts
+
+A source outage is not successful empty evidence. Sold-price samples require
+all requested postcode batches to succeed, with source-side date ordering.
+Postcode centres are not exact properties or title boundaries; planning results
+are point screening with incomplete England coverage. Preserve known source
+territory and leave unknown country metadata unknown. EPC records require
+exact normalized address/postcode identity and one certificate before using an
+area to compute a rate. Use the engine's `analysedPsf` and `SQFT_PER_SQM`.
+Missing credentials and transient failures must not persist as successful cache
+entries; EPC caches are workspace-scoped. Map popup labels are text, never HTML;
+static imagery keeps its full frame/attribution and fails visibly into the street
+map. The customer release check requires a production tile service, attribution
+and contactable user agent. See `docs/PRODUCT-READINESS.md` for provider choices
+and the evidence needed before claiming commercial differentiation.

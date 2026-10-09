@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { useUnits } from '../lib/region';
-import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
+import { Avatar, Button, Icon, Listbox, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 import { workingDeal } from '../lib/working-deal';
 
@@ -108,7 +108,10 @@ export default function Hub() {
     },
   });
   // the deal the firm is on — `lib/working-deal.ts` says how that is decided
-  const flagship = workingDeal(data?.deals);
+  const selectionKey = `apex_working_deal_${principal?.userId ?? 'anonymous'}`;
+  const [selectedDealId, setSelectedDealId] = useState(() => sessionStorage.getItem(selectionKey) ?? '');
+  // Only a deal returned for this signed-in workspace can become the tool target.
+  const flagship = data?.deals.find((d) => d.id === selectedDealId) ?? workingDeal(data?.deals);
   // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
   const TOOL_TINTS: Record<string, string> = {
     appraise: 'bg-tint-success text-brand-ink',
@@ -121,6 +124,7 @@ export default function Hub() {
         ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
         ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],
         ['comps', 'Comparables', `Adjustment grid → supported £/${U.unit}`, `/deal/${flagship.id}/comparables`, 'appraise'],
+        ['comps', 'Site evidence', 'Maps, recorded sales, planning & EPCs', `/deal/${flagship.id}/sitepack`, 'site'],
         ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`, 'appraise'],
         ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`, 'site'],
         ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`, 'sell'],
@@ -136,7 +140,7 @@ export default function Hub() {
         // A4. It was complete, tested and reachable only by typing the URL: every
         // one of its e2e specs opens it with `page.goto`, which is the tell.
         ['pack', 'Portfolio funding pack', 'The book as a lender receives it — exposure, covenants, exceptions', '/portfolio/pack', 'records'],
-        ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
+        ['integrations', 'Integrations', 'Supported feeds, coverage & credentials', '/integrations', 'records'],
       ]
     : [];
 
@@ -285,7 +289,16 @@ export default function Hub() {
         {/* deal tools grid */}
         <section className="mt-9">
           <div className="eyebrow">Deal tools</div>
-          <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">Everything on {flagship?.name ?? 'your pipeline'}</h2>
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">Everything on {flagship?.name ?? 'your pipeline'}</h2>
+              {flagship && <p className="mt-1 text-[12px] text-ink-3">Choose the deal you are working on. Every deal tool below opens that workfile.</p>}
+            </div>
+            {flagship && data && <div className="w-full sm:w-[300px]">
+              <Listbox ariaLabel="Working deal" value={flagship.id} options={data.deals.map((d) => ({ value: d.id, label: d.name }))}
+                onChange={(id) => { setSelectedDealId(id); sessionStorage.setItem(selectionKey, id); }} />
+            </div>}
+          </div>
           <div className="mt-4 grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(255px, 1fr))' }}>
             {isLoading &&
               Array.from({ length: 8 }, (_, i) => (
@@ -313,7 +326,7 @@ export default function Hub() {
 
         <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-ink hover:text-brand-600 transition-colors">
           <span aria-hidden="true" className="inline-flex"><Icon d={ICONS.integrations} size={15} /></span>
-          Connected data sources — Land Registry, EPC, AVM →
+          Data sources — capabilities and coverage →
         </Link>
       </main>
     </div>
