@@ -40,8 +40,8 @@ export function SiteMap({ pins, height = 300, interactive = false, maptype, zoom
       {controls && (
         <div className="mb-2 flex items-center justify-between gap-2 flex-wrap print:hidden">
           <div role="group" aria-label="Map view" className="inline-flex gap-1">
-            <button type="button" aria-pressed={!imagery} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${!imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => setView('interactive')}>Street map</button>
-            {config.staticMapUrl && located.length <= 40 && <button type="button" aria-pressed={imagery} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => { setFailedImage(null); setView('imagery'); }}>Aerial image</button>}
+            <button type="button" aria-pressed={!imagery} style={{ border: '1px solid rgb(var(--control-border))' }} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${!imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => setView('interactive')}>Street map</button>
+            {config.staticMapUrl && located.length <= 40 && <button type="button" aria-pressed={imagery} style={{ border: '1px solid rgb(var(--control-border))' }} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => { setFailedImage(null); setView('imagery'); }}>Aerial image</button>}
           </div>
           {!imagery && <Button size="sm" onClick={() => setReset((v) => v + 1)}>Fit properties</Button>}
         </div>

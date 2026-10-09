@@ -7,6 +7,10 @@ async function site(page: Page, opts: { image?: boolean; failImage?: boolean; co
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools', { exact: true })).toBeVisible();
   const href = await page.getByRole('link', { name: /^Site evidence/ }).getAttribute('href');
+  const policy = await page.evaluate(async () => {
+    const response = await fetch('/trpc/org.policy', { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    return (await response.json()).result.data.json;
+  });
   const label = opts.hostile ? '<img src=x onerror="document.body.dataset.injected=1">' : 'Recorded property';
   await page.route('**/tiles/**', (route) => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=', 'base64') }));
   await page.route('**/staticmap?**', (route) => opts.failImage ? route.fulfill({ status: 503 }) : route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=', 'base64') }));
@@ -14,8 +18,19 @@ async function site(page: Page, opts: { image?: boolean; failImage?: boolean; co
     const u = new URL(route.request().url());
     const ops = u.pathname.split('/trpc/')[1]!.split(',');
     const batched = u.searchParams.get('batch') === '1';
-    const actual = await (await route.fetch()).json();
-    const rows = batched ? actual : [actual];
+    const mocked = new Set(['org.mapConfig', 'org.policy', 'sitePack.get']);
+    if (ops.every((op) => !mocked.has(op))) return route.continue();
+    const inputs = JSON.parse(u.searchParams.get('input') ?? '{}');
+    // Never request an upstream source that this fixture replaces. Forward only
+    // unrelated operations, preserving each operation's input and real response.
+    const rows = await Promise.all(ops.map(async (op, i) => {
+      if (mocked.has(op)) return {};
+      const single = new URL(u);
+      single.pathname = `${u.pathname.split('/trpc/')[0]}/trpc/${op}`;
+      single.searchParams.delete('batch');
+      single.searchParams.set('input', JSON.stringify(batched ? inputs[i] ?? {} : inputs));
+      return (await route.fetch({ url: single.toString() })).json();
+    }));
     ops.forEach((op, i) => {
       let json: unknown;
       if (op === 'org.mapConfig') {
@@ -24,7 +39,7 @@ async function site(page: Page, opts: { image?: boolean; failImage?: boolean; co
           return;
         }
         json = { tileUrl: '/tiles/{z}/{x}/{y}.png?t=test', attribution: 'Test map', maxZoom: 19, staticMapUrl: opts.image ? '/staticmap?t=test' : null, staticMapAttribution: 'Test imagery' };
-      } else if (op === 'org.policy' && opts.metric) json = { ...rows[i]?.result?.data?.json, region: 'AU' };
+      } else if (op === 'org.policy') json = { ...policy, ...(opts.metric ? { region: 'AU' } : {}) };
       else if (op === 'sitePack.get') json = {
         status: 'ok', dealName: 'Evidence test', address: 'Subject site',
         geo: { postcode: 'BH8 8EW', latitude: 50.73, longitude: -1.86, district: 'BCP', region: 'South West' },

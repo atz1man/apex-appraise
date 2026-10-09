@@ -679,7 +679,8 @@ export const documentsRouter = router({
       await assertOwnDeal(ctx, input.dealId);
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const all = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
@@ -1000,7 +1001,8 @@ export const documentsRouter = router({
       // readable = a stored file the AI can actually open (mirrors Auto-Appraisal)
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const readable = docs
         .filter((d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
