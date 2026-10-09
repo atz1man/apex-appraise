@@ -20,11 +20,22 @@ screen for the length of the second deploy), then proves the site is actually se
 asking the public host for `/login` and `/ready` — the second is proxied to the API and
 checks the database, which a front-end-only smoke test would miss.
 
-It needs one repository secret, `FLY_API_TOKEN`:
+Before deploying, the workflow requires a successful CI push run on `main` for
+the exact commit selected by the workflow. A missing, running, failed or cancelled
+run blocks deployment. Wait for CI to finish, then run Deploy again. CI includes
+the web unit tests and component safeguards as well as the engine, API, schema
+and browser checks. This gate applies to the Actions workflow; hand deployments
+still require the operator to check CI.
+
+Use two app-scoped repository secrets:
 
 ```bash
-fly tokens create deploy -a apex-appraise-api
+fly tokens create deploy -a apex-appraise-api   # store as FLY_API_TOKEN
+fly tokens create deploy -a apex-appraise-web   # store as FLY_WEB_API_TOKEN
 ```
+
+The web deployment falls back to `FLY_API_TOKEN` for existing setups where that
+token is authorised for both apps. An API-only token cannot deploy the web app.
 
 **Why this exists.** A green CI run and a merged PR mean the code is CORRECT, never that it
 is RUNNING. On 4 September the live API was found to be serving an image built on 10 August
@@ -57,6 +68,8 @@ POSTGRES_PASSWORD=REPLACE_ME   # openssl rand -hex 32 — the database password
 ENCRYPTION_KEY=REPLACE_ME      # openssl rand -hex 32 — seals credentials at rest
 ENV
 $EDITOR .env   # paste real values in; the first two are REQUIRED and the stack will not start without them
+```
+
 ### About `ENCRYPTION_KEY`
 
 Xero and open-banking refresh tokens, the API keys a workspace pastes in for the
@@ -80,10 +93,9 @@ one, with an error saying so rather than returning rubbish. Reconnecting Xero,
 the bank feed and the self-serve providers is the recovery, and re-adding
 webhook endpoints. Pick the key once.
 
-# Optional integrations — same file, same reason. Each degrades gracefully to a
-# clearly-labelled demo mode when unset, which is exactly why they belong here
-# and not in a shell: a later rebuild without them does not fail, it quietly
-# turns live AI extraction and real payments back off.
+```bash
+# Optional integrations — same file, same reason. Missing credentials disable
+# live integrations. Sample fallbacks require an explicit demo deployment.
 cat >> .env <<'ENV'
 ANTHROPIC_API_KEY=                       # live AI extraction in Auto-Appraisal
 SMTP_URL=smtp://user:pass@host:587       # invite + welcome email delivery
@@ -215,8 +227,18 @@ public address, and why the `demo-reset` workflow curls the WEB host rather than
 ## Stripe webhook
 
 In the Stripe dashboard add an endpoint `https://<your-host>/webhooks/stripe` subscribed to
-`payment_intent.succeeded`, and set its signing secret as `STRIPE_WEBHOOK_SECRET`. Without
-Stripe keys the buyer portal runs in clearly-labelled demo mode (payments settle instantly).
+`payment_intent.succeeded`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`,
+`customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`
+and `invoice.payment_failed`. Set its signing secret as `STRIPE_WEBHOOK_SECRET`.
+Existing endpoints must add the subscription and invoice events too: deploying
+the handler does not change Stripe's event selection. The handler verifies the
+signature, matches the stored customer to one workspace and fetches the current
+subscription state, so an old event does not replay an old plan. See
+[Stripe's subscription webhook guidance](https://docs.stripe.com/billing/subscriptions/webhooks).
+Without
+Stripe keys, production refuses payment; only an explicit demo deployment settles
+sample payments instantly.
 
 ## Ops: backups, restores and monitoring
 
@@ -295,19 +317,41 @@ A monitor that cannot go red is worse than no monitor: it is the thing you check
 
   Not enabled by default: the right rate depends on your traffic, and a limit guessed here
   would throttle a busy firm rather than an attacker.
-- CI (GitHub Actions) runs the engine's 48 golden tests, both typechecks, and a full
-  Postgres schema/seed validation on every push.
+- CI (GitHub Actions) runs engine, API, MCP and web tests, typechecks, the web build
+  and bundle check, Postgres schema/seed validation, and browser tests on main pushes
+  and pull requests.
 
-## Going live: the four things only the owner can do
+## Release acceptance
 
-Everything below is already built and exercised in demo/sandbox mode. Each item is
-a credential or a decision, and the product states honestly what it cannot do
-until each one is supplied — it does not pretend.
+A green local suite is evidence about the code, not confirmation that a customer
+can buy and use the deployed service. Record the release commit and evidence for
+each item below before admitting paying customers. An unchecked item is unknown,
+not a pass. Keep the public demo separate from customer data.
+
+| Requirement | Evidence to record |
+|---|---|
+| Tested release | Successful CI run for the release commit, including Postgres and browser jobs |
+| Operator identity and terms | Confirmed values in `apps/web/src/legal/entity.ts`, approved terms and privacy text, working support and privacy inboxes |
+| Customer deployment | HTTPS customer domain; demo seeding, demo fallbacks and reset endpoint disabled; no published demo accounts in the customer database |
+| Account lifecycle | New workspace, delivered invitation, password reset, team access and offboarding exercised on the customer deployment |
+| Subscription lifecycle | Checkout, plan change, cancellation, renewal/webhook reconciliation and failed-payment handling verified against the intended Stripe account |
+| Valuation journey | A valuer checks a representative scheme from inputs and evidence through approval, PDF export and portal sharing |
+| Recovery | Offsite database and upload backups, a successful restore drill, named incident owner and an external readiness monitor |
+| Integrations | Enabled providers verified; mapping provider and attribution selected; disabled providers described honestly |
+
+Docker builds exclude local credentials, databases and uploaded records through
+the root `.dockerignore`. Do not remove those exclusions to make a build pass.
+
+## Going live: owner configuration
+
+These settings require owner-supplied information. Their presence alone does not
+prove the live journey; use the acceptance checks above.
 
 ### 1. Deploy — done, and this is how each release goes out
 
-Fly is live. Nothing here is blocked; what follows is the release procedure rather than a
-first-time setup. `flyctl auth login` once on the machine you deploy from, then:
+The repository contains configuration for the existing Fly apps. Verify their
+current status before releasing. Prefer the CI-gated Actions workflow above;
+for a hand deployment, check CI for the exact commit first, then:
 
 ```bash
 fly deploy -c infra/fly.api.toml
@@ -320,8 +364,10 @@ days at that moment rather than being retro-expired.
 
 ### 2. Email — nothing reaches a real inbox until this is set
 
-Without `SMTP_URL`, invites, password resets and welcome mail go to an in-memory
-demo mailbox. Self-serve signup does not work for a real customer in that state.
+Without `SMTP_URL`, mail is not delivered. An explicitly enabled demo can read it
+through its workspace-scoped demo mailbox; production cannot. Logs record the
+delivery failure without recipients, message contents or credentials. Verify
+invites and password resets reach real inboxes before onboarding customers.
 
 ```bash
 fly secrets set -a apex-appraise-api \
@@ -337,8 +383,9 @@ serve messages out of it.
 
 ### 3. Stripe — sandbox keys cannot take money
 
-The keys in `.env` are `sk_test`/`pk_test`. Checkout, plan sync and buyer payments
-are all proven against them; going live is a key swap plus tax settings.
+Use the intended live Stripe account for paid launch. Local key files are not
+evidence of the deployed account or of successful payments. Supply keys through
+the secret manager and verify the subscription lifecycle before launch.
 
 ```bash
 fly secrets set -a apex-appraise-api \
@@ -363,3 +410,5 @@ rather than inventing one.
 
 A UK controller also needs an ICO registration (ico.org.uk, ~£52/yr) before
 processing customer data commercially.
+
+The customer journey and owner acceptance evidence are tracked in [docs/SAAS-RELEASE.md](../docs/SAAS-RELEASE.md). Run `pnpm release:check` with the intended customer environment before declaring it configured. A pass checks configuration shape; it does not replace delivery, payment or restore drills.

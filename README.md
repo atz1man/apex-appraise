@@ -99,7 +99,7 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, ~1,760 tests plus 197 browser specs. All of them run in CI on every PR.
+Five suites, ~1,760 tests plus 205 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
@@ -152,7 +152,7 @@ All optional vars degrade gracefully to a clearly-labelled demo mode when unset.
 - `ENCRYPTION_KEY` — 32 bytes (hex or base64) sealing integration credentials at rest. Optional: derived from `JWT_SECRET` when unset, so nothing breaks on upgrade — but then rotating `JWT_SECRET` makes every sealed field unreadable. See `infra/DEPLOY.md`
 - `RATE_LIMIT_PER_MIN` (default 600) and `AUTH_RATE_LIMIT_PER_MIN` (default 10) — raise them only for a test run, never in the deployed file
 - `ANTHROPIC_API_KEY` — live LLM extraction for Auto-Appraisal
-- `SMTP_URL` + `EMAIL_FROM` + `APP_URL` — invite/welcome email delivery (logged to console otherwise)
+- `SMTP_URL` + `EMAIL_FROM` + `APP_URL` — invite/welcome email delivery (otherwise undelivered; an enabled demo has a workspace-scoped mailbox in Settings)
 - `STRIPE_SECRET_KEY` — live buyer card payments (PaymentIntents); demo mode settles instantly
 - `STRIPE_WEBHOOK_SECRET` — signature verification for `POST /webhooks/stripe`
 

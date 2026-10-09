@@ -2,7 +2,7 @@
   "name": "apex-appraise",
   "private": true,
   "version": "0.1.0",
-  "description": "Apex Appraise — connected operating system for UK residential & mixed-use property development",
+  "description": "Apex Appraise \u2014 connected operating system for UK residential & mixed-use property development",
   "scripts": {
     "dev": "pnpm --parallel --filter @apex/api --filter @apex/web dev",
     "dev:api": "pnpm --filter @apex/api dev",
@@ -10,7 +10,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "seed": "pnpm --filter @apex/api seed",
-    "db:push": "pnpm --filter @apex/api db:push"
+    "db:push": "pnpm --filter @apex/api db:push",
+    "release:check": "pnpm --filter @apex/api exec tsx ../../infra/check-release.ts"
   },
   "packageManager": "pnpm@9.15.0"
 }
