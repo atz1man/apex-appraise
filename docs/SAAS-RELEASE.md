@@ -12,7 +12,7 @@ The `codex/saas-completion` branch builds on PR #26 and preserves the pending
 | Journey | Implementation and evidence |
 | --- | --- |
 | Signup | Workspace, administrator and connector catalogue commit in one transaction. `signup-atomic.test.ts` drives simultaneous signup and checks no orphan remains. |
-| Activation and appraisal | `saas-customer-lifecycle.spec.ts` registers its own empty workspace, creates a deal through the drawer, enters a scheme manually, saves it, opens the report and fetches a generated PDF. It uses no seeded valuation. |
+| Activation and appraisal | `saas-customer-lifecycle.spec.ts` registers its own empty workspace, creates a deal through the drawer, enters a scheme manually, saves it, opens the report and fetches a generated PDF. The renderer cache is discarded after Chromium disconnects, so a crash does not leave all future reports failing. It uses no seeded valuation. |
 | Provenance | Manual, AI and what-if runs preserve their origin when saved. The lifecycle export checks the manual source. Comparable evidence and unit correctness are covered in PR #26. |
 | Checkout | Existing and delinquent subscriptions are checked on the server. An open checkout is reused; customer and checkout creation carry Stripe idempotency keys. A checkout already opened on a different plan is refused until completed or expired. |
 | Subscription changes | Current Stripe state is reconciled from signed lifecycle events. Access and audit records commit together; a slower response cannot overwrite a newer plan. |

@@ -41,7 +41,7 @@ interest), `buildSpendProfile`, `irr` (bisection, null on no root), `sdltCommerc
 `weightedComparables`, sales/lettings/portfolio roll-ups, and en-GB formatters.
 
 Run the tests: `pnpm --filter @apex/appraisal-engine test`
-(313 tests; the golden fixture is the Bournemouth trade-counter reference case from
+(319 tests; the golden fixture is the Bournemouth trade-counter reference case from
 `CALCULATIONS.md §12`, asserted to the penny / basis point against the prototype's
 own `compute()` output. Its every numeric output is also hashed against
 `ENGINE_VERSION`, so changing any arithmetic fails the build until somebody bumps
@@ -99,15 +99,15 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, ~1,760 tests plus 205 browser specs. All of them run in CI on every PR.
+Five suites, 1,893 unit/API tests plus 205 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
-| Engine | `pnpm --filter @apex/appraisal-engine test` | 313 |
-| API | `cd apps/api && npx vitest run` | 1084 |
-| Web unit | `cd apps/web && npx vitest run` | 360 |
+| Engine | `pnpm --filter @apex/appraisal-engine test` | 319 |
+| API | `cd apps/api && npx vitest run` | 1186 |
+| Web unit | `cd apps/web && npx vitest run` | 371 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 197 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 205 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase
