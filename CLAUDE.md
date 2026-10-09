@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (319; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1085). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1093). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (371): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -1094,6 +1094,34 @@ the point, so read the failure rather than adding an exemption.
   four e2e specs whose premise was "this seeded deal is a shell", which now make their own
   with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
   the demo being filled in.
+- `agent-docs` (API suite) — **`AGENTS.md` keeps its promises.** Codex CLI, Copilot and
+  Cursor read `AGENTS.md` at the repo root by convention, the way Claude Code reads this
+  file, so the moment it exists a second agent's first act here is to believe it — and an
+  onboarding document naming a command that does not run, or a guard that no longer
+  exists, is worse than none, because the reader stops looking. Same argument
+  `security-headers` records about two files claiming a protection nothing enforced.
+  `AGENTS.md` deliberately does NOT restate the rules: this file is the one table, and two
+  agent documents paraphrasing the same non-negotiables is `trpc.ts`'s own complaint about
+  a rule written in several places, in documentation form. What it adds is an INDEX — "if
+  you are adding a tRPC procedure, these are the sweeps that will fail you" — plus the
+  branch-and-PR protocol for working beside another agent, and the MCP config, because an
+  agent that reasons its way to a GDV has broken the LLM-never-computes rule exactly as a
+  procedure would. The sweep checks the three CHECKABLE kinds of claim, each of which rots
+  differently: a COMMAND (a renamed package script), a GUARD NAME in the index (renamed or
+  folded into another file — and the index is precisely where that is invisible, since a
+  stale row still reads as authoritative), and a PATH. Writing it found three faults in its
+  own prose, which is the point: `e2e/reachable.spec.ts` is not openable from the repo root,
+  and the index's right-hand column carried `ENGINE_VERSION` and `data-decorative` — an
+  identifier and an attribute, not guards — so that column means one thing now. It also
+  found a real defect in `packages/mcp-server/README.md`: the documented root command
+  `node --import tsx packages/…` fails with `ERR_MODULE_NOT_FOUND`, because `tsx` is that
+  package's own dev dependency and not the workspace root's. Both the filtered form and the
+  `npx -y tsx` form an MCP client uses are now driven through a real `initialize` +
+  `tools/list` handshake, 13 tools, the npx one from outside the repo. NOT PROVEN, and said
+  in the test: that `AGENTS.md` does not DUPLICATE what it points at. No matcher reads two
+  documents and decides whether one restates the other; the length check is a proxy that
+  would catch a wholesale copy and miss a paraphrased paragraph. Four mutants recorded, one
+  per parser.
 - `security-headers` (API suite) — the headers the docs said the front door enforced. It
   enforced none: the ONLY `add_header` directives in `nginx.conf.template` were five
   `Cache-Control` lines, with no CSP, no HSTS, no `X-Frame-Options`, no `nosniff` and no
