@@ -184,8 +184,8 @@ rather than guess.
 2. Expect three investors, their holdings and their share of the LP base.
 3. Add an investor, give them a holding on a deal, and record a distribution and a
    capital call.
-4. Invite them to the portal under **Portal access**. Expect the invite email in the
-   server log (`docker compose logs api`).
+4. Invite them to the portal under **Portal access**. As a workspace admin, read the
+   invite in **Settings → Demo mailbox** (demo mode with no SMTP configured).
 5. Remove one and expect their portal login removed with them.
 
 ## 14. Funding pack
