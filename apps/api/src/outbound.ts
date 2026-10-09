@@ -1,4 +1,5 @@
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
+import { Agent } from 'undici';
 import { lookup } from 'node:dns/promises';
 
 /**
@@ -27,15 +28,11 @@ import { lookup } from 'node:dns/promises';
  * plain HTTP. By accident is not a guard, and it says nothing about the rest of
  * a private network.
  *
- * WHAT THIS DOES NOT DO. It resolves the hostname and refuses private answers,
- * then hands the ORIGINAL hostname to fetch — so a name that resolves publicly
- * here and privately a millisecond later (DNS rebinding) is not stopped. Closing
- * that needs the connection pinned to the address that was checked, which means
- * a custom undici dispatcher, which means adding undici as a real dependency of
- * this package. That is a deliberate, recorded limitation and not an oversight:
- * everything short of an attacker-controlled authoritative nameserver is
- * covered, and redirects — the cheap way to reach the same end — are refused
- * outright at the fetch.
+ * Connections use a guarded DNS lookup through an undici dispatcher. The
+ * addresses returned to the socket are the same addresses checked for public
+ * routability: there is no second resolution between the check and connection.
+ * The original hostname remains in the request for Host, TLS SNI and certificate
+ * verification. Redirects are refused by the shared transport.
  */
 
 export class OutboundUrlError extends Error {
@@ -203,4 +200,35 @@ export async function assertPublicHttpsUrl(raw: string): Promise<void> {
       `${host} resolves to ${bad.address}, which is not a public address. A webhook endpoint cannot point inside the network this server runs in.`,
     );
   }
+}
+
+
+/** Resolve and validate the actual socket destination in one operation. */
+export const publicHttpsLookup: LookupFunction = (hostname, options, callback) => {
+  lookup(hostname, { all: true, family: options.family, hints: options.hints }).then(
+    (addresses) => {
+      if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) {
+        callback(new OutboundUrlError('The endpoint does not resolve exclusively to public addresses.'), []);
+        return;
+      }
+      if (options.all) callback(null, addresses);
+      else callback(null, addresses[0]!.address, addresses[0]!.family);
+    },
+    (error: NodeJS.ErrnoException) => callback(error, []),
+  );
+};
+
+const publicDispatcher = new Agent({ connect: { lookup: publicHttpsLookup } });
+
+/** The shared transport for URLs chosen by a customer or their identity provider. */
+export async function publicHttpsFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  // Literal IPs skip lookup at the socket layer, so preflight still matters.
+  await assertPublicHttpsUrl(url);
+  const guardedInit: RequestInit & { dispatcher: Agent } = {
+    ...init,
+    dispatcher: publicDispatcher,
+    redirect: 'manual',
+    signal: init.signal ?? AbortSignal.timeout(15_000),
+  };
+  return fetch(url, guardedInit);
 }

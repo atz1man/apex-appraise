@@ -153,7 +153,9 @@ describe('an endpoint whose host has gone is parked too', () => {
     id = made.id;
     await prisma.webhookEndpoint.update({ where: { id }, data: { failureCount: FAILURE_LIMIT - 1 } });
     await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
+    const due = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
     await drainWebhooks(prisma, {
+      now: () => due.nextAttemptAt,
       deliver: async () => {
         throw new Error('ECONNREFUSED');
       },

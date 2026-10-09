@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { planHasFeature } from '@apex/types/plan';
 import { openFor } from './sealed-fields.js';
-import { assertPublicHttpsUrl } from './outbound.js';
+import { publicHttpsFetch } from './outbound.js';
 
 /**
  * Outbound webhooks.
@@ -172,14 +172,14 @@ export async function postWebhook(
   body: string,
   headers: Record<string, string>,
 ): Promise<{ status: number }> {
-  await assertPublicHttpsUrl(url);
-  const res = await fetch(url, {
+  const res = await publicHttpsFetch(url, {
     method: 'POST',
     body,
     headers,
     redirect: 'manual',
     signal: AbortSignal.timeout(10_000),
   });
+  await res.body?.cancel();
   return { status: res.status };
 }
 
