@@ -1,4 +1,4 @@
-import { computeAppraisal } from '@apex/appraisal-engine';
+import { computeAppraisal, distanceMiles } from '@apex/appraisal-engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { seedDemo } from '../src/demo-seed.js';
 import { appraisalRowToEngineInput } from '../src/mappers.js';
@@ -101,6 +101,52 @@ describe('demo seed depth', () => {
       const sum = budgets.reduce((a, b) => a + b.budget, 0n);
       expect(sum, `${d.name}: package budgets vs engine build`).toBe(BigInt(Math.round(engine.build * 100)));
       expect(budgets.every((b) => b.progressPct === 100), `${d.name}: every package certified`).toBe(true);
+    }
+  });
+
+  /**
+   * A comparable SITS where its own text says it does.
+   *
+   * Each seeded row's meta reads "Sold Apr 2026 · 0.6 mi · 730 ft²", and until
+   * this landed the row carried no coordinates at all — so the distance was a
+   * sentence with no geometry under it, the same defect the Comparables
+   * screen's "Comps within 0.8 mi" row had one layer up. Now that
+   * `compProximity` MEASURES that row, a demo whose comps are unplaced would
+   * report "none of the 4 comparables are geolocated" beside a meta claiming a
+   * distance, on the one workspace anyone can try. Checked with the engine's
+   * own `distanceMiles` against the deal's geocode, not by repeating the
+   * seed's trigonometry.
+   */
+  it('places every demo comparable at the distance its own text claims', async () => {
+    const deals = await dealsWithCounts();
+    const withComps = deals.filter((d) => d._count.comparables > 0);
+    expect(withComps.length, 'the demo has comparables to check').toBeGreaterThan(0);
+
+    for (const d of withComps) {
+      const geo = await prisma.openDataCache.findFirst({
+        where: { key: `geocode:${(d.postcode ?? '').replace(/\s+/g, '').toUpperCase()}` },
+      });
+      expect(geo, `${d.name} has a cached geocode`).toBeTruthy();
+      const site = JSON.parse(geo!.payload) as { latitude: number; longitude: number };
+      const comps = await prisma.comparable.findMany({ where: { dealId: d.id }, orderBy: { id: 'asc' } });
+
+      for (const c of comps) {
+        expect(c.lat, `${d.name} / ${c.address}: no latitude`).not.toBeNull();
+        expect(c.lng, `${d.name} / ${c.address}: no longitude`).not.toBeNull();
+        const claimed = Number(/·\s([\d.]+)\smi\s·/.exec(c.meta)?.[1]);
+        expect(Number.isFinite(claimed), `${c.address}: meta states no distance — ${c.meta}`).toBe(true);
+        const actual = distanceMiles(
+          { lat: site.latitude, lng: site.longitude },
+          { lat: c.lat!, lng: c.lng! },
+        );
+        /**
+         * A tenth of a mile. The geocode is the POSTCODE centroid and the
+         * offset is taken from the spec's own coordinate, so the two differ by
+         * however far the spec sits from its postcode's centre — which is the
+         * honest tolerance, not a slack one.
+         */
+        expect(actual, `${d.name} / ${c.address}: text says ${claimed} mi`).toBeCloseTo(claimed, 1);
+      }
     }
   });
 

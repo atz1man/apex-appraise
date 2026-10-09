@@ -17,6 +17,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install
+      # The package where ALL money maths lives was the one package nothing
+      # typechecked: `mode: 'fixed'` sat in its tests against a `SiteMode` of
+      # 'residual' | 'profit', passing only because an unknown mode falls into
+      # the else branch and behaves like 'profit'. The test read as covering a
+      # third mode that does not exist.
+      - name: Typecheck engine
+        run: pnpm --filter @apex/appraisal-engine lint
       - name: Engine golden tests
         run: pnpm --filter @apex/appraisal-engine test
       - name: Generate Prisma client (sqlite dev schema)

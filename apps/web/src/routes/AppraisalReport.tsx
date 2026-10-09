@@ -5,6 +5,7 @@ import {
   dcfSensitivity,
   discountedCashflow,
   sensitivityGrid,
+  sensitivityStructure,
   formatMoneyFull,
   formatPct,
 } from '@apex/appraisal-engine';
@@ -144,7 +145,25 @@ export default function AppraisalReport() {
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
   const mintDownload = trpc.appraisal.downloadToken.useMutation();
-  const sens = useMemo(() => (input ? sensitivityGrid(input, 'roc') : null), [input]);
+  /**
+   * The metric this appraisal's own structure can actually move.
+   *
+   * It was hardcoded to 'roc', and on a RESIDUAL appraisal — the mode every
+   * appraisal starts in — return on cost is pinned to target ÷ (1 − target), so
+   * this printed page carried twenty-five identical cells under the heading
+   * "Sensitivity — profit on cost", and the paragraph below it stated that a
+   * +10% build overrun with a −10% fall in GDV "moves the return on cost from
+   * 23% to 23%". That is a sentence in a signed investment report telling a
+   * lender that a ten per cent cost overrun and a ten per cent revenue fall have
+   * no effect. The screen had the same defect and a toggle to escape it; a PDF
+   * has no toggle. `sensitivityStructure` is the engine's own statement of which
+   * metric answers — see `sensitivity-structure.test.ts`.
+   */
+  const sensMetric = useMemo(
+    () => (input ? sensitivityStructure(input.site.mode).preferred : 'roc'),
+    [input],
+  );
+  const sens = useMemo(() => (input ? sensitivityGrid(input, sensMetric) : null), [input, sensMetric]);
   // the growth-explicit cross-check, when the appraisal carries one
   const dcf = useMemo(
     () => (input?.income && input.dcf ? discountedCashflow(input.income, input.dcf) : null),
@@ -438,6 +457,15 @@ export default function AppraisalReport() {
     if (ratio > 0.85) return { color: '#85520E', background: '#F8F0DE' };
     return { color: '#B23A2E', background: '#F9EAE7' };
   };
+  /** What the sensitivity page is OF — the heading, the prose and the cells must agree. */
+  const SENS_NAME: Record<'roc' | 'profit' | 'residual', string> = {
+    roc: 'profit on cost',
+    profit: 'developer profit',
+    residual: 'residual land value',
+  };
+  const sensName = SENS_NAME[sensMetric];
+  const fmtSens = (v: number) => (sensMetric === 'roc' ? `${Math.round(v * 100)}%` : fM(v));
+
   const steps = [-0.1, -0.05, 0, 0.05, 0.1];
   const deltaLabel = (d: number) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d * 100) + '%';
 
@@ -1238,10 +1266,14 @@ export default function AppraisalReport() {
 
         {/* ===== PAGE 5 — SENSITIVITY ===== */}
         <A4Page>
-          <PageHead title={`${secSensitivity} · Sensitivity — profit on cost`} scheme={scheme} />
+          <PageHead title={`${secSensitivity} · Sensitivity — ${sensName}`} scheme={scheme} />
           <p className="text-[13px] leading-[1.6]" style={{ marginTop: 18, color: '#3F463F' }}>
-            Return on cost re-computed across simultaneous movements in gross development value (columns) and construction cost (rows).
-            The base case is outlined.
+            {sensName.charAt(0).toUpperCase() + sensName.slice(1)} re-computed across simultaneous movements in {U.terms.gdv} (columns)
+            and construction cost (rows). The base case is outlined.
+            {isResidual
+              ? ' In a residual appraisal the land value absorbs these movements, so it is the figure that responds; return on cost is '
+                + 'held at the target by construction and is reported in section 1.'
+              : ' The land price is held at the figure in section 1, so the return absorbs these movements.'}
           </p>
           <div className="mt-5 border border-border-std rounded-[12px] overflow-hidden">
             <div className="flex bg-canvas fig text-[10px] font-semibold text-ink-2b">
@@ -1261,7 +1293,7 @@ export default function AppraisalReport() {
                     className="fig text-center text-[11.5px] font-semibold"
                     style={{ flex: 1, padding: '12px 8px', ...cellStyle(cell.value, cell.ratio), outline: cell.isBase ? `2px solid ${brand[700]}` : 'none', outlineOffset: -2 }}
                   >
-                    {Math.round(cell.value * 100)}%
+                    {fmtSens(cell.value)}
                   </div>
                 ))}
               </div>
@@ -1270,9 +1302,10 @@ export default function AppraisalReport() {
 
           <SectionTitle>Reading the grid</SectionTitle>
           <p className="mt-2.5 text-[12px] text-ink-2b leading-[1.6]">
-            Each cell re-runs the full appraisal — including monthly finance — at the stated {U.terms.gdv} and build-cost movements, holding the land
-            price at the base-case figure. Green cells exceed the base return; amber cells fall materially below it; red cells are loss-making.
-            A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in {U.terms.gdv} moves the return on cost from {Math.round(R.poc * 100)}% to {Math.round(sens[0][0].value * 100)}%.
+            Each cell re-runs the full appraisal — including monthly finance — at the stated {U.terms.gdv} and build-cost movements.
+            Green cells exceed the base case; amber cells fall materially below it; red cells are loss-making.
+            A {deltaLabel(0.1)} build-cost overrun combined with a {deltaLabel(-0.1)} fall in {U.terms.gdv} moves the {sensName} from{' '}
+            {fmtSens(sens[2][2].value)} to {fmtSens(sens[0][0].value)}.
           </p>
           <PageFoot no={sensitivityPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
         </A4Page>

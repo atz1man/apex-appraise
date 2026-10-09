@@ -127,7 +127,7 @@ describe('the residual waterfall a lender adds up', () => {
 
   it('holds for a fixed land price too, where the same rows are printed', () => {
     const fixed = computeAppraisal(
-      { ...referenceCase, site: { ...referenceCase.site, mode: 'fixed' } },
+      { ...referenceCase, site: { ...referenceCase.site, mode: 'profit' } },
       { withCash: true },
     );
     expect(fixed.acqCost).toBeCloseTo(fixed.landGross - fixed.residualNet, 6);

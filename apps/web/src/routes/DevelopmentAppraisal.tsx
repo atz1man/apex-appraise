@@ -7,6 +7,7 @@ import {
   jvWaterfall,
   monteCarlo,
   sensitivityGrid,
+  sensitivityStructure,
   rollUpCashflow,
   formatPct,
   formatSigned,
@@ -26,7 +27,7 @@ import { startingIncome, startingIncomeLine } from '../lib/starting-income';
 import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, Drawer, EmptyState, Panel, SegmentedToggle, Skeleton, SkeletonRows, StatCard, StatusChip, TopBar , writeAttrs} from '../components/ui';
-import { CashflowChart, ProfitBridge } from '../components/charts';
+import { CashflowChart, ProfitBridge, ProfitDistribution } from '../components/charts';
 import { DealNav } from '../components/DealNav';
 import { assetLabel, isIncomeLed } from '@apex/types/asset-classes';
 import { accent, brand, brandInk, onFill, status as statusTokens } from '@apex/ui-tokens';
@@ -192,7 +193,19 @@ export default function DevelopmentAppraisal() {
 
   const toast = useToast();
   const [tab, setTab] = useState('revenue');
-  const [sensTab, setSensTab] = useState<'roc' | 'profit' | 'residual'>('roc');
+  /**
+   * The sensitivity metric opens on whichever one THIS MODE can move.
+   *
+   * It used to open on RoC in every mode. In a residual appraisal — the mode
+   * every appraisal starts in — RoC is pinned to target ÷ (1 − target) by
+   * construction, so the panel showed one number in all twenty-five cells and a
+   * valuer read "insensitive to ±10% on values and costs". `sensitivityStructure`
+   * (the engine) holds which metric answers, and why the others cannot.
+   */
+  const [sensTab, setSensTab] = useState<'roc' | 'profit' | 'residual'>(
+    () => sensitivityStructure(DEFAULT_INPUT.site.mode).preferred,
+  );
+  const [sensTouched, setSensTouched] = useState(false);
   const [period, setPeriod] = useState<Periodicity>('month');
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionNote, setVersionNote] = useState('');
@@ -246,7 +259,19 @@ export default function DevelopmentAppraisal() {
     () => jvWaterfall(R.equity, R.profit, R.holdYears, input.jv ?? DEFAULT_INPUT.jv!),
     [R, input.jv],
   );
+  const sensStructure = useMemo(() => sensitivityStructure(input.site.mode), [input.site.mode]);
   const sens = useMemo(() => sensitivityGrid(input, sensTab), [input, sensTab]);
+  /**
+   * Switching the site mode re-points the panel, until the valuer chooses for
+   * themselves — after which it is their choice and this stops moving it. The
+   * alternative, re-pointing on every mode change for ever, takes a deliberate
+   * selection away each time somebody toggles the mode to compare.
+   */
+  useEffect(() => {
+    if (!sensTouched) setSensTab(sensStructure.preferred);
+  }, [sensStructure, sensTouched]);
+  const sensResponse = sensStructure.responseOf[sensTab];
+  const sensNote = sensStructure.noteOf[sensTab];
   // Monte Carlo risk — land held at the base residual, sales/build shocked (seeded → stable UI)
   const risk = useMemo(() => monteCarlo(input, { iterations: 400, seed: 42 }), [input]);
 
@@ -1617,10 +1642,33 @@ export default function DevelopmentAppraisal() {
                 <SegmentedToggle
                   options={[['roc', 'RoC'], ['profit', 'Profit'], ['residual', 'Residual']]}
                   value={sensTab}
-                  onChange={setSensTab}
+                  onChange={(v) => { setSensTouched(true); setSensTab(v); }}
                 />
               }
             >
+              {/**
+                * A PINNED metric states its one value and why, instead of drawing
+                * it twenty-five times. The grid is not hidden behind a judgement
+                * about what a valuer wants to see — the tab is still there, and
+                * choosing it tells them what the model does rather than handing
+                * them a wall of the same number to misread as "insensitive".
+                */}
+              {sensResponse === 'pinned' ? (
+                <div role="status">
+                  <div className="fig text-[22px] font-semibold text-brand-ink">{fmtMetric(sens[0]![0]!.value)}</div>
+                  <div className="text-[11px] text-ink-2 leading-relaxed mt-1">{sensNote}</div>
+                  <button
+                    className="mt-2 text-[11.5px] font-semibold text-brand-ink hover:underline"
+                    onClick={() => { setSensTouched(true); setSensTab(sensStructure.preferred); }}
+                  >
+                    Sensitise {sensStructure.preferred === 'residual' ? 'the residual land value' : sensStructure.preferred === 'roc' ? 'return on cost' : 'profit'} instead →
+                  </button>
+                </div>
+              ) : (
+              <>
+              {/* a metric that answers on one axis only says so, rather than
+                  leaving a reader to wonder why every row is identical */}
+              {sensNote && <div className="mb-2 text-[10.5px] text-ink-2 leading-relaxed">{sensNote}</div>}
               <table className="w-full">
                 <thead>
                   <tr>
@@ -1649,6 +1697,8 @@ export default function DevelopmentAppraisal() {
                 </tbody>
               </table>
               <div className="mt-1.5 text-[10.5px] text-ink-3">Columns: GDV. Rows: build cost. Base cell outlined.</div>
+              </>
+              )}
             </Panel>
 
             <Panel level={2}
@@ -1656,29 +1706,20 @@ export default function DevelopmentAppraisal() {
               right={<span className="fig text-[10.5px] text-ink-3">{risk.iterations} runs · land held at {fM(risk.landFixed)}</span>}
             >
               {(() => {
-                const lo = Math.min(risk.profit.p10, 0);
-                const hi = Math.max(risk.profit.p90, 1);
-                const posOf = (v: number) => ((v - lo) / (hi - lo)) * 100;
                 return (
                   <>
-                    <div className="relative h-[26px] rounded-[7px] bg-sunken-2 overflow-hidden">
-                      <div
-                        className="absolute top-0 bottom-0"
-                        data-mark="mc-range"
-                        style={{
-                          left: `${posOf(risk.profit.p10)}%`,
-                          width: `${posOf(risk.profit.p90) - posOf(risk.profit.p10)}%`,
-                          background: 'rgb(var(--tint-green-deep, 223 239 231))',
-                          boxShadow: 'inset 0 0 0 1px rgb(var(--band-edge))',
-                        }}
+                    {/* the SHAPE, not three numbers — see charts.tsx. The old band
+                        drew P10–P90 as a flat rectangle, which draws every
+                        distribution identically whatever its tail. */}
+                    <div data-mark="mc-range">
+                      <ProfitDistribution
+                        bins={risk.histogram}
+                        p10={risk.profit.p10}
+                        p50={risk.profit.p50}
+                        p90={risk.profit.p90}
+                        probLoss={risk.probLoss}
+                        iterations={risk.iterations}
                       />
-                      <div data-mark="mc-median" className="absolute top-0 bottom-0 w-[3px] rounded" style={{ left: `${posOf(risk.profit.p50)}%`, background: 'rgb(var(--brand-ink, 20 80 59))' }} />
-                      {lo < 0 && <div className="absolute top-0 bottom-0 w-px" style={{ left: `${posOf(0)}%`, background: 'rgb(var(--status-red, 178 58 46))' }} />}
-                    </div>
-                    <div className="mt-1.5 flex justify-between text-[10.5px] fig text-ink-3">
-                      <span>P10 {fM(risk.profit.p10)}</span>
-                      <span className="font-semibold text-brand-ink">P50 {fM(risk.profit.p50)}</span>
-                      <span>P90 {fM(risk.profit.p90)}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2.5">
                       <div className="rounded-[10px] bg-tint-success px-3 py-2.5">

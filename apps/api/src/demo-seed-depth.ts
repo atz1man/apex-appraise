@@ -264,6 +264,37 @@ const STREETS: Record<string, string[]> = {
   Ringwood: ['Christchurch Road', 'Southampton Road', 'Hightown Road', 'Castleman Way', 'Crow Arch Lane'],
 };
 
+/** Degrees of latitude per statute mile — enough to place a comparable a known distance off the site. */
+const MILES_PER_DEG_LAT = 69.17;
+
+/**
+ * A point `miles` from `site` on the given bearing, in radians.
+ *
+ * Exported because `demo-seed.ts` places Northgate's four comparables itself —
+ * that deal predates this file and keeps its hand-written evidence — and two
+ * copies of this trigonometry is how the demo ends up with comparables that
+ * sit at one distance and say another. The flat approximation is fine at this
+ * range and is checked the right way round in `test/seed-depth.test.ts`, which
+ * measures the result with the engine's `distanceMiles` rather than repeating
+ * the arithmetic here.
+ */
+export function offsetFrom(
+  site: { lat: number; lng: number },
+  miles: number,
+  bearing: number,
+): { lat: number; lng: number } {
+  return {
+    lat: site.lat + (miles * Math.cos(bearing)) / MILES_PER_DEG_LAT,
+    lng: site.lng + (miles * Math.sin(bearing)) / (MILES_PER_DEG_LAT * Math.cos((site.lat * Math.PI) / 180)),
+  };
+}
+
+/** Where a demo deal sits. `SPECS` is the one table carrying it, so nothing else restates a coordinate. */
+export function siteCoordOf(dealName: string): { lat: number; lng: number } | null {
+  const spec = SPECS.find((d) => d.name === dealName);
+  return spec ? { lat: spec.lat, lng: spec.lng } : null;
+}
+
 async function comparablesFor(prisma: PrismaClient, ctx: DepthContext, d: DealSpec) {
   const psf = blendedPsf(d.asset);
   const streets = STREETS[d.town] ?? STREETS.Bournemouth!;
@@ -277,17 +308,40 @@ async function comparablesFor(prisma: PrismaClient, ctx: DepthContext, d: DealSp
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
     const area = d.asset === 'RESIDENTIAL' ? 640 + i * 90 : d.asset === 'COMMERCIAL' ? 1400 + i * 220 : 9000 + i * 2600;
+    /**
+     * The comparable SITS where its own text says it does.
+     *
+     * This row used to write "· 0.6 mi ·" into the meta string and store no
+     * coordinates at all, which was the same defect the Comparables screen's
+     * "Comps within 0.8 mi" row had: a distance asserted with no geometry under
+     * it. `compProximity` now measures that row, so a demo with no coordinates
+     * would honestly report "none of the 4 comparables are geolocated" beside a
+     * meta string claiming a distance — on the one workspace anyone can try.
+     * One `miles` feeds the offset and the sentence, so they cannot disagree.
+     */
+    /**
+     * A 0.3 step, not 0.25: every distance is then exact to the one decimal the
+     * meta prints, so the text and the geometry cannot disagree by a rounding
+     * (0.55 mi printed as "0.6" is what the guard caught). It also puts the
+     * last two comparables OUTSIDE the 0.8-mile radius, so the demo's Evidence
+     * quality panel reads "2 / 4" and exercises the counting rather than
+     * showing another hundred per cent.
+     */
+    const miles = 0.3 + i * 0.3;
+    const { lat, lng } = offsetFrom(d, miles, (i * 2 * Math.PI) / rows.length + 0.6);
     await prisma.comparable.create({
       data: {
         orgId: ctx.orgId,
         dealId: ctx.deals[d.name]!,
         address: `${12 + i * 7} ${streets[i % streets.length]}`,
-        meta: `Sold ${months[i]} 2026 · ${(0.3 + i * 0.25).toFixed(1)} mi · ${area.toLocaleString('en-GB')} ft²`,
+        meta: `Sold ${months[i]} 2026 · ${miles.toFixed(1)} mi · ${area.toLocaleString('en-GB')} ft²`,
         basePsf: Math.round(psf * r.drift),
         adjSize: r.adj[0]!,
         adjCondition: r.adj[1]!,
         adjDate: r.adj[2]!,
         adjLocation: r.adj[3]!,
+        lat,
+        lng,
       },
     });
   }

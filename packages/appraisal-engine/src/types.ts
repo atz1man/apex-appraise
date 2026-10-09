@@ -410,6 +410,25 @@ export interface JvResult {
 
 export type SensitivityMetric = 'roc' | 'profit' | 'residual';
 
+/**
+ * How a metric answers a shock, given the site mode.
+ *
+ *   varies   — moves with both GDV and build cost. A grid of it is analysis.
+ *   gdvOnly  — moves with GDV and not with build cost, so a row reads flat.
+ *   pinned   — CONSTANT by construction. A grid of it is 25 copies of one
+ *              number, which a reader takes as "insensitive" when the truth is
+ *              "this model cannot express sensitivity in this metric".
+ */
+export type SensitivityResponse = 'varies' | 'gdvOnly' | 'pinned';
+
+export interface SensitivityStructure {
+  /** the metric to open on: the one this mode can actually move */
+  preferred: SensitivityMetric;
+  responseOf: Record<SensitivityMetric, SensitivityResponse>;
+  /** why it answers that way — printed beside a pinned or partial metric */
+  noteOf: Record<SensitivityMetric, string | null>;
+}
+
 export interface SensitivityCell {
   value: number;
   salesDelta: number;
@@ -530,6 +549,13 @@ export interface MonteCarloOptions {
   seed?: number; // deterministic runs for tests/UI stability
 }
 
+/** One column of the profit distribution. `to` is exclusive except in the last bin. */
+export interface MonteCarloBin {
+  from: number;
+  to: number;
+  count: number;
+}
+
 export interface MonteCarloResult {
   iterations: number;
   landFixed: number; // the land price the simulation held constant
@@ -538,4 +564,16 @@ export interface MonteCarloResult {
   /** probability profit meets the target (targetProfitOnGdvPct of base GDV) */
   probAtTarget: number;
   probLoss: number;
+  /**
+   * The profit distribution, binned — the SHAPE, which three percentiles cannot
+   * carry. Two schemes can share a P10, P50 and P90 and have completely
+   * different tails, and the tail is the question a lender is asking.
+   *
+   * Binned in the ENGINE rather than by whichever surface draws it, so the
+   * screen, the report and a customer's own integration describe one
+   * distribution. The samples themselves are not returned: 400 figures crossing
+   * the wire to be re-binned at the other end is the same arithmetic done twice
+   * with two chances to differ.
+   */
+  histogram: MonteCarloBin[];
 }

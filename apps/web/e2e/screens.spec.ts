@@ -1777,7 +1777,11 @@ test('the appraisal report prints an investment section without desyncing pagina
   await page.goto(`/deal/${ids.sales}/report`);
   await page.waitForSelector('.a4-page');
   await expect(page.getByText('Investment valuation')).toHaveCount(0);
-  await expect(page.getByText('4 · Sensitivity — profit on cost')).toBeVisible();
+  // the NUMBER is the claim here — the section shifts from 5 to 4 without the
+  // investment sheet. The metric in the title follows the appraisal's site mode
+  // (`sensitivityStructure`), so pinning "profit on cost" would pin the one that
+  // is uninformative on a residual scheme.
+  await expect(page.getByText(/^4 · Sensitivity — /)).toBeVisible();
   const noInv = await measure();
   expect(noInv.overflowing, `pages past A4: ${JSON.stringify(noInv.tooTall)}`).toBe(0);
   // TWO sheets separate them now: the investment valuation and, since the scheme

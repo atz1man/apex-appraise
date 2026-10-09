@@ -17,8 +17,16 @@ API does in production.
 
 ```bash
 pnpm install
-node --import tsx packages/mcp-server/src/index.ts   # or: pnpm --filter @apex/mcp-server start
+pnpm --filter @apex/mcp-server start
 ```
+
+`tsx` is this package's own dev dependency, not the workspace root's, so
+`node --import tsx packages/…` from the repo root fails with
+`ERR_MODULE_NOT_FOUND` — which is what this line used to say. Run it through
+the filter above, or give an MCP client the `npx -y tsx` form below, which
+resolves `tsx` itself and works from any directory. Both were driven through a
+real `initialize` + `tools/list` handshake; the filtered form answers from the
+repo, the npx form answers from outside it.
 
 ### Claude Desktop / Claude Code
 
@@ -38,6 +46,30 @@ Add to your MCP client's config, with an absolute path to your clone:
   }
 }
 ```
+
+### Codex CLI
+
+`~/.codex/config.toml` — TOML rather than JSON, and the table is `mcp_servers`
+rather than `mcpServers`:
+
+```toml
+[mcp_servers.apex-appraise]
+command = "npx"
+args = ["-y", "tsx", "/absolute/path/to/apex-appraise/packages/mcp-server/src/index.ts"]
+
+# optional — only the three workspace-reading tools need these
+[mcp_servers.apex-appraise.env]
+APEX_API_KEY = "apex_live_…"
+APEX_API_URL = "https://apex.yourfirm.co.uk"
+```
+
+Why a coding agent wants this at all, rather than only a valuer's assistant:
+this product's first rule is that the model never computes a financial figure,
+and an agent reasoning its way to a GDV in a commit message or a comment has
+broken that rule just as surely as a procedure would. Pointing the agent at the
+engine's own entry points is how it checks a figure without becoming a second
+implementation of one. `AGENTS.md` at the repo root says the same thing to any
+agent that reads it.
 
 Both variables are **optional**. Without them the ten calculation tools work
 exactly as they are — modelling a scheme needs no key, no network and no
