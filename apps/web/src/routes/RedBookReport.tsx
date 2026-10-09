@@ -730,7 +730,7 @@ export default function RedBookReport() {
             </div>
             <div className="shrink-0 rounded-[12px] overflow-hidden border border-border-strong relative" style={{ width: 300, height: 188, background: neutral.sunken2 }}>
               {subjectPin.length ? (
-                <SiteMap pins={subjectPin} height={188} />
+                <SiteMap pins={subjectPin} height={188} controls={false} />
               ) : (
                 /* Nothing plotted rather than a map of somewhere else: without a
                    resolved postcode there is no position to draw, and a panel

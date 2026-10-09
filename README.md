@@ -99,15 +99,15 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, 1,893 unit/API tests plus 205 browser specs. All of them run in CI on every PR.
+Five suites, 1,923 unit/API tests plus 214 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
 | Engine | `pnpm --filter @apex/appraisal-engine test` | 319 |
-| API | `cd apps/api && npx vitest run` | 1186 |
+| API | `cd apps/api && npx vitest run` | 1216 |
 | Web unit | `cd apps/web && npx vitest run` | 371 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 205 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 214 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase
@@ -163,3 +163,5 @@ a button press rather than on merge — deliberately, because this product print
 somebody signs, so which build is live stays a decision. That workflow exists because the
 live API was once found running an image built three and a half weeks earlier: CI proves
 the code is correct, never that it is running.
+
+Product and source coverage: [product readiness](docs/PRODUCT-READINESS.md) records the implemented workfile/map improvements, verified data limits, commercial provider decisions and customer acceptance criteria.

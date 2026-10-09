@@ -679,7 +679,8 @@ export const documentsRouter = router({
       await assertOwnDeal(ctx, input.dealId);
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const all = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
@@ -1000,7 +1001,8 @@ export const documentsRouter = router({
       // readable = a stored file the AI can actually open (mirrors Auto-Appraisal)
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const readable = docs
         .filter((d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
@@ -1722,24 +1724,26 @@ export const integrationsRouter = router({
       if (input.provider === 'HM Land Registry') {
         // REAL sold-price data from the open PPD API when the deal has a postcode
         let live = 0;
+        let lookupFailed = false;
         if (deal.postcode) {
+          let sold: import('../opendata.js').SoldPrice[] = [];
           try {
             const { fetchSoldPrices } = await import('../opendata.js');
-            const sold = (await fetchSoldPrices(deal.postcode)).slice(0, 3);
-            for (const s of sold) {
-              await ctx.prisma.comparable.create({
-                data: {
-                  orgId: ctx.principal.orgId,
-                  dealId: deal.id,
-                  address: s.address,
-                  meta: `Sold ${s.date} · £${Math.round(s.price).toLocaleString('en-GB')} · ${s.propertyType} · HM Land Registry PPD`,
-                  basePsf: 0, // analyst sets £/ft² (or use the Site pack's EPC match)
-                },
-              });
-              live++;
-            }
+            sold = (await fetchSoldPrices(deal.postcode)).slice(0, 3);
           } catch {
-            live = 0;
+            lookupFailed = true;
+          }
+          for (const s of sold) {
+            await ctx.prisma.comparable.create({
+              data: {
+                orgId: ctx.principal.orgId,
+                dealId: deal.id,
+                address: s.address,
+                meta: `Sold ${s.date} · £${Math.round(s.price).toLocaleString('en-GB')} · ${s.propertyType} · HM Land Registry PPD`,
+                basePsf: 0, // analyst sets £/ft² (or use the Site pack's EPC match)
+              },
+            });
+            live++;
           }
         }
         if (live > 0) {
@@ -1755,7 +1759,9 @@ export const integrationsRouter = router({
           throw new TRPCError({
             code: 'PRECONDITION_FAILED',
             message: deal.postcode
-              ? `No Price Paid records came back for ${deal.postcode}. Nothing has been added — add comparables by hand, or try again later.`
+              ? lookupFailed
+                ? 'The Price Paid search is unavailable or incomplete. Nothing has been added — try again later, or add verified comparables by hand.'
+                : `No Price Paid records came back for ${deal.postcode}. Nothing has been added — add comparables by hand, or try again later.`
               : 'This deal has no postcode, so there is nothing to look up. Add one on the deal first.',
           });
         } else {
@@ -1783,4 +1789,3 @@ export const integrationsRouter = router({
       return { created };
     }),
 });
-

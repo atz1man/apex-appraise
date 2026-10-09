@@ -41,7 +41,10 @@ test('the data room can share a document with one plot’s buyer', async ({ page
   const pickers = page.locator('select[aria-label^="Share "]');
   await expect(pickers.first(), 'no buyer control in the data room at all').toBeVisible();
 
-  const picker = pickers.first();
+  // A save may reorder documents. Follow the same document through reloads.
+  const sharingLabel = await pickers.first().getAttribute('aria-label');
+  expect(sharingLabel).toBeTruthy();
+  const picker = page.getByRole('combobox', { name: sharingLabel!, exact: true });
   const before = await picker.inputValue();
   const plots = await picker.locator('option').allTextContents();
   expect(plots, 'the picker offers no plot to share with').toContain('Plot 1');
@@ -59,17 +62,17 @@ test('the data room can share a document with one plot’s buyer', async ({ page
     await expect(page.getByText('Shared with the buyer')).toBeVisible();
     await page.reload();
     await expect(
-      page.locator('select[aria-label^="Share "]').first(),
+      picker,
       'the sharing choice did not survive a reload — it never reached the server',
     ).toHaveValue(plot2);
 
     // and withdrawing it is equally reachable, and equally persistent
-    await page.locator('select[aria-label^="Share "]').first().selectOption('');
+    await picker.selectOption('');
     await expect(page.getByText('No longer shared with a buyer')).toBeVisible();
     await page.reload();
-    await expect(page.locator('select[aria-label^="Share "]').first()).toHaveValue('');
+    await expect(picker).toHaveValue('');
   } finally {
     // the demo workspace is shared — put the row back however this ends
-    await page.locator('select[aria-label^="Share "]').first().selectOption(before).catch(() => {});
+    await picker.selectOption(before).catch(() => {});
   }
 });

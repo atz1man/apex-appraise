@@ -1,77 +1,60 @@
-import { Suspense, lazy } from 'react';
-import { Skeleton } from './ui';
+import { Suspense, lazy, useState } from 'react';
+import { Button, Skeleton } from './ui';
 import { StaticMap } from './StaticMap';
 import { trpc } from '../lib/trpc';
+import type { MapPin } from './SiteMapImpl';
 export type { MapPin } from './SiteMapImpl';
 
-/**
- * The map, and the choice of which map.
- *
- * Leaflet is 150K and stays behind a lazy boundary. It used to be imported
- * statically here AND by Comparables and the Site Pack, so opening either route
- * downloaded the whole library before anything could paint — including on a
- * Comparables page where nothing had been geocoded and no tile would ever be
- * drawn. CLAUDE.md's rule ("heavy deps stay lazy-loaded") was satisfied to the
- * letter, because leaflet was not in the MAIN bundle; it had simply moved into a
- * shared chunk that arrived just as eagerly.
- *
- * Now this component also decides between two maps, and every surface that
- * draws one goes through here — the Site Pack, Comparables and the Red Book —
- * so the decision is made once rather than three times.
- *
- * WITH a Google key configured, that is a Static Map: aerial imagery, fetched
- * server-side so the browser never contacts Google. Without one it is the tile
- * map, unchanged. The fallback is the DEFAULT rather than the unhappy path —
- * the public demo has no Google account and CI has no key, and both must draw a
- * working map.
- *
- * The trade is honest and worth stating: the static map does not pan or zoom.
- * For the Red Book and the Site Pack that costs nothing, since both are headed
- * for a printed page. On Comparables it trades panning for being able to SEE
- * the sites — which is what somebody checking whether a comparable is really
- * comparable is looking for. `interactive` is there for a caller that would
- * rather have the drag.
- */
+// The tile renderer stays lazy: evidence without coordinates downloads no Leaflet.
 const Impl = lazy(() => import('./SiteMapImpl'));
 
-export function SiteMap({
-  pins,
-  height = 300,
-  interactive = false,
-  maptype,
-  zoom,
-}: {
-  pins: import('./SiteMapImpl').MapPin[];
+export function SiteMap({ pins, height = 300, interactive = false, maptype, zoom, controls = true }: {
+  pins: MapPin[];
   height?: number;
-  /** force the tile map even where imagery is available */
   interactive?: boolean;
   maptype?: 'roadmap' | 'satellite' | 'hybrid' | 'terrain';
   zoom?: number;
+  /** Printed workfiles keep a quiet map, without screen-only controls. */
+  controls?: boolean;
 }) {
-  /**
-   * Shared with `SiteMapImpl` through react-query's cache, so choosing a map
-   * costs no extra request — the tile map needs this same config for its token.
-   */
-  const { data: config, isLoading } = trpc.org.mapConfig.useQuery(undefined, { staleTime: 25 * 60_000 });
+  const { data: config, isLoading, error, refetch } = trpc.org.mapConfig.useQuery(undefined, { staleTime: 25 * 60_000 });
+  const [view, setView] = useState<'imagery' | 'interactive'>(interactive ? 'interactive' : 'imagery');
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const [reset, setReset] = useState(0);
+  // Validate only; projection, bounds and distances stay in the map/engine.
+  const located = pins.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180);
+  const imageKey = JSON.stringify([config?.staticMapUrl, located, height, maptype, zoom]);
+  const imagery = view === 'imagery' && !!config?.staticMapUrl && failedImage !== imageKey && located.length <= 40;
 
+  if (!located.length) return <div className="rounded-card border border-border-strong bg-sunken p-4 text-[12px] text-ink-3">No valid coordinates to plot. Add a postcode or location to this evidence.</div>;
   if (isLoading) return <Skeleton height={height} />;
-
-  if (!interactive && config?.staticMapUrl) {
-    return (
-      <StaticMap
-        pins={pins}
-        height={height}
-        urlPrefix={config.staticMapUrl}
-        attribution={config.staticMapAttribution ?? 'Map data ©Google'}
-        maptype={maptype}
-        zoom={zoom}
-      />
-    );
-  }
+  if (error || !config) return (
+    <div role="status" className="rounded-card border border-border-strong bg-sunken p-4 text-[12px] text-ink-3">
+      <p>Map access could not be loaded. The property evidence is still available below.</p>
+      <Button size="sm" className="mt-2" onClick={() => void refetch()}>Retry map</Button>
+    </div>
+  );
 
   return (
-    <Suspense fallback={<Skeleton height={height} />}>
-      <Impl pins={pins} height={height} />
-    </Suspense>
+    <div className="min-w-0">
+      {controls && (
+        <div className="mb-2 flex items-center justify-between gap-2 flex-wrap print:hidden">
+          <div role="group" aria-label="Map view" className="inline-flex gap-1">
+            <button type="button" aria-pressed={!imagery} style={{ border: '1px solid rgb(var(--control-border))' }} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${!imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => setView('interactive')}>Street map</button>
+            {config.staticMapUrl && located.length <= 40 && <button type="button" aria-pressed={imagery} style={{ border: '1px solid rgb(var(--control-border))' }} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-semibold ${imagery ? 'bg-tint-success text-brand-ink' : 'bg-sunken text-ink-2'}`} onClick={() => { setFailedImage(null); setView('imagery'); }}>Aerial image</button>}
+          </div>
+          {!imagery && <Button size="sm" onClick={() => setReset((v) => v + 1)}>Fit properties</Button>}
+        </div>
+      )}
+      {failedImage === imageKey && <p role="status" className="mb-2 text-[11px] text-ink-3">Aerial imagery is unavailable. Showing the street map.</p>}
+      {imagery ? (
+        <StaticMap key={imageKey} pins={located} height={height} urlPrefix={config.staticMapUrl!}
+          attribution={config.staticMapAttribution ?? 'Map data ©Google'} maptype={maptype} zoom={zoom}
+          onError={() => setFailedImage(imageKey)} />
+      ) : (
+        <Suspense fallback={<Skeleton height={height} />}><Impl pins={located} height={height} reset={reset} /></Suspense>
+      )}
+      {controls && <p className="mt-2 text-[10.5px] text-ink-3 print:hidden">{located.length} {located.length === 1 ? 'property' : 'properties'} plotted{located.length < pins.length ? ' · some coordinates unavailable' : ''}. {imagery ? 'Static imagery; switch to street map to explore.' : 'Drag to explore; use + and − to zoom. Select a pin for its evidence.'}</p>}
+    </div>
   );
 }

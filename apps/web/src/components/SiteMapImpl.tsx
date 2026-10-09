@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { trpc } from '../lib/trpc';
@@ -43,9 +43,10 @@ const icon = (kind: 'subject' | 'comp') =>
  * else." The API proxies and caches them under a User-Agent that identifies us,
  * which is what OSM's tile policy asks for and what a browser cannot provide.
  */
-export default function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height?: number }) {
+export default function SiteMap({ pins, height = 300, reset = 0 }: { pins: MapPin[]; height?: number; reset?: number }) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const [tileFailed, setTileFailed] = useState(false);
   /**
    * The tile URL carries a short-lived token, so the map waits for it. Without
    * this gate Leaflet would fire a screenful of unauthorised tile requests on
@@ -66,16 +67,28 @@ export default function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height
     if (!el.current || pins.length === 0 || !mapConfig) return;
     const map = L.map(el.current, { scrollWheelZoom: false, attributionControl: true });
     mapRef.current = map;
-    L.tileLayer(mapConfig.tileUrl, {
+    setTileFailed(false);
+    const tiles = L.tileLayer(mapConfig.tileUrl, {
       maxZoom: mapConfig.maxZoom,
       attribution: mapConfig.attribution,
     }).addTo(map);
+    tiles.on('tileerror', () => setTileFailed(true));
     const group = L.featureGroup(
-      pins.map((p) =>
-        L.marker([p.lat, p.lng], { icon: icon(p.kind ?? 'comp') }).bindPopup(
-          `<div style="font:600 12px 'Schibsted Grotesk',sans-serif">${p.label}</div>${p.sub ? `<div style="font:500 11px 'JetBrains Mono',monospace;color:${fixed.inkMuted};margin-top:2px">${p.sub}</div>` : ''}`,
-        ),
-      ),
+      pins.map((p) => {
+        // Source addresses and deal names are untrusted text, never popup HTML.
+        const content = document.createElement('div');
+        const title = document.createElement('div');
+        title.style.font = "600 12px 'Schibsted Grotesk',sans-serif";
+        title.textContent = p.label;
+        content.appendChild(title);
+        if (p.sub) {
+          const detail = document.createElement('div');
+          detail.style.cssText = `font:500 11px 'JetBrains Mono',monospace;color:${fixed.inkMuted};margin-top:2px`;
+          detail.textContent = p.sub;
+          content.appendChild(detail);
+        }
+        return L.marker([p.lat, p.lng], { icon: icon(p.kind ?? 'comp'), title: p.label, alt: p.label }).bindPopup(content);
+      }),
     ).addTo(map);
     map.fitBounds(group.getBounds().pad(0.25), { maxZoom: 16 });
     return () => {
@@ -83,8 +96,11 @@ export default function SiteMap({ pins, height = 300 }: { pins: MapPin[]; height
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins), mapConfig?.tileUrl]);
+  }, [JSON.stringify(pins), mapConfig?.tileUrl, reset]);
 
   if (pins.length === 0) return null;
-  return <div ref={el} style={{ height }} className="rounded-[12px] overflow-hidden border border-border-strong z-0" />;
+  return <div>
+    {tileFailed && <p role="status" className="mb-2 text-[11px] text-ink-3">Some map tiles could not be loaded. Property pins remain available.</p>}
+    <div ref={el} role="region" aria-label="Property location map" style={{ height }} className="rounded-[12px] overflow-hidden border border-border-strong z-0" />
+  </div>;
 }
