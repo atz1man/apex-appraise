@@ -35,7 +35,7 @@ completion time, errors, evidence review and exported packs using the same schem
   sample. Failed or incomplete searches cannot become cached empty evidence.
   A geocoding outage cannot become 90 days of cached missing pins.
 - Automatic EPC rates require exact normalized address and postcode identity
-  and one certificate. Ambiguous matches remain unknown. The shared engine
+  and one certificate. Ambiguous matches remain unknown. A certificate without a retrieved floor area says “Area unavailable”. The shared engine
   computes rates; the screen formats them in the workspace's area unit.
 - Known unsupported countries are not searched as though an empty response
   were local evidence. Historic geocode caches without country remain unknown;

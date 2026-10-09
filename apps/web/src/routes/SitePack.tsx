@@ -428,7 +428,7 @@ export default function SitePack() {
                             <span className="flex-1 min-w-0 truncate text-[11.5px] leading-tight">{r.address}</span>
                             {/* the register states square metres; SQFT_PER_SQM is the engine's,
                                 not a second copy of it — see appraisal-engine/src/format.ts */}
-                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{U.area(r.floorAreaSqm * SQFT_PER_SQM)}</span>
+                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{Number.isFinite(r.floorAreaSqm) && r.floorAreaSqm > 0 ? U.area(r.floorAreaSqm * SQFT_PER_SQM) : 'Area unavailable'}</span>
                           </div>
                         ))}
                       </div>

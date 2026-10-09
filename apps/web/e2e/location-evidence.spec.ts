@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 // Deterministic source responses, not invented customer evidence. No upstream
 // tile traffic or writes; test only the real UI's treatment of these outcomes.
-async function site(page: Page, opts: { image?: boolean; failImage?: boolean; configError?: boolean; sourceError?: boolean; metric?: boolean; hostile?: boolean } = {}) {
+async function site(page: Page, opts: { image?: boolean; failImage?: boolean; configError?: boolean; sourceError?: boolean; metric?: boolean; hostile?: boolean; missingArea?: boolean } = {}) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools', { exact: true })).toBeVisible();
@@ -30,7 +30,7 @@ async function site(page: Page, opts: { image?: boolean; failImage?: boolean; co
         geo: { postcode: 'BH8 8EW', latitude: 50.73, longitude: -1.86, district: 'BCP', region: 'South West' },
         soldPrices: { status: opts.sourceError ? 'error' : 'ok', asAt: '2026-10-01T09:00:00Z', items: opts.sourceError ? [] : [{ address: label, date: '2026-09-01', price: 300000, postcode: 'BH8 8EW', propertyType: 'terraced', estateType: 'freehold', newBuild: false, psf: 220, lat: 50.731, lng: -1.862 }] },
         constraints: { status: opts.sourceError ? 'slow' : 'ok', checked: ['green-belt'], hits: [] },
-        epc: { status: 'error', records: [], note: 'Register unavailable' },
+        epc: opts.missingArea ? { status: 'ok', records: [{ address: 'Area unknown property', floorAreaSqm: 0, rating: 'C', inspectionDate: '2026-01-01', source: 'Test certificate' }] } : { status: 'error', records: [], note: 'Register unavailable' },
         floodWarnings: { status: 'ok', items: [] }, amenities: { status: 'ok', items: [] }, incomplete: false,
       };
       if (json !== undefined) rows[i] = { result: { data: { json } } };
@@ -112,4 +112,10 @@ test('site evidence remains usable on a narrow viewport', async ({ page }) => {
   await site(page);
   await expect(page.getByRole('button', { name: 'Fit properties', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('unavailable certificate area is not displayed as a measured zero', async ({ page }) => {
+  await site(page, { missingArea: true });
+  await expect(page.getByText('Area unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText('0 ft²', { exact: true })).toHaveCount(0);
 });

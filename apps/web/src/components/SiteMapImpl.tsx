@@ -100,7 +100,7 @@ export default function SiteMap({ pins, height = 300, reset = 0 }: { pins: MapPi
 
   if (pins.length === 0) return null;
   return <div>
-    {tileFailed && <p role="status" className="mb-2 text-[11px] text-ink-3">Some map tiles could not be loaded. Pins remain available; use Fit properties to retry.</p>}
+    {tileFailed && <p role="status" className="mb-2 text-[11px] text-ink-3">Some map tiles could not be loaded. Property pins remain available.</p>}
     <div ref={el} role="region" aria-label="Property location map" style={{ height }} className="rounded-[12px] overflow-hidden border border-border-strong z-0" />
   </div>;
 }
