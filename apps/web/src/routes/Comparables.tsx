@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { weightedComparables } from '@apex/appraisal-engine';
 import { assetLabel } from '@apex/types/asset-classes';
@@ -32,12 +32,14 @@ export default function Comparables() {
   const utils = trpc.useUtils();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data, isLoading, error: compsError, refetch: refetchComps } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
-  const upsert = trpc.comparables.upsert.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
+  const upsert = trpc.comparables.upsert.useMutation({ meta: { inlineError: true }, onSuccess: () => utils.comparables.list.invalidate(dealId) });
   const remove = trpc.comparables.remove.useMutation({ onSuccess: () => utils.comparables.list.invalidate(dealId) });
   // this screen shows the error where it happened; see App.tsx
   const apply = trpc.comparables.applyToAppraisal.useMutation({ meta: { inlineError: true } });
 
   // local overlay of adjustment edits for live recompute; persisted onBlur via upsert
+  const pendingSave = useRef<Promise<unknown>>(Promise.resolve());
+  const [applying, setApplying] = useState(false);
   const [edits, setEdits] = useState<Record<string, Partial<Record<AdjKey, number>>>>({});
 
   /**
@@ -118,14 +120,18 @@ export default function Comparables() {
   const supported = comps.length ? Math.round(summary.supportedPsf) : 0;
   const avgGross = summary.avgGrossAdjustment;
   const conf =
-    avgGross <= 8
+    !comps.length
+      ? { label: 'Not assessed', color: NEUTRAL, bg: 'transparent' }
+      : avgGross <= 8
       ? { label: 'High', color: GREEN, bg: 'rgb(var(--tint-success-2, 228 241 234))' }
       : avgGross <= 15
         ? { label: 'Medium', color: AMBER, bg: 'rgb(var(--status-amber-bg, 248 240 222))' }
         : { label: 'Low', color: RED, bg: 'rgb(var(--status-red-bg, 249 234 231))' };
 
-  const setAdj = (id: string, key: AdjKey, v: number) =>
+  const setAdj = (id: string, key: AdjKey, v: number) => {
+    apply.reset();
     setEdits((e) => ({ ...e, [id]: { ...e[id], [key]: v } }));
+  };
 
   /**
    * Only what this person actually changed.
@@ -137,10 +143,24 @@ export default function Comparables() {
   const persist = (c: (typeof comps)[number]) => {
     const changed = edits[c.id];
     if (!changed || !Object.keys(changed).length) return;
-    upsert.mutate({ id: c.id, dealId, ...changed });
+    const patch = { ...changed };
+    // Serialize blur saves: a slow older request must not overwrite a newer edit.
+    const save = pendingSave.current.catch(() => undefined).then(async () => {
+      await upsert.mutateAsync({ id: c.id, dealId, ...patch });
+      setEdits((current) => {
+        const remaining = { ...current[c.id] };
+        for (const key of Object.keys(patch) as AdjKey[]) {
+          if (remaining[key] === patch[key]) delete remaining[key];
+        }
+        return { ...current, [c.id]: remaining };
+      });
+    });
+    pendingSave.current = save;
+    return save;
   };
 
-  const addComp = () =>
+  const addComp = () => {
+    apply.reset();
     upsert.mutate({
       dealId,
       address: `Comparable ${comps.length + 1}`,
@@ -151,6 +171,22 @@ export default function Comparables() {
       adjDate: 0,
       adjLocation: 0,
     });
+  };
+
+  const applyEvidence = async () => {
+    setApplying(true);
+    try {
+      // Clicking Apply blurs the active field. Wait for that save, then flush
+      // every remaining edit before the server reads its persisted evidence.
+      await pendingSave.current.catch(() => undefined);
+      for (const comp of comps) await persist(comp);
+      await apply.mutateAsync(dealId);
+    } catch {
+      // Mutation errors render in the panel; failed edits stay available to retry.
+    } finally {
+      setApplying(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -217,7 +253,7 @@ export default function Comparables() {
                 </div>
               }
               right={
-                <Button writes variant="secondary" onClick={addComp} disabled={upsert.isPending}>
+                <Button writes variant="secondary" onClick={addComp} disabled={upsert.isPending || applying}>
                   <Icon d="M12 5v14|M5 12h14" size={14} color="rgb(var(--brand-ink))" /> Add comp
                 </Button>
               }
@@ -228,7 +264,7 @@ export default function Comparables() {
                   error={compsError}
                   what="comparables"
                   onRetry={() => refetchComps()}
-                  cta={<Button writes onClick={addComp} disabled={upsert.isPending}>Add your first comp</Button>}
+                  cta={<Button writes onClick={addComp} disabled={upsert.isPending || applying}>Add your first comp</Button>}
                 >
                   Add sold comparables to derive a supported £/{U.unit} for the valuation.
                 </EmptyState>
@@ -243,6 +279,7 @@ export default function Comparables() {
                         <div key={k} className="pb-2 px-1.5 text-center" style={{ flex: 1 }}>{label}</div>
                       ))}
                       <div className="pb-2 px-2.5 text-right" style={{ flex: 1.2 }}>Adjusted</div>
+                      <div className="shrink-0 w-7 mr-1" aria-hidden="true" />
                     </div>
 
                     {/* rows */}
@@ -268,7 +305,8 @@ export default function Comparables() {
                                 style={{ color: adjColor(c[k]) }}
                                 value={c[k]}
                                 onChange={(e) => setAdj(c.id, k, parseFloat(e.target.value) || 0)}
-                                onBlur={() => persist(c)}
+                                onBlur={() => { void persist(c)?.catch(() => undefined); }}
+                                disabled={applying}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') e.currentTarget.blur();
                                 }}
@@ -288,10 +326,10 @@ export default function Comparables() {
                           <button
                             aria-label={`Remove ${c.address}`}
                             className="shrink-0 w-7 h-7 mr-1 rounded-[7px] inline-flex items-center justify-center text-ink-3 hover:text-status-red hover:bg-status-red-bg transition-colors"
-                            disabled={remove.isPending}
+                            disabled={remove.isPending || applying}
                             {...writeAttrs('Remove this comparable')}
                             onClick={() => {
-                              if (confirm(`Remove ${c.address} from the evidence? The supported £/${U.unit} will be recalculated without it.`)) remove.mutate(c.id);
+                              if (confirm(`Remove ${c.address} from the evidence? The supported £/${U.unit} will be recalculated without it.`)) { apply.reset(); remove.mutate(c.id); }
                             }}
                           >
                             <Icon d="M18 6 6 18M6 6l12 12" size={14} color="currentColor" />
@@ -304,7 +342,8 @@ export default function Comparables() {
                     <div className="mt-2.5 flex items-center rounded-[10px] bg-tint-success py-3">
                       <div className="px-2.5 text-[13.5px] font-bold text-brand-ink" style={{ flex: 2 }}>Weighted supported value</div>
                       <div style={{ flex: 1.1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} /><div style={{ flex: 1 }} />
-                      <div className="fig px-2.5 text-right text-[16px] font-bold text-brand-ink" style={{ flex: 1.2 }}>£{supported}</div>
+                      <div className="fig px-2.5 text-right text-[16px] font-bold text-brand-ink" style={{ flex: 1.2 }}>£{U.rateNum(supported)}</div>
+                      <div className="shrink-0 w-7 mr-1" aria-hidden="true" />
                     </div>
                     <div className="mt-2 text-[11px] text-ink-3">
                       Adjustments are % to the subject — positive uplifts the comp toward the subject. Weighted by inverse gross adjustment (closest comps weigh most).
@@ -354,7 +393,7 @@ export default function Comparables() {
               <div className="mt-4 pt-3.5 flex items-end justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                 <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.75)' }}>Supported blended value</span>
                 <span className="fig text-[24px] font-semibold tracking-[-1px]">
-                  £{U.rateNum(supported)}
+                  {comps.length ? `£${U.rateNum(supported)}` : '—'}
                   <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.6)' }}>/{U.unit}</span>
                 </span>
               </div>
@@ -365,7 +404,7 @@ export default function Comparables() {
                 <div>
                   <div className="flex justify-between text-[12px] text-ink-2b">
                     <span>Gross adjustment</span>
-                    <span className="fig font-semibold text-ink">{avgGross.toFixed(1)}%</span>
+                    <span className="fig font-semibold text-ink">{comps.length ? `${avgGross.toFixed(1)}%` : '—'}</span>
                   </div>
                   <div className="mt-1.5">
                     <ProgressBar pct={Math.min(100, avgGross * 5)} color={conf.color} />
@@ -393,19 +432,19 @@ export default function Comparables() {
                 <div className="flex justify-between text-[12.5px] text-ink-2b">
                   <span>Range</span>
                   <span className="fig font-semibold text-ink">
-                    {comps.length ? `£${summary.range.lo}–£${summary.range.hi}` : '—'}
+                    {comps.length ? `£${U.rateNum(summary.range.lo)}–£${U.rateNum(summary.range.hi)}` : '—'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2 rounded-[9px]" style={{ background: conf.bg }}>
                   <Dot color={conf.color} size={8} />
-                  <span className="text-[12px] font-semibold" style={{ color: conf.color }}>{conf.label} confidence</span>
+                  <span className="text-[12px] font-semibold" style={{ color: conf.color }}>{comps.length ? `${conf.label} confidence` : compsError ? 'Not assessed — evidence unavailable' : 'Not assessed — no evidence'}</span>
                 </div>
               </div>
             </Panel>
 
             <Panel level={2} title="Apply to appraisal" titleClassName="text-[13px] font-semibold">
               <div className="text-[12px] text-ink-2b leading-relaxed">
-                Push the supported {U.rate(supported)} into the revenue tab of the development appraisal.
+                {comps.length ? `Push the supported ${U.rate(supported)} into the revenue tab of the development appraisal.` : 'Load or add comparable evidence before applying a supported rate.'}
               </div>
               {apply.isSuccess ? (
                 <div className="mt-3">
@@ -424,11 +463,11 @@ export default function Comparables() {
                 <Button writes
                   size="lg"
                   className="mt-3.5 w-full"
-                  loading={apply.isPending}
-                  disabled={comps.length === 0}
-                  onClick={() => apply.mutate(dealId)}
+                  loading={applying}
+                  disabled={comps.length === 0 || remove.isPending || applying}
+                  onClick={() => { void applyEvidence(); }}
                 >
-                  {!apply.isPending && (
+                  {applying ? 'Applying evidence…' : (
                     <>
                       Apply &amp; open appraisal
                       <Icon d="M5 12h14|M13 6l6 6-6 6" size={15} color={onFill} strokeWidth={2.2} />
@@ -436,6 +475,7 @@ export default function Comparables() {
                   )}
                 </Button>
               )}
+              {upsert.error && <FormError className="mt-2 text-[11.5px]">Evidence was not saved: {upsert.error.message}. Retry before applying.</FormError>}
               {apply.error && <FormError className="mt-2 text-[11.5px]">{apply.error.message}</FormError>}
             </Panel>
           </aside>
