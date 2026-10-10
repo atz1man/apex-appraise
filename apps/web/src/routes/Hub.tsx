@@ -36,12 +36,13 @@ const ICONS = {
 type IconKey = keyof typeof ICONS;
 
 function GettingStarted({ flagshipId }: { flagshipId?: string }) {
-  const { data: ob } = trpc.org.onboarding.useQuery(undefined, { staleTime: 30_000 });
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem('apex_onboarding_hidden') === '1');
+  const { data: ob } = trpc.org.onboarding.useQuery(undefined, { staleTime: 30_000, refetchOnMount: 'always' });
+  const dismissalKey = `apex_onboarding_hidden_${getPrincipal()?.userId ?? 'anonymous'}`;
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissalKey) === '1');
   if (!ob || dismissed) return null;
   const dealPath = (tool: string) => (flagshipId ? `/deal/${flagshipId}/${tool}` : '/board');
   const steps: Array<[done: boolean, label: string, to: string]> = [
-    [ob.hasDeal, 'Create your first deal', '/board'],
+    [ob.hasDeal, 'Create your first deal', '/board?new=1'],
     [ob.hasAppraisal, 'Save an appraisal', dealPath('appraisal')],
     [ob.hasDocument, 'Add a document to the data room', dealPath('dataroom')],
     [ob.hasComparable, 'Support the values with comparables', dealPath('comparables')],
@@ -49,6 +50,7 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
   ];
   const done = steps.filter(([d]) => d).length;
   if (done === steps.length) return null;
+  const next = steps.find(([complete]) => !complete)!;
   return (
     <section className="mt-6 bg-surface border border-border-strong rounded-panel shadow-rest p-5" data-testid="getting-started">
       <div className="flex items-center gap-3 flex-wrap">
@@ -60,12 +62,19 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
         <button
           className="ml-auto text-[11.5px] font-medium text-ink-3 hover:text-ink"
           onClick={() => {
-            localStorage.setItem('apex_onboarding_hidden', '1');
+            localStorage.setItem(dismissalKey, '1');
             setDismissed(true);
           }}
         >
           Hide
         </button>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[15px] font-semibold">Your next step</h2>
+          <p className="mt-1 text-[12.5px] text-ink-2">{next[1]}</p>
+        </div>
+        <Button to={next[2]}>Continue setup →</Button>
       </div>
       <div className="mt-3 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map(([isDone, label, to]) => (
@@ -98,7 +107,7 @@ export default function Hub() {
   const navigate = useNavigate();
   const principal = getPrincipal();
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data, isLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
   const { data: queue } = trpc.appraisal.reviewQueue.useQuery(undefined, { staleTime: 15_000 });
   const loadSample = trpc.org.loadSampleDeal.useMutation({
@@ -131,7 +140,7 @@ export default function Hub() {
         ['dataroom', 'Data room', 'Deal documents with live extraction', `/deal/${flagship.id}/dataroom`, 'records'],
         ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`, 'records'],
         ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field', 'site'],
-        ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking', 'appraise'],
+        ['bench', 'Benchmarking', 'Consented scheme benchmarks and coverage', '/benchmarking', 'appraise'],
         // the register, not the LP's own page: an internal user is not an LP, and
         // `investors.myPosition` answered them FORBIDDEN
         ['investor', 'Investors', 'The register — holdings, distributions, capital calls, portal logins', '/investors', 'sell'],
@@ -216,6 +225,10 @@ export default function Hub() {
           )}
         </section>
 
+        {dealsError && <div role="alert" className="mt-6 rounded-panel border border-border-strong bg-surface p-5">
+          <p className="text-[13px] text-ink-2">Your deals could not be loaded. Retry to open your workfiles.</p>
+          <Button className="mt-3" onClick={() => void refetchDeals()}>Retry deals</Button>
+        </div>}
         <GettingStarted flagshipId={flagship?.id} />
 
         {/* empty-workspace onboarding for freshly registered orgs */}
@@ -224,8 +237,8 @@ export default function Hub() {
             <div className="eyebrow">Get started</div>
             <h2 className="mt-1.5 text-[22px] font-bold tracking-[-0.6px]">Add your first deal</h2>
             <p className="mt-2 text-[13.5px] text-ink-2 max-w-[460px] mx-auto leading-relaxed">
-              Create a deal on the pipeline board, then run the Auto-Appraisal — paste your planning
-              text and cost-plan notes and get a full residual appraisal in seconds.
+              Create a deal, then enter your scheme manually or extract assumptions from documents.
+              Review the inputs, save your appraisal and prepare the report.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5 flex-wrap">
               {/* straight into the form. Landing on the board — where the same

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /** Customer-owned data throughout; no demo login or seeded valuation. */
-test('a customer creates an appraisal, reads its report, exports and closes the workspace', async ({ page, request }) => {
+test('a customer creates an appraisal, reads its report, exports and closes the workspace', async ({ page }) => {
   test.setTimeout(90_000);
   const stamp = `${Date.now()}-${test.info().workerIndex}`;
   const orgName = `Lifecycle ${stamp}`;
@@ -24,6 +24,13 @@ test('a customer creates an appraisal, reads its report, exports and closes the 
     await drawer.getByRole('button', { name: 'Create & appraise from documents' }).click();
     await page.waitForURL(/\/deal\/[^/]+\/auto$/);
     const dealId = page.url().match(/\/deal\/([^/]+)\//)![1];
+    // Export actions must not invite a customer to download an empty workfile.
+    await page.goto(`/deal/${dealId}/report`);
+    await expect(page.getByRole('heading', { name: 'No appraisal saved yet', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Print / Save PDF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Share link', exact: true })).toHaveCount(0);
+    await page.goto(`/deal/${dealId}/auto`);
     await page.getByText('Manual entry', { exact: true }).click();
     await expect(page.getByLabel('Scheme')).toHaveValue('Customer appraisal');
     await page.getByRole('button', { name: /Add unit/ }).click();
@@ -38,18 +45,14 @@ test('a customer creates an appraisal, reads its report, exports and closes the 
     await expect(page.locator('.a4-page').first()).toBeVisible();
     await expect(page.getByText('Customer appraisal', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('No appraisal saved yet')).toHaveCount(0);
-    const pdfUrl = await page.evaluate(async id => {
-      const response = await fetch('/trpc/appraisal.downloadToken', {
-        method: 'POST', headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ json: { kind: 'appraisal', dealId: id } }),
-      });
-      const token = (await response.json()).result.data.json.token;
-      return `/reports/${id}/appraisal.pdf?t=${encodeURIComponent(token)}`;
-    }, dealId);
-    const pdf = await request.get(pdfUrl);
-    expect(pdf.status()).toBe(200);
-    expect(pdf.headers()['content-type']).toContain('application/pdf');
-    expect((await pdf.body()).subarray(0, 4).toString()).toBe('%PDF');
+    const reportDownloadEvent = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download PDF', exact: true }).click();
+    const reportDownload = await reportDownloadEvent;
+    const pdfStream = await reportDownload.createReadStream();
+    const pdfChunks: Buffer[] = [];
+    for await (const chunk of pdfStream!) pdfChunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(pdfChunks).subarray(0, 4).toString()).toBe('%PDF');
+    await expect(page.getByText('PDF download started', { exact: true })).toBeVisible();
     await page.goto('/settings');
     await expect(page.getByText('14 DAYS LEFT', { exact: true })).toBeVisible();
     const downloadEvent = page.waitForEvent('download');

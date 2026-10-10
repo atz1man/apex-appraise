@@ -52,10 +52,10 @@ incomplete; sample/test transactions are labelled as such.
 | Operator identity | Owner supplies and confirms the real company details, support/privacy inboxes, published terms and commercial policy. Update `apps/web/src/legal/entity.ts`. | Awaiting owner details; `confirmed` remains false. |
 | Domain | Owner chooses customer domain; HTTPS, email links, PDF renderer and integration callbacks use it. | Awaiting domain decision. |
 | Plans | Owner confirms catalogue prices, VAT/tax treatment and cancellation/refund policy. | Existing catalogue retained; awaiting commercial confirmation. |
-| Payments | Intended Stripe account configured; Customer Portal enabled; signed webhook receives checkout, renewal, failure, recovery, plan-change and cancellation events. Exercise erasure on a disposable subscribed tenant. | Fly configuration inspection on 9 October 2026 showed test-mode Stripe and no webhook secret. Live payment acceptance not performed. |
-| Email | SMTP configured; welcome, invite and reset delivered to controlled inboxes; SPF/DKIM configured with provider; no secrets in logs. | Fly inspection showed SMTP absent. Real delivery not performed. |
+| Payments | Intended Stripe account configured; Customer Portal enabled; signed webhook receives checkout, renewal, failure, recovery, plan-change and cancellation events. Exercise erasure on a disposable subscribed tenant. | Fly configuration inspections on 9 and 10 October 2026 showed test-mode Stripe and no webhook secret. Live payment acceptance not performed. |
+| Email | SMTP configured; welcome, invite and reset delivered to controlled inboxes; SPF/DKIM configured with provider; no secrets in logs. | Fly inspections on 9 and 10 October 2026 showed SMTP absent. Real delivery not performed. |
 | Customer data | Dedicated customer database; no published demo accounts, reset endpoint or sample integration claims; separate demo infrastructure. | Requires deployment/data inventory. Disabling seed flags does not remove existing demo accounts. |
-| Independent secrets | Explicit signing and encryption keys stored securely with recovery/rotation procedure. | Fly inspection showed explicit encryption key absent; current service derives it from the signing key. See `infra/DEPLOY.md` before rotation. |
+| Independent secrets | Explicit signing and encryption keys stored securely with recovery/rotation procedure. | Fly inspections on 9 and 10 October 2026 showed explicit encryption key absent; current service derives it from the signing key. See `infra/DEPLOY.md` before rotation. |
 | Valuation acceptance | Qualified intended users work a real scheme from evidence through appraisal, review and exported PDFs. Save feedback and approval of the release commit. | Automated journey passes; professional acceptance still required. |
 | Recovery | Encrypted/offsite backups; actual restore into a separate database and uploaded-file restore; record recovery duration and checks. | Scripts exist; actual production restore drill not performed in this work. |
 | Operations | External `/ready` monitoring, named incident owner, support response procedure and a tested rollback. | Operator configuration/evidence required. |
@@ -67,3 +67,44 @@ September 2026. A fresh release and the acceptance above are needed; restarting 
 machine does not ship this branch.
 
 Mapping acceptance: configure `TILE_URL`, `TILE_ATTRIBUTION` and `TILE_USER_AGENT` for a production service with agreed capacity and appropriate proxy/cache/export rights. `release:check` rejects the best-effort public OSM tile default. See [product and source readiness](PRODUCT-READINESS.md) for the evidence coverage and commercial provider decisions.
+
+
+## Workfile hardening and customer actions — 10 October 2026
+
+Upload records and audit events now commit atomically. UUID/exclusive storage
+prevents concurrent filenames overwriting another tenant's bytes. Failed or
+oversized writes clean up their files; private delivery headers survive the
+static-file handler. Downloadable documents have attachment/sandbox/nosniff
+protection, while raster images remain displayable. Portal file links recheck
+current sharing and buyer/investor assignments, so access withdrawal takes
+effect even on previously minted links.
+
+Internal report URLs honour password-reset session revocation. PDF rendering
+has a per-process concurrency bound and an overall deadline, with explicit
+busy/timeout responses. Public share jobs can occupy only one of the two slots;
+closed timed-out contexts release capacity even if application work stalls. All internal report kinds have the same progress,
+download, error and retry action; the portfolio pack now exposes its PDF route
+in the UI. Print remains an alternative. Fresh-workspace onboarding points to
+the next unfinished action and keeps dismissal separate for each user.
+
+The strengthened customer lifecycle verifies an actual UI-generated PDF,
+workspace export and erasure using customer-owned test data. These checks do
+not establish live payment delivery, mail delivery or operational recovery.
+
+A read-only production runtime inspection on 10 October confirmed production
+mode with test-mode Stripe, no SMTP, no Stripe webhook secret, no explicit
+encryption key and no configured production mapping service. Demo/reset flags
+were disabled; that does not prove historical demo users were removed. No live
+configuration, payments or deployment was changed during this work.
+
+Runtime dependencies were audited and updated to patched versions, including
+Fastify/static serving, multipart parsing, mail, routing and MCP transport.
+Compatible transitive security overrides are recorded in the root manifest;
+CI refuses high or critical production dependency advisories. The registry
+audit is a snapshot, not proof that a dependency has no undiscovered defects.
+
+The patched router increases the initial JavaScript closure from about 306KB
+to 322KB uncompressed (the older checked-in baseline was 293KB). Only the
+entry baseline is updated; route growth tolerances and the 250KB route budget
+are unchanged. ExcelJS/Leaflet remain outside initial/route static closures.
+The heaviest route measures 121KB in this build.

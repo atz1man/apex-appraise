@@ -4,6 +4,8 @@ import { brand, neutral } from '@apex/ui-tokens';
 import { trpc } from '../lib/trpc';
 import { fM, n0 } from '../lib/format';
 import { drawnAgainstWorksLabel, drawnBasis } from '../lib/drawn-basis';
+import { Link } from 'react-router-dom';
+import { ReportDownloadButton } from '../components/ReportDownloadButton';
 import { Button, EmptyState, Spinner } from '../components/ui';
 import { A4Page, PAGE_CONTENT_PX, PageFoot, PageHead, PRINT_CSS, docDate } from '../components/paper';
 import { PACK_LAYOUT, paginatePack } from '../lib/pack-pagination';
@@ -201,6 +203,13 @@ export default function FundingPack() {
   return (
     <div className="light min-h-screen bg-frame overflow-x-auto">
       <style>{PRINT_CSS}</style>
+      <div className="no-print sticky top-0 z-40 flex min-h-[54px] flex-wrap items-center justify-between gap-3 border-b border-border-strong bg-surface px-5 py-2">
+        <Link to="/board" className="text-[13px] font-medium text-brand-ink">← Back to pipeline</Link>
+        <div className="flex flex-wrap gap-2">
+          <ReportDownloadButton kind="portfolio" path="/reports/portfolio/funding-pack.pdf" />
+          <Button variant="secondary" onClick={() => window.print()}>Print / Save PDF</Button>
+        </div>
+      </div>
       <div className="a4-canvas flex flex-col items-center gap-6 px-5 pt-7 pb-14">
         {pages.map(({ rows, exceptions, continued }, pi) => (
           <A4Page key={pi}>
