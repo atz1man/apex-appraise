@@ -24,6 +24,13 @@ test('a customer creates an appraisal, reads its report, exports and closes the 
     await drawer.getByRole('button', { name: 'Create & appraise from documents' }).click();
     await page.waitForURL(/\/deal\/[^/]+\/auto$/);
     const dealId = page.url().match(/\/deal\/([^/]+)\//)![1];
+    // Export actions must not invite a customer to download an empty workfile.
+    await page.goto(`/deal/${dealId}/report`);
+    await expect(page.getByRole('heading', { name: 'No appraisal saved yet', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download PDF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Print / Save PDF', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Share link', exact: true })).toHaveCount(0);
+    await page.goto(`/deal/${dealId}/auto`);
     await page.getByText('Manual entry', { exact: true }).click();
     await expect(page.getByLabel('Scheme')).toHaveValue('Customer appraisal');
     await page.getByRole('button', { name: /Add unit/ }).click();

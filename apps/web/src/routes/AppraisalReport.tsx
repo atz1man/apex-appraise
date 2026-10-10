@@ -292,6 +292,7 @@ export default function AppraisalReport() {
   const dates = reportDates({ appraisal: appr, terms: toe });
   const scheme = deal?.name ?? 'Development appraisal';
 
+  const readyToDownload = !!appr && !!R && !!input && !!sens && !apprError && !isLoading;
   const toolbar = (
     // relative: the share panel hangs beneath this bar
     <div className="no-print sticky top-0 z-40 min-h-[54px] py-2 flex-wrap bg-surface border-b border-border-strong flex items-center gap-3.5 px-5 relative">
@@ -304,9 +305,9 @@ export default function AppraisalReport() {
       <span className="text-[13px] text-ink-2 truncate">{scheme}</span>
       <span className="fig text-[11px] font-medium text-ink-3 hidden lg:inline">{refCode}</span>
       <div className="ml-auto flex flex-wrap gap-2">
-        <ReportDownloadButton kind="appraisal" path={`/reports/${dealId}/appraisal.pdf`} dealId={dealId} />
-        <ShareLinks dealId={dealId} kind="appraisal" />
-        <Button variant="secondary" onClick={() => window.print()}>
+        <ReportDownloadButton kind="appraisal" path={`/reports/${dealId}/appraisal.pdf`} dealId={dealId} disabled={!readyToDownload} />
+        {readyToDownload && <ShareLinks dealId={dealId} kind="appraisal" />}
+        <Button variant="secondary" disabled={!readyToDownload} onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>
           Print / Save PDF
         </Button>
