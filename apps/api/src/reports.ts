@@ -3,7 +3,8 @@ import { currentAppraisal } from './current-appraisal.js';
 import jwt from 'jsonwebtoken';
 import type { Browser, Page } from 'playwright';
 import { getReportBrowser } from './report-browser.js';
-import { JWT_SECRET, prisma } from './context.js';
+import { ReportRenderUnavailable, withReportContext } from './report-capacity.js';
+import { issuedBefore, JWT_SECRET, prisma } from './context.js';
 import { recordAudit } from './audit.js';
 import { SHARE_REFUSAL_MESSAGE, hashShareToken, shareRefusal } from './share.js';
 import { verifyDownloadToken, type DownloadKind } from './download-token.js';
@@ -47,8 +48,6 @@ async function typographySettled(page: Page): Promise<{ loaded: boolean; missing
   }
 }
 
-
-
 /**
  * Server-rendered PDF reports (Appraisal + Red Book). Renders the same React
  * report routes in headless chromium and prints to A4 — one source of truth for
@@ -61,7 +60,7 @@ const KIND_LABEL: Record<string, string> = {
   engagement: 'Terms of engagement',
 };
 
-export function registerReports(app: FastifyInstance) {
+export function registerReports(app: FastifyInstance, db = prisma) {
   /**
    * A shared report, for someone with no account.
    *
@@ -76,14 +75,20 @@ export function registerReports(app: FastifyInstance) {
     reply.header('x-robots-tag', 'noindex, nofollow, noarchive');
     reply.header('cache-control', 'private, no-store');
 
-    const share = await prisma.reportShare.findUnique({ where: { tokenHash: hashShareToken(req.params.token) } });
+    const share = await db.reportShare.findUnique({
+      where: { tokenHash: hashShareToken(req.params.token) },
+    });
     // an unknown token and a dead one get the same answer: whether a link ever
     // existed is not something the holder of a guess is entitled to learn
     if (!share || shareRefusal(share)) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
 
-    const creator = await prisma.user.findUnique({ where: { id: share.createdById } });
+    const creator = await db.user.findUnique({
+      where: { id: share.createdById },
+    });
     if (!creator || creator.orgId !== share.orgId) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
-    const deal = await prisma.deal.findFirst({ where: { id: share.dealId, orgId: share.orgId } });
+    const deal = await db.deal.findFirst({
+      where: { id: share.dealId, orgId: share.orgId },
+    });
     if (!deal) return reply.code(404).send({ error: SHARE_REFUSAL_MESSAGE });
 
     let browser: Browser;
@@ -91,33 +96,53 @@ export function registerReports(app: FastifyInstance) {
       browser = await getReportBrowser();
     } catch (e) {
       req.log.error(e, 'chromium unavailable for shared report');
-      return reply.code(503).send({ error: 'This report cannot be produced right now — please try again shortly.' });
+      return reply.code(503).send({
+        error: 'This report cannot be produced right now — please try again shortly.',
+      });
     }
     // a short-lived token for the RENDERER only; it never leaves this process
-    const renderToken = jwt.sign({ sub: creator.id }, JWT_SECRET, { expiresIn: '2m' });
-    const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
+    const renderToken = jwt.sign({ sub: creator.id }, JWT_SECRET, {
+      expiresIn: '2m',
+    });
     try {
-      await context.addInitScript(
-        ([t, p]: string[]) => {
-          localStorage.setItem('apex_token', t);
-          localStorage.setItem('apex_principal', p);
+      const pdf = await withReportContext(
+        browser,
+        async (context) => {
+          await context.addInitScript(
+            ([t, p]: string[]) => {
+              localStorage.setItem('apex_token', t);
+              localStorage.setItem('apex_principal', p);
+            },
+            [
+              renderToken,
+              JSON.stringify({
+                userId: creator.id,
+                name: creator.name,
+                initials: creator.initials,
+                role: creator.role,
+                principalType: 'internal',
+              }),
+            ],
+          );
+          const page = await context.newPage();
+          const route = share.kind === 'redbook' ? 'redbook' : 'report';
+          await page.goto(`${WEB_URL}/deal/${share.dealId}/${route}`, {
+            waitUntil: 'networkidle',
+          });
+          await page.waitForSelector('.a4-page', { timeout: 15_000 });
+          await page.emulateMedia({ media: 'print' });
+          const type = await typographySettled(page);
+          if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
+          return page.pdf({ format: 'A4', printBackground: true });
         },
-        [renderToken, JSON.stringify({ userId: creator.id, name: creator.name, initials: creator.initials, role: creator.role, principalType: 'internal' })],
+        { publicShare: true },
       );
-      const page = await context.newPage();
-      const route = share.kind === 'redbook' ? 'redbook' : 'report';
-      await page.goto(`${WEB_URL}/deal/${share.dealId}/${route}`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.a4-page', { timeout: 15_000 });
-      await page.emulateMedia({ media: 'print' });
-      const type = await typographySettled(page);
-      if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
-      const pdf = await page.pdf({ format: 'A4', printBackground: true });
 
-      await prisma.reportShare.update({
+      await db.reportShare.update({
         where: { id: share.id },
         data: { viewCount: { increment: 1 }, lastViewedAt: new Date() },
       });
-      await recordAudit(prisma, {
+      await recordAudit(db, {
         orgId: share.orgId,
         dealId: share.dealId,
         actor: 'Shared link',
@@ -129,8 +154,13 @@ export function registerReports(app: FastifyInstance) {
       reply.header('content-type', 'application/pdf');
       reply.header('content-disposition', 'inline; filename="report.pdf"');
       return reply.send(pdf);
-    } finally {
-      await context.close();
+    } catch (error) {
+      if (error instanceof ReportRenderUnavailable) {
+        req.log.warn({ error: error.message }, 'report rendering unavailable');
+        reply.header('retry-after', '5');
+        return reply.code(503).send({ error: error.message });
+      }
+      throw error;
     }
   });
 
@@ -140,11 +170,15 @@ export function registerReports(app: FastifyInstance) {
    * truth, so the pack cannot drift from what the screen shows.
    */
   app.get<{ Querystring: { t?: string } }>('/reports/portfolio/funding-pack.pdf', async (req, reply) => {
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-robots-tag', 'noindex, nofollow, noarchive');
     const token = req.query.t;
     if (!token) return reply.code(401).send({ error: 'token required' });
     const claim = verifyDownloadToken(token, { kind: 'portfolio' });
     if (!claim) return reply.code(401).send({ error: 'invalid or expired download token' });
-    const user = await prisma.user.findUnique({ where: { id: claim.userId } });
+    const user = await db.user.findUnique({ where: { id: claim.userId } });
+    if (user && issuedBefore(claim.issuedAt, user.sessionsValidFrom))
+      return reply.code(401).send({ error: 'invalid or expired download token' });
     // internal only: the pack is the whole book, and a portal login is scoped to
     // one position within it
     if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
@@ -154,27 +188,43 @@ export function registerReports(app: FastifyInstance) {
       browser = await getReportBrowser();
     } catch (e) {
       req.log.error(e, 'chromium unavailable for PDF rendering');
-      return reply.code(501).send({ error: 'PDF rendering unavailable on this server — use Print / Save PDF instead.' });
+      return reply.code(501).send({
+        error: 'PDF rendering unavailable on this server — use Print / Save PDF instead.',
+      });
     }
     // a short-lived token for the RENDERER only; it never leaves this process
-    const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '2m' });
-    const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
+    const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, {
+      expiresIn: '2m',
+    });
     try {
-      await context.addInitScript(
-        ([t, p]: string[]) => {
-          localStorage.setItem('apex_token', t);
-          localStorage.setItem('apex_principal', p);
-        },
-        [renderToken, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
-      );
-      const page = await context.newPage();
-      await page.goto(`${WEB_URL}/portfolio/pack`, { waitUntil: 'networkidle' });
-      await page.waitForSelector('.a4-page', { timeout: 15_000 });
-      await page.emulateMedia({ media: 'print' });
-      const type = await typographySettled(page);
-      if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
-      const pdf = await page.pdf({ format: 'A4', printBackground: true });
-      await recordAudit(prisma, {
+      const pdf = await withReportContext(browser, async (context) => {
+        await context.addInitScript(
+          ([t, p]: string[]) => {
+            localStorage.setItem('apex_token', t);
+            localStorage.setItem('apex_principal', p);
+          },
+          [
+            renderToken,
+            JSON.stringify({
+              userId: user.id,
+              name: user.name,
+              initials: user.initials,
+              role: user.role,
+              principalType: 'internal',
+            }),
+          ],
+        );
+        const page = await context.newPage();
+        await page.goto(`${WEB_URL}/portfolio/pack`, {
+          waitUntil: 'networkidle',
+        });
+        await page.waitForSelector('.a4-page', { timeout: 15_000 });
+        await page.emulateMedia({ media: 'print' });
+        const type = await typographySettled(page);
+        if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
+        return page.pdf({ format: 'A4', printBackground: true });
+      });
+      await recordAudit(db, {
         orgId: user.orgId,
         userId: user.id,
         actor: user.name,
@@ -185,87 +235,126 @@ export function registerReports(app: FastifyInstance) {
       reply.header('content-type', 'application/pdf');
       reply.header('content-disposition', 'inline; filename="portfolio-funding-pack.pdf"');
       return reply.send(pdf);
-    } finally {
-      await context.close();
+    } catch (error) {
+      if (error instanceof ReportRenderUnavailable) {
+        req.log.warn({ error: error.message }, 'report rendering unavailable');
+        reply.header('retry-after', '5');
+        return reply.code(503).send({ error: error.message });
+      }
+      throw error;
     }
   });
 
-  app.get<{ Params: { dealId: string; kind: string }; Querystring: { t?: string } }>(
-    '/reports/:dealId/:kind.pdf',
-    async (req, reply) => {
-      const { dealId, kind } = req.params;
-      if (kind !== 'appraisal' && kind !== 'redbook' && kind !== 'engagement')
-        return reply.code(404).send({ error: 'unknown report' });
-      const token = req.query.t;
-      if (!token) return reply.code(401).send({ error: 'token required' });
-      /**
-       * A DOWNLOAD token, not a session token. This URL ends up in browser
-       * history and access logs; what it carries must be worth as little as
-       * possible if it is found there.
-       */
-      const claim = verifyDownloadToken(token, { kind: kind as DownloadKind, dealId });
-      if (!claim) return reply.code(401).send({ error: 'invalid or expired download token' });
-      const userId = claim.userId;
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
-      const deal = await prisma.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
-      if (!deal) return reply.code(404).send({ error: 'deal not found' });
+  app.get<{
+    Params: { dealId: string; kind: string };
+    Querystring: { t?: string };
+  }>('/reports/:dealId/:kind.pdf', async (req, reply) => {
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-robots-tag', 'noindex, nofollow, noarchive');
+    const { dealId, kind } = req.params;
+    if (kind !== 'appraisal' && kind !== 'redbook' && kind !== 'engagement')
+      return reply.code(404).send({ error: 'unknown report' });
+    const token = req.query.t;
+    if (!token) return reply.code(401).send({ error: 'token required' });
+    /**
+     * A DOWNLOAD token, not a session token. This URL ends up in browser
+     * history and access logs; what it carries must be worth as little as
+     * possible if it is found there.
+     */
+    const claim = verifyDownloadToken(token, {
+      kind: kind as DownloadKind,
+      dealId,
+    });
+    if (!claim) return reply.code(401).send({ error: 'invalid or expired download token' });
+    const userId = claim.userId;
+    const user = await db.user.findUnique({ where: { id: userId } });
+    if (user && issuedBefore(claim.issuedAt, user.sessionsValidFrom))
+      return reply.code(401).send({ error: 'invalid or expired download token' });
+    if (!user || user.principalType !== 'internal') return reply.code(403).send({ error: 'forbidden' });
+    const deal = await db.deal.findFirst({
+      where: { id: dealId, orgId: user.orgId },
+    });
+    if (!deal) return reply.code(404).send({ error: 'deal not found' });
 
-      /**
-       * A valuation report needs something to value. Without a current appraisal
-       * the page renders no sheets, the renderer waits fifteen seconds for one and
-       * the request dies as a 500 — which tells the user their server is broken
-       * when the truth is that the deal has no appraisal yet.
-       */
-      if (kind === 'appraisal' || kind === 'redbook') {
-        const appraisal = await currentAppraisal(prisma.appraisal, dealId, user.orgId);
-        if (!appraisal) {
-          return reply.code(409).send({
-            error: `${deal.name} has no saved appraisal yet — run or save one, then the ${KIND_LABEL[kind]} can be produced.`,
-          });
-        }
-      }
-
-      let browser: Browser;
-      try {
-        browser = await getReportBrowser();
-      } catch (e) {
-        req.log.error(e, 'chromium unavailable for PDF rendering');
-        return reply.code(501).send({
-          error: 'PDF rendering unavailable on this server — use the in-app Print / Save PDF button instead.',
+    /**
+     * A valuation report needs something to value. Without a current appraisal
+     * the page renders no sheets, the renderer waits fifteen seconds for one and
+     * the request dies as a 500 — which tells the user their server is broken
+     * when the truth is that the deal has no appraisal yet.
+     */
+    if (kind === 'appraisal' || kind === 'redbook') {
+      const appraisal = await currentAppraisal(db.appraisal, dealId, user.orgId);
+      if (!appraisal) {
+        return reply.code(409).send({
+          error: `${deal.name} has no saved appraisal yet — run or save one, then the ${KIND_LABEL[kind]} can be produced.`,
         });
       }
-      // a short-lived token for the RENDERER only; it never leaves this process
-      const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '2m' });
-      const context = await browser.newContext({ viewport: { width: 900, height: 1200 } });
-      try {
+    }
+
+    let browser: Browser;
+    try {
+      browser = await getReportBrowser();
+    } catch (e) {
+      req.log.error(e, 'chromium unavailable for PDF rendering');
+      return reply.code(501).send({
+        error: 'PDF rendering unavailable on this server — use the in-app Print / Save PDF button instead.',
+      });
+    }
+    // a short-lived token for the RENDERER only; it never leaves this process
+    const renderToken = jwt.sign({ sub: user.id }, JWT_SECRET, {
+      expiresIn: '2m',
+    });
+    try {
+      const pdf = await withReportContext(browser, async (context) => {
         await context.addInitScript(
           ([t, p]: string[]) => {
             localStorage.setItem('apex_token', t);
             localStorage.setItem('apex_principal', p);
           },
-          [renderToken, JSON.stringify({ userId: user.id, name: user.name, initials: user.initials, role: user.role, principalType: 'internal' })],
+          [
+            renderToken,
+            JSON.stringify({
+              userId: user.id,
+              name: user.name,
+              initials: user.initials,
+              role: user.role,
+              principalType: 'internal',
+            }),
+          ],
         );
         const page = await context.newPage();
         const route = kind === 'appraisal' ? 'report' : kind === 'engagement' ? 'engagement/document' : 'redbook';
-        await page.goto(`${WEB_URL}/deal/${dealId}/${route}`, { waitUntil: 'networkidle' });
+        await page.goto(`${WEB_URL}/deal/${dealId}/${route}`, {
+          waitUntil: 'networkidle',
+        });
         await page.waitForSelector('.a4-page', { timeout: 15_000 });
         await page.emulateMedia({ media: 'print' });
         const type = await typographySettled(page);
         if (!type.loaded) req.log.warn({ missing: type.missing }, 'report rendered in fallback typeface');
-        const pdf = await page.pdf({ format: 'A4', printBackground: true });
-        await prisma.activityEvent.create({
-          data: { orgId: user.orgId, dealId, actor: user.name, action: 'generated PDF', target: `${KIND_LABEL[kind]} — ${deal.name}` },
-        });
-        // header values must be Latin-1 — keep the filename strictly ASCII
-        const filename = `${deal.name.replace(/[^\w ]/g, '').trim()} - ${KIND_LABEL[kind]}.pdf`;
-        reply
-          .header('content-type', 'application/pdf')
-          .header('content-disposition', `attachment; filename="${filename}"`)
-          .send(pdf);
-      } finally {
-        await context.close();
+        return page.pdf({ format: 'A4', printBackground: true });
+      });
+      await db.activityEvent.create({
+        data: {
+          orgId: user.orgId,
+          dealId,
+          actor: user.name,
+          action: 'generated PDF',
+          target: `${KIND_LABEL[kind]} — ${deal.name}`,
+        },
+      });
+      // header values must be Latin-1 — keep the filename strictly ASCII
+      const filename = `${deal.name.replace(/[^\w ]/g, '').trim()} - ${KIND_LABEL[kind]}.pdf`;
+      reply
+        .header('content-type', 'application/pdf')
+        .header('content-disposition', `attachment; filename="${filename}"`)
+        .send(pdf);
+    } catch (error) {
+      if (error instanceof ReportRenderUnavailable) {
+        req.log.warn({ error: error.message }, 'report rendering unavailable');
+        reply.header('retry-after', '5');
+        return reply.code(503).send({ error: error.message });
       }
-    },
-  );
+      throw error;
+    }
+  });
 }

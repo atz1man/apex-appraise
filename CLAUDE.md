@@ -32,7 +32,7 @@ memory, or commits between the two.
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
 - `pnpm --filter @apex/appraisal-engine test` — engine tests (319; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1216). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1245). See the container gotcha below before
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (371): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
@@ -41,7 +41,7 @@ memory, or commits between the two.
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (214, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (217, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -1527,3 +1527,28 @@ static imagery keeps its full frame/attribution and fails visibly into the stree
 map. The customer release check requires a production tile service, attribution
 and contactable user agent. See `docs/PRODUCT-READINESS.md` for provider choices
 and the evidence needed before claiming commercial differentiation.
+
+
+## Workfile upload and report hardening
+
+- File storage uses UUIDs and exclusive creation, never millisecond/name identity.
+  Failed streams, excess multipart parts and failed database/audit transactions
+  remove only bytes this request created. Upload routes allow one file. Logos
+  enforce 2MB while streaming. Invalid photo dates are refused, not rolled over.
+- Uploaded documents download as attachments, except displayable raster files.
+  Every upload response carries sandbox/nosniff and private/no-store; the static
+  file plugin must not overwrite that cache policy. `workfile-upload` exercises
+  real HTTP requests, simultaneous tenant writes and injected audit failures.
+- Portal file links recheck current sharing flags and the buyer unit/investor
+  holding on every request. Withdrawing access revokes already minted links.
+- Internal PDF URLs obey the session cutoff. `report-revocation` checks all
+  report kinds before the renderer is invoked. Explicit public share links
+  retain their own existing expiry/revocation rules.
+- All three PDF routes share two active contexts per API process (at most one public-share job) and a 60-second
+  render deadline. No unbounded waiting queue. Timeout closes the context; a
+  late context is closed without printing. Failed cleanup retires the browser;
+  if neither can close, capacity stays occupied until the process is recovered.
+  `report-capacity` tests busy, failure, timeout, late creation and broken cleanup.
+- Internal PDF actions share `ReportDownloadButton`: progress, duplicate-click
+  suppression, bounded fetch, visible failure/retry and a validated PDF response.
+  The customer lifecycle downloads the real generated PDF through this UI.

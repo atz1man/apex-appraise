@@ -1,8 +1,9 @@
-import multipart from '@fastify/multipart';
+import multipart, { type MultipartFile } from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createWriteStream } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, stat, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +45,25 @@ export async function principalFrom(req: Pick<FastifyRequest, 'headers'>, db = p
 
 const safeName = (name: string) => name.replace(/[^\w.\- ()£]/g, '_');
 
+/** Exclusive, unpredictable storage; a failed/truncated stream owns no file. */
+async function storeFile(file: MultipartFile, prefix = '') {
+  const key = `${prefix}${randomUUID()}-${safeName(file.filename).slice(-160)}`;
+  const dest = path.join(UPLOAD_DIR, key);
+  const output = createWriteStream(dest, { flags: 'wx' });
+  let created = false;
+  output.once('open', () => {
+    created = true;
+  });
+  try {
+    await pipeline(file.file, output);
+    if (file.file.truncated) throw Object.assign(new Error('File is too large'), { statusCode: 413 });
+    return { key, filename: file.filename, bytes: (await stat(dest)).size };
+  } catch (error) {
+    if (created) await unlink(dest).catch(() => {});
+    throw error;
+  }
+}
+
 /**
  * Real file storage for the data room and site photo log. Local disk in dev
  * (apps/api/uploads/, gitignored); swap the write for S3 presigned uploads in prod —
@@ -70,14 +90,30 @@ export function signFileUrl(url: string | null | undefined, userId: string): str
   return `${url}?t=${encodeURIComponent(signDownloadToken({ sub: userId, kind: 'file', key }))}`;
 }
 
-async function orgForKey(key: string, db: PrismaClient = prisma): Promise<string | null> {
+async function accessForKey(key: string, db: PrismaClient = prisma) {
   const url = `/uploads/files/${key}`;
   const [doc, photo, org] = await Promise.all([
-    db.document.findFirst({ where: { url }, select: { orgId: true } }),
+    db.document.findFirst({
+      where: { url },
+      select: {
+        orgId: true,
+        dealId: true,
+        unitId: true,
+        buyerVisible: true,
+        investorVisible: true,
+      },
+    }),
     db.sitePhoto.findFirst({ where: { url }, select: { orgId: true } }),
-    db.organisation.findFirst({ where: { logoUrl: url }, select: { id: true } }),
+    db.organisation.findFirst({
+      where: { logoUrl: url },
+      select: { id: true },
+    }),
   ]);
-  return doc?.orgId ?? photo?.orgId ?? org?.id ?? null;
+  return {
+    owner: doc?.orgId ?? photo?.orgId ?? org?.id ?? null,
+    doc,
+    logo: !!org,
+  };
 }
 
 /**
@@ -94,22 +130,17 @@ async function orgForKey(key: string, db: PrismaClient = prisma): Promise<string
  * wanted, and failing the refusal because the cleanup failed would turn a 404
  * into a 500.
  */
-async function refuse(
-  reply: FastifyReply,
-  code: number,
-  error: string,
-  ...keys: (string | null | undefined)[]
-) {
+async function refuse(reply: FastifyReply, code: number, error: string, ...keys: (string | null | undefined)[]) {
   const { unlink } = await import('node:fs/promises');
-  await Promise.all(
-    keys.filter((k): k is string => !!k).map((k) => unlink(path.join(UPLOAD_DIR, k)).catch(() => {})),
-  );
+  await Promise.all(keys.filter((k): k is string => !!k).map((k) => unlink(path.join(UPLOAD_DIR, k)).catch(() => {})));
   return reply.code(code).send({ error });
 }
 
 export async function registerUploads(app: FastifyInstance, db: PrismaClient = prisma) {
   await mkdir(UPLOAD_DIR, { recursive: true });
-  await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
+  await app.register(multipart, {
+    limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 8, parts: 9 },
+  });
   /**
    * Uploaded files are SERVED behind a check, not by a static handler.
    *
@@ -124,13 +155,19 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
    * scoped to the single file (see download-token.ts). Both end in the same
    * question: does this file belong to the caller's organisation?
    */
-  await app.register(fastifyStatic, { root: UPLOAD_DIR, prefix: '/uploads/raw-internal/', serve: false });
+  await app.register(fastifyStatic, {
+    root: UPLOAD_DIR,
+    prefix: '/uploads/raw-internal/',
+    serve: false,
+    cacheControl: false,
+  });
 
   app.get<{ Params: { '*': string }; Querystring: { t?: string } }>('/uploads/files/*', async (req, reply) => {
     const key = req.params['*'];
     if (!key || key.includes('..')) return reply.code(400).send({ error: 'bad key' });
 
-    const owner = await orgForKey(key, db);
+    const access = await accessForKey(key, db);
+    const owner = access.owner;
     // a key nobody owns is not a file we serve — never fall back to the disk
     if (!owner) return reply.code(404).send({ error: 'not found' });
 
@@ -146,7 +183,25 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
          * so honouring it costs nothing. Tokens are minted at render time, so
          * `iat` is when the page was drawn.
          */
-        allowed = !!u && u.orgId === owner && !issuedBefore(claim.issuedAt, u.sessionsValidFrom);
+        allowed = false;
+        if (u && u.orgId === owner && !issuedBefore(claim.issuedAt, u.sessionsValidFrom)) {
+          // A scoped link is not a frozen grant: withdrawal/reassignment takes
+          // effect on the next request, even before its half-hour token expires.
+          if (u.principalType === 'internal' || access.logo) allowed = true;
+          else if (u.principalType === 'buyer') {
+            allowed = !!access.doc?.buyerVisible && !!u.buyerUnitId && access.doc.unitId === u.buyerUnitId;
+          } else if (u.principalType === 'investor' && access.doc?.investorVisible && u.investorId) {
+            allowed = !!(await db.holding.findFirst({
+              where: {
+                investorId: u.investorId,
+                dealId: access.doc.dealId,
+                investor: { orgId: owner },
+                deal: { orgId: owner },
+              },
+              select: { id: true },
+            }));
+          }
+        }
       }
     }
     // the same 404 either way: whether a file exists is not something to confirm
@@ -155,6 +210,10 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
 
     reply.header('cache-control', 'private, no-store');
     reply.header('x-robots-tag', 'noindex, nofollow');
+    // Uploaded HTML/SVG must never become an application page on our origin.
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('content-security-policy', "sandbox; default-src 'none'");
+    if (!/\.(png|jpe?g|webp|gif|avif)$/i.test(key)) reply.header('content-disposition', 'attachment');
     return reply.sendFile(key, UPLOAD_DIR);
   });
 
@@ -166,41 +225,55 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
     let dealId = '';
     let category = 'Legal';
     let stored: { key: string; filename: string; bytes: number } | null = null;
-    for await (const part of parts) {
-      if (part.type === 'field') {
-        if (part.fieldname === 'dealId') dealId = String(part.value);
-        if (part.fieldname === 'category') category = String(part.value);
-      } else {
-        const key = `${Date.now()}-${safeName(part.filename)}`;
-        const dest = path.join(UPLOAD_DIR, key);
-        await pipeline(part.file, createWriteStream(dest));
-        const { size } = await import('node:fs/promises').then((fs) => fs.stat(dest));
-        stored = { key, filename: part.filename, bytes: size };
+    let retained = false;
+    try {
+      for await (const part of parts) {
+        if (part.type === 'field') {
+          if (part.fieldname === 'dealId') dealId = String(part.value);
+          if (part.fieldname === 'category') category = String(part.value);
+        } else {
+          stored = await storeFile(part);
+        }
       }
+      // split so the cleanup has a file to name: no upload, nothing to collect
+      if (!stored) return reply.code(400).send({ error: 'file and dealId required' });
+      if (!dealId) return refuse(reply, 400, 'file and dealId required', stored.key);
+      const deal = await db.deal.findFirst({
+        where: { id: dealId, orgId: user.orgId },
+      });
+      if (!deal) return refuse(reply, 404, 'deal not found', stored.key);
+      const ext = stored.filename.includes('.') ? stored.filename.split('.').pop()! : 'pdf';
+      const upload = stored;
+      const doc = await db.$transaction(async (tx) => {
+        const row = await tx.document.create({
+          data: {
+            orgId: user.orgId,
+            dealId,
+            name: upload.filename,
+            category,
+            ext,
+            sizeBytes: BigInt(upload.bytes),
+            url: `/uploads/files/${upload.key}`,
+            extraction: 'STORED',
+            addedById: user.userId,
+          },
+        });
+        await tx.activityEvent.create({
+          data: {
+            orgId: user.orgId,
+            dealId,
+            actor: user.name,
+            action: 'uploaded',
+            target: upload.filename,
+          },
+        });
+        return row;
+      });
+      retained = true;
+      return { id: doc.id, url: doc.url };
+    } finally {
+      if (stored && !retained) await unlink(path.join(UPLOAD_DIR, stored.key)).catch(() => {});
     }
-    // split so the cleanup has a file to name: no upload, nothing to collect
-    if (!stored) return reply.code(400).send({ error: 'file and dealId required' });
-    if (!dealId) return refuse(reply, 400, 'file and dealId required', stored.key);
-    const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
-    if (!deal) return refuse(reply, 404, 'deal not found', stored.key);
-    const ext = stored.filename.includes('.') ? stored.filename.split('.').pop()! : 'pdf';
-    const doc = await db.document.create({
-      data: {
-        orgId: user.orgId,
-        dealId,
-        name: stored.filename,
-        category,
-        ext,
-        sizeBytes: BigInt(stored.bytes),
-        url: `/uploads/files/${stored.key}`,
-        extraction: 'STORED',
-        addedById: user.userId,
-      },
-    });
-    await db.activityEvent.create({
-      data: { orgId: user.orgId, dealId, actor: user.name, action: 'uploaded', target: stored.filename },
-    });
-    return { id: doc.id, url: doc.url };
   });
 
   /**
@@ -213,24 +286,36 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
     const user = await guard(reply, () => internalWriter(req, 'uploads.logo', db));
     if (!user) return;
     if (user.role !== 'ADMIN') return reply.code(403).send({ error: 'admin access required' });
-    const ALLOWED: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+    const ALLOWED: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+    };
     const MAX_BYTES = 2 * 1024 * 1024;
-    const file = await req.file();
-    if (!file) return reply.code(400).send({ error: 'file required' });
-    const ext = ALLOWED[file.mimetype];
-    if (!ext) return reply.code(415).send({ error: 'PNG, JPEG or WebP only' });
-    const key = `logo-${user.orgId}-${Date.now()}.${ext}`;
-    const dest = path.join(UPLOAD_DIR, key);
-    await pipeline(file.file, createWriteStream(dest));
-    const { stat, unlink } = await import('node:fs/promises');
-    const { size } = await stat(dest);
-    if (size > MAX_BYTES) {
-      await unlink(dest);
-      return reply.code(413).send({ error: 'Logo must be 2MB or smaller' });
+    let stored: Awaited<ReturnType<typeof storeFile>> | null = null;
+    let retained = false;
+    try {
+      for await (const part of req.parts({
+        limits: { fileSize: MAX_BYTES, files: 1, fields: 8, parts: 9 },
+      })) {
+        if (part.type !== 'file') continue;
+        const ext = ALLOWED[part.mimetype];
+        if (!ext) return reply.code(415).send({ error: 'PNG, JPEG or WebP only' });
+        // The extension is server-selected, independent of the supplied filename.
+        part.filename = `logo.${ext}`;
+        stored = await storeFile(part, 'logo-');
+      }
+      if (!stored) return reply.code(400).send({ error: 'file required' });
+      const url = `/uploads/files/${stored.key}`;
+      await db.organisation.update({
+        where: { id: user.orgId },
+        data: { logoUrl: url },
+      });
+      retained = true;
+      return { url };
+    } finally {
+      if (stored && !retained) await unlink(path.join(UPLOAD_DIR, stored.key)).catch(() => {});
     }
-    const url = `/uploads/files/${key}`;
-    await db.organisation.update({ where: { id: user.orgId }, data: { logoUrl: url } });
-    return { url };
   });
 
   app.post('/uploads/photo', async (req, reply) => {
@@ -243,62 +328,83 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
     let caption = 'Site photo';
     let takenAt = new Date().toISOString().slice(0, 10);
     let key: string | null = null;
-    for await (const part of parts) {
-      if (part.type === 'field') {
-        if (part.fieldname === 'dealId') dealId = String(part.value);
-        if (part.fieldname === 'contractorId') contractorId = String(part.value) || null;
-        if (part.fieldname === 'caption') caption = String(part.value);
-        if (part.fieldname === 'takenAt') takenAt = String(part.value);
-      } else {
-        key = `${Date.now()}-${safeName(part.filename)}`;
-        await pipeline(part.file, createWriteStream(path.join(UPLOAD_DIR, key)));
+    let retained = false;
+    try {
+      for await (const part of parts) {
+        if (part.type === 'field') {
+          if (part.fieldname === 'dealId') dealId = String(part.value);
+          if (part.fieldname === 'contractorId') contractorId = String(part.value) || null;
+          if (part.fieldname === 'caption') caption = String(part.value);
+          if (part.fieldname === 'takenAt') takenAt = String(part.value);
+        } else {
+          key = (await storeFile(part)).key;
+        }
       }
+      // split so the cleanup has a file to name: no upload, nothing to collect
+      if (!key) return reply.code(400).send({ error: 'file and dealId required' });
+      if (!dealId) return refuse(reply, 400, 'file and dealId required', key);
+      const deal = await db.deal.findFirst({
+        where: { id: dealId, orgId: user.orgId },
+      });
+      if (!deal) return refuse(reply, 404, 'deal not found', key);
+      // the deal and the contractor are two independent inputs. The tRPC twin of
+      // this route took the same id on trust, and firm B's subcontractor name then
+      // rendered on firm A's cost screen — `photos.list` joins the contractor and
+      // filters only on the photo's own orgId.
+      if (
+        contractorId &&
+        !(await db.contractor.findFirst({
+          where: { id: contractorId, orgId: user.orgId },
+        }))
+      )
+        return refuse(reply, 404, 'contractor not found', key);
+      const taken = new Date(takenAt + 'T00:00:00Z');
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(takenAt) ||
+        !Number.isFinite(taken.getTime()) ||
+        taken.toISOString().slice(0, 10) !== takenAt
+      )
+        return refuse(reply, 400, 'valid photo date required', key);
+      const wc = new Date(taken);
+      wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
+      const photo = await db.$transaction(async (tx) => {
+        const row = await tx.sitePhoto.create({
+          data: {
+            orgId: user.orgId,
+            dealId,
+            caption,
+            contractorId,
+            url: `/uploads/files/${key}`,
+            takenAt: taken,
+            weekCommencing: wc,
+          },
+        });
+        /**
+         * The same event its tRPC twin writes, and for the reason `photos.add` gives:
+         * the site log is what a disputed valuation of works-in-progress is argued
+         * from, and `takenAt` is typed by hand — so when it was RECORDED, and by
+         * whom, is a different fact from when it was taken, and the only one of the
+         * two that cannot be backdated.
+         *
+         * This is the door that carries the actual photograph; `photos.add` creates a
+         * row with no image. The argument was written on the wrong one.
+         */
+        await tx.activityEvent.create({
+          data: {
+            orgId: user.orgId,
+            dealId,
+            userId: user.userId,
+            actor: user.name,
+            action: 'added a site photo',
+            target: `${caption} · taken ${takenAt}`,
+          },
+        });
+        return row;
+      });
+      retained = true;
+      return { id: photo.id, url: photo.url };
+    } finally {
+      if (key && !retained) await unlink(path.join(UPLOAD_DIR, key)).catch(() => {});
     }
-    // split so the cleanup has a file to name: no upload, nothing to collect
-    if (!key) return reply.code(400).send({ error: 'file and dealId required' });
-    if (!dealId) return refuse(reply, 400, 'file and dealId required', key);
-    const deal = await db.deal.findFirst({ where: { id: dealId, orgId: user.orgId } });
-    if (!deal) return refuse(reply, 404, 'deal not found', key);
-    // the deal and the contractor are two independent inputs. The tRPC twin of
-    // this route took the same id on trust, and firm B's subcontractor name then
-    // rendered on firm A's cost screen — `photos.list` joins the contractor and
-    // filters only on the photo's own orgId.
-    if (contractorId && !(await db.contractor.findFirst({ where: { id: contractorId, orgId: user.orgId } })))
-      return refuse(reply, 404, 'contractor not found', key);
-    const taken = new Date(takenAt + 'T00:00:00Z');
-    const wc = new Date(taken);
-    wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
-    const photo = await db.sitePhoto.create({
-      data: {
-        orgId: user.orgId,
-        dealId,
-        caption,
-        contractorId,
-        url: `/uploads/files/${key}`,
-        takenAt: taken,
-        weekCommencing: wc,
-      },
-    });
-    /**
-     * The same event its tRPC twin writes, and for the reason `photos.add` gives:
-     * the site log is what a disputed valuation of works-in-progress is argued
-     * from, and `takenAt` is typed by hand — so when it was RECORDED, and by
-     * whom, is a different fact from when it was taken, and the only one of the
-     * two that cannot be backdated.
-     *
-     * This is the door that carries the actual photograph; `photos.add` creates a
-     * row with no image. The argument was written on the wrong one.
-     */
-    await db.activityEvent.create({
-      data: {
-        orgId: user.orgId,
-        dealId,
-        userId: user.userId,
-        actor: user.name,
-        action: 'added a site photo',
-        target: `${caption} · taken ${takenAt}`,
-      },
-    });
-    return { id: photo.id, url: photo.url };
   });
 }

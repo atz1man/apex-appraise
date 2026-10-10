@@ -1,29 +1,39 @@
-/**
- * Open a report PDF in a new tab.
- *
- * The tab is opened SYNCHRONOUSLY, inside the click, and pointed at the document
- * once the token arrives. Fetching first and opening after would be simpler to
- * read and would be blocked as a popup, because by then the browser no longer
- * considers the navigation to be something the user asked for.
- *
- * The token is minted per download and lasts two minutes — see
- * apps/api/src/download-token.ts for why the URL must not carry a session.
- */
-export async function openReport(
-  mint: (input: { kind: 'appraisal' | 'redbook' | 'engagement' | 'portfolio'; dealId?: string }) => Promise<{ token: string }>,
+/** Fetch a scoped PDF before downloading so server failures stay in the workfile. */
+export async function downloadReport(
+  mint: (input: {
+    kind: 'appraisal' | 'redbook' | 'engagement' | 'portfolio';
+    dealId?: string;
+  }) => Promise<{ token: string }>,
   kind: 'appraisal' | 'redbook' | 'engagement' | 'portfolio',
   path: string,
   dealId?: string,
+  signal?: AbortSignal,
 ) {
-  const tab = window.open('', '_blank');
+  const { token } = await mint({ kind, dealId });
+  const response = await fetch(`${path}?t=${encodeURIComponent(token)}`, {
+    signal,
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Your sign-in changed. Reload the page and try again.');
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error || 'The PDF could not be downloaded. Try again, or use Print / Save PDF.');
+  }
+  if (!response.headers.get('content-type')?.includes('application/pdf'))
+    throw new Error('The server did not return a PDF. Try again, or use Print / Save PDF.');
+  const blob = await response.blob();
+  if ((await blob.slice(0, 4).text()) !== '%PDF') throw new Error('The PDF response was incomplete. Please try again.');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const filename = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1];
+  link.download = filename || `${kind}-report.pdf`;
+  document.body.appendChild(link);
   try {
-    const { token } = await mint({ kind, dealId });
-    const url = `${path}?t=${encodeURIComponent(token)}`;
-    if (tab) tab.location.href = url;
-    else window.location.href = url; // popup blocked outright — go in place
-  } catch (e) {
-    // never leave a blank tab sitting there as if something were loading
-    tab?.close();
-    throw e;
+    link.click();
+  } finally {
+    link.remove();
+    // Leave enough time for the browser to consume the download, then reclaim it.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }

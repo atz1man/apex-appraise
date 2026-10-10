@@ -22,7 +22,7 @@ import { reportDates } from '../lib/report-dates';
 import { approvalCheck } from '../lib/approval-check';
 import { valuerFrom } from '../lib/valuer';
 import { CashflowChart, ProfitBridge } from '../components/charts';
-import { openReport } from '../lib/download';
+import { ReportDownloadButton } from '../components/ReportDownloadButton';
 import { namedModel } from '../lib/ai-model';
 
 /* ------------------------------------------------------------------ */
@@ -144,7 +144,6 @@ export default function AppraisalReport() {
 
   // All figures from the shared engine — never hand-rolled.
   const R = useMemo(() => (input ? computeAppraisal(input, { withCash: true }) : null), [input]);
-  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   /**
    * The metric this appraisal's own structure can actually move.
    *
@@ -295,24 +294,19 @@ export default function AppraisalReport() {
 
   const toolbar = (
     // relative: the share panel hangs beneath this bar
-    <div className="no-print sticky top-0 z-40 h-[54px] bg-surface border-b border-border-strong flex items-center gap-3.5 px-5 relative">
+    <div className="no-print sticky top-0 z-40 min-h-[54px] py-2 flex-wrap bg-surface border-b border-border-strong flex items-center gap-3.5 px-5 relative">
       <Link to={`/deal/${dealId}/appraisal`} className="flex items-center gap-2 text-[13px] font-medium text-inactive hover:text-brand-700">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
         Back to appraisal
       </Link>
-      <span className="text-[13.5px] font-semibold ml-1.5">Investment appraisal report</span>
+      <span className="text-[13.5px] font-semibold ml-1.5 hidden md:inline">Investment appraisal report</span>
       <span className="text-[13px] text-ink-3">·</span>
       <span className="text-[13px] text-ink-2 truncate">{scheme}</span>
-      <span className="fig text-[11px] font-medium text-ink-3">{refCode}</span>
-      <div className="ml-auto flex gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => void openReport(mintDownload.mutateAsync, 'appraisal', `/reports/${dealId}/appraisal.pdf`, dealId)}
-        >
-          Download PDF
-        </Button>
+      <span className="fig text-[11px] font-medium text-ink-3 hidden lg:inline">{refCode}</span>
+      <div className="ml-auto flex flex-wrap gap-2">
+        <ReportDownloadButton kind="appraisal" path={`/reports/${dealId}/appraisal.pdf`} dealId={dealId} />
         <ShareLinks dealId={dealId} kind="appraisal" />
-        <Button onClick={() => window.print()}>
+        <Button variant="secondary" onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>
           Print / Save PDF
         </Button>
