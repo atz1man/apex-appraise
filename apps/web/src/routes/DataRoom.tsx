@@ -132,11 +132,13 @@ export default function DataRoom() {
   const [earlierId, setEarlierId] = useState('');
   const [replacementId, setReplacementId] = useState('');
   const [revisionExpected, setRevisionExpected] = useState<string | null>(null);
-  useUnsavedWarning(!!earlierId, 'document revision link');
+  useUnsavedWarning(!!earlierId && (replacementId || null) !== revisionExpected, 'document revision link');
   const revisionDocs = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
   const revision = trpc.documents.setRevision.useMutation({ onSuccess: () => {
     setEarlierId(''); setReplacementId(''); utils.documents.list.invalidate(); utils.documents.activity.invalidate(dealId);
     utils.appraisal.getCurrent.invalidate(dealId); toast.success('Document revision link saved');
+  }, onError: async error => {
+    if (error.data?.code === 'CONFLICT') { await utils.documents.list.invalidate(); setEarlierId(''); setReplacementId(''); }
   } });
 
   // ---- Ask the workfile: AI Q&A over the deal's readable documents ----
@@ -271,10 +273,11 @@ export default function DataRoom() {
                 <option value="">Select document</option>{revisionDocs.data?.documents.filter(d => d.url).map(d => <option key={d.id} value={d.id}>{d.name}{(revisionDocs.data?.documents.filter(other => other.name === d.name).length ?? 0) > 1 ? ` (${fmtWhen(d.addedAt)} · ${d.id.slice(-6)})` : ''}{d.supersededById ? ' (superseded)' : ''}</option>)}
               </select></label>
               <label className="text-[12px]">Replacement document<select {...writeAttrs()} disabled={revision.isPending} className="w-full" value={replacementId} onChange={e => setReplacementId(e.target.value)}>
-                <option value="">No replacement (current document)</option>{revisionDocs.data?.documents.filter(d => d.url && d.id !== earlierId && !d.supersededById).map(d => <option key={d.id} value={d.id}>{d.name}{(revisionDocs.data?.documents.filter(other => other.name === d.name).length ?? 0) > 1 ? ` (${fmtWhen(d.addedAt)} · ${d.id.slice(-6)})` : ''}</option>)}
+                <option value="">No replacement (current document)</option>
+                {revisionExpected && revisionDocs.data && !revisionDocs.data.documents.some(d => d.id === revisionExpected) && <option value={revisionExpected} disabled>Replacement no longer available</option>}{revisionDocs.data?.documents.filter(d => d.url && d.id !== earlierId && (!d.supersededById || d.id === revisionExpected)).map(d => <option key={d.id} value={d.id}>{d.name}{(revisionDocs.data?.documents.filter(other => other.name === d.name).length ?? 0) > 1 ? ` (${fmtWhen(d.addedAt)} · ${d.id.slice(-6)})` : ''}{d.supersededById ? ' (superseded)' : ''}</option>)}
               </select></label>
             </div>
-            <Button writes className="mt-3" disabled={!earlierId || revisionDocs.isError || revisionDocs.isPending} loading={revision.isPending} onClick={() => revision.mutate({ documentId: earlierId, toId: replacementId || null, expected: revisionExpected })}>Save revision link</Button>
+            <Button writes className="mt-3" disabled={!earlierId || (replacementId || null) === revisionExpected || revisionDocs.isError || revisionDocs.isPending} loading={revision.isPending} onClick={() => revision.mutate({ documentId: earlierId, toId: replacementId || null, expected: revisionExpected })}>Save revision link</Button>
             {revisionDocs.isError && <p role="alert" className="mt-2 text-[12px]">Revision documents could not be loaded. Reload the data room.</p>}
           </details>
 

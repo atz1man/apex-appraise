@@ -26,4 +26,14 @@ describe('portable source evidence', () => {
     const pages = sourceEvidencePages([text]); expect(pages.length).toBeGreaterThan(1);
     expect(pages.every(p => p.length <= 42)).toBe(true); expect(pages.flat().join('')).toBe(text);
   });
+  it('caps printed evidence explicitly while leaving the complete workbook text available', () => {
+    const lines = Array.from({ length: 1000 }, (_, i) => `Evidence line ${i}`);
+    const pages = sourceEvidencePages(lines);
+    expect(pages).toHaveLength(12);
+    expect(pages.flat()[0]).toContain('PRINT LIMIT');
+    expect(pages.flat().at(-1)).toContain('complete Source evidence sheet');
+    expect(pages.flat()).toContain('500 additional evidence lines are not printed in this PDF.');
+    expect(wrapEvidence(lines)).toEqual(lines);
+  });
+
 });

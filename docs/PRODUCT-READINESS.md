@@ -233,11 +233,13 @@ replacing either file. Same-deal/workspace checks, strict upload ordering and
 compare-and-set writes protect the links; changes and removals are audited in
 the same transaction. Superseded documents are excluded from new extraction,
 and existing appraisals report their superseded sources. Undoing a link is
-explicit and keeps both files. The nullable Document.supersededById migration
+explicit and keeps both files. A missing replacement never silently promotes
+the older file to current; the revision panel exposes the missing link so a
+reviewer can relink it or explicitly undo it. The nullable Document.supersededById migration
 is required. Revision identity does not certify that the files represent the
 same drawing; linking them remains a reviewer decision.
 
-The development-appraisal PDF adds paginated source-evidence pages. Excel adds a
+The development-appraisal PDF adds paginated source-evidence pages (at most twelve evidence pages, with explicit continuation notices directing readers to the complete Excel register). Excel adds a
 Source evidence sheet. Both carry input-review status, reviewer/time, source
 identities, references, omissions and worked-example warnings, without exporting
 expiring download tokens. Excel exports of unsaved edits explicitly mark the old

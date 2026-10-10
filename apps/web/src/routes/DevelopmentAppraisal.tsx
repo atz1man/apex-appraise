@@ -526,7 +526,7 @@ export default function DevelopmentAppraisal() {
                     {saved.sourceReview.documents.map(d => <p key={d.id}>
                       {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-ink underline">{d.name}</a> : <span>{d.name} — source {d.status}</span>}
                     </p>)}
-                    {(saved.sourceReview.references ?? []).map((r, i) => <p key={`ref-${i}`}>Unit {r.unitIndex + 1}: {r.unitLabel} — {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.name ?? 'Source unavailable'}{r.page !== null ? `, PDF page ${r.page}` : ''}{r.locator ? `, ${r.locator}` : ''} (user-entered reference)</p>)}
+                    {(saved.sourceReview.references ?? []).map((r, i) => <p key={`ref-${i}`}>Unit {r.unitIndex + 1}: {r.unitLabel} — {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.name ?? 'Source unavailable'}{r.page !== null ? `, PDF page ${r.page}` : ''}{r.locator ? `, ${r.locator}` : ''} (user-entered reference; source {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.status ?? 'unavailable'})</p>)}
                     {saved.sourceReview.omissions.map((o, i) => <p key={i}>{o.name}: {o.reason}</p>)}
                     <p>Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
                   </div>

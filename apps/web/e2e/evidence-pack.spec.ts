@@ -39,6 +39,26 @@ test('page references survive save, revision changes warn, and evidence leaves i
   await page.getByRole('combobox', { name: 'Replacement document', exact: true }).selectOption({ label: 'Drawing revision B.pdf' });
   await page.getByRole('button', { name: 'Save revision link', exact: true }).click();
   await expect(page.getByText('Document revision link saved', { exact: true })).toBeVisible();
+  // Another editor changes the link after this form captures its expected value.
+  const earlierChoice = page.getByRole('combobox', { name: 'Earlier document', exact: true });
+  const replacementChoice = page.getByRole('combobox', { name: 'Replacement document', exact: true });
+  const oldOption = earlierChoice.getByRole('option', { name: /Drawing revision A.pdf.*superseded/ });
+  await expect(oldOption).toHaveCount(1);
+  const oldId = (await oldOption.getAttribute('value'))!;
+  const newId = (await replacementChoice.getByRole('option', { name: 'Drawing revision B.pdf', exact: true }).getAttribute('value'))!;
+  await earlierChoice.selectOption(oldId);
+  const externalEdit = await page.evaluate(async ({ oldId, newId }) => (await fetch('/trpc/documents.setRevision', {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('apex_token')}` },
+    body: JSON.stringify({ json: { documentId: oldId, toId: null, expected: newId } }),
+  })).ok, { oldId, newId });
+  expect(externalEdit).toBe(true);
+  await replacementChoice.selectOption('');
+  await page.getByRole('button', { name: 'Save revision link', exact: true }).click();
+  await expect(earlierChoice).toHaveValue('');
+  await expect(page.getByText('This revision link changed. Reload the data room and try again.', { exact: true })).toBeVisible();
+  await earlierChoice.selectOption(oldId); await replacementChoice.selectOption(newId);
+  await page.getByRole('button', { name: 'Save revision link', exact: true }).click();
+  await expect(earlierChoice).toHaveValue('');
   await page.goto(`/deal/${dealId}/auto`);
   await expect(page.getByRole('button', { name: /Drawing revision A.pdf/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Drawing revision B.pdf/ })).toBeVisible();
