@@ -329,7 +329,7 @@ export default function DataRoom() {
                   PDF, XLSX, PNG, JPG · up to 100 MB — these feed the AI extraction. DWG and other formats are stored and
                   shared, but cannot be read.{' '}
                   <button
-                    className="text-brand-ink font-semibold hover:text-brand-ink"
+                    className="inline-flex min-h-8 items-center text-brand-ink font-semibold hover:text-brand-ink"
                     onClick={(e) => {
                       e.stopPropagation();
                       openForm();
