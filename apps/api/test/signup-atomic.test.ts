@@ -2,9 +2,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { anonymous, prisma, resetDatabase } from './harness.js';
 
 beforeAll(() => resetDatabase());
-const signup = (email: string) => anonymous().org.register({
-  orgName: 'New customer', name: 'Customer Owner', email, password: 'a-long-test-password',
-});
+const signup = (email: string) =>
+  anonymous().org.register({
+    orgName: 'New customer',
+    name: 'Customer Owner',
+    email,
+    password: 'a-long-test-password',
+  });
 
 describe('signup creates one complete workspace', () => {
   it('starts a private trial with an admin and the connector catalogue', async () => {
@@ -20,8 +24,8 @@ describe('signup creates one complete workspace', () => {
   it('rolls back the losing workspace when simultaneous signups use one email', async () => {
     const before = await prisma.organisation.count();
     const results = await Promise.allSettled([signup('race@customer.test'), signup('race@customer.test')]);
-    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
     expect(await prisma.organisation.count()).toBe(before + 1);
     expect(await prisma.user.count({ where: { email: 'race@customer.test' } })).toBe(1);
   });
@@ -29,5 +33,37 @@ describe('signup creates one complete workspace', () => {
     const before = await prisma.organisation.count();
     await expect(signup('new@customer.test')).rejects.toThrow(/already exists/);
     expect(await prisma.organisation.count()).toBe(before);
+  });
+});
+
+describe('signup validates customer identity at the server boundary', () => {
+  it.each(['orgName', 'name'] as const)('refuses whitespace-only %s without creating a workspace', async (field) => {
+    const before = await prisma.organisation.count();
+    await expect(
+      anonymous().org.register({
+        orgName: 'Customer firm',
+        name: 'Customer Owner',
+        email: `blank-${field}@customer.test`,
+        password: 'long-test-password',
+        [field]: '   ',
+      }),
+    ).rejects.toThrow();
+    expect(await prisma.organisation.count()).toBe(before);
+  });
+
+  it('normalizes pasted identity values and accepts a padded email at sign-in', async () => {
+    await anonymous().org.register({
+      orgName: '  Customer firm  ',
+      name: '  Customer Owner  ',
+      email: '  PASTED@customer.test  ',
+      password: 'long-test-password',
+    });
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: 'pasted@customer.test' } });
+    expect(user.name).toBe('Customer Owner');
+    expect((await prisma.organisation.findUniqueOrThrow({ where: { id: user.orgId } })).name).toBe('Customer firm');
+    expect(
+      (await anonymous().auth.login({ email: ' PASTED@customer.test ', password: 'long-test-password' })).principal
+        .userId,
+    ).toBe(user.id);
   });
 });

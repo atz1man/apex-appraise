@@ -108,3 +108,42 @@ to 322KB uncompressed (the older checked-in baseline was 293KB). Only the
 entry baseline is updated; route growth tolerances and the 250KB route budget
 are unchanged. ExcelJS/Leaflet remain outside initial/route static closures.
 The heaviest route measures 121KB in this build.
+
+## New-customer entry audit — 10 October 2026
+
+This pass exercises first-time registration, invalid and duplicate submissions,
+initial workspace isolation, first appraisal/report, team invitation/removal,
+trial and seat controls, password recovery, export and account closure. It is
+an engineering audit with synthetic customers; it is not observed customer
+conversion data or a production load test.
+
+Fixed findings:
+
+- The signup API accepted whitespace-only organisation/person names even though
+  the browser rejected them. The server now trims identity fields before
+  validation, enforces bounded input lengths and normalizes email case. Sign-in,
+  SSO discovery and password recovery accept surrounding email whitespace too.
+- Two simultaneous password resets could both read a valid token and overwrite
+  each other's password. Consumption now compares the token and expiry in the
+  database write. A forced concurrent-read regression test proves only one wins.
+- Changing a password left older reset links usable. It now clears outstanding
+  reset credentials as well as revoking old sessions.
+- Signup now explains the 14-day trial, links the public terms/privacy notices,
+  focuses the first invalid field, keeps entered details after a rejection,
+  gives duplicate-account recovery links and shows a pending creation state.
+  The notices are links, not a claim of recorded contractual acceptance.
+
+Verification: `new-user-recovery.test.ts`, `signup-atomic.test.ts`, existing
+session/SSO/throttling/tenant/role/entitlement checks and the new
+`new-user-entry.spec.ts`. The customer lifecycle uses its own new workspace and
+runs through a real appraisal and PDF before export and erasure. Provider-backed
+billing and email delivery still require the live acceptance evidence above.
+
+Open launch work: registration currently issues a session without proving email
+ownership. Before unrestricted public signup, implement verified-email activation
+with expiring, single-use confirmation and resend throttling, and decide which
+trial actions require verification. This depends on working transactional email
+for customer acceptance. The public operator identity and any versioned terms
+acceptance policy still need owner confirmation. Multi-instance abuse limits,
+capacity/load testing and restore exercises are separate release evidence;
+passing the application tests does not establish them.
