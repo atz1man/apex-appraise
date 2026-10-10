@@ -56,14 +56,25 @@ test('a rejected signup keeps the inputs and offers account recovery', async ({ 
 test('signup prevents repeat submissions while pending and recovers from a service failure', async ({ page }) => {
   let attempts = 0;
   let release!: () => void;
-  const responseGate = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/trpc/org.register*', async route => {
+  const responseGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/trpc/org.register*', async (route) => {
     attempts++;
     if (attempts === 1) await responseGate;
-    await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({
-      error: { json: { message: 'Service temporarily unavailable. Please try again.', code: -32603,
-        data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 503, path: 'org.register' } } },
-    }) });
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: {
+          json: {
+            message: 'Service temporarily unavailable. Please try again.',
+            code: -32603,
+            data: { code: 'INTERNAL_SERVER_ERROR', httpStatus: 503, path: 'org.register' },
+          },
+        },
+      }),
+    });
   });
   await page.goto('/register');
   await page.getByLabel('Organisation name').fill('Retry workspace');
@@ -71,10 +82,11 @@ test('signup prevents repeat submissions while pending and recovers from a servi
   await page.getByLabel('Email', { exact: true }).fill('retry@example.test');
   await page.getByLabel('Password', { exact: true }).fill('long-test-password');
   await page.getByLabel('Confirm password').fill('long-test-password');
-  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await page.getByLabel('Confirm password').press('Enter');
   try {
     await expect(page.getByRole('button', { name: 'Creating your workspace…', exact: true })).toBeDisabled();
-    await expect(page.getByLabel('Email', { exact: true })).toBeDisabled();
+    await expect(page.getByLabel('Email', { exact: true })).toHaveAttribute('readonly', '');
+    await expect(page.getByLabel('Confirm password')).toBeFocused();
     await expect.poll(() => attempts).toBe(1);
     await page.keyboard.press('Enter');
     expect(attempts).toBe(1);
@@ -82,6 +94,7 @@ test('signup prevents repeat submissions while pending and recovers from a servi
     release();
   }
   await expect(page.getByText('Service temporarily unavailable. Please try again.')).toBeVisible();
+  await expect(page.getByLabel('Confirm password')).toBeFocused();
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue('retry@example.test');
   await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
   await expect.poll(() => attempts).toBe(2);

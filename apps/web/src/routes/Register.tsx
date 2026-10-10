@@ -39,7 +39,7 @@ export default function Register() {
     if (form.email.trim().length > 254) next.email = 'Use at most 254 characters.';
     if (form.password.length > 1024) next.password = 'Use at most 1,024 characters.';
     setErrors(next);
-    const firstError = Object.keys(next)[0];
+    const firstError = (['orgName', 'name', 'email', 'password', 'confirm'] as const).find((key) => next[key]);
     if (firstError) {
       document.getElementById(`reg-${firstError}`)?.focus();
       return;
@@ -81,7 +81,7 @@ export default function Register() {
         onChange={set(key)}
         autoFocus={props.autoFocus}
         autoComplete={props.autoComplete}
-        disabled={register.isPending}
+        readOnly={register.isPending}
         required
         maxLength={key === 'email' ? 254 : key === 'password' || key === 'confirm' ? 1024 : 80}
         aria-invalid={errors[key] ? true : undefined}
@@ -109,7 +109,12 @@ export default function Register() {
             Apex <span className="text-accent-300">Appraise</span>
           </span>
         </div>
-        <form className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6" onSubmit={submit} noValidate>
+        <form
+          className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6"
+          onSubmit={submit}
+          noValidate
+          aria-busy={register.isPending}
+        >
           <div className="eyebrow mb-1">Create workspace</div>
           <h1 className="text-[19px] font-bold tracking-[-0.4px] mb-2">Start your organisation</h1>
           <p className="text-[12.5px] text-ink-2 mb-4">

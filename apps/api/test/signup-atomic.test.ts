@@ -47,7 +47,7 @@ describe('signup validates customer identity at the server boundary', () => {
         password: 'long-test-password',
         [field]: '   ',
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(await prisma.organisation.count()).toBe(before);
   });
 
