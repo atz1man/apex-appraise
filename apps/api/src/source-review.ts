@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Appraisal } from '@prisma/client';
 import { inputHashOf } from './approval-pin.js';
 
+export const zSourceFingerprint = z.string().regex(/^[a-f0-9]{64}$/);
+
 export const zSourceReference = z.object({
   unitIndex: z.number().int().min(0), documentId: z.string(),
   page: z.number().int().min(1).max(10000).nullable(), locator: z.string().trim().max(120),
@@ -24,7 +26,7 @@ export const zStoredSourceReview = z.object({
   inputHash: z.string(),
   sample: z.boolean(),
   omissions: zSourceReviewRequest.shape.omissions,
-  documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null) })),
+  documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string(), sha256: zSourceFingerprint.nullable().default(null) })),
 });
 
 export function readSourceReview(row: Appraisal) {

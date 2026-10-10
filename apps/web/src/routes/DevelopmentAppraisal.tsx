@@ -524,12 +524,12 @@ export default function DevelopmentAppraisal() {
                   <div className="mt-2 space-y-2 break-words">
                     {!saved.sourceReview.documents.length && <p>No uploaded source documents were recorded with this review.</p>}
                     {saved.sourceReview.documents.map(d => <p key={d.id}>
-                      <span className="block break-all text-[11px]">Upload fingerprint (SHA-256): {d.sha256 ?? 'Not recorded for this source review'}</span>
                       {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-ink underline">{d.name}</a> : <span>{d.name} — source {d.status}</span>}
+                      <span className="block break-all text-[11px]">Upload fingerprint (SHA-256): {d.sha256 ?? 'Not recorded for this source review'}</span>
                     </p>)}
                     {(saved.sourceReview.references ?? []).map((r, i) => <p key={`ref-${i}`}>Unit {r.unitIndex + 1}: {r.unitLabel} — {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.name ?? 'Source unavailable'}{r.page !== null ? `, PDF page ${r.page}` : ''}{r.locator ? `, ${r.locator}` : ''} (user-entered reference; source {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.status ?? 'unavailable'})</p>)}
                     {saved.sourceReview.omissions.map((o, i) => <p key={i}>{o.name}: {o.reason}</p>)}
-                    <p>Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
+                    <p>Fingerprints record bytes received at upload; stored bytes are not rechecked here or at export. Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
                   </div>
                 </details>
               </div> : <p className="text-[12px] text-ink-2">{saved.sourceReviewState === 'unreadable' ? 'The stored source input review could not be read. Its review status cannot be confirmed.' : 'No source input review is recorded for this version.'}</p>}

@@ -74,7 +74,7 @@ describe('workfile storage under competing and failed writes', () => {
     expect(a.statusCode).toBe(200); expect(b.statusCode).toBe(200);
     const one = await prisma.document.findUniqueOrThrow({ where: { id: a.json().id } });
     const two = await prisma.document.findUniqueOrThrow({ where: { id: b.json().id } });
-    expect(one.sha256).toBe(expected); expect(two.sha256).not.toBe(expected);
+    expect(one.sha256).toBe(expected); expect(two.sha256).toBe(createHash('sha256').update(body + '!').digest('hex'));
     expect(createHash('sha256').update((await app.inject({ url: a.json().url, headers: auth(A) })).rawPayload).digest('hex')).toBe(expected);
   });
 

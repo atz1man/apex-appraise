@@ -251,7 +251,7 @@ remain outstanding; Red Book and funding-pack exports are separate formats.
 
 ### Upload fingerprints — 11 October 2026
 
-New uploads compute SHA-256 while streaming the file into exclusive storage.
+New workfile document uploads compute SHA-256 while streaming the file into exclusive storage.
 The document row and subsequent input acknowledgements retain that server-owned
 fingerprint. The appraisal source panel and development PDF/Excel register expose
 it, allowing a recipient to compare a separately obtained file to the recorded

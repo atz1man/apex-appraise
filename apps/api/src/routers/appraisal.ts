@@ -1,5 +1,5 @@
 import type { Appraisal } from '@prisma/client';
-import { readSourceReview, zSourceReviewRequest } from '../source-review.js';
+import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
 import { signFileUrl } from '../uploads.js';
 import { TRPCError } from '@trpc/server';
 import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
@@ -289,6 +289,9 @@ export const appraisalRouter = router({
         });
         if (documents.length !== ids.length || documents.some(d => !d.url || d.supersededById)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'A reviewed source is unavailable in this deal. Reload the source documents before saving.' });
+        }
+        if (documents.some(d => d.sha256 !== null && !zSourceFingerprint.safeParse(d.sha256).success)) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'A source has an invalid upload fingerprint. Contact your administrator before recording a review.' });
         }
         for (const ref of input.sourceReview.references) {
           const doc = documents.find(d => d.id === ref.documentId);

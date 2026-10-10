@@ -26,6 +26,12 @@ describe('durable source input review', () => {
     await prisma.document.update({ where: { id: doc.id }, data: { sha256: 'b'.repeat(64) } });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ sha256: hash, status: 'changed', url: null });
   });
+  it('refuses invalid database fingerprints before committing an unreadable review', async () => {
+    const { dealId, api } = await fresh(); const doc = await document(dealId);
+    await prisma.document.update({ where: { id: doc.id }, data: { sha256: 'not-a-sha256' } });
+    await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id] } })).rejects.toThrow(/invalid upload fingerprint/);
+    expect(await api.appraisal.getCurrent(dealId)).toBeNull();
+  });
   it('reads pre-fingerprint reviews without inventing a historical fingerprint', async () => {
     const { dealId, api } = await fresh(); const doc = await document(dealId);
     const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id] } });
