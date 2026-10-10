@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import superjson from 'superjson';
 import { expect, test } from '@playwright/test';
 
@@ -14,6 +15,7 @@ test('page references survive save, revision changes warn, and evidence leaves i
   const fixturePage = await context.newPage();
   await fixturePage.setContent('<h1>Test drawing</h1><p>Drawing A102, revision A. Test fixture only.</p>');
   const pdf = (await fixturePage.pdf()).toString('base64'); await fixturePage.close();
+  const fingerprint = createHash('sha256').update(Buffer.from(pdf, 'base64')).digest('hex');
   const upload = (name: string) => page.evaluate(async ({ dealId, pdf, name }) => {
     const form = new FormData(); form.append('dealId', dealId); form.append('category', 'Architectural');
     form.append('file', new Blob([Uint8Array.from(atob(pdf), c => c.charCodeAt(0))], { type: 'application/pdf' }), name);
@@ -66,6 +68,7 @@ test('page references survive save, revision changes warn, and evidence leaves i
   await expect(page.getByText('A reviewed source is superseded, changed or missing. Check the source record before relying on this appraisal.', { exact: true })).toBeVisible();
   await page.getByText('Reviewed sources and reported omissions', { exact: true }).click();
   await expect(page.getByText(/PDF page 1, A102 revision A/)).toBeVisible();
+  await expect(page.getByText(`Upload fingerprint (SHA-256): ${fingerprint}`, { exact: true })).toBeVisible();
   const workbookEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export.*xlsx/i }).click();
   const workbookDownload = await workbookEvent;
@@ -73,11 +76,11 @@ test('page references survive save, revision changes warn, and evidence leaves i
   const ExcelJS = (await import('exceljs')).default; const workbook = new ExcelJS.Workbook(); await workbook.xlsx.readFile(workbookPath);
   const evidence = workbook.getWorksheet('Source evidence'); expect(evidence).toBeTruthy();
   const text: string[] = []; evidence!.eachRow(row => text.push(String(row.getCell(1).value ?? '')));
-  expect(text.join('')).toContain('PDF page 1'); expect(text.join('')).toContain('superseded'); expect(text.join('')).toContain('WORKED EXAMPLE'); expect(text.join('')).not.toContain('?t=');
+  expect(text.join('')).toContain(fingerprint); expect(text.join('')).toContain('PDF page 1'); expect(text.join('')).toContain('superseded'); expect(text.join('')).toContain('WORKED EXAMPLE'); expect(text.join('')).not.toContain('?t=');
   await page.goto(`/deal/${dealId}/report`);
   await expect(page.getByTestId('source-evidence-page').first()).toBeVisible();
   const printed = (await page.getByTestId('source-evidence-page').allTextContents()).join('');
-  expect(printed).toContain('PDF page 1'); expect(printed).toContain('SOURCE WARNING');
+  expect(printed).toContain(fingerprint); expect(printed).toContain('PDF page 1'); expect(printed).toContain('SOURCE WARNING');
   const overflow = await page.locator('.a4-page').evaluateAll(pages => pages.some(p => p.scrollHeight > p.clientHeight + 2));
   expect(overflow).toBe(false);
   const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download PDF', exact: true }).click();

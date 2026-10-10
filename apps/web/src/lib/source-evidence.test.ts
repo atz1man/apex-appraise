@@ -6,6 +6,13 @@ const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('exports recorded upload fingerprints and explicitly marks legacy absence', () => {
+    const hash = 'a'.repeat(64);
+    const text = sourceEvidenceLines({ ...review, documents: [{ ...review.documents[0], sha256: hash }] }).join('\n');
+    expect(text).toContain(`Upload SHA-256: ${hash}`);
+    expect(text).toContain('stored bytes are not rechecked at export');
+    expect(sourceEvidenceLines(review).join('\n')).toContain('Upload SHA-256: Not recorded');
+  });
   it('carries warnings, source identities, page references and omissions without URLs', () => {
     const text = sourceEvidenceLines({ ...review, url: 'SECRET' } as SourceEvidence).join('\n');
     expect(text).toContain('SOURCE WARNING'); expect(text).toContain('PDF page 2');

@@ -524,6 +524,7 @@ export default function DevelopmentAppraisal() {
                   <div className="mt-2 space-y-2 break-words">
                     {!saved.sourceReview.documents.length && <p>No uploaded source documents were recorded with this review.</p>}
                     {saved.sourceReview.documents.map(d => <p key={d.id}>
+                      <span className="block break-all text-[11px]">Upload fingerprint (SHA-256): {d.sha256 ?? 'Not recorded for this source review'}</span>
                       {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-ink underline">{d.name}</a> : <span>{d.name} — source {d.status}</span>}
                     </p>)}
                     {(saved.sourceReview.references ?? []).map((r, i) => <p key={`ref-${i}`}>Unit {r.unitIndex + 1}: {r.unitLabel} — {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.name ?? 'Source unavailable'}{r.page !== null ? `, PDF page ${r.page}` : ''}{r.locator ? `, ${r.locator}` : ''} (user-entered reference; source {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.status ?? 'unavailable'})</p>)}

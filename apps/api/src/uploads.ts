@@ -3,7 +3,8 @@ import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createWriteStream } from 'node:fs';
 import { mkdir, stat, unlink } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { Transform } from 'node:stream';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
@@ -55,9 +56,11 @@ async function storeFile(file: MultipartFile, prefix = '') {
     created = true;
   });
   try {
-    await pipeline(file.file, output);
+    const hash = createHash('sha256');
+    const fingerprint = new Transform({ transform(chunk, _encoding, callback) { hash.update(chunk); callback(null, chunk); } });
+    await pipeline(file.file, fingerprint, output);
     if (file.file.truncated) throw Object.assign(new Error('File is too large'), { statusCode: 413 });
-    return { key, filename: file.filename, bytes: (await stat(dest)).size };
+    return { key, filename: file.filename, bytes: (await stat(dest)).size, sha256: hash.digest('hex') };
   } catch (error) {
     if (created) await unlink(dest).catch(() => {});
     throw error;
@@ -224,7 +227,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
     const parts = req.parts();
     let dealId = '';
     let category = 'Legal';
-    let stored: { key: string; filename: string; bytes: number } | null = null;
+    let stored: Awaited<ReturnType<typeof storeFile>> | null = null;
     let retained = false;
     try {
       for await (const part of parts) {
@@ -253,6 +256,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
             category,
             ext,
             sizeBytes: BigInt(upload.bytes),
+            sha256: upload.sha256,
             url: `/uploads/files/${upload.key}`,
             extraction: 'STORED',
             addedById: user.userId,

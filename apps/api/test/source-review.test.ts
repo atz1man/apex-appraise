@@ -17,6 +17,24 @@ const fresh = async () => {
 };
 const document = (dealId: string, orgId = T.orgId) => prisma.document.create({ data: { orgId, dealId, name: 'Schedule.xlsx', ext: 'xlsx', category: 'Cost plans', sizeBytes: 100n, url: '/uploads/files/test-source.xlsx' } });
 describe('durable source input review', () => {
+  it('pins the server fingerprint and refuses a changed fingerprint despite identical metadata', async () => {
+    const { dealId, api } = await fresh(); const doc = await document(dealId);
+    const hash = 'a'.repeat(64);
+    await prisma.document.update({ where: { id: doc.id }, data: { sha256: hash } });
+    await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id], sha256: 'forged' } } as never);
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ sha256: hash, status: 'unchanged' });
+    await prisma.document.update({ where: { id: doc.id }, data: { sha256: 'b'.repeat(64) } });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ sha256: hash, status: 'changed', url: null });
+  });
+  it('reads pre-fingerprint reviews without inventing a historical fingerprint', async () => {
+    const { dealId, api } = await fresh(); const doc = await document(dealId);
+    const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id] } });
+    const row = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+    const legacy = JSON.parse(row.sourceReview!); delete legacy.documents[0].sha256;
+    await prisma.appraisal.update({ where: { id: saved.id }, data: { sourceReview: JSON.stringify(legacy) } });
+    await prisma.document.update({ where: { id: doc.id }, data: { sha256: 'c'.repeat(64) } });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ sha256: null, status: 'unchanged' });
+  });
   it('stamps authenticated identity and persisted inputs, ignoring caller identity claims', async () => {
     const { dealId, api } = await fresh(); const doc = await document(dealId);
     await api.appraisal.save({ dealId, input, source: 'ai', sourceReview: { ...acknowledgement, documentIds: [doc.id], reviewerName: 'Imposter', reviewedAt: '2000-01-01' } } as never);

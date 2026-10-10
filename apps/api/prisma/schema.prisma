@@ -379,6 +379,7 @@ model Document {
   ext      String
   sizeBytes BigInt
   url      String @default("")
+  sha256 String? // server-computed upload fingerprint; null for legacy files
   supersededById String? // later uploaded revision, same deal; original bytes retained
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
   // WHICH buyer this is shared with. A document offered to a buyer is offered to

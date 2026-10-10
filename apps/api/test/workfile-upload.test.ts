@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import Fastify from 'fastify';
@@ -65,6 +66,18 @@ const auth = (tenant: Tenant) => ({
 });
 
 describe('workfile storage under competing and failed writes', () => {
+  it('fingerprints the exact uploaded bytes, independently of filename and caller fields', async () => {
+    const body = '£ drawings\n' + 'abc'.repeat(50000);
+    const expected = createHash('sha256').update(body).digest('hex');
+    const a = await post('/uploads/document', { body, fields: { dealId: A.dealId, sha256: 'forged' } });
+    const b = await post('/uploads/document', { body: body + '!', filename: 'workfile.pdf' });
+    expect(a.statusCode).toBe(200); expect(b.statusCode).toBe(200);
+    const one = await prisma.document.findUniqueOrThrow({ where: { id: a.json().id } });
+    const two = await prisma.document.findUniqueOrThrow({ where: { id: b.json().id } });
+    expect(one.sha256).toBe(expected); expect(two.sha256).not.toBe(expected);
+    expect(createHash('sha256').update((await app.inject({ url: a.json().url, headers: auth(A) })).rawPayload).digest('hex')).toBe(expected);
+  });
+
   it('same filename in the same millisecond cannot overwrite another firm’s bytes', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     const [a, b] = await Promise.all([

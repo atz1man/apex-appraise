@@ -188,7 +188,8 @@ export const appraisalRouter = router({
       documents: review.documents.map(({ storagePath, ...snapshot }) => {
         const current = sourceDocs.find(d => d.id === snapshot.id);
         const unchanged = !!current && current.url === storagePath && current.name === snapshot.name
-          && current.sizeBytes.toString() === snapshot.sizeBytes && current.addedAt.toISOString() === snapshot.addedAt;
+          && current.sizeBytes.toString() === snapshot.sizeBytes && current.addedAt.toISOString() === snapshot.addedAt
+          && (snapshot.sha256 === null || current.sha256 === snapshot.sha256);
         return { ...snapshot, supersededById: current?.supersededById ?? null, status: !current ? 'missing' as const : current.supersededById ? 'superseded' as const : unchanged ? 'unchanged' as const : 'changed' as const,
           url: unchanged && !current?.supersededById ? signFileUrl(current!.url, ctx.principal.userId) : null };
       }),
@@ -301,7 +302,7 @@ export const appraisalRouter = router({
           reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
           sample: input.sourceReview.sample, omissions: input.sourceReview.omissions,
           documents: documents.map(d => ({ id: d.id, name: d.name, sizeBytes: d.sizeBytes.toString(),
-            addedAt: d.addedAt.toISOString(), storagePath: d.url })),
+            addedAt: d.addedAt.toISOString(), storagePath: d.url, sha256: d.sha256 })),
         });
       }
       let row;

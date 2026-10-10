@@ -24,7 +24,7 @@ export const zStoredSourceReview = z.object({
   inputHash: z.string(),
   sample: z.boolean(),
   omissions: zSourceReviewRequest.shape.omissions,
-  documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string() })),
+  documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null) })),
 });
 
 export function readSourceReview(row: Appraisal) {

@@ -1,7 +1,7 @@
 /** Portable evidence text: never export expiring download credentials. */
 export interface SourceEvidence {
   reviewerName: string; reviewedAt: string; inputsUnchanged: boolean; sample: boolean;
-  documents: Array<{ id: string; name: string; status: string; addedAt: string; supersededById?: string | null }>;
+  documents: Array<{ id: string; name: string; status: string; addedAt: string; supersededById?: string | null; sha256?: string | null }>;
   omissions: Array<{ name: string; reason: string }>;
   references?: Array<{ unitIndex: number; unitLabel: string; documentId: string; page: number | null; locator: string }>;
 }
@@ -11,13 +11,13 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
     review.inputsUnchanged && !dirty ? 'Exported inputs match the recorded input review.' : 'INPUTS CHANGED: the recorded review does not cover these inputs.',
     `Reviewed by ${review.reviewerName} on ${new Date(review.reviewedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time).`,
     'Input acknowledgement only; not professional approval or independently verified evidence.',
-    'Source identities are metadata snapshots. Page and sheet/cell references are user-entered and have not been independently verified.',
+    'Source identities include upload-time SHA-256 fingerprints where recorded; stored bytes are not rechecked at export. Page and sheet/cell references are user-entered and have not been independently verified.',
   ];
   if (review.sample) lines.push('WORKED EXAMPLE: these inputs were not extracted from project documents.');
   if (review.documents.some(d => d.status !== 'unchanged')) lines.push('SOURCE WARNING: a reviewed document is superseded, changed or missing.');
   lines.push('SOURCE REGISTER');
   if (!review.documents.length) lines.push('No uploaded source documents were recorded.');
-  for (const d of review.documents) lines.push(`${d.name} | Document ID: ${d.id} | Uploaded: ${d.addedAt} | Status: ${d.status}${d.supersededById ? ` | Superseded by document ID: ${d.supersededById}` : ''}`);
+  for (const d of review.documents) lines.push(`${d.name} | Document ID: ${d.id} | Uploaded: ${d.addedAt} | Status: ${d.status}${d.supersededById ? ` | Superseded by document ID: ${d.supersededById}` : ''} | Upload SHA-256: ${d.sha256 ?? 'Not recorded'}`);
   lines.push('INPUT REFERENCES');
   if (!review.references?.length) lines.push('No structured page or sheet/cell references were recorded.');
   for (const ref of review.references ?? []) {

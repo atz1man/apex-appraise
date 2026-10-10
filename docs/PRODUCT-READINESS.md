@@ -247,3 +247,24 @@ review as not covering those inputs. This is a source register, not a ZIP bundle
 of original files. Native CAD/BIM, calibrated measurement, region-level PDF
 viewing, cryptographic source-content pins and live extraction accuracy testing
 remain outstanding; Red Book and funding-pack exports are separate formats.
+
+
+### Upload fingerprints — 11 October 2026
+
+New uploads compute SHA-256 while streaming the file into exclusive storage.
+The document row and subsequent input acknowledgements retain that server-owned
+fingerprint. The appraisal source panel and development PDF/Excel register expose
+it, allowing a recipient to compare a separately obtained file to the recorded
+upload. A changed or removed recorded fingerprint marks a pinned source changed
+and withholds its reviewed download link. Older source reviews remain readable
+and explicitly say that no fingerprint was recorded; a later fingerprint is not
+backfilled into a historical review.
+
+This identifies the bytes received at upload. It does not rehash storage during
+extraction or export, prove which bytes the model read, verify page references,
+or establish professional acceptance. The nullable Document.sha256 migration
+is required. No financial calculation changed.
+
+Next priority: close the extraction-time integrity gap and measure the complete
+source-to-appraisal workflow on representative customer packs. Integration of
+the stacked PRs and the external SaaS acceptance checks remain release work.
