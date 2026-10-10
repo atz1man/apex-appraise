@@ -42,7 +42,7 @@ describe('buildAppraisalWorkbook', async () => {
     monthLabel,
   });
 
-  it('carries all seven sheets in order', () => {
+  it('carries all eight sheets in order', () => {
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       'Summary',
       'Unit schedule',
@@ -51,6 +51,7 @@ describe('buildAppraisalWorkbook', async () => {
       'JV returns',
       'Risk & sensitivity',
       'Assumptions',
+      'Source evidence',
     ]);
   });
 
@@ -145,6 +146,7 @@ describe('buildAppraisalWorkbook — with a held element', async () => {
       'JV returns',
       'Risk & sensitivity',
       'Assumptions',
+      'Source evidence',
     ]);
   });
 

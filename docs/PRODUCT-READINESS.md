@@ -219,3 +219,29 @@ review ledger or review export into PDF/Excel packs. Existing appraisals remain
 explicitly unreviewed; no acceptance is fabricated or backfilled.
 
 The nullable `Appraisal.sourceReview` column requires the included migration.
+
+### Drawing references, revisions and portable evidence
+
+A reviewer can now attach a source document plus a PDF page or drawing/sheet/cell
+location to a unit. These are labelled user-entered references; page existence,
+source interpretation and drawing measurements are not automatically verified.
+References are validated against the reviewed source IDs and unit indices and
+persist with the accepted unit labels.
+
+The data room links an earlier uploaded document to a later revision without
+replacing either file. Same-deal/workspace checks, strict upload ordering and
+compare-and-set writes protect the links; changes and removals are audited in
+the same transaction. Superseded documents are excluded from new extraction,
+and existing appraisals report their superseded sources. Undoing a link is
+explicit and keeps both files. The nullable Document.supersededById migration
+is required. Revision identity does not certify that the files represent the
+same drawing; linking them remains a reviewer decision.
+
+The development-appraisal PDF adds paginated source-evidence pages. Excel adds a
+Source evidence sheet. Both carry input-review status, reviewer/time, source
+identities, references, omissions and worked-example warnings, without exporting
+expiring download tokens. Excel exports of unsaved edits explicitly mark the old
+review as not covering those inputs. This is a source register, not a ZIP bundle
+of original files. Native CAD/BIM, calibrated measurement, region-level PDF
+viewing, cryptographic source-content pins and live extraction accuracy testing
+remain outstanding; Red Book and funding-pack exports are separate formats.

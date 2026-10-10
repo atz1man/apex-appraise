@@ -379,6 +379,7 @@ model Document {
   ext      String
   sizeBytes BigInt
   url      String @default("")
+  supersededById String? // later uploaded revision, same deal; original bytes retained
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
   // WHICH buyer this is shared with. A document offered to a buyer is offered to
   // A buyer: `signedAt` is one column, so a row shared across a development

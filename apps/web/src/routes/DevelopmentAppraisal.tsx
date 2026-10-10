@@ -479,7 +479,7 @@ export default function DevelopmentAppraisal() {
               variant="secondary"
               className="hidden sm:inline-flex"
               onClick={() =>
-                exportAppraisalXlsx({ dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
+                exportAppraisalXlsx({ evidence: saved?.sourceReview, evidenceState: saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
               }
             >
               Export .xlsx
@@ -517,7 +517,7 @@ export default function DevelopmentAppraisal() {
                 <p>Reviewed by {saved.sourceReview.reviewerName} on {new Date(saved.sourceReview.reviewedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time).</p>
                 <p>This records an input acknowledgement, not professional approval or independently verified evidence.</p>
                 {saved.sourceReview.sample && <p className="font-semibold">Worked example: these inputs were not extracted from project documents.</p>}
-                {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source has changed or is missing. Check the source record before relying on this appraisal.</p>}
+                {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source is superseded, changed or missing. Check the source record before relying on this appraisal.</p>}
                 {saved.sourceReview.omissions.length > 0 && <p className="font-semibold">The review recorded incomplete source coverage. Read the reported omissions below.</p>}
                 <details>
                   <summary className="cursor-pointer font-semibold">Reviewed sources and reported omissions</summary>
@@ -526,6 +526,7 @@ export default function DevelopmentAppraisal() {
                     {saved.sourceReview.documents.map(d => <p key={d.id}>
                       {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-ink underline">{d.name}</a> : <span>{d.name} — source {d.status}</span>}
                     </p>)}
+                    {(saved.sourceReview.references ?? []).map((r, i) => <p key={`ref-${i}`}>Unit {r.unitIndex + 1}: {r.unitLabel} — {saved.sourceReview?.documents.find(d => d.id === r.documentId)?.name ?? 'Source unavailable'}{r.page !== null ? `, PDF page ${r.page}` : ''}{r.locator ? `, ${r.locator}` : ''} (user-entered reference)</p>)}
                     {saved.sourceReview.omissions.map((o, i) => <p key={i}>{o.name}: {o.reason}</p>)}
                     <p>Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
                   </div>

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { StatusKey } from '@apex/ui-tokens';
 import { getToken, trpc } from '../lib/trpc';
 import { Button, EmptyState, FormError, Icon, Skeleton, SkeletonRows, Spinner, StatusChip, TopBar , writeAttrs} from '../components/ui';
+import { useUnsavedWarning } from '../lib/unsaved';
 import { loadFailure } from '../lib/load-failure';
 import { DealNav } from '../components/DealNav';
 import { useToast } from '../components/Toast';
@@ -128,6 +129,16 @@ export default function DataRoom() {
     onSuccess: () => utils.documents.list.invalidate(),
   });
 
+  const [earlierId, setEarlierId] = useState('');
+  const [replacementId, setReplacementId] = useState('');
+  const [revisionExpected, setRevisionExpected] = useState<string | null>(null);
+  useUnsavedWarning(!!earlierId, 'document revision link');
+  const revisionDocs = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
+  const revision = trpc.documents.setRevision.useMutation({ onSuccess: () => {
+    setEarlierId(''); setReplacementId(''); utils.documents.list.invalidate(); utils.documents.activity.invalidate(dealId);
+    utils.appraisal.getCurrent.invalidate(dealId); toast.success('Document revision link saved');
+  } });
+
   // ---- Ask the workfile: AI Q&A over the deal's readable documents ----
   // this screen shows the error where it happened; see App.tsx
   const ask = trpc.documents.ask.useMutation({ meta: { inlineError: true } });
@@ -252,6 +263,21 @@ export default function DataRoom() {
 
         {/* file list */}
         <div className="px-4 sm:px-6 py-5">
+          <details className="mb-4 rounded-panel border border-border-std p-3">
+            <summary className="cursor-pointer font-semibold text-[13px]">Document revisions</summary>
+            <p className="mt-2 text-[12px] text-ink-2">Upload the new file first, then link the earlier document to it. Earlier files stay in the workfile; new extraction excludes superseded sources. Select no replacement to undo a link.</p>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="text-[12px]">Earlier document<select {...writeAttrs()} disabled={revision.isPending} className="w-full" value={earlierId} onChange={e => { setEarlierId(e.target.value); const expected = revisionDocs.data?.documents.find(d => d.id === e.target.value)?.supersededById ?? null; setRevisionExpected(expected); setReplacementId(expected ?? ''); }}>
+                <option value="">Select document</option>{revisionDocs.data?.documents.filter(d => d.url).map(d => <option key={d.id} value={d.id}>{d.name}{(revisionDocs.data?.documents.filter(other => other.name === d.name).length ?? 0) > 1 ? ` (${fmtWhen(d.addedAt)} · ${d.id.slice(-6)})` : ''}{d.supersededById ? ' (superseded)' : ''}</option>)}
+              </select></label>
+              <label className="text-[12px]">Replacement document<select {...writeAttrs()} disabled={revision.isPending} className="w-full" value={replacementId} onChange={e => setReplacementId(e.target.value)}>
+                <option value="">No replacement (current document)</option>{revisionDocs.data?.documents.filter(d => d.url && d.id !== earlierId && !d.supersededById).map(d => <option key={d.id} value={d.id}>{d.name}{(revisionDocs.data?.documents.filter(other => other.name === d.name).length ?? 0) > 1 ? ` (${fmtWhen(d.addedAt)} · ${d.id.slice(-6)})` : ''}</option>)}
+              </select></label>
+            </div>
+            <Button writes className="mt-3" disabled={!earlierId || revisionDocs.isError || revisionDocs.isPending} loading={revision.isPending} onClick={() => revision.mutate({ documentId: earlierId, toId: replacementId || null, expected: revisionExpected })}>Save revision link</Button>
+            {revisionDocs.isError && <p role="alert" className="mt-2 text-[12px]">Revision documents could not be loaded. Reload the data room.</p>}
+          </details>
+
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="text-[32px] font-bold tracking-[-1.2px]">{currentLabel}</div>

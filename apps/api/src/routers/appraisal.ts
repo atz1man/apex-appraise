@@ -184,13 +184,13 @@ export const appraisalRouter = router({
     }) : [];
     const sourceReview = review ? {
       reviewerName: review.reviewerName, reviewedAt: review.reviewedAt,
-      inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions,
+      inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,
       documents: review.documents.map(({ storagePath, ...snapshot }) => {
         const current = sourceDocs.find(d => d.id === snapshot.id);
         const unchanged = !!current && current.url === storagePath && current.name === snapshot.name
           && current.sizeBytes.toString() === snapshot.sizeBytes && current.addedAt.toISOString() === snapshot.addedAt;
-        return { ...snapshot, status: !current ? 'missing' as const : unchanged ? 'unchanged' as const : 'changed' as const,
-          url: unchanged ? signFileUrl(current!.url, ctx.principal.userId) : null };
+        return { ...snapshot, supersededById: current?.supersededById ?? null, status: !current ? 'missing' as const : current.supersededById ? 'superseded' as const : unchanged ? 'unchanged' as const : 'changed' as const,
+          url: unchanged && !current?.supersededById ? signFileUrl(current!.url, ctx.principal.userId) : null };
       }),
     } : null;
     return {
@@ -286,10 +286,17 @@ export const appraisalRouter = router({
         const documents = await ctx.prisma.document.findMany({
           where: { orgId: ctx.principal.orgId, dealId: input.dealId, id: { in: ids } }, orderBy: { id: 'asc' },
         });
-        if (documents.length !== ids.length || documents.some(d => !d.url)) {
+        if (documents.length !== ids.length || documents.some(d => !d.url || d.supersededById)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'A reviewed source is unavailable in this deal. Reload the source documents before saving.' });
         }
+        for (const ref of input.sourceReview.references) {
+          const doc = documents.find(d => d.id === ref.documentId);
+          if (!doc || ref.unitIndex >= input.input.units.length || (ref.page !== null && doc.ext.toLowerCase() !== 'pdf') || (ref.page === null && !ref.locator)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each input reference needs a reviewed document, a valid unit, and a PDF page or sheet/cell reference.' });
+          }
+        }
         data.sourceReview = JSON.stringify({
+          references: input.sourceReview.references.map(ref => ({ ...ref, unitLabel: input.input.units[ref.unitIndex].label })),
           version: 1, reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name,
           reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
           sample: input.sourceReview.sample, omissions: input.sourceReview.omissions,
@@ -1574,6 +1581,7 @@ export async function documentBlocks(
   let totalBytes = 0;
   let textBudget = 100_000;
   for (const doc of docs.slice(0, 12)) {
+    if (doc.supersededById) { skipped.push({ name: doc.name, reason: 'Superseded by a later document revision; select the current source.' }); continue; }
     const filePath = doc.url ? uploadPathFor(doc.url) : null;
     if (!filePath) {
       skipped.push({ name: doc.name, reason: 'no file has been uploaded for it yet' });

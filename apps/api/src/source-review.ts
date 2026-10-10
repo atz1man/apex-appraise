@@ -2,15 +2,22 @@ import { z } from 'zod';
 import type { Appraisal } from '@prisma/client';
 import { inputHashOf } from './approval-pin.js';
 
+export const zSourceReference = z.object({
+  unitIndex: z.number().int().min(0), documentId: z.string(),
+  page: z.number().int().min(1).max(10000).nullable(), locator: z.string().trim().max(120),
+});
+
 /** An acknowledgement of inputs, never professional approval or proof of model accuracy. */
 export const zSourceReviewRequest = z.object({
   accepted: z.literal(true),
+  references: z.array(zSourceReference).max(200).default([]),
   documentIds: z.array(z.string()).max(12),
   sample: z.boolean(),
   omissions: z.array(z.object({ name: z.string().max(500), reason: z.string().max(8000) })).max(36),
 });
 export const zStoredSourceReview = z.object({
   version: z.literal(1),
+  references: z.array(zSourceReference.extend({ unitLabel: z.string() })).default([]),
   reviewerId: z.string(),
   reviewerName: z.string(),
   reviewedAt: z.string().datetime(),

@@ -1,3 +1,4 @@
+import { sourceEvidenceLines, sourceEvidencePages } from '../lib/source-evidence';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -626,7 +627,9 @@ export default function AppraisalReport() {
   const cashStartPageNo = 6 + sched + inv + dsn + ovr;
   const assumptionsPageNo = cashStartPageNo + cashChunks.length;
   const monitoringPageNo = assumptionsPageNo + 1;
-  const pageTotal = monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo;
+  const evidenceStartPage = (monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo) + 1;
+  const evidencePages = sourceEvidencePages(sourceEvidenceLines(appr.sourceReview, appr.sourceReviewState));
+  const pageTotal = evidenceStartPage + evidencePages.length - 1;
 
   /**
    * The phasing table, wherever it lands. `first` prints the heading (a
@@ -1463,6 +1466,16 @@ export default function AppraisalReport() {
             <PageFoot no={monitoringPageNo} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         )}
+        {evidencePages.map((lines, index) => (
+          <A4Page key={`source-evidence-${index}`}>
+            <PageHead title={`Source input review${index ? ' (continued)' : ''}`} scheme={scheme} />
+            <div data-testid="source-evidence-page" style={{ marginTop: 18, fontFamily: 'monospace', fontSize: 11, lineHeight: '18px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+              {lines.map((line, i) => <div key={i} style={{ minHeight: 18, fontWeight: /^(SOURCE REGISTER|INPUT REFERENCES|REPORTED OMISSIONS|SOURCE WARNING|INPUTS CHANGED|WORKED EXAMPLE)/.test(line) ? 700 : 400 }}>{line || ' '}</div>)}
+            </div>
+            <PageFoot no={evidenceStartPage + index} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
+          </A4Page>
+        ))}
+
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { documentBlocks } from '../src/routers/appraisal.js';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 const input = {
@@ -74,4 +75,42 @@ describe('durable source input review', () => {
     await prisma.appraisal.updateMany({ where: { dealId }, data: { sourceReview: '{broken' } });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReviewState).toBe('unreadable');
   });
+  it('persists structured references with the accepted unit label', async () => {
+    const { dealId, api } = await fresh(); const doc = await document(dealId);
+    await prisma.document.update({ where: { id: doc.id }, data: { ext: 'pdf' } });
+    await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id], references: [{ unitIndex: 0, documentId: doc.id, page: 2, locator: 'Drawing A102 revision C' }] } });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.references[0]).toMatchObject({ unitLabel: 'Apartments', page: 2, locator: 'Drawing A102 revision C' });
+  });
+  it('refuses references outside reviewed sources, invalid units and PDF pages on spreadsheets', async () => {
+    const { dealId, api } = await fresh(); const doc = await document(dealId);
+    const valid = { unitIndex: 0, documentId: doc.id, page: null, locator: 'Costs!B4' };
+    for (const bad of [{ ...valid, documentId: 'missing' }, { ...valid, unitIndex: 99 }, { ...valid, page: 1 }, { ...valid, locator: '' }]) {
+      await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id], references: [bad] } })).rejects.toThrow(/Each input reference/);
+    }
+  });
+  it('flags superseded reviewed sources, excludes them from extraction and records an undoable revision link', async () => {
+    const { dealId, api } = await fresh(); const earlier = await document(dealId); const later = await document(dealId);
+    await prisma.document.update({ where: { id: later.id }, data: { addedAt: new Date(+earlier.addedAt + 1000) } });
+    await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [earlier.id] } });
+    await api.documents.setRevision({ documentId: earlier.id, toId: later.id, expected: null });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ status: 'superseded', url: null });
+    const blocks = await documentBlocks(prisma, T.orgId, [earlier.id]);
+    expect(blocks.used).toEqual([]); expect(blocks.skipped[0].reason).toMatch(/Superseded/);
+    await expect(api.appraisal.save({ dealId, input, asNewVersion: true, sourceReview: { ...acknowledgement, documentIds: [earlier.id] } })).rejects.toThrow(/source is unavailable/);
+    expect(await prisma.activityEvent.count({ where: { dealId, action: 'recorded a superseding document revision' } })).toBe(1);
+    await api.documents.setRevision({ documentId: earlier.id, toId: null, expected: later.id });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0].status).toBe('unchanged');
+  });
+  it('refuses revision cycles, foreign replacements, viewers and stale edits', async () => {
+    const { dealId, api } = await fresh(); const earlier = await document(dealId); const later = await document(dealId);
+    await prisma.document.update({ where: { id: later.id }, data: { addedAt: new Date(+earlier.addedAt + 1000) } });
+    const other = await makeTenant('RevisionOther'); const foreign = await document(other.dealId, other.orgId);
+    await expect(api.documents.setRevision({ documentId: earlier.id, toId: foreign.id, expected: null })).rejects.toThrow();
+    await expect(api.documents.setRevision({ documentId: later.id, toId: earlier.id, expected: null })).rejects.toThrow(/later uploaded/);
+    await expect(api.documents.setRevision({ documentId: earlier.id, toId: earlier.id, expected: null })).rejects.toThrow(/later uploaded/);
+    await expect(callerFor({ ...T.principal, role: 'VIEWER' }).documents.setRevision({ documentId: earlier.id, toId: later.id, expected: null })).rejects.toThrow();
+    await api.documents.setRevision({ documentId: earlier.id, toId: later.id, expected: null });
+    await expect(api.documents.setRevision({ documentId: earlier.id, toId: null, expected: null })).rejects.toThrow(/revision link changed/);
+  });
+
 });

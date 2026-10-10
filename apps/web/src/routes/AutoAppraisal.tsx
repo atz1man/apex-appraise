@@ -20,6 +20,7 @@ type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict }
 
 interface RunState {
   source: 'manual' | 'ai' | 'whatif';
+  references?: Array<{ unitIndex: number; documentId: string; page: number | null; locator: string }>;
   extraction: Extraction;
   buildPerSqft: number;
   indicative: Indicative;
@@ -222,7 +223,7 @@ export default function AutoAppraisal() {
   // real data-room documents the AI can read (PDFs/images with a stored file)
   const { data: roomDocs, isPending: sourcesPending, isError: sourcesFailed } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
   const readableDocs = (roomDocs?.documents ?? []).filter(
-    (d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xlsm'].includes(d.ext.toLowerCase()),
+    (d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xlsm'].includes(d.ext.toLowerCase()),
   );
   const toggleDoc = (id: string) =>
     setSelectedDocs((prev) => {
@@ -247,9 +248,11 @@ export default function AutoAppraisal() {
   const [unitDraft, setUnitDraft] = useState<{ run: RunState; units: Extraction['units'] } | null>(null);
   const [reviewPending, setReviewPending] = useState(false);
   const reviewUnits = unitDraft && unitDraft.run === run ? unitDraft.units : run?.extraction.units ?? [];
-  const reviewAccepted = !!run && acceptedRun === run;
+  const reviewDocumentIds = [...new Set([...(run?.sourceDocuments ?? []).map(d => d.id), ...(run?.references ?? []).map(r => r.documentId)])];
+  const referencesValid = reviewDocumentIds.length <= 12 && (run?.references ?? []).every(r => (r.page !== null && Number.isInteger(r.page) && r.page > 0 && r.page <= 10000) || (r.page === null && !!r.locator.trim()));
+  const reviewAccepted = !!run && acceptedRun === run && referencesValid;
   const reviewDirty = !!run && unitDraft?.run === run && JSON.stringify(reviewUnits) !== JSON.stringify(run.extraction.units);
-  useUnsavedWarning(reviewDirty, 'extraction corrections');
+  useUnsavedWarning(reviewDirty || (!!run?.references?.length && !reviewAccepted), 'extraction corrections and source references');
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [chatInput, setChatInput] = useState('');
@@ -361,7 +364,7 @@ export default function AutoAppraisal() {
     setChatInput('');
     try {
       const res = await whatIf.mutateAsync({ extraction: run.extraction, buildPerSqft: run.buildPerSqft, prompt: q });
-      setRun((r) => (r ? { ...r, source: 'whatif', extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
+      setRun((r) => (r ? { ...r, source: 'whatif', references: [], extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
       setChat((c) => [...c, { role: 'ai', text: res.reply }]);
     } catch {
       setChat((c) => [...c, { role: 'ai', text: 'Something went wrong — try again.' }]);
@@ -395,7 +398,7 @@ export default function AutoAppraisal() {
         dealId,
         source: run.source,
         sourceReview: run.source !== 'manual' ? {
-          accepted: true, documentIds: (run.sourceDocuments ?? []).map(d => d.id),
+          accepted: true, references: run.references ?? [], documentIds: reviewDocumentIds,
           sample: !!run.extraction.sample, omissions: run.skipped,
         } : undefined,
         asNewVersion: !!existingAppraisal,
@@ -862,6 +865,13 @@ export default function AutoAppraisal() {
                         setAcceptedRun(null);
                         setUnitDraft({ run, units: reviewUnits.map((u, i) => i === index ? { ...u, ...patch } : u) });
                       };
+                      const reference = run.references?.find(r => r.unitIndex === index);
+                      const setReference = (patch: Partial<NonNullable<RunState['references']>[number]>) => {
+                        setAcceptedRun(null);
+                        setRun({ ...run, references: [...(run.references ?? []).filter(r => r.unitIndex !== index),
+                          { unitIndex: index, documentId: '', page: null, locator: '', ...reference, ...patch }].filter(r => r.documentId) });
+                      };
+                      const referenceDoc = roomDocs?.documents.find(d => d.id === reference?.documentId);
                       return <fieldset key={index} disabled={reviewPending || whatIf.isPending || save.isPending} className="rounded-panel border border-border-std p-3">
                         <legend className="text-[12px] font-semibold px-1">Review unit {index + 1}</legend>
                         <p className="mb-3 text-[12px] text-ink-2 break-words">Source and review history: {run.extraction.units[index]?.source || 'No citation supplied'}</p>
@@ -871,6 +881,20 @@ export default function AutoAppraisal() {
                           <NumBox label={`Review unit ${index + 1} area sq ft`} value={unit.area} onChange={area => update({ area })} />
                           <NumBox label={`Review unit ${index + 1} value per sq ft`} value={unit.value} onChange={value => update({ value })} />
                         </div>
+                        {readableDocs.length > 0 && <fieldset disabled={reviewDirty} className="mt-3 space-y-2">
+                          <legend className="text-[12px] font-semibold">Input source reference</legend>
+                          <p className="text-[11px] text-ink-2">User-entered reference; page existence and drawing measurements are not verified. Apply unit corrections before editing references.</p>
+                          <label className="block text-[12px]">Source document for unit {index + 1}
+                            <select className="w-full" value={reference?.documentId ?? ''} onChange={e => setReference({ documentId: e.target.value, page: null, locator: '' })}>
+                              <option value="">No structured reference</option>
+                              {readableDocs.map(d => <option key={d.id} value={d.id}>{d.name}{readableDocs.filter(other => other.name === d.name).length > 1 ? ` · ${d.id.slice(-6)}` : ''}</option>)}
+                            </select>
+                          </label>
+                          {reference && <>
+                            {referenceDoc?.ext.toLowerCase() === 'pdf' && <label className="block text-[12px]">PDF page for unit {index + 1}<input className="w-full" type="number" min="1" max="10000" step="1" value={reference.page ?? ''} onChange={e => setReference({ page: e.target.value ? Number(e.target.value) : null })} /></label>}
+                            <label className="block text-[12px]">Drawing, sheet or cell reference for unit {index + 1}<input className="w-full" maxLength={120} value={reference.locator} onChange={e => setReference({ locator: e.target.value })} /></label>
+                          </>}
+                        </fieldset>}
                       </fieldset>;
                     })}
                   </div>
@@ -888,10 +912,10 @@ export default function AutoAppraisal() {
                 </div>
               )}
                   <label className="mt-4 flex items-start gap-2 text-[12px] text-ink-2">
-                    <input type="checkbox" checked={reviewAccepted} disabled={reviewDirty || reviewPending || whatIf.isPending} aria-describedby="review-help" onChange={e => setAcceptedRun(e.target.checked ? run : null)} />
+                    <input type="checkbox" checked={reviewAccepted} disabled={!referencesValid || reviewDirty || reviewPending || whatIf.isPending} aria-describedby="review-help" onChange={e => setAcceptedRun(e.target.checked ? run : null)} />
                     I have checked the inputs, source citations and omitted content. These assumptions are ready to save.
                   </label>
-                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
+                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{!referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
                 </Panel>
               )}
 

@@ -824,6 +824,31 @@ export const documentsRouter = router({
       return doc;
     }),
 
+  setRevision: internalProcedure
+    .input(z.object({ documentId: z.string(), toId: z.string().nullable(), expected: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.documentId, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      let replacement = null;
+      if (input.toId) {
+        replacement = await ctx.prisma.document.findFirst({ where: { id: input.toId, orgId: ctx.principal.orgId, dealId: doc.dealId } });
+        if (!replacement) throw new TRPCError({ code: 'NOT_FOUND' });
+        // Strict upload order makes revision cycles impossible, including concurrent links.
+        const newer = replacement.addedAt > doc.addedAt || (+replacement.addedAt === +doc.addedAt && replacement.id > doc.id);
+        if (!doc.url || !replacement.url || !newer || replacement.supersededById) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a later uploaded, current document on this deal. Both documents must have files.' });
+        }
+      }
+      await ctx.prisma.$transaction(async tx => {
+        const changed = await tx.document.updateMany({ where: { id: doc.id, orgId: ctx.principal.orgId, supersededById: input.expected }, data: { supersededById: input.toId } });
+        if (changed.count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'This revision link changed. Reload the data room and try again.' });
+        await tx.activityEvent.create({ data: { orgId: ctx.principal.orgId, dealId: doc.dealId, userId: ctx.principal.userId,
+          actor: ctx.principal.name, action: input.toId ? 'recorded a superseding document revision' : 'removed a document revision link',
+          target: replacement ? `${doc.name} → ${replacement.name}` : doc.name } });
+      });
+      return { id: doc.id };
+    }),
+
   setExtraction: internalProcedure
     .input(z.object({ id: z.string(), status: z.enum(['EXTRACTED', 'LINKED', 'STORED']) }))
     .mutation(async ({ ctx, input }) => {
@@ -1005,7 +1030,7 @@ export const documentsRouter = router({
         orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const readable = docs
-        .filter((d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
+        .filter((d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
         .slice(0, 4);
       if (readable.length === 0) return { status: 'no-docs' as const };
       const audit = () =>
