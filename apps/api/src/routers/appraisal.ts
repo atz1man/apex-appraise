@@ -1435,43 +1435,70 @@ type ContentBlock =
  * is only needed when somebody actually selects a spreadsheet, and the same rule
  * applies on a server as in the browser.
  *
- * Bounded at the first worksheet's first 400 rows and 40 columns, which is a
- * decision rather than a guard: a cost plan's figures are at the top left, and a
- * 20,000-row export would spend the request budget on a model's context without
- * telling anybody. The bound is REPORTED when it bites, for the same reason the
- * skips are.
+ * Up to ten worksheets, 400 rows and 40 columns each, within a shared text
+ * budget. Every truncated sheet is named. Cell addresses remain in the text
+ * so a reviewer can locate an extracted figure in the original workbook.
  */
-async function spreadsheetText(filePath: string): Promise<{ text: string; truncated: boolean }> {
+async function spreadsheetText(filePath: string, budget: number): Promise<{ text: string; warnings: string[] }> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(filePath);
-  const sheet = wb.worksheets[0];
-  if (!sheet) return { text: '', truncated: false };
-  const MAX_ROWS = 400;
-  const MAX_COLS = 40;
-  const lines: string[] = [`[sheet: ${sheet.name}]`];
-  let truncated = sheet.rowCount > MAX_ROWS || sheet.columnCount > MAX_COLS;
-  sheet.eachRow({ includeEmpty: false }, (row: { getCell: (c: number) => { value: unknown } }, n: number) => {
-    if (n > MAX_ROWS) return;
-    const cells: string[] = [];
-    for (let c = 1; c <= Math.min(sheet.columnCount, MAX_COLS); c++) {
-      const v = row.getCell(c).value;
-      cells.push(
-        v == null
-          ? ''
-          : typeof v === 'object' && 'result' in (v as object)
-            ? String((v as { result: unknown }).result ?? '')
-            : typeof v === 'object' && 'text' in (v as object)
-              ? String((v as { text: unknown }).text ?? '')
-              : String(v),
-      );
+  const lines: string[] = [];
+  const warnings: string[] = [];
+  let chars = 0;
+  let readableRows = 0;
+  const MAX_CHARS = budget;
+  for (const sheet of wb.worksheets.slice(0, 10)) {
+    const heading = `[sheet: ${sheet.name}]`;
+    if (chars + heading.length + 1 > MAX_CHARS) {
+      warnings.push(`${sheet.name}: omitted because the shared 100,000-character spreadsheet budget was reached`);
+      continue;
     }
-    // trailing empties carry nothing and cost context
-    while (cells.length && cells[cells.length - 1] === '') cells.pop();
-    if (cells.length) lines.push(cells.join('\t'));
-  });
-  if (wb.worksheets.length > 1) truncated = true;
-  return { text: lines.join('\n'), truncated };
+    lines.push(heading);
+    chars += heading.length + 1;
+    if (sheet.rowCount > 400) warnings.push(`${sheet.name}: only the first 400 rows were read`);
+    if (sheet.columnCount > 40) warnings.push(`${sheet.name}: only the first 40 columns were read`);
+    let exhausted = false;
+    let missingFormula = false;
+    for (let n = 1; n <= Math.min(sheet.rowCount, 400) && !exhausted; n++) {
+      const row = sheet.getRow(n);
+      const cells: string[] = [];
+      for (let c = 1; c <= Math.min(sheet.columnCount, 40); c++) {
+        const cell = row.getCell(c);
+        const v = cell.value;
+        if (v == null) continue;
+        let text: string;
+        if (typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) {
+          if (v.result == null) {
+            missingFormula = true;
+            text = '[formula has no cached result; recalculate in Excel]';
+          } else if (typeof v.result === 'object' && 'error' in v.result) {
+            text = `[formula error: ${v.result.error}]`;
+            missingFormula = true;
+          } else text = String(v.result);
+        } else if (typeof v === 'object' && 'richText' in v) {
+          text = v.richText.map(part => part.text).join('');
+        } else if (typeof v === 'object' && 'text' in v) text = String(v.text);
+        else if (v instanceof Date) text = v.toISOString();
+        else if (typeof v === 'object' && 'error' in v) text = `[cell error: ${v.error}]`;
+        else text = String(v);
+        cells.push(`${cell.address}: ${text}`);
+      }
+      if (!cells.length) continue;
+      const line = cells.join(' | ');
+      if (chars + line.length + 1 > MAX_CHARS) {
+        exhausted = true;
+        warnings.push(`${sheet.name}: remaining rows omitted at the shared 100,000-character spreadsheet budget`);
+        break;
+      }
+      chars += line.length + 1;
+      lines.push(line);
+      readableRows++;
+    }
+    if (missingFormula) warnings.push(`${sheet.name}: formulas without cached results or with errors need recalculation in Excel`);
+  }
+  for (const sheet of wb.worksheets.slice(10)) warnings.push(`${sheet.name}: omitted by the 10-worksheet limit`);
+  return { text: readableRows ? lines.join('\n') : '', warnings };
 }
 
 /**
@@ -1498,14 +1525,15 @@ export async function documentBlocks(
 }> {
   const { uploadPathFor } = await import('../uploads.js');
   const { readFile } = await import('node:fs/promises');
-  // ordered: `slice(0, 4)` below means the order can decide which documents are
+  // ordered: `slice(0, 12)` below means the order can decide which documents are
   // read at all, and the blocks reach a model in this sequence
   const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
   const blocks: ContentBlock[] = [];
   const used: Array<{ id: string; name: string; dealId: string }> = [];
   const skipped: Array<{ name: string; reason: string }> = [];
   let totalBytes = 0;
-  for (const doc of docs.slice(0, 4)) {
+  let textBudget = 100_000;
+  for (const doc of docs.slice(0, 12)) {
     const filePath = doc.url ? uploadPathFor(doc.url) : null;
     if (!filePath) {
       skipped.push({ name: doc.name, reason: 'no file has been uploaded for it yet' });
@@ -1540,15 +1568,15 @@ export async function documentBlocks(
     totalBytes += data.length;
     if (spreadsheet) {
       try {
-        const { text, truncated } = await spreadsheetText(filePath);
+        const prefix = `--- ${doc.name} ---\n`;
+        const { text, warnings } = await spreadsheetText(filePath, Math.max(0, textBudget - prefix.length));
+        if (warnings.length) skipped.push({ name: doc.name, reason: warnings.join('; ') });
         if (!text.trim()) {
-          skipped.push({ name: doc.name, reason: 'the spreadsheet has no readable cells' });
+          skipped.push({ name: doc.name, reason: 'no readable cells were found within the extraction limits' });
           continue;
         }
-        blocks.push({ type: 'text', text: `--- ${doc.name} ---\n${text}` });
-        if (truncated) {
-          skipped.push({ name: doc.name, reason: 'only its first worksheet and first 400 rows were read' });
-        }
+        blocks.push({ type: 'text', text: prefix + text });
+        textBudget = Math.max(0, textBudget - prefix.length - text.length);
       } catch {
         skipped.push({ name: doc.name, reason: 'the spreadsheet could not be opened — re-save it as .xlsx' });
         continue;
@@ -1560,6 +1588,7 @@ export async function documentBlocks(
     }
     used.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
   }
+  for (const doc of docs.slice(12)) skipped.push({ name: doc.name, reason: 'omitted by the 12-document extraction limit' });
   return { blocks, used, skipped };
 }
 
@@ -1725,7 +1754,7 @@ export const autoAppraisalRouter = router({
       z
         .object({
           notes: z.string().default(''),
-          documentIds: z.array(z.string()).max(4).default([]),
+          documentIds: z.array(z.string()).max(12).default([]),
           buildPerSqft: z.number().positive().default(105),
         })
         .refine((v) => v.notes.trim().length >= 10 || v.documentIds.length > 0, {
@@ -1767,6 +1796,7 @@ export const autoAppraisalRouter = router({
         extraction,
         indicative: indicative(extraction, input.buildPerSqft),
         documentsRead: blocks.used.map((d) => d.name),
+        sourceDocuments: blocks.used.map(({ id, name }) => ({ id, name })),
         /**
          * What was NOT read, and why. A partial skip — one PDF and one DWG — used
          * to read as a complete success: the screen said "Generated by AI from 1

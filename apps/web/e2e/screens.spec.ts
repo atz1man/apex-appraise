@@ -65,6 +65,7 @@ test.describe('internal screens', () => {
     test.setTimeout(120_000); // live LLM extraction can take ~15-40s
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/auto`);
+    await page.getByRole('button', { name: 'Load worked example', exact: true }).click();
     await page.getByRole('button', { name: /Generate appraisal/ }).click();
     // live LLM extraction when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
     await expect(page.getByText('Extracted accommodation')).toBeVisible({ timeout: 90_000 });
@@ -2423,6 +2424,7 @@ test('a new signup reaches the appraisal form in one click, on its own deal', as
    * one click produces a full appraisal even with no AI key configured, which is
    * the self-hosted and CI case.
    */
+  await page.getByRole('button', { name: 'Load worked example', exact: true }).click();
   await page.getByRole('button', { name: /Generate appraisal/i }).click();
   /**
    * 90s, not 60s: this is a live model call, and every other live-LLM assertion

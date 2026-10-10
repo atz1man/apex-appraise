@@ -175,3 +175,61 @@ describe('isolation', () => {
     expect(skipped).toEqual([]);
   });
 });
+
+describe('multi-sheet workbooks retain source coordinates and limits', () => {
+  it('reads a cost plan beyond the cover sheet with cell references', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet('Cover').addRow(['Cost plan revision D']);
+    const costs = wb.addWorksheet('Costs');
+    costs.getCell('B7').value = 1296000;
+    costs.getCell('A7').value = { richText: [{ text: 'Frame ' }, { text: 'and envelope' }] };
+    const d = await doc('Multi-sheet.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+    const result = await read([d.id]);
+    const text = (result.blocks[0] as { text: string }).text;
+    expect(text).toContain('[sheet: Costs]');
+    expect(text).toContain('B7: 1296000');
+    expect(text).toContain('A7: Frame and envelope');
+    expect(result.skipped).toEqual([]);
+  });
+  it('names excluded sheets and uncached formulas rather than inventing results', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    for (let i = 0; i < 11; i++) wb.addWorksheet(`Sheet ${i + 1}`).addRow([i]);
+    wb.worksheets[0].getCell('B2').value = { formula: 'A1*2' };
+    const d = await doc('Limits.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+    const result = await read([d.id]);
+    const reasons = result.skipped.map(item => item.reason).join(' ');
+    expect(reasons).toContain('Sheet 11: omitted');
+    expect(reasons).toContain('formulas without cached results');
+    expect((result.blocks[0] as { text: string }).text).toContain('B2: [formula has no cached result');
+  });
+  it('reports an empty workbook as unreadable', async () => {
+    const d = await doc('Empty.xlsx', 'xlsx', await workbook([]));
+    expect((await read([d.id])).used).toEqual([]);
+  });
+  it('accepts more than four documents in one bounded extraction', async () => {
+    const files = await Promise.all(Array.from({ length: 5 }, (_, i) => doc(`Plan ${i}.pdf`, 'pdf', Buffer.from('%PDF-1.4'))));
+    expect((await read(files.map(file => file.id))).used).toHaveLength(5);
+  });
+});
+
+it('shares the spreadsheet text budget across workbooks and names omitted data', async () => {
+  const rows = Array.from({ length: 100 }, (_, i) => [`Row ${i}`, 'x'.repeat(1000)]);
+  const first = await doc('Large 1.xlsx', 'xlsx', await workbook(rows));
+  const second = await doc('Large 2.xlsx', 'xlsx', await workbook(rows));
+  const result = await read([first.id, second.id]);
+  expect(result.blocks.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0)).toBeLessThanOrEqual(100_000);
+  expect(result.skipped.map(item => item.reason).join(' ')).toContain('spreadsheet budget');
+});
+
+it('retains limits even when all populated worksheets fall outside them', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  for (let i = 0; i < 10; i++) wb.addWorksheet(`Empty ${i}`);
+  wb.addWorksheet('Costs omitted').addRow(['Total', 1296000]);
+  const d = await doc('Cover sheets.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+  const result = await read([d.id]);
+  expect(result.used).toHaveLength(0);
+  expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs omitted: omitted by the 10-worksheet limit');
+});
