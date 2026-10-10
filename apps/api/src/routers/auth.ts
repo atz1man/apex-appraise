@@ -66,7 +66,7 @@ export const __ssoStateCount = () => ssoStates.size;
 
 export const authRouter = router({
   login: publicProcedure
-    .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
+    .input(z.object({ email: z.string().trim().email(), password: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
       const user = await ctx.prisma.user.findUnique({ where: { email } });
@@ -166,7 +166,7 @@ export const authRouter = router({
    * here would make one leaked code a silent way to switch off single sign-on.
    */
   recoveryLogin: publicProcedure
-    .input(z.object({ email: z.string().email(), code: z.string().min(1).max(64) }))
+    .input(z.object({ email: z.string().trim().email(), code: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
       const refuse = () =>
@@ -291,7 +291,7 @@ export const authRouter = router({
    * companies use this product and who works there.
    */
   ssoAvailable: publicProcedure
-    .input(z.object({ email: z.string().email() }))
+    .input(z.object({ email: z.string().trim().email() }))
     .query(async ({ ctx, input }) => {
       const conn = await connectionForEmail(ctx.prisma, input.email);
       return { sso: !!conn, enforced: !!conn?.enforced };
@@ -325,7 +325,7 @@ export const authRouter = router({
 
   /** Begin an SSO sign-in for whichever workspace claims this domain. */
   ssoStart: publicProcedure
-    .input(z.object({ email: z.string().email() }))
+    .input(z.object({ email: z.string().trim().email() }))
     .mutation(async ({ ctx, input }) => {
       const conn = await connectionForEmail(ctx.prisma, input.email);
       if (!conn) throw new TRPCError({ code: 'NOT_FOUND', message: 'No single sign-on is configured for that address.' });
@@ -389,7 +389,7 @@ export const authRouter = router({
    * account is itself a disclosure.
    */
   requestPasswordReset: publicProcedure
-    .input(z.object({ email: z.string().email() }))
+    .input(z.object({ email: z.string().trim().email() }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
       if (await tooManyResetRequests(ctx.prisma, email)) return { ok: true };
@@ -463,8 +463,13 @@ export const authRouter = router({
           message: 'Your organisation signs in with single sign-on — there is no password to set. Use the SSO button on the sign-in page.',
         });
       }
-      await ctx.prisma.user.update({
-        where: { id: user.id },
+      const spent = await ctx.prisma.user.updateMany({
+        where: {
+          id: user.id,
+          resetTokenHash: hashResetToken(input.token),
+          resetTokenExpiresAt: { gt: new Date() },
+        },
+        // Compare and consume in one write: concurrent requests cannot both win.
         // cleared in the same write that sets the password: single use is not a
         // policy, it is the absence of a second chance
         // sessionsValidFrom cuts every token already issued for this account. A
@@ -480,6 +485,9 @@ export const authRouter = router({
           sessionsValidFrom: new Date(),
         },
       });
+      if (spent.count !== 1) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'That reset link is invalid or has expired' });
+      }
       // a reset is how someone locked out gets back in — leaving the lockout in
       // place would hand them a new password and still refuse the login
       await recordSuccess(ctx.prisma, user.email);
@@ -502,7 +510,10 @@ export const authRouter = router({
         // every other session goes with the old password — a phone left on a
         // train, a shared machine, whoever prompted the change in the first
         // place
-        data: { password: hashPassword(input.next), sessionsValidFrom: new Date() },
+        data: {
+          password: hashPassword(input.next), sessionsValidFrom: new Date(),
+          resetTokenHash: null, resetTokenExpiresAt: null,
+        },
       });
       await recordAudit(ctx.prisma, {
         orgId: user.orgId, userId: user.id, actor: user.name,

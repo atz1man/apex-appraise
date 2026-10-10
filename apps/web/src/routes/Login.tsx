@@ -62,7 +62,7 @@ export default function Login() {
    */
   const [settledEmail, setSettledEmail] = useState(email);
   useEffect(() => {
-    const t = setTimeout(() => setSettledEmail(email), 400);
+    const t = setTimeout(() => setSettledEmail(email.trim()), 400);
     return () => clearTimeout(t);
   }, [email]);
   const looksLikeAddress = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(settledEmail);
