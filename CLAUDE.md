@@ -1552,3 +1552,8 @@ and the evidence needed before claiming commercial differentiation.
 - Internal PDF actions share `ReportDownloadButton`: progress, duplicate-click
   suppression, bounded fetch, visible failure/retry and a validated PDF response.
   The customer lifecycle downloads the real generated PDF through this UI.
+
+- Production dependencies are audited in CI (`pnpm audit --prod --audit-level high`).
+  Root `pnpm.overrides` pin compatible security fixes for transitive packages.
+  Audit before changing/removing these overrides; regenerate the lockfile and
+  verify the HTTP, report, spreadsheet and MCP surfaces after dependency updates.

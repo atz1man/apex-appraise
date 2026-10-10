@@ -96,3 +96,9 @@ mode with test-mode Stripe, no SMTP, no Stripe webhook secret, no explicit
 encryption key and no configured production mapping service. Demo/reset flags
 were disabled; that does not prove historical demo users were removed. No live
 configuration, payments or deployment was changed during this work.
+
+Runtime dependencies were audited and updated to patched versions, including
+Fastify/static serving, multipart parsing, mail, routing and MCP transport.
+Compatible transitive security overrides are recorded in the root manifest;
+CI refuses high or critical production dependency advisories. The registry
+audit is a snapshot, not proof that a dependency has no undiscovered defects.

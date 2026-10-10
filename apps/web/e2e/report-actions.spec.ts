@@ -4,6 +4,10 @@ async function login(page: import('@playwright/test').Page) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools', { exact: true })).toBeVisible();
+  // Other specs work on new, unappraised deals; the Hub correctly follows them.
+  // This transport test needs an explicit saved fixture, not the latest deal.
+  await page.getByRole('button', { name: 'Working deal', exact: true }).click();
+  await page.getByRole('option', { name: 'Old Brewery Quarter', exact: true }).click();
   const link = page.getByRole('link', { name: /^Appraisal report/ });
   return (await link.getAttribute('href'))!;
 }
