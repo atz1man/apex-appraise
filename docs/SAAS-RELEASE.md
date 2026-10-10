@@ -102,3 +102,9 @@ Fastify/static serving, multipart parsing, mail, routing and MCP transport.
 Compatible transitive security overrides are recorded in the root manifest;
 CI refuses high or critical production dependency advisories. The registry
 audit is a snapshot, not proof that a dependency has no undiscovered defects.
+
+The patched router increases the initial JavaScript closure from about 306KB
+to 322KB uncompressed (the older checked-in baseline was 293KB). Only the
+entry baseline is updated; route growth tolerances and the 250KB route budget
+are unchanged. ExcelJS/Leaflet remain outside initial/route static closures.
+The heaviest route measures 121KB in this build.
