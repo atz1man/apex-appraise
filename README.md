@@ -99,7 +99,7 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, 1,957 unit/API tests plus 220 browser specs. All of them run in CI on every PR.
+Five suites, 1,957 unit/API tests plus 221 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
@@ -107,7 +107,7 @@ Five suites, 1,957 unit/API tests plus 220 browser specs. All of them run in CI 
 | API | `cd apps/api && npx vitest run` | 1250 |
 | Web unit | `cd apps/web && npx vitest run` | 371 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
-| Browser (e2e) | `cd apps/web && npx playwright test` | 220 |
+| Browser (e2e) | `cd apps/web && npx playwright test` | 221 |
 | Web typecheck | `cd apps/web && npx tsc --noEmit` | strict |
 
 Much of that count is MECHANICAL GUARDS rather than per-feature tests: whole-codebase

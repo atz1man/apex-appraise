@@ -100,3 +100,14 @@ test('signup prevents repeat submissions while pending and recovers from a servi
   await expect.poll(() => attempts).toBe(2);
   await expect(page.getByText('Service temporarily unavailable. Please try again.')).toBeVisible();
 });
+
+
+test('pasted email whitespace still discovers enforced single sign-on', async ({ page }) => {
+  await page.route('**/trpc/auth.ssoAvailable*', route => route.fulfill({
+    contentType: 'application/json', body: JSON.stringify({ result: { data: { json: { sso: true, enforced: true } } } }),
+  }));
+  await page.goto('/login');
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill('  customer@example.test  ');
+  await expect(page.getByRole('button', { name: 'Continue with single sign-on', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
+});

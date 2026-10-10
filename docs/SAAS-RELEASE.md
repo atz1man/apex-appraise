@@ -123,6 +123,8 @@ Fixed findings:
   the browser rejected them. The server now trims identity fields before
   validation, enforces bounded input lengths and normalizes email case. Sign-in,
   SSO discovery and password recovery accept surrounding email whitespace too.
+  The login screen also trims before SSO discovery so pasted whitespace cannot
+  hide the required sign-in route.
 - Two simultaneous password resets could both read a valid token and overwrite
   each other's password. Consumption now compares the token and expiry in the
   database write. A forced concurrent-read regression test proves only one wins.
