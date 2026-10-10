@@ -509,6 +509,32 @@ export default function DevelopmentAppraisal() {
           <StatCard label="GDV" value={fM(R.gdv)} />
         </div>
 
+        {saved && (
+          <div className="mt-5">
+            <Panel level={2} title="Source input review">
+              {saved.sourceReview ? <div className="space-y-2 text-[12px] text-ink-2">
+                <p>{saved.sourceReview.inputsUnchanged && !dirty ? 'Saved inputs match the recorded review.' : 'Inputs have changed. The recorded review does not cover these inputs.'}</p>
+                <p>Reviewed by {saved.sourceReview.reviewerName} on {new Date(saved.sourceReview.reviewedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time).</p>
+                <p>This records an input acknowledgement, not professional approval or independently verified evidence.</p>
+                {saved.sourceReview.sample && <p className="font-semibold">Worked example: these inputs were not extracted from project documents.</p>}
+                {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source has changed or is missing. Check the source record before relying on this appraisal.</p>}
+                {saved.sourceReview.omissions.length > 0 && <p className="font-semibold">The review recorded incomplete source coverage. Read the reported omissions below.</p>}
+                <details>
+                  <summary className="cursor-pointer font-semibold">Reviewed sources and reported omissions</summary>
+                  <div className="mt-2 space-y-2 break-words">
+                    {!saved.sourceReview.documents.length && <p>No uploaded source documents were recorded with this review.</p>}
+                    {saved.sourceReview.documents.map(d => <p key={d.id}>
+                      {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-ink underline">{d.name}</a> : <span>{d.name} — source {d.status}</span>}
+                    </p>)}
+                    {saved.sourceReview.omissions.map((o, i) => <p key={i}>{o.name}: {o.reason}</p>)}
+                    <p>Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
+                  </div>
+                </details>
+              </div> : <p className="text-[12px] text-ink-2">No source input review is recorded for this version.</p>}
+            </Panel>
+          </div>
+        )}
+
         <div className="mt-5 grid grid-cols-1 gap-4 lg:[grid-template-columns:minmax(0,1fr)_330px]">
           <div>
             {/* tabs */}

@@ -394,6 +394,10 @@ export default function AutoAppraisal() {
       await save.mutateAsync({
         dealId,
         source: run.source,
+        sourceReview: run.source !== 'manual' ? {
+          accepted: true, documentIds: (run.sourceDocuments ?? []).map(d => d.id),
+          sample: !!run.extraction.sample, omissions: run.skipped,
+        } : undefined,
         asNewVersion: !!existingAppraisal,
         label: existingAppraisal ? run.source === 'manual' ? 'Manual appraisal' : run.source === 'whatif' ? 'What-if appraisal' : 'Auto-Appraisal' : undefined,
         input: {

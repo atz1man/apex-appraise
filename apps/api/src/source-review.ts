@@ -1,0 +1,30 @@
+import { z } from 'zod';
+import type { Appraisal } from '@prisma/client';
+import { inputHashOf } from './approval-pin.js';
+
+/** An acknowledgement of inputs, never professional approval or proof of model accuracy. */
+export const zSourceReviewRequest = z.object({
+  accepted: z.literal(true),
+  documentIds: z.array(z.string()).max(12),
+  sample: z.boolean(),
+  omissions: z.array(z.object({ name: z.string().max(500), reason: z.string().max(8000) })).max(36),
+});
+export const zStoredSourceReview = z.object({
+  version: z.literal(1),
+  reviewerId: z.string(),
+  reviewerName: z.string(),
+  reviewedAt: z.string().datetime(),
+  inputHash: z.string(),
+  sample: z.boolean(),
+  omissions: zSourceReviewRequest.shape.omissions,
+  documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string() })),
+});
+
+export function readSourceReview(row: Appraisal) {
+  if (!row.sourceReview) return null;
+  try {
+    const parsed = zStoredSourceReview.safeParse(JSON.parse(row.sourceReview));
+    if (!parsed.success) return null;
+    return { ...parsed.data, inputsUnchanged: parsed.data.inputHash === inputHashOf(row) };
+  } catch { return null; }
+}

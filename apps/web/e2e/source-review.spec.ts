@@ -71,4 +71,15 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   }, dealId);
   expect(JSON.stringify(saved)).toContain('User-corrected input. Previous source: Drawing A-102');
   expect(JSON.stringify(saved)).toContain('2600');
+  expect(saved.sourceReview).toMatchObject({ inputsUnchanged: true, sample: true });
+  expect(saved.sourceReview.reviewerName).toBeTruthy();
+  await page.reload();
+  await expect(page.getByText('Saved inputs match the recorded review.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Worked example: these inputs were not extracted from project documents.', { exact: true })).toBeVisible();
+  await page.getByLabel('NIA / GIA efficiency (%)', { exact: true }).fill('82');
+  await expect(page.getByText('Inputs have changed. The recorded review does not cover these inputs.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Inputs have changed. The recorded review does not cover these inputs.', { exact: true })).toBeVisible();
 });

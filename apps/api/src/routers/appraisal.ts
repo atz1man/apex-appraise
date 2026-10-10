@@ -1,3 +1,6 @@
+import type { Appraisal } from '@prisma/client';
+import { readSourceReview, zSourceReviewRequest } from '../source-review.js';
+import { signFileUrl } from '../uploads.js';
 import { TRPCError } from '@trpc/server';
 import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
@@ -27,7 +30,7 @@ import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from 
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
 import { feedApproved } from '../benchmark-feed.js';
-import { pinFor, verify as verifyPin } from '../approval-pin.js';
+import { inputHashOf, pinFor, verify as verifyPin } from '../approval-pin.js';
 import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
@@ -174,7 +177,24 @@ export const appraisalRouter = router({
     const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) return null;
     const engineInput = appraisalRowToEngineInput(row);
+    const review = readSourceReview(row);
+    const sourceDocs = review ? await ctx.prisma.document.findMany({
+      where: { orgId: ctx.principal.orgId, dealId: row.dealId, id: { in: review.documents.map(d => d.id) } },
+      orderBy: { id: 'asc' },
+    }) : [];
+    const sourceReview = review ? {
+      reviewerName: review.reviewerName, reviewedAt: review.reviewedAt,
+      inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions,
+      documents: review.documents.map(({ storagePath, ...snapshot }) => {
+        const current = sourceDocs.find(d => d.id === snapshot.id);
+        const unchanged = !!current && current.url === storagePath && current.name === snapshot.name
+          && current.sizeBytes.toString() === snapshot.sizeBytes && current.addedAt.toISOString() === snapshot.addedAt;
+        return { ...snapshot, status: !current ? 'missing' as const : unchanged ? 'unchanged' as const : 'changed' as const,
+          url: unchanged ? signFileUrl(current!.url, ctx.principal.userId) : null };
+      }),
+    } : null;
     return {
+      sourceReview,
       id: row.id,
       dealId: row.dealId,
       label: row.label,
@@ -227,6 +247,7 @@ export const appraisalRouter = router({
         dealId: z.string(),
         input: zAppraisalInput,
         source: z.string().default('manual'),
+        sourceReview: zSourceReviewRequest.optional(),
         // versioning: asNewVersion snapshots the current row into history and
         // creates a fresh current version under the given label
         asNewVersion: z.boolean().default(false),
@@ -256,7 +277,25 @@ export const appraisalRouter = router({
         ...inputToRow(input.input),
         source: input.source,
         resultCache: JSON.stringify({ result, jv }),
+        // An ordinary save retains the historical record; its hash exposes any changed inputs.
+        sourceReview: input.asNewVersion ? null : existing?.sourceReview ?? null,
       };
+      if (input.sourceReview) {
+        const ids = [...new Set(input.sourceReview.documentIds)];
+        const documents = await ctx.prisma.document.findMany({
+          where: { orgId: ctx.principal.orgId, dealId: input.dealId, id: { in: ids } }, orderBy: { id: 'asc' },
+        });
+        if (documents.length !== ids.length || documents.some(d => !d.url)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'A reviewed source is unavailable in this deal. Reload the source documents before saving.' });
+        }
+        data.sourceReview = JSON.stringify({
+          version: 1, reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name,
+          reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
+          sample: input.sourceReview.sample, omissions: input.sourceReview.omissions,
+          documents: documents.map(d => ({ id: d.id, name: d.name, sizeBytes: d.sizeBytes.toString(),
+            addedAt: d.addedAt.toISOString(), storagePath: d.url })),
+        });
+      }
       let row;
       if (existing && input.asNewVersion) {
         /**

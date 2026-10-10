@@ -99,12 +99,12 @@ source of truth for layout): `GET /reports/:dealId/appraisal.pdf?t=<jwt>` and
 
 ## Tests
 
-Five suites, 1,969 unit/API tests plus 222 browser specs. All of them run in CI on every PR.
+Five suites, 1,977 unit/API tests plus 222 browser specs. All of them run in CI on every PR.
 
 | Suite | Command | Count |
 |---|---|---|
 | Engine | `pnpm --filter @apex/appraisal-engine test` | 319 |
-| API | `cd apps/api && npx vitest run` | 1256 |
+| API | `cd apps/api && npx vitest run` | 1264 |
 | Web unit | `cd apps/web && npx vitest run` | 377 |
 | MCP server | `pnpm --filter @apex/mcp-server test` | 17 |
 | Browser (e2e) | `cd apps/web && npx playwright test` | 222 |

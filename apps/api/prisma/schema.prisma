@@ -141,6 +141,7 @@ model Appraisal {
   reviewedAt     DateTime?
   reviewNote     String?
   source     String  @default("manual") // manual | ai | field
+  sourceReview String? // JSON server-stamped input review; separate from professional approval
   efficiency Float   @default(90)
   units      String  // JSON AppraisalUnit[] {label,count,area,cap,conf,source} — cap in £/sqft
   trades     String  // JSON BuildTrade[] {label, rate £/ft²}

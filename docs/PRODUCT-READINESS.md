@@ -194,7 +194,28 @@ payloads can exceed URL limits. No financial arithmetic or database schema chang
 
 This is an initial review workflow, not a complete drawing workbench: PDF page/region
 citations, revision conflict detection, calibrated measurement, durable extraction
-jobs and persisted reviewer attestations remain outstanding. Browser tests exercise
+jobs remain outstanding. Persisted input acknowledgements are described below. Browser tests exercise
 the labelled worked example and real engine; they do not establish live model
 accuracy on customer drawings. Licensed provider activation and real source-pack
 acceptance remain separate release requirements.
+
+### Durable input acknowledgement
+
+Source review now persists on the appraisal row in the same write as its inputs.
+The server stamps the authenticated reviewer, review time, canonical input hash,
+source-document metadata and user-reported omissions/sample status. Document IDs
+must belong to the same workspace and deal. The full appraisal shows this record
+after reload, warns when inputs change (including writes through other routes),
+and reports changed or missing source identities without linking to a replacement.
+An ordinary edit retains the historical record and checks its input hash; a new
+unreviewed version starts without a record. Restoring an exact old version retains
+its historical acknowledgement, including its original reviewer and time.
+
+This acknowledgement is separate from professional approval. Source metadata is
+captured at save time, not cryptographic proof of the file read during extraction.
+Sample status and omissions are reported by the reviewing client. This increment
+does not add file-content hashes, verified page/region citations, an append-only
+review ledger or review export into PDF/Excel packs. Existing appraisals remain
+explicitly unreviewed; no acceptance is fabricated or backfilled.
+
+The nullable `Appraisal.sourceReview` column requires the included migration.
