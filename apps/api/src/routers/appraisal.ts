@@ -195,6 +195,7 @@ export const appraisalRouter = router({
     } : null;
     return {
       sourceReview,
+      sourceReviewState: review ? 'recorded' as const : row.sourceReview !== null ? 'unreadable' as const : 'absent' as const,
       id: row.id,
       dealId: row.dealId,
       label: row.label,

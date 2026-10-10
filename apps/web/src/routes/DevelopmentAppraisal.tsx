@@ -530,7 +530,7 @@ export default function DevelopmentAppraisal() {
                     <p>Document identity is checked against the data room; file contents and cited regions have not been independently verified.</p>
                   </div>
                 </details>
-              </div> : <p className="text-[12px] text-ink-2">No source input review is recorded for this version.</p>}
+              </div> : <p className="text-[12px] text-ink-2">{saved.sourceReviewState === 'unreadable' ? 'The stored source input review could not be read. Its review status cannot be confirmed.' : 'No source input review is recorded for this version.'}</p>}
             </Panel>
           </div>
         )}

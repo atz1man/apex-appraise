@@ -68,8 +68,10 @@ describe('durable source input review', () => {
     await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, sample: true } });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.sample).toBe(true);
   });
-  it('leaves legacy appraisals explicitly unreviewed', async () => {
+  it('distinguishes absent reviews from unreadable stored records', async () => {
     const { dealId, api } = await fresh(); await api.appraisal.save({ dealId, input });
-    expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toBeNull();
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReviewState).toBe('absent');
+    await prisma.appraisal.updateMany({ where: { dealId }, data: { sourceReview: '{broken' } });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReviewState).toBe('unreadable');
   });
 });
