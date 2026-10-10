@@ -15,6 +15,7 @@ describe('extraction review provenance', () => {
       source: 'User-corrected input. Previous source: Schedule.xlsx, Units!C4',
     });
     expect(original[0].area).toBe(750);
+    expect(reviewedUnits(result, [{ ...result[0], area: 850 }])[0].source).toBe(result[0].source);
   });
   it.each([{ count: 1.5 }, { area: NaN }, { value: -2 }, { label: '  ' }])(
     'refuses invalid corrections %j',

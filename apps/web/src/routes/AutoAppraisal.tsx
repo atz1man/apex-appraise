@@ -220,7 +220,7 @@ export default function AutoAppraisal() {
   const [buildRate, setBuildRate] = useState(105);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   // real data-room documents the AI can read (PDFs/images with a stored file)
-  const { data: roomDocs } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
+  const { data: roomDocs, isPending: sourcesPending, isError: sourcesFailed } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
   const readableDocs = (roomDocs?.documents ?? []).filter(
     (d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xlsm'].includes(d.ext.toLowerCase()),
   );
@@ -281,7 +281,7 @@ export default function AutoAppraisal() {
   // ---- AI extraction run: real documents + notes ----
   const onGenerate = async () => {
     const docIds = [...selectedDocs];
-    if (reviewPending || phase === 'loading' || (notes.trim().length < 10 && docIds.length === 0)) return;
+    if (reviewDirty || whatIf.isPending || save.isPending || reviewPending || phase === 'loading' || (notes.trim().length < 10 && docIds.length === 0)) return;
     setError(null);
     setPhase('loading');
     try {
@@ -311,7 +311,7 @@ export default function AutoAppraisal() {
 
   // ---- manual run: build an Extraction from the form, compute server-side ----
   const onRunManual = async () => {
-    if (reviewPending || phase === 'loading' || !manualIsRunnable(manual)) return;
+    if (reviewDirty || whatIf.isPending || save.isPending || reviewPending || phase === 'loading' || !manualIsRunnable(manual)) return;
     const m = manual;
     const extraction: Extraction = {
       // manual entry is the user's own scheme, never the worked example
@@ -377,6 +377,7 @@ export default function AutoAppraisal() {
       const extraction = { ...current.extraction, units: reviewedUnits(current.extraction.units, reviewUnits) };
       const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: current.buildPerSqft });
       setRun(latest => latest === current ? { ...current, extraction, indicative } : latest);
+      setChat([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not apply corrections.');
     } finally {
@@ -427,6 +428,7 @@ export default function AutoAppraisal() {
   };
 
   const onReset = () => {
+    if (reviewDirty || reviewPending || whatIf.isPending || save.isPending) return;
     setPhase('idle');
     setRun(null);
     setChat([]);
@@ -584,7 +586,7 @@ export default function AutoAppraisal() {
                   size="lg"
                   className="flex-1"
                   loading={phase === 'loading'}
-                  disabled={reviewPending || (notes.trim().length < 10 && selectedDocs.size === 0)}
+                  disabled={reviewDirty || whatIf.isPending || save.isPending || reviewPending || (notes.trim().length < 10 && selectedDocs.size === 0)}
                 >
                   <Sparkle /> Generate appraisal
                 </Button>
@@ -705,7 +707,7 @@ export default function AutoAppraisal() {
                   size="lg"
                   className="flex-1"
                   loading={phase === 'loading'}
-                  disabled={reviewPending || !manualIsRunnable(manual)}
+                  disabled={reviewDirty || whatIf.isPending || save.isPending || reviewPending || !manualIsRunnable(manual)}
                   title={manualIsRunnable(manual) ? undefined : `Add a unit with a count, an area and a £/${U.unit} first`}
                 >
                   Run appraisal
@@ -847,7 +849,7 @@ export default function AutoAppraisal() {
                   <div className="mt-3 flex gap-3 flex-wrap">
                     {run.sourceDocuments?.map(document => {
                       const url = roomDocs?.documents.find(d => d.id === document.id)?.url;
-                      return url ? <a key={document.id} href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-brand-ink underline">Download source: {document.name}</a> : <span key={document.id} className="text-[12px] text-ink-2">{document.name} — source unavailable</span>;
+                      return url ? <a key={document.id} href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-brand-ink underline">Download source: {document.name}</a> : <span key={document.id} className="text-[12px] text-ink-2">{document.name} — {sourcesPending ? 'loading source link…' : sourcesFailed ? 'source links could not be loaded' : 'source unavailable'}</span>;
                     })}
                   </div>
                   <div className="mt-3 space-y-4">
@@ -1020,7 +1022,7 @@ export default function AutoAppraisal() {
                     </>
                   )}
                 </Button>
-                <Button variant="secondary" size="lg" className="flex-none" onClick={onReset}>
+                <Button variant="secondary" size="lg" className="flex-none" disabled={reviewDirty || reviewPending || whatIf.isPending || save.isPending} onClick={onReset}>
                   New deal
                 </Button>
               </div>

@@ -23,7 +23,8 @@ export function reviewedUnits(original: Extraction['units'], draft: Extraction['
       unit.value !== before.value;
     return {
       ...unit,
-      source: changed ? `User-corrected input. Previous source: ${before.source}` : before.source,
+      source: changed && !before.source.startsWith('User-corrected input. Previous source: ')
+        ? `User-corrected input. Previous source: ${before.source}` : before.source,
       conf: changed ? 'low' : before.conf,
     };
   });

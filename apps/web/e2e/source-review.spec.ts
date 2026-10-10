@@ -52,6 +52,8 @@ test('source review corrects extracted inputs and preserves their origin in a sa
     'I have checked the inputs, source citations and omitted content. These assumptions are ready to save.',
   );
   await expect(accept).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Generate appraisal/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'New deal', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true }).click();
   await expect(page.getByText(/Source and review history: User-corrected input/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true })).toBeDisabled();
