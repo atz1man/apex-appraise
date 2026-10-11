@@ -125,3 +125,15 @@ Next: an approved review/save/report journey using these extracted inputs and
 source provenance, then anonymised real packs. Real-world scans, encrypted or
 malformed PDFs, lengthy packs, geometric measurement, native provider behaviour,
 production integration and professional acceptance remain unverified.
+
+## Recorded response through the customer workflow
+
+The `recorded-ai-report.spec.ts` browser journey uploads the actual synthetic
+PDF into a fresh workspace, replays the stored Codex response at the extraction
+boundary, corrects an input, recalculates, records its page reference and saves.
+It reopens the appraisal, verifies input/review persistence and shared-engine
+results, checks the report's displayed figure/source locator and downloads a
+real PDF. Local execution passed on 11 October 2026; full exact-commit CI is
+recorded on PR #49. CI never makes a funded model request. This is downstream
+workflow evidence, not live extraction API/provider acceptance. The expanded
+product-wide completion register is in `COMPLETION-AUDIT.md`.
