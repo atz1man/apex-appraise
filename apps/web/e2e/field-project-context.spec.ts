@@ -63,6 +63,7 @@ test('field companion keeps the chosen project and refreshes shared appraisal co
 });
 
 for (const surface of ['field', 'workbench'] as const) test(`${surface} refresh cannot give an edited inspection a newer save stamp`, async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const orgName = `Field conflict ${Date.now()}`;
   await page.goto('/register');
   await page.getByLabel('Organisation name').fill(orgName);
@@ -119,7 +120,6 @@ for (const surface of ['field', 'workbench'] as const) test(`${surface} refresh 
     expect(stored.updatedAt).toBe(desk.updatedAt);
     expect((Array.isArray(payload) ? payload[0] : payload).error?.json?.data?.code).toBe('CONFLICT');
     await expect(page.getByText('A newer inspection has been saved', { exact: true })).toBeVisible();
-    await page.setViewportSize({ width: 390, height: 844 });
     const recoveryPanel = page.getByRole('alert').filter({ hasText: 'A newer inspection has been saved' });
     await recoveryPanel.scrollIntoViewIfNeeded();
     await recoveryPanel.screenshot({ path: test.info().outputPath(`${surface}-conflict-recovery.png`) });
