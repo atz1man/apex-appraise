@@ -209,14 +209,14 @@ test.describe('internal screens', () => {
     await expect(page.getByText('Ask the workfile')).toBeVisible();
   });
 
-  test('data room answers a question from an uploaded document', async ({ page }) => {
+  test('data room explains why metadata-only documents cannot answer a question', async ({ page }) => {
     test.setTimeout(120_000); // live document Q&A can take a while when a key is set
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/dataroom`);
     await page.getByPlaceholder('e.g. What does the cost plan allow for M&E?').fill('What documents can you see?');
     await page.getByRole('button', { name: 'Ask' }).click();
     // seeded documents are metadata-only (no stored files) → the workfile has nothing readable
-    await expect(page.getByText('Upload PDFs or images and the AI can answer from them.')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('No answer was generated because no source files could be read.', { exact: false })).toBeVisible({ timeout: 90_000 });
   });
 
   test('benchmarking renders percentile strips', async ({ page }) => {
