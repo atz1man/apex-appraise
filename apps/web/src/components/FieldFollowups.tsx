@@ -5,13 +5,13 @@ import { useUnsavedWarning } from '../lib/unsaved';
 import { Button, writeAttrs } from './ui';
 
 /** Human-reviewed tasks from saved observations. The task holds the reviewed
- * title only; the inspection remains the evidence, and no appraisal is changed. */
+ * title and a server-captured observation snapshot; no appraisal is changed. */
 export function FieldFollowups({ dealId }: { dealId: string }) {
   const utils = trpc.useUtils();
   const inspection = trpc.inspections.get.useQuery(dealId);
   const members = trpc.org.members.useQuery();
   const tasks = trpc.tasks.list.useQuery({ dealId, aspect: 'Field inspection' });
-  const [draft, setDraft] = useState<{ observation: string; title: string; assignee: string; due: string; edit?: { id: string; title: string; assignee: string; assigneeId: string | null; due: string | null; done: boolean } } | null>(null);
+  const [draft, setDraft] = useState<{ observation: string; title: string; assignee: string; due: string; source?: { inspectionId: string; updatedAt: string; roomIndex: number }; edit?: { id: string; title: string; assignee: string; assigneeId: string | null; due: string | null; done: boolean } } | null>(null);
   const [notice, setNotice] = useState('');
   useUnsavedWarning(!!draft, 'this field follow-up');
   const create = trpc.tasks.create.useMutation({
@@ -28,7 +28,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
   const availableMembers = members.data ?? [];
   const assigneeValid = !!draft && !members.isError && !members.isLoading && availableMembers.some(member => member.id === draft.assignee);
   const duplicate = tasks.data?.some(task => task.id !== draft?.edit?.id && task.title === title && !task.done) ?? false;
-  const observations = inspection.data?.rooms.filter(room => room.notes.trim() || room.condition > 0) ?? [];
+  const observations = inspection.data?.rooms.map((room, roomIndex) => ({ ...room, roomIndex })).filter(room => room.notes.trim() || room.condition > 0) ?? [];
   return (
     <section aria-label="Field follow-ups" className="mx-[18px] my-4 rounded-card border border-border-std bg-surface p-4">
       <h2 className="text-[15px] font-semibold">Field follow-ups</h2>
@@ -44,7 +44,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
               <p className="mt-1 whitespace-pre-wrap break-words text-[12px]">{room.notes || 'No saved note.'}</p>
               <Button size="sm" variant="secondary" className="mt-2 min-h-11" disabled={!!draft || pending} onClick={() => {
                 setNotice(''); create.reset();
-                setDraft({ assignee: getPrincipal()?.userId ?? '', due: '', observation: `${room.name}: ${room.notes || `Condition ${room.condition}/5; no note recorded.`}`, title: `Review ${room.name}: ${room.notes.trim().slice(0, 180) || `condition ${room.condition}/5`}` });
+                setDraft({ assignee: getPrincipal()?.userId ?? '', due: '', source: { inspectionId: inspection.data!.id, updatedAt: new Date(inspection.data!.updatedAt).toISOString(), roomIndex: room.roomIndex }, observation: `${room.name}: ${room.notes || `Condition ${room.condition}/5; no note recorded.`}`, title: `Review ${room.name}: ${room.notes.trim().slice(0, 180) || `condition ${room.condition}/5`}` });
               }}>Review follow-up for {room.name}</Button>
             </div>
           ))}
@@ -58,7 +58,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
             const { id, ...expected } = draft.edit;
             const originalDay = expected.due ? firmDayKey(expected.due) : '';
             update.mutate({ id, title, assigneeId: draft.assignee, expected, ...(draft.due !== originalDay ? { due: draft.due || null } : {}) });
-          } else create.mutate({ dealId, aspect: 'Field inspection', title, assigneeId: draft.assignee, due: draft.due || undefined });
+          } else create.mutate({ dealId, aspect: 'Field inspection', title, inspectionSource: draft.source, assigneeId: draft.assignee, due: draft.due || undefined });
         }}>
           <p className="text-[12px] whitespace-pre-wrap break-words">{draft.edit ? 'Editing an existing follow-up. Completion status stays unchanged.' : `Observation selected for review: ${draft.observation}`}</p>
           <label className="block text-[12px] font-semibold">Follow-up title
@@ -74,10 +74,10 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
           <label className="block text-[12px] font-semibold">Follow-up due date
             <input {...writeAttrs()} type="date" disabled={pending} value={draft.due} className="mt-1 block min-h-11 w-full rounded-lg border border-border-std bg-surface p-2 text-[13px]" onChange={event => setDraft({ ...draft, due: event.target.value })} />
           </label>
-          <p className="text-[11px] text-ink-2">{draft.edit ? 'Clear the date to remove the deadline.' : 'Leave the date blank for seven days from creation.'} Only the reviewed title, assignment and due date are saved to the task. Review the current inspection in the workbench for full evidence.</p>
+          <p className="text-[11px] text-ink-2">{draft.edit ? 'Clear the date to remove the deadline.' : 'Leave the date blank for seven days from creation.'} The saved note and condition are captured when this follow-up is created. Photos and financial figures are not copied; later inspection changes do not rewrite the captured evidence.</p>
           {duplicate && <p role="status" className="text-[12px]">An open follow-up already has this title.</p>}
           {update.isError && <p role="alert" className="text-[12px]">{update.error.data?.code === 'CONFLICT' ? 'This follow-up changed elsewhere. Your draft is retained. Refresh follow-ups to review the latest saved task below; cancel and reopen editing when ready.' : 'The update could not be confirmed. Your draft is retained. Refresh follow-ups to check the saved task before retrying.'}</p>}
-          {create.isError && <p role="alert" className="text-[12px]">The follow-up could not be confirmed. Check the task list before trying again; your title is still here.</p>}
+          {create.isError && <p role="alert" className="text-[12px]">{create.error.data?.code === 'CONFLICT' ? 'The saved inspection changed. Your draft is retained. Copy any title you need, cancel, refresh observations and select the latest observation before creating the task.' : 'The follow-up could not be confirmed. Check the task list before trying again; your title is still here.'}</p>}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" writes className="min-h-11" loading={pending} disabled={!title || duplicate || tasks.isError || tasks.isLoading || !assigneeValid}>{draft.edit ? 'Save follow-up changes' : 'Create project follow-up'}</Button>
             <Button variant="ghost" className="min-h-11" disabled={pending} onClick={() => { setDraft(null); create.reset(); update.reset(); }}>Cancel follow-up</Button>
@@ -92,6 +92,14 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
             {tasks.data.map(task => <li key={task.id} className="rounded-lg border border-border-std p-3">
               <p className="text-[12px] break-words">{task.title}</p>
               <p className="mt-1 text-[11px] text-ink-2">{task.done ? 'Completed' : 'Open'} · {availableMembers.find(member => member.id === task.assigneeId)?.name ?? (members.isLoading ? task.assignee : `${task.assignee} (${task.assigneeId ? 'member unavailable' : 'legacy assignment; select a colleague when editing'})`)}{task.due ? ` · due ${firmDayLabel(task.due)}` : ''}</p>
+              {task.inspectionEvidence ? <details className="mt-2 text-[12px]">
+                <summary className="cursor-pointer">Captured inspection evidence</summary>
+                <p className="mt-2 break-words">{task.inspectionEvidence.room.name} · {task.inspectionEvidence.room.condition ? `condition ${task.inspectionEvidence.room.condition}/5` : 'not rated'}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words">{task.inspectionEvidence.room.notes || 'No note recorded.'}</p>
+                <p className="mt-1 text-ink-2">Inspection saved {new Date(task.inspectionEvidence.sourceUpdatedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Photos are not included.</p>
+                {inspection.data && (inspection.data.id !== task.inspectionEvidence.inspectionId || new Date(inspection.data.updatedAt).toISOString() !== task.inspectionEvidence.sourceUpdatedAt) && <p className="mt-1">The current inspection differs from this captured version. Review it before relying on this observation.</p>}
+                {inspection.isError && <p className="mt-1">The current inspection could not be checked.</p>}
+              </details> : <p className="mt-2 text-[11px] text-ink-2">No inspection snapshot was captured for this task.</p>}
               <Button size="sm" variant="secondary" className="mt-2 mr-2 min-h-11" disabled={!!draft || pending || toggle.isPending} onClick={() => {
                 setNotice(''); update.reset(); create.reset();
                 setDraft({ observation: '', title: task.title, assignee: task.assigneeId ?? '', due: task.due ? firmDayKey(task.due) : '', edit: { id: task.id, title: task.title, assignee: task.assignee, assigneeId: task.assigneeId, due: task.due ? new Date(task.due).toISOString() : null, done: task.done } });

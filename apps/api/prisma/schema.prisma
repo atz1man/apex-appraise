@@ -817,6 +817,7 @@ model Task {
   aspect  String
   assignee String // display snapshot; legacy rows retain their original initials
   assigneeId String? // stable member identity; null means unresolved legacy assignment
+  inspectionEvidence String? // immutable JSON snapshot captured by the server at task creation
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())

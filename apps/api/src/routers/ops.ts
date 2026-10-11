@@ -585,6 +585,12 @@ export const photosRouter = router({
 
 // ---------- Tasks ----------
 
+const zInspectionEvidence = z.object({
+  version: z.literal(1), inspectionId: z.string(), sourceUpdatedAt: z.string().datetime(),
+  capturedAt: z.string().datetime(), roomIndex: z.number().int().min(0),
+  room: z.object({ name: z.string(), notes: z.string().default(''), condition: z.number().min(0).max(5) }),
+});
+
 export const tasksRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string().optional(), aspect: z.string().optional() }))
@@ -592,7 +598,7 @@ export const tasksRouter = router({
       // dealId is optional — the calendar lists across every deal — so this
       // refuses only when one is named, and named wrongly
       if (input.dealId) await assertOwnDeal(ctx, input.dealId);
-      return ctx.prisma.task.findMany({
+      const rows = await ctx.prisma.task.findMany({
         where: {
           orgId: ctx.principal.orgId,
           ...(input.dealId ? { dealId: input.dealId } : {}),
@@ -601,6 +607,7 @@ export const tasksRouter = router({
         orderBy: [{ done: 'asc' }, { due: 'asc' }],
         include: { deal: { select: { name: true } } },
       });
+      return rows.map(row => ({ ...row, inspectionEvidence: row.inspectionEvidence ? zInspectionEvidence.parse(JSON.parse(row.inspectionEvidence)) : null }));
     }),
 
   /**
@@ -619,7 +626,7 @@ export const tasksRouter = router({
    * for unique current members; old stored assignments are never guessed.
    */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), assigneeId: z.string().min(1).optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
+    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), assigneeId: z.string().min(1).optional(), inspectionSource: z.object({ inspectionId: z.string(), updatedAt: z.string().datetime(), roomIndex: z.number().int().min(0) }).optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -631,6 +638,18 @@ export const tasksRouter = router({
       });
       if (!members.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `“${assignee}” is not a member of this workspace.` });
       if (members.length > 1) throw new TRPCError({ code: 'BAD_REQUEST', message: `More than one workspace member uses “${assignee}”. Choose a colleague with unique initials.` });
+      let inspectionEvidence: string | null = null;
+      if (input.inspectionSource) {
+        const source = input.inspectionSource;
+        const inspection = await ctx.prisma.inspection.findFirst({ where: { id: source.inspectionId, orgId: ctx.principal.orgId, dealId: input.dealId } });
+        if (!inspection) throw new TRPCError({ code: 'NOT_FOUND' });
+        if (inspection.updatedAt.toISOString() !== source.updatedAt) throw new TRPCError({ code: 'CONFLICT', message: 'The saved inspection changed. Review its latest observation before creating a follow-up.' });
+        const rooms: unknown = JSON.parse(inspection.rooms);
+        const room = Array.isArray(rooms) ? rooms[source.roomIndex] : undefined;
+        const parsed = zInspectionEvidence.shape.room.safeParse(room);
+        if (!parsed.success || (!parsed.data.notes.trim() && !parsed.data.condition)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Select a saved note or condition rating.' });
+        inspectionEvidence = JSON.stringify(zInspectionEvidence.parse({ version: 1, inspectionId: inspection.id, sourceUpdatedAt: inspection.updatedAt.toISOString(), capturedAt: new Date().toISOString(), roomIndex: source.roomIndex, room: parsed.data }));
+      }
       return ctx.prisma.task.create({
         data: {
           orgId: ctx.principal.orgId,
@@ -639,6 +658,7 @@ export const tasksRouter = router({
           aspect: input.aspect,
           assignee: members[0]!.initials,
           assigneeId: members[0]!.id,
+          inspectionEvidence,
           due: input.due ? new Date(input.due) : new Date(Date.now() + 7 * 86400e3),
         },
       });

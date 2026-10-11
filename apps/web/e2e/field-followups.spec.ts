@@ -31,7 +31,7 @@ test('saved field observations become reviewed project tasks and calendar comple
     const colleague = (await query('org.members', undefined)).find((member: { name: string }) => member.name === 'Field Observer');
     expect(colleague.initials).toBe('FO');
     const other = await rpc('deals.create', { name: 'Other project', address: 'Synthetic site B', assetType: 'RESIDENTIAL' });
-    await rpc('inspections.save', { dealId: deal.id, rooms: [{ name: 'Exterior', condition: 2, photos: [], notes: 'Crack beside the entrance; investigate before valuation.' }], reconciledValue: null, approachWeights: { salesComparison: 60, cost: 20, income: 20 }, status: 'draft' });
+    await rpc('inspections.save', { dealId: deal.id, rooms: [{ name: 'Empty room', condition: 0, photos: [], notes: '' }, { name: 'Exterior', condition: 2, photos: [], notes: 'Crack beside the entrance; investigate before valuation.' }], reconciledValue: null, approachWeights: { salesComparison: 60, cost: 20, income: 20 }, status: 'draft' });
     // API callers must not roll an impossible deadline into another month.
     const invalidDate = await request.post('/trpc/tasks.create', {
       headers: { authorization: `Bearer ${token}` },
@@ -44,7 +44,7 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(panel).toContainText('Crack beside the entrance');
     // Unsaved edits must not be represented as saved evidence for a follow-up.
     await page.getByRole('button', { name: 'Continue inspection', exact: true }).click();
-    await page.getByLabel('Notes for Exterior').fill('Unreviewed local observation');
+    await page.getByLabel('Notes for Empty room').fill('Unreviewed local observation');
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(panel).not.toContainText('Unreviewed local observation');
     await panel.getByRole('button', { name: 'Review follow-up for Exterior', exact: true }).click();
@@ -63,6 +63,19 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(panel.getByLabel('Follow-up title')).toHaveValue(title);
     expect(await query('tasks.list', { dealId: deal.id })).toEqual([]);
     await page.unroute('**/trpc/tasks.create*');
+    const sourceBefore = await query('inspections.get', deal.id);
+    await rpc('inspections.save', { id: sourceBefore.id, dealId: deal.id, expectedUpdatedAt: sourceBefore.updatedAt, rooms: [sourceBefore.rooms[0], { ...sourceBefore.rooms[1], notes: 'Desk-reviewed entrance crack.' }], reconciledValue: null, approachWeights: sourceBefore.approachWeights, status: 'draft' });
+    await panel.getByRole('button', { name: 'Create project follow-up', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('saved inspection changed');
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(title);
+    expect(await query('tasks.list', { dealId: deal.id })).toEqual([]);
+    await panel.getByRole('button', { name: 'Cancel follow-up', exact: true }).click();
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(panel).toContainText('Desk-reviewed entrance crack.');
+    await panel.getByRole('button', { name: 'Review follow-up for Exterior', exact: true }).click();
+    await panel.getByLabel('Follow-up title').fill(title);
+    await panel.getByLabel('Assign follow-up to').selectOption(colleague.id);
+    await panel.getByLabel('Follow-up due date').fill('2030-03-31');
     await panel.getByRole('button', { name: 'Create project follow-up', exact: true }).click();
     await expect(panel.getByRole('status')).toContainText('Follow-up created');
     const taskRow = panel.getByRole('listitem').filter({ hasText: title });
@@ -70,12 +83,22 @@ test('saved field observations become reviewed project tasks and calendar comple
     const saved = await query('tasks.list', { dealId: deal.id, aspect: 'Field inspection' });
     expect(saved).toHaveLength(1);
     expect(saved[0].title).toBe(title);
+    expect(saved[0].inspectionEvidence).toMatchObject({ inspectionId: sourceBefore.id, roomIndex: 1, room: { name: 'Exterior', notes: 'Desk-reviewed entrance crack.', condition: 2 } });
     expect(saved[0].assignee).toBe('FO');
     expect(saved[0].assigneeId).toBe(colleague.id);
     expect(saved[0].due).toBe('2030-03-31T00:00:00.000Z');
     await expect(taskRow).toContainText('Field Observer');
     expect(await query('tasks.list', { dealId: other.id })).toEqual([]);
     expect(await query('appraisal.getCurrent', deal.id)).toBeNull();
+    const capturedSource = await query('inspections.get', deal.id);
+    await rpc('inspections.save', { id: capturedSource.id, dealId: deal.id, expectedUpdatedAt: capturedSource.updatedAt, rooms: [capturedSource.rooms[0], { ...capturedSource.rooms[1], notes: 'New desk note after follow-up.' }], reconciledValue: null, approachWeights: capturedSource.approachWeights, status: 'draft' });
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await taskRow.getByText('Captured inspection evidence', { exact: true }).click();
+    await expect(taskRow).toContainText('Desk-reviewed entrance crack.');
+    await expect(taskRow).toContainText('current inspection differs');
+    await expect(taskRow).not.toContainText('New desk note after follow-up.');
+    await taskRow.screenshot({ path: test.info().outputPath('captured-field-evidence.png') });
+
     // An exact duplicate open title is flagged before another submit.
     await panel.getByRole('button', { name: 'Review follow-up for Exterior', exact: true }).click();
     await panel.getByLabel('Follow-up title').fill(title);
