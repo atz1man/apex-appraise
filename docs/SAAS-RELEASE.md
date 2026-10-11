@@ -188,10 +188,12 @@ supporting documents. It now exits unsuccessfully before any pruning when
 uploads are incomplete. A verified database dump remains available and is sent
 offsite when configured. Invalid or zero retention settings fail before writes.
 
-Ten isolated command-level regressions execute the actual shell script with
+Fifteen isolated command-level regressions execute the actual shell script with
 fake container/database boundaries and real tar archives, covering missing,
 failed and corrupt uploads, successful paired publication/pruning, offsite
-failure and unsafe retention inputs. These checks use synthetic files and do
+failure, database/configuration failures, managed database partial runs and unsafe
+retention inputs. Retention now preserves matching archive pairs instead of letting
+newer partial dumps displace older complete recovery material. These checks use synthetic files and do
 not establish production backup contents or restorability. No live backups,
 credentials or databases were changed. PR #46 remains the separate deployment
 serving-check increment. Next operational priority is an isolated restore drill

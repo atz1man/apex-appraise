@@ -242,8 +242,8 @@ sample payments instantly.
 
 ## Ops: backups, restores and monitoring
 
-Three scripts, each of which exits non-zero when it fails, so `cron`'s `MAILTO` reaches you
-even before you configure anything cleverer.
+Three scripts, each of which exits non-zero when it fails. Configure your scheduler
+to alert on failure; the redirected log examples below do not deliver email by themselves.
 
 ```bash
 # nightly backup — Postgres + uploaded files, verified before it replaces anything
@@ -279,7 +279,10 @@ archives cause a non-zero exit and prevent all retention pruning. A valid databa
 copy is still kept and sent offsite when configured, even if uploads fail. Alert on
 that exit status: a partial database copy is not a complete recovery set.
 `BACKUP_KEEP` accepts integers from 1 to 999999 (default 14); invalid retention
-settings fail before any backup writes or pruning. Repeated failures preserve old
+settings fail before any backup writes or pruning. Retention counts matching
+database/upload pairs; newer database-only dumps cannot displace older complete
+pairs. Orphan dumps and diagnostic `.part` files require operator review and
+cleanup. Repeated failures preserve old
 copies and can grow disk usage, so resolve the alert rather than ignoring it.
 
 The restore-check script verifies the database only. Uploaded-file restoration,

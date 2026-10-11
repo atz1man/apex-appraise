@@ -3,16 +3,17 @@
 #
 #   ./infra/backup.sh [backup-dir]
 #
-# Cron (2am nightly, from the repo root). Non-zero exit means the backup did NOT
-# happen, so cron's MAILTO reaches you:
+# Cron (2am nightly, from the repo root). Non-zero exit means the backup run did NOT
+# complete (a useful database copy may still exist), so alert on failure:
 #   0 2 * * * cd /opt/apex-appraise && ./infra/backup.sh /var/backups/apex >> /var/log/apex-backup.log 2>&1
 #
-# Prove it works, once, before you trust it:  ./infra/restore-check.sh
+# Check database restoration: ./infra/restore-check.sh
+# Uploaded-file restoration needs a separate drill; see infra/DEPLOY.md.
 #
 # Environment:
 #   BACKUP_DB_URL      dump this connection directly (managed Postgres — RDS, Fly,
 #                      Neon). Unset: dump the compose `db` service.
-#   BACKUP_KEEP        how many of each artefact to retain (1–999999, default 14)
+#   BACKUP_KEEP        how many complete archive pairs to retain (1–999999, default 14)
 #   BACKUP_UPLOAD_CMD  offsite. Run once per new file with the path as $1, e.g.
 #                        BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'
 #                      A backup that lives only on the machine it is backing up
@@ -153,16 +154,25 @@ if [ "$UPLOADS_OK" -ne 1 ]; then
   exit 1
 fi
 
-# Prune only now, and only ever files we verified on their way in. .part files
-# are left alone: they are evidence, not backups.
-prune() {
-  local glob="$1"
+# Retain complete pairs, not independent counts: database-only dumps from failed
+# nights must never displace the database half of an older complete pair.
+# Orphan dumps and .part files remain diagnostic/recovery material for operators.
+shopt -s nullglob
+PAIRS=()
+for db in "$BACKUP_DIR"/apex-*.dump; do
+  stamp="${db##*/apex-}"
+  stamp="${stamp%.dump}"
+  [ -f "$BACKUP_DIR/uploads-$stamp.tar.gz" ] && PAIRS+=("$db")
+done
+if [ "${#PAIRS[@]}" -gt "$KEEP" ]; then
+  # Generated backup names contain no newlines. Quoting preserves directory spaces.
   # shellcheck disable=SC2012
-  ls -1t "$BACKUP_DIR"/$glob 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
-    rm -f "$old" && echo "$(now) pruned: $(basename "$old")"
+  ls -1t "${PAIRS[@]}" | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
+    stamp="${old##*/apex-}"
+    stamp="${stamp%.dump}"
+    rm -f "$old" "$BACKUP_DIR/uploads-$stamp.tar.gz"
+    echo "$(now) pruned complete pair: $stamp"
   done
-}
-prune 'apex-*.dump'
-prune 'uploads-*.tar.gz'
+fi
 
-echo "$(now) done — $(ls -1 "$BACKUP_DIR"/apex-*.dump 2>/dev/null | wc -l) database backup(s) retained"
+echo "$(now) done — database and uploads verified; at most $KEEP complete backup pair(s) retained"
