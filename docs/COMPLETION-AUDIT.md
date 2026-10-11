@@ -402,3 +402,44 @@ credentials or deployment were changed.
 Next: version-linked observation evidence and reviewed observation-to-appraisal
 proposals. General-task legacy reassignment UI, offline task submission,
 server-side create idempotency and external launch acceptance remain outstanding.
+
+## Captured field-observation evidence — 12 October 2026
+
+PR #62 was green and merged at `bba749767ef1ca0885f29188bc58c548a5291fd5`
+before this increment. Live remains `818ed258`; later merges do not imply release.
+The hourly product-improvement automation remains active.
+
+A field follow-up now submits the selected inspection ID, saved timestamp and
+original room index. The server checks workspace/project ownership and that the
+source timestamp still matches, then copies the saved name, note and condition
+into the task. User-supplied snapshot contents cannot replace the server source.
+The original room index is retained before filtering empty observations, so a
+hidden empty room cannot shift the selection onto a different observation.
+
+The task's immutable JSON snapshot records its inspection ID, source timestamp,
+room index and capture time. Task edits and subsequent inspection edits leave it
+unchanged. The expandable evidence card displays the captured note/rating and
+source time in London, and distinguishes a changed current inspection. A stale
+source refuses task creation, preserves the draft and requires explicit review
+and reselection. Legacy/ordinary tasks have no invented snapshot.
+
+This captures text and condition only: it is not a frozen photograph archive,
+appraisal-version approval, signed professional receipt or financial proposal.
+The source timestamp identifies the saved inspection observed by the server;
+this is not a complete immutable history of every inspection edit. The additive
+`20261012004500_task_inspection_evidence` migration adds a nullable Task column.
+Existing task/workspace deletion behavior still applies to the captured notes.
+
+40 focused API/evidence/edit/tenant/viewer/provenance tests passed, including
+cross-project/firm refusals, stale-source no-write, forged input, empty/index
+validation and preserved evidence after both source and task edits. Both mobile
+follow-up journeys passed with real HTTP writes, including an empty preceding
+room, stale-source recovery and changed-source warning; the evidence card was
+visually inspected. 388 web checks, API/web typechecks and build/bundle guards
+passed. Exact-head CI evidence belongs to the PR. No production deployment or
+provider activation occurred.
+
+Next: explicit reviewed observation-to-appraisal proposals, with source context,
+human-selected input changes and deterministic recalculation. Photo retention,
+general-task legacy reassignment, offline task submission, create idempotency
+and external launch acceptance remain separate work.
