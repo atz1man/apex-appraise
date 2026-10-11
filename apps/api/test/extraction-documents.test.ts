@@ -415,14 +415,17 @@ describe('workfile answers disclose their coverage', () => {
     const old = await doc('Old.pdf', 'pdf', Buffer.from('old'));
     await prisma.document.update({ where: { id: old.id }, data: { supersededById: 'replacement' } });
     await doc('Plan.dwg', 'dwg', Buffer.from('cad'));
-    for (let i = 0; i < 5; i++) await doc(`Current ${i}.pdf`, 'pdf', Buffer.from(`current ${i}`));
+    for (let i = 0; i < 5; i++) {
+      const current = await doc(`Current ${i}.pdf`, 'pdf', Buffer.from(`current ${i}`));
+      await prisma.document.update({ where: { id: current.id }, data: { addedAt: new Date(2030, 0, 1, 0, 0, i) } });
+    }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { answer: 'Fixture', sources: [] } }] }), { status: 200 })));
     const answer = await callerFor(T.principal).documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
     expect(answer.documentsRead).toHaveLength(4);
     expect(answer.documentsSkipped).toEqual(expect.arrayContaining([
       { name: old.name, reason: expect.stringContaining('Superseded') },
       { name: 'Plan.dwg', reason: expect.stringContaining('PDF and image') },
-      { name: expect.stringContaining('Current'), reason: expect.stringContaining('at most four') },
+      { name: 'Current 0.pdf', reason: expect.stringContaining('newest current') },
     ]));
     expect(answer.documentsSkipped).toHaveLength(3);
   });
@@ -430,13 +433,14 @@ describe('workfile answers disclose their coverage', () => {
   it('does not call the model for unreadable files or claim reads when AI is unconfigured', async () => {
     T = await makeTenant('Workfile unavailable');
     const d = await doc('Gone.pdf', 'pdf', Buffer.from('gone'));
+    await doc('Awaited.pdf', 'pdf', null);
     await rm(path.join(UPLOADS, d.url.split('/').at(-1)!));
     const request = vi.fn(); vi.stubGlobal('fetch', request);
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
     const caller = callerFor(T.principal);
     const answer = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
     expect(answer.status).toBe('no-docs'); expect(answer.documentsRead).toEqual([]);
-    expect(answer.documentsSkipped).toEqual([{ name: d.name, reason: expect.any(String) }]);
+    expect(answer.documentsSkipped).toEqual([{ name: 'Awaited.pdf', reason: 'No stored workfile is available.' }, { name: d.name, reason: expect.stringContaining('could not be read from storage') }]);
     expect(request).not.toHaveBeenCalled();
     vi.stubEnv('ANTHROPIC_API_KEY', '');
     const unconfigured = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });

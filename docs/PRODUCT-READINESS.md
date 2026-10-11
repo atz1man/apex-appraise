@@ -372,10 +372,11 @@ priority, followed by stacked-release integration and customer-pack acceptance.
 
 Ask the workfile now carries preparation warnings into its answer UI. It names
 sources excluded by unsupported format, missing upload, superseded revision or
-the existing four-file selection cap, plus storage/integrity warnings from the
+the existing newest-four-file selection cap, plus storage/integrity warnings from the
 source reader. Successful answers list the files actually prepared for the model;
 empty answers retain the reasons nothing could be read. Unconfigured AI reports
-no reads and creates no AI-use audit. Q&A remains limited to PDF and image files;
+no reads and creates no AI-use audit; it does not inspect storage without a provider.
+Long warning lists are collapsed behind a disclosure. Q&A remains limited to PDF and image files;
 this change does not add spreadsheet Q&A or certify model interpretation.
 
 Guarded API checks exercise partial integrity failure, cap/revision/format

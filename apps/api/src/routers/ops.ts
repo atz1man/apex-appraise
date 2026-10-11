@@ -1038,7 +1038,7 @@ export const documentsRouter = router({
         reason: d.supersededById ? 'Superseded by a later revision.' :
           !d.url?.startsWith('/uploads/files/') ? 'No stored workfile is available.' :
           !['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()) ? 'Workfile questions currently read PDF and image files only.' :
-          'Not included: workfile questions read at most four current files per answer.',
+          'Not included: workfile questions read at most four of the newest current PDF/image files per answer.',
       }));
       if (readable.length === 0) return { status: 'no-docs' as const, documentsRead: [] as string[], documentsSkipped: excluded };
       const audit = () =>
@@ -1062,7 +1062,7 @@ export const documentsRouter = router({
          */
         return {
           status: 'demo' as const,
-          answer: `No files were read. Configure ANTHROPIC_API_KEY to answer questions from the listed PDF and image files.`,
+          answer: `No files were read. Configure ANTHROPIC_API_KEY to answer questions from uploaded PDF and image files.`,
           sources: [] as string[],
           documentsRead: [] as string[],
           documentsSkipped: excluded,

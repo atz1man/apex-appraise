@@ -573,7 +573,7 @@ export default function DataRoom() {
             </Button>
           </div>
           {ask.error && <FormError className="mt-2 text-[11.5px]">{ask.error.message}</FormError>}
-          <div className="mt-3 flex flex-col gap-3">
+          <div className="mt-3 flex flex-col gap-3" aria-live="polite">
             {askHistory.map((entry, i) => (
               <div key={`${entry.q}-${i}`} className="bg-sunken border border-border-std rounded-[11px] p-3">
                 <div className="text-[12px] font-semibold leading-snug">{entry.q}</div>
@@ -591,7 +591,7 @@ export default function DataRoom() {
                     </div>
                     {(entry.sources ?? []).length > 0 && (
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="label-mono text-ink-3">Sources</span>
+                        <span className="label-mono text-ink-3">Cited sources</span>
                         {entry.sources!.map((s) => (
                           <span key={s} className="fig text-[10px] font-medium text-ink-2b bg-surface border border-border-std rounded-[5px] px-1.5 py-0.5">
                             {s}
@@ -603,12 +603,12 @@ export default function DataRoom() {
                 )}
                 {entry.status === 'ok' && <div className="mt-2 text-[11.5px] text-ink-3">Files read: {(entry.documentsRead ?? []).join('; ')}. This answer covers only these files.</div>}
                 {(entry.documentsSkipped ?? []).length > 0 && (
-                  <div className="mt-2 text-[11.5px] text-ink-2" role="status">
-                    <div className="font-semibold">Source warnings</div>
-                    <ul className="mt-1 list-disc pl-4">
+                  <details className="mt-2 text-[11.5px] text-ink-2 break-words" open={entry.documentsSkipped!.length <= 6}>
+                    <summary className="font-semibold cursor-pointer">Source warnings ({entry.documentsSkipped!.length})</summary>
+                    <ul className="mt-1 list-disc pl-4 max-h-48 overflow-y-auto">
                       {entry.documentsSkipped!.map((source, index) => <li key={index}>{source.name}: {source.reason}</li>)}
                     </ul>
-                  </div>
+                  </details>
                 )}
               </div>
             ))}
