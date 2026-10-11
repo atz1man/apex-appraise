@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1400" viewBox="0 0 1200 1400">
+<rect width="1200" height="1400" fill="white"/>
+<g fill="#111" font-family="Arial, sans-serif">
+<text x="40" y="45" font-size="26" font-weight="bold">APEX — SYNTHETIC DRAWING EXTRACTION TEST</text>
+<text x="40" y="76" font-size="18">Not a real site. Not to scale. Areas below are stated inputs, not measured geometry.</text>
+<g stroke="#111" fill="none" stroke-width="2">
+<rect x="30" y="100" width="1140" height="390"/>
+<rect x="60" y="180" width="280" height="180"/><rect x="340" y="180" width="280" height="180"/>
+<rect x="30" y="510" width="1140" height="390"/>
+<rect x="60" y="610" width="180" height="150"/><rect x="240" y="610" width="180" height="150"/><rect x="420" y="610" width="180" height="150"/>
+<rect x="30" y="920" width="1140" height="420"/>
+<rect x="60" y="1020" width="250" height="150"/><rect x="310" y="1020" width="250" height="150"/>
+</g>
+<text x="50" y="140" font-size="24" font-weight="bold">Case: drawing-explicit | Sheet A01 | CURRENT Rev B</text>
+<g font-size="22">
+<text x="120" y="260">Flat 1</text><text x="400" y="260">Flat 2</text>
+<text x="660" y="210">UNIT SCHEDULE</text><text x="660" y="250">2 flats</text>
+<text x="660" y="290">Area EACH: 725 sqft</text><text x="660" y="330">Sales value: £475 / sqft</text>
+<text x="60" y="410">Asking land price: £325,000</text><text x="60" y="450">S106 contribution: £18,000</text>
+</g>
+<text x="50" y="550" font-size="24" font-weight="bold">Case: drawing-revision | Sheet B01 | CURRENT Rev C</text>
+<g font-size="22">
+<text x="95" y="690">House 1</text><text x="275" y="690">House 2</text><text x="455" y="690">House 3</text>
+<text x="660" y="620">CURRENT Rev C</text><text x="660" y="660">3 houses | EACH 1,150 sqft</text>
+<text x="660" y="700">Sales value: £360 / sqft</text>
+<text x="60" y="820">SUPERSEDED Rev A: 8 houses, each 900 sqft, sales £300 / sqft</text>
+<text x="60" y="860">Land asking price and S106: not supplied.</text>
+</g>
+<text x="50" y="960" font-size="24" font-weight="bold">Case: drawing-missing-value | Sheet C01 | CURRENT Rev A</text>
+<g font-size="22">
+<text x="125" y="1100">Flat 1</text><text x="375" y="1100">Flat 2</text>
+<text x="620" y="1040">2 flats | EACH 680 sqft</text>
+<text x="620" y="1080">BUILD COST: £210 / sqft</text>
+<text x="620" y="1120">SALES VALUE: not supplied</text>
+<text x="60" y="1230">Land asking price and S106: not supplied.</text>
+<text x="60" y="1280">Do not measure this diagram. No scale or verified survey is provided.</text>
+</g>
+</g></svg>

@@ -1,0 +1,67 @@
+{
+  "mode": "local Codex subscription drawing evaluation",
+  "imageSha256": "22376045f937a95fc8881f0618d518535ed786c572c1987948581180cbab2457",
+  "cases": [
+    {
+      "id": "drawing-explicit",
+      "passed": true
+    },
+    {
+      "id": "drawing-revision",
+      "passed": true
+    },
+    {
+      "id": "drawing-missing-value",
+      "passed": true
+    }
+  ],
+  "passed": 3,
+  "total": 3,
+  "limits": "Synthetic annotated raster/text extraction only. Not PDF parsing, scale measurement, real customer plans, the Anthropic route, production integration or professional acceptance.",
+  "usage": {
+    "input_tokens": 19609,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 142,
+    "reasoning_output_tokens": 0
+  },
+  "recordedAt": "2026-10-11",
+  "response": {
+    "cases": [
+      {
+        "id": "drawing-explicit",
+        "asking": 325000,
+        "s106": 18000,
+        "units": [
+          {
+            "label": "flats",
+            "count": 2,
+            "area": 725,
+            "value": 475,
+            "source": "drawing-explicit: Sheet A01, CURRENT Rev B unit schedule."
+          }
+        ]
+      },
+      {
+        "id": "drawing-revision",
+        "asking": null,
+        "s106": null,
+        "units": [
+          {
+            "label": "houses",
+            "count": 3,
+            "area": 1150,
+            "value": 360,
+            "source": "drawing-revision: Sheet B01, CURRENT Rev C unit schedule."
+          }
+        ]
+      },
+      {
+        "id": "drawing-missing-value",
+        "asking": null,
+        "s106": null,
+        "units": []
+      }
+    ]
+  }
+}
