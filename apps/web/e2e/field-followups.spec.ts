@@ -29,6 +29,13 @@ test('saved field observations become reviewed project tasks and calendar comple
     const deal = await rpc('deals.create', { name: 'Follow-up project', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
     const other = await rpc('deals.create', { name: 'Other project', address: 'Synthetic site B', assetType: 'RESIDENTIAL' });
     await rpc('inspections.save', { dealId: deal.id, rooms: [{ name: 'Exterior', condition: 2, photos: [], notes: 'Crack beside the entrance; investigate before valuation.' }], reconciledValue: null, approachWeights: { salesComparison: 60, cost: 20, income: 20 }, status: 'draft' });
+    // API callers must not roll an impossible deadline into another month.
+    const invalidDate = await request.post('/trpc/tasks.create', {
+      headers: { authorization: `Bearer ${token}` },
+      data: { json: { dealId: deal.id, aspect: 'Field inspection', title: 'Invalid deadline', due: '2030-02-31' } },
+    });
+    expect(invalidDate.status()).toBe(400);
+    expect(await query('tasks.list', { dealId: deal.id })).toEqual([]);
     await page.goto(`/field?dealId=${deal.id}`);
     const panel = page.getByRole('region', { name: 'Field follow-ups', exact: true });
     await expect(panel).toContainText('Crack beside the entrance');

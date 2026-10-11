@@ -74,3 +74,24 @@ it('refuses an ambiguous pair of internal members without creating a task', asyn
   await expect(callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'Inspect roof', aspect: 'Field inspection', assignee: 'AB' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   expect(await prisma.task.count({ where: { orgId: tenant.orgId } })).toBe(before);
 });
+
+describe('task due dates preserve the chosen calendar day', () => {
+  it.each(['2030-02-31', '2030-02-29', '2030-04-31', '2030-13-01', 'not-a-date', '03/04/2030', '2030-03-31T23:00:00-07:00'])('refuses %s without writing a task', async due => {
+    const before = await prisma.task.count({ where: { orgId: T.orgId } });
+    await expect(callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Review inspection', aspect: 'Field inspection', due })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(await prisma.task.count({ where: { orgId: T.orgId } })).toBe(before);
+  });
+
+  it.each(['2028-02-29', '2030-03-31', '2030-10-27'])('stores %s unchanged at UTC midnight', async due => {
+    const task = await callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Review inspection', aspect: 'Field inspection', due });
+    const saved = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+    expect(saved.due?.toISOString()).toBe(`${due}T00:00:00.000Z`);
+  });
+
+  it.each([undefined, ''])('retains the seven-day default for %s', async due => {
+    const before = Date.now();
+    const task = await callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Review inspection', aspect: 'Field inspection', due });
+    expect(task.due!.getTime()).toBeGreaterThanOrEqual(before + 7 * 86400e3);
+    expect(task.due!.getTime()).toBeLessThanOrEqual(Date.now() + 7 * 86400e3);
+  });
+});
