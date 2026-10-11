@@ -160,6 +160,8 @@ jobs:
         env:
           E2E_BASE_URL: http://localhost:8080
         run: pnpm --filter @apex/web exec playwright test
+      - name: Restore database and upload backups in the disposable stack
+        run: bash .github/scripts/backup-restore-smoke.sh
       - name: Report renderer process signals
         run: docker compose exec -T api node --test test/report-signals.smoke.mjs
       - name: API logs on failure

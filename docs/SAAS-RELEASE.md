@@ -199,3 +199,20 @@ credentials or databases were changed. PR #46 remains the separate deployment
 serving-check increment. Next operational priority is an isolated restore drill
 covering both database and uploaded documents; customer-launch owner/provider
 acceptance gates remain open.
+
+
+## Synthetic recovery exercise — 11 October 2026
+
+The follow-up to #47 runs the actual backup and restore-check commands against
+CI's disposable PostgreSQL 18 stack after the customer browser journeys. It
+checks restored table/organisation/deal counts, byte-for-byte recovery of a
+synthetic uploaded file, rejection of a corrupt database archive and scratch
+database cleanup after both success and failure. Original row counts and fixture
+bytes must remain unchanged. It uses no live credentials or customer data.
+
+This covers the operator command path beyond mocked command regressions. It
+does not verify a real production backup, offsite retrieval, all document
+references, recovery duration at production scale or concurrent-write snapshot
+consistency. The next recovery acceptance remains an isolated production
+restore drill with those checks and an identified operator; #46 deployment
+verification and #47 backup completeness remain separately reviewable.

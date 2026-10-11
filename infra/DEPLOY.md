@@ -298,6 +298,14 @@ export BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'   # or aws s3 cp "$
 `BACKUP_DB_URL` makes both scripts talk to a managed Postgres (RDS, Fly Postgres, Neon)
 instead of the compose `db` service.
 
+CI runs both scripts against its disposable PostgreSQL 18 compose stack. It
+compares restored table/organisation/deal counts, extracts and byte-compares a
+synthetic upload, rejects a corrupt database archive, checks scratch database
+cleanup and verifies the original counts remain unchanged. The fixture script
+is `.github/scripts/backup-restore-smoke.sh`; do not run it on a customer stack.
+This is synthetic recovery regression evidence, not a production restore drill,
+a complete document-reference integrity check or proof of offsite recovery.
+
 ### Health endpoints — the two are not interchangeable
 
 - `GET /health` — **liveness.** Is the process alive? No dependencies, always 200 while it can
