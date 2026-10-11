@@ -617,7 +617,7 @@ export const tasksRouter = router({
    * investor's login is not a colleague a to-do can be handed to.
    */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), due: z.string().optional() }))
+    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });

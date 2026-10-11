@@ -300,3 +300,32 @@ API/web typechecks, build and bundle budget. Exact-head CI belongs to the PR.
 Remaining: stable member-ID assignment and editing existing follow-ups,
 version-linked observation evidence, then explicit reviewed appraisal proposals.
 No automatic financial changes, provider activation or deployment occurred.
+
+## Follow-up deadline integrity — 11 October 2026
+
+The preceding improvements through #59 were merged and deployed on main
+`818ed258af0b1bddb531894045bd1e0d573b9175`, with successful exact-main CI
+38179627406. API machine version 58 and web version 75 serve that release.
+Fresh volume snapshots, unchanged aggregate record counts, successful migration,
+live serving/login/project reads and a real portfolio PDF are recorded in #59.
+This supersedes the earlier increments' no-deployment status, not their remaining
+customer-launch limitations.
+
+The next field-workflow check found `tasks.create` accepted arbitrary date strings:
+31 February silently became a March deadline, ambiguous slash dates were accepted,
+and invalid strings could surface as database/internal errors. It now accepts
+only valid YYYY-MM-DD days, or the existing omitted/blank seven-day default.
+Existing tasks and financial calculations are unchanged.
+
+Seven failing API regression cases reproduced the defect before correction.
+Seventeen task cases now pass, including leap day, both UK clock-change days,
+no-write rejection and both default forms; viewer and tenant sweeps pass too.
+The HTTP/browser journey also failed against the previous local API process,
+then passed after restart on the corrected code. Both field-to-calendar and
+colleague-assignment journeys pass in America/Los_Angeles. API typechecking and
+diff review pass. Exact-commit CI evidence belongs to this increment's PR.
+This date correction has not been deployed.
+
+Next: editing existing follow-ups with conflict protection, stable member-ID
+assignment, then version-linked observation evidence and reviewed appraisal
+proposals. External provider, professional and customer-launch gates remain.
