@@ -246,3 +246,30 @@ backup retention and post-restore erasure reconciliation, operator alert deliver
 and a measured deletion SLA. This does not close comprehensive erasure acceptance.
 Next customer-workflow priority remains reviewed field-observation handoff into
 project tasks/appraisal inputs; all provider/professional acceptance gates remain.
+
+## Reviewed field follow-ups — 11 October 2026
+
+PR #57 was green and merged at `e61c27975c5ea8a21d85d1205125ebb80d59006f`
+before this increment. The selected Field Companion project now reads its saved
+inspection observations and existing Field inspection tasks. A user selects an
+observation, reviews/edits the suggested title and explicitly creates a task.
+The existing tenant-scoped task service assigns it to the current member with
+its seven-day default due date; completion/reopening is shared with the calendar.
+The panel states that only the reviewed title is copied. Full evidence remains
+in the current inspection; this is not a frozen/version-linked evidence record
+and never automatically applies a change to financial inputs.
+
+The mobile browser journey covers saved versus unsaved observations, title review,
+refused save with retained text and retry, local duplicate-title prevention,
+unsaved-draft navigation protection, actual API task data, calendar completion
+returning to the field, reopening, two-project separation and failed-read/retry
+states. The existing seven project/conflict/photo/offline journeys also pass.
+388 web guards/tests and typechecking pass. The panel loads on demand when a
+project opens to preserve the field route's bundle budget. Exact-head CI evidence
+belongs to the PR. No provider activation or production deployment occurred.
+
+Next: version-linked observation evidence and assignment/due-date editing for
+field follow-ups, followed by explicit reviewed observation-to-appraisal proposals.
+Duplicate-title prevention here is a UI safeguard, not server-side idempotency;
+offline task submission and automatic appraisal updates are not implemented.
+The erasure, provider and professional-acceptance limitations above remain open.
