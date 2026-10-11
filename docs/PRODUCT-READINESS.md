@@ -366,3 +366,20 @@ model accuracy or a durable extraction receipt. The model request may already
 have incurred provider usage when a concurrent source change is detected.
 Durable receipts linking accepted inputs to a specific request remain the next
 priority, followed by stacked-release integration and customer-pack acceptance.
+
+
+### Workfile question source coverage — 11 October 2026
+
+Ask the workfile now carries preparation warnings into its answer UI. It names
+sources excluded by unsupported format, missing upload, superseded revision or
+the existing four-file selection cap, plus storage/integrity warnings from the
+source reader. Successful answers list the files actually prepared for the model;
+empty answers retain the reasons nothing could be read. Unconfigured AI reports
+no reads and creates no AI-use audit. Q&A remains limited to PDF and image files;
+this change does not add spreadsheet Q&A or certify model interpretation.
+
+Guarded API checks exercise partial integrity failure, cap/revision/format
+exclusions, missing storage and unconfigured AI. The browser journey verifies a
+real empty-workfile response and the rendering of a controlled partial-answer
+response. No live provider call, financial calculation or schema change.
+Durable extraction receipts and release/customer acceptance remain outstanding.

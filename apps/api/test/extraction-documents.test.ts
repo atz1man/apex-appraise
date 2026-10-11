@@ -393,3 +393,54 @@ describe('extraction completion commits the prepared source identities', () => {
     expect(await prisma.activityEvent.count({ where: { orgId: T.orgId, dealId: T.dealId, action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(2);
   });
 });
+
+describe('workfile answers disclose their coverage', () => {
+  it('keeps source integrity warnings beside a partial answer and sends only the readable file', async () => {
+    T = await makeTenant('Workfile partial');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const good = await doc('Read.pdf', 'pdf', Buffer.from('good'));
+    const bad = await doc('Changed.pdf', 'pdf', Buffer.from('before'));
+    await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'after');
+    const request = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { answer: 'Fixture answer', sources: [good.name, bad.name] } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    const answer = await callerFor(T.principal).documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer).toMatchObject({ status: 'ok', documentsRead: [good.name], sources: [good.name], documentsSkipped: [{ name: bad.name, reason: expect.stringContaining('does not match') }] });
+    const sent = JSON.parse((request.mock.calls as unknown as Array<[string, { body: string }]>)[0][1].body);
+    expect(sent.messages[0].content.filter((b: { type: string }) => b.type === 'document')).toHaveLength(1);
+  });
+
+  it('names unsupported, superseded and capped files without reading them', async () => {
+    T = await makeTenant('Workfile cap');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const old = await doc('Old.pdf', 'pdf', Buffer.from('old'));
+    await prisma.document.update({ where: { id: old.id }, data: { supersededById: 'replacement' } });
+    await doc('Plan.dwg', 'dwg', Buffer.from('cad'));
+    for (let i = 0; i < 5; i++) await doc(`Current ${i}.pdf`, 'pdf', Buffer.from(`current ${i}`));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { answer: 'Fixture', sources: [] } }] }), { status: 200 })));
+    const answer = await callerFor(T.principal).documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer.documentsRead).toHaveLength(4);
+    expect(answer.documentsSkipped).toEqual(expect.arrayContaining([
+      { name: old.name, reason: expect.stringContaining('Superseded') },
+      { name: 'Plan.dwg', reason: expect.stringContaining('PDF and image') },
+      { name: expect.stringContaining('Current'), reason: expect.stringContaining('at most four') },
+    ]));
+    expect(answer.documentsSkipped).toHaveLength(3);
+  });
+
+  it('does not call the model for unreadable files or claim reads when AI is unconfigured', async () => {
+    T = await makeTenant('Workfile unavailable');
+    const d = await doc('Gone.pdf', 'pdf', Buffer.from('gone'));
+    await rm(path.join(UPLOADS, d.url.split('/').at(-1)!));
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const caller = callerFor(T.principal);
+    const answer = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer.status).toBe('no-docs'); expect(answer.documentsRead).toEqual([]);
+    expect(answer.documentsSkipped).toEqual([{ name: d.name, reason: expect.any(String) }]);
+    expect(request).not.toHaveBeenCalled();
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    const unconfigured = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(unconfigured).toMatchObject({ status: 'demo', documentsRead: [], answer: expect.stringContaining('No files were read') });
+    expect(await prisma.activityEvent.count({ where: { dealId: T.dealId, action: 'asked the workfile about' } })).toBe(0);
+  });
+});

@@ -1032,7 +1032,15 @@ export const documentsRouter = router({
       const readable = docs
         .filter((d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
         .slice(0, 4);
-      if (readable.length === 0) return { status: 'no-docs' as const };
+      const selected = new Set(readable.map(d => d.id));
+      const excluded = docs.filter(d => !selected.has(d.id)).map(d => ({
+        name: d.name,
+        reason: d.supersededById ? 'Superseded by a later revision.' :
+          !d.url?.startsWith('/uploads/files/') ? 'No stored workfile is available.' :
+          !['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()) ? 'Workfile questions currently read PDF and image files only.' :
+          'Not included: workfile questions read at most four current files per answer.',
+      }));
+      if (readable.length === 0) return { status: 'no-docs' as const, documentsRead: [] as string[], documentsSkipped: excluded };
       const audit = () =>
         ctx.prisma.activityEvent.create({
           data: {
@@ -1054,17 +1062,19 @@ export const documentsRouter = router({
          */
         return {
           status: 'demo' as const,
-          answer: `The workfile holds ${readable.length} readable document${readable.length === 1 ? '' : 's'} (${readable.map((d) => d.name).join('; ')}). Configure ANTHROPIC_API_KEY and the AI will answer questions directly from their contents.`,
+          answer: `No files were read. Configure ANTHROPIC_API_KEY to answer questions from the listed PDF and image files.`,
           sources: [] as string[],
-          documentsRead: readable.map((d) => d.name),
+          documentsRead: [] as string[],
+          documentsSkipped: excluded,
         };
       }
       const blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, readable.map((d) => d.id));
-      if (blocks.blocks.length === 0) return { status: 'no-docs' as const }; // files missing on disk
+      const documentsSkipped = [...excluded, ...blocks.skipped];
+      if (blocks.blocks.length === 0) return { status: 'no-docs' as const, documentsRead: [] as string[], documentsSkipped };
       const names = blocks.used.map((d) => d.name);
       const { answer, sources } = await answerFromWorkfile(input.question, blocks.blocks, names);
       await audit();
-      return { status: 'ok' as const, answer, sources, documentsRead: names };
+      return { status: 'ok' as const, answer, sources, documentsRead: names, documentsSkipped };
     }),
 });
 

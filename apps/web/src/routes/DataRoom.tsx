@@ -82,7 +82,7 @@ const fmtWhen = (d: Date | string) => {
 };
 
 /** one answered (or unanswerable) workfile question, kept locally */
-type AskEntry = { q: string; status: 'ok' | 'demo' | 'no-docs'; answer?: string; sources?: string[] };
+type AskEntry = { q: string; status: 'ok' | 'demo' | 'no-docs'; answer?: string; sources?: string[]; documentsRead?: string[]; documentsSkipped?: Array<{ name: string; reason: string }> };
 
 export default function DataRoom() {
   const { dealId = '' } = useParams();
@@ -579,7 +579,7 @@ export default function DataRoom() {
                 <div className="text-[12px] font-semibold leading-snug">{entry.q}</div>
                 {entry.status === 'no-docs' ? (
                   <div className="mt-1.5 text-[12px] text-ink-3 leading-normal">
-                    Upload PDFs or images and the AI can answer from them.
+                    No answer was generated because no source files could be read. Upload a current PDF or image, or resolve the source warnings below.
                   </div>
                 ) : (
                   <>
@@ -600,6 +600,15 @@ export default function DataRoom() {
                       </div>
                     )}
                   </>
+                )}
+                {entry.status === 'ok' && <div className="mt-2 text-[11.5px] text-ink-3">Files read: {(entry.documentsRead ?? []).join('; ')}. This answer covers only these files.</div>}
+                {(entry.documentsSkipped ?? []).length > 0 && (
+                  <div className="mt-2 text-[11.5px] text-ink-2" role="status">
+                    <div className="font-semibold">Source warnings</div>
+                    <ul className="mt-1 list-disc pl-4">
+                      {entry.documentsSkipped!.map((source, index) => <li key={index}>{source.name}: {source.reason}</li>)}
+                    </ul>
+                  </div>
                 )}
               </div>
             ))}
