@@ -260,8 +260,8 @@ These run from cron, which has no shell environment, so both scripts begin by
 checking that `docker compose` can read its own configuration — it interpolates
 the whole file for `exec`, so a missing `JWT_SECRET` or `POSTGRES_PASSWORD`
 would otherwise surface as a confusing failure inside `pg_dump`. That is what
-the `.env` file above is for. Set `BACKUP_DB_URL` (backup) or `SERVER_URL`
-(restore-check) instead if your database is managed and compose is not involved.
+the `.env` file above is for. Set `BACKUP_DB_URL` for either script to reach a managed database. The backup
+script still requires a running compose API for its uploaded-file snapshot.
 
 On a managed database (RDS, Fly, Neon) both scripts take the connection instead
 of the compose service — `BACKUP_DB_URL` for each. Pass the full URL including
@@ -272,6 +272,19 @@ there when it connects to the scratch database.
 **Run `./infra/restore-check.sh` once, by hand, the day you set backups up.** It restores the
 newest dump into a scratch database, counts the rows, and drops it. Until it has passed once,
 you have a backup process, not a backup — `pg_dump` exiting 0 only means it wrote a file.
+
+A backup run is complete only when both the database archive and uploaded-file
+archive verify. Missing/stopped API containers, failed upload snapshots or malformed
+archives cause a non-zero exit and prevent all retention pruning. A valid database
+copy is still kept and sent offsite when configured, even if uploads fail. Alert on
+that exit status: a partial database copy is not a complete recovery set.
+`BACKUP_KEEP` accepts integers from 1 to 999999 (default 14); invalid retention
+settings fail before any backup writes or pruning. Repeated failures preserve old
+copies and can grow disk usage, so resolve the alert rather than ignoring it.
+
+The restore-check script verifies the database only. Uploaded-file restoration,
+consistency with document records and an actual isolated production restore drill
+remain separate required evidence.
 
 Offsite is one variable, and until you set it the backups live on the disk they are protecting:
 

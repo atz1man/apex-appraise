@@ -12,7 +12,7 @@
 # Environment:
 #   BACKUP_DB_URL      dump this connection directly (managed Postgres — RDS, Fly,
 #                      Neon). Unset: dump the compose `db` service.
-#   BACKUP_KEEP        how many of each artefact to retain (default 14)
+#   BACKUP_KEEP        how many of each artefact to retain (1–999999, default 14)
 #   BACKUP_UPLOAD_CMD  offsite. Run once per new file with the path as $1, e.g.
 #                        BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'
 #                      A backup that lives only on the machine it is backing up
@@ -22,6 +22,12 @@ set -euo pipefail
 
 BACKUP_DIR="${1:-./backups}"
 KEEP="${BACKUP_KEEP:-14}"
+# Validate before creating or pruning anything; zero/negative retention can erase
+# every usable backup, and arithmetic must never interpret arbitrary input.
+if ! [[ "$KEEP" =~ ^[1-9][0-9]{0,5}$ ]]; then
+  echo "FAILED: BACKUP_KEEP must be an integer from 1 to 999999" >&2
+  exit 1
+fi
 STAMP="$(date +%Y%m%d-%H%M%S)"
 now() { date -u +%FT%TZ; }
 
@@ -112,16 +118,18 @@ echo "$(now) database backup verified: $DB_OUT ($(du -h "$DB_OUT" | cut -f1))"
 # ---------------------------------------------------------------------------
 UP_OUT="$BACKUP_DIR/uploads-$STAMP.tar.gz"
 UP_PART="$UP_OUT.part"
+UPLOADS_OK=0
 if [ -n "$(docker compose ps -q api 2>/dev/null)" ]; then
   if docker compose exec -T api tar -czf - -C /app/apps/api uploads > "$UP_PART" 2>/dev/null && [ -s "$UP_PART" ] && tar -tzf "$UP_PART" >/dev/null 2>&1; then
     mv "$UP_PART" "$UP_OUT"
+    UPLOADS_OK=1
     echo "$(now) uploads backup verified: $UP_OUT ($(du -h "$UP_OUT" | cut -f1))"
   else
     rm -f "$UP_PART"
-    echo "$(now) WARNING: uploads snapshot failed — database backup above is still good" >&2
+    echo "$(now) FAILED: uploads snapshot failed — database backup above is still good" >&2
   fi
 else
-  echo "$(now) WARNING: api container is not running — uploaded FILES were not backed up" >&2
+  echo "$(now) FAILED: api container is not running — uploaded FILES were not backed up" >&2
 fi
 
 # Offsite, before pruning: a copy that never left the machine has not survived
@@ -136,6 +144,13 @@ if [ -n "${BACKUP_UPLOAD_CMD:-}" ]; then
       exit 1
     fi
   done
+fi
+
+# Preserve a useful database copy offsite even when uploads failed, but never
+# declare a partial run successful or prune the previous recovery material.
+if [ "$UPLOADS_OK" -ne 1 ]; then
+  echo "$(now) FAILED: backup is incomplete — database copy kept, nothing pruned" >&2
+  exit 1
 fi
 
 # Prune only now, and only ever files we verified on their way in. .part files

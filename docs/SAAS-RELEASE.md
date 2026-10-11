@@ -177,3 +177,23 @@ Live inspection confirms test Stripe, absent SMTP/AI, and an existing reset toke
 was invoked. Earlier records saying all reset configuration was disabled are
 superseded by this inspection. This code release does not complete customer-launch
 acceptance or commercial provider activation.
+
+
+## Backup completeness — 11 October 2026
+
+The compose backup script previously continued to retention pruning after an
+uploaded-file snapshot failed or the API container was absent. With an older
+uploads archive present, it could exit successfully despite missing the new
+supporting documents. It now exits unsuccessfully before any pruning when
+uploads are incomplete. A verified database dump remains available and is sent
+offsite when configured. Invalid or zero retention settings fail before writes.
+
+Ten isolated command-level regressions execute the actual shell script with
+fake container/database boundaries and real tar archives, covering missing,
+failed and corrupt uploads, successful paired publication/pruning, offsite
+failure and unsafe retention inputs. These checks use synthetic files and do
+not establish production backup contents or restorability. No live backups,
+credentials or databases were changed. PR #46 remains the separate deployment
+serving-check increment. Next operational priority is an isolated restore drill
+covering both database and uploaded documents; customer-launch owner/provider
+acceptance gates remain open.
