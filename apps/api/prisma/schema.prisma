@@ -996,3 +996,14 @@ model OpenDataCache {
 
   @@index([fetchedAt])
 }
+
+// Durable deletion outbox. Deliberately has no organisation FK: it must survive
+// the workspace transaction until bytes are removed. No credentials or content.
+model UploadErasure {
+  url           String   @id
+  createdAt     DateTime @default(now())
+  nextAttemptAt DateTime @default(now())
+  attempts      Int      @default(0)
+
+  @@index([nextAttemptAt])
+}

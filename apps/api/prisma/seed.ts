@@ -55,6 +55,7 @@ async function main() {
     return;
   }
 
+  // UploadErasure is deliberately retained: pending physical cleanup must survive a reseed.
   // wipe (idempotent seed)
   const tables = [
     'AuthThrottle',

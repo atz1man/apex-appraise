@@ -452,3 +452,32 @@ A UK controller also needs an ICO registration (ico.org.uk, ~£52/yr) before
 processing customer data commercially.
 
 The customer journey and owner acceptance evidence are tracked in [docs/SAAS-RELEASE.md](../docs/SAAS-RELEASE.md). Run `pnpm release:check` with the intended customer environment before declaring it configured. A pass checks configuration shape; it does not replace delivery, payment or restore drills.
+
+### Workspace upload erasure
+
+Workspace deletion and demo reset now insert current document, site-photo and
+logo URLs into `UploadErasure` in the same transaction that removes the records.
+Apply the `20261011195000_upload_erasure` migration before starting this API build.
+The API drains up to 100 due entries on startup and once per minute, without
+local overlap. Failed removals retry with exponential delay capped at one hour;
+already-missing files count as complete. Shared live references defer removal.
+Invalid paths remain queued for operator investigation. Logs report aggregate
+`removed`/`deferred` counts and drain failures without file contents or keys.
+
+Inspect backlog age and attempts using a restricted database session:
+
+```sql
+SELECT COUNT(*), MIN("createdAt"), MAX("attempts") FROM "UploadErasure";
+```
+
+Investigate a growing/old backlog or repeated drain errors (database availability,
+volume permissions, or shared/invalid references); do not truncate the outbox to
+make the alert disappear. Successful entries are removed after unlink. The seed
+script deliberately retains pending entries. Worker replicas must share the
+same upload volume; this does not add distributed object storage support.
+
+This covers files still referenced at workspace deletion and retryable rejected
+upload cleanup. It does not identify historical orphan files, recover a process
+crash during an unfinished upload, or erase backup copies. Backup retention and
+post-restore erasure reconciliation remain separate release responsibilities.
+Do not claim comprehensive erasure or a deletion SLA from the worker tests.

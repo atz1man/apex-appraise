@@ -903,7 +903,7 @@ function DataPrivacyPanel() {
           <div className="text-[13.5px] font-semibold text-status-red">Danger zone</div>
           <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[460px]">
             Permanently delete this workspace — every deal, appraisal, document record, member and investor
-            position. Any subscription stops immediately and stored Stripe payment methods are removed. This cannot be undone. Download an export first.
+            position. Files referenced by this workspace are queued for removal from active storage; failed removals are retried. Backup copies follow the backup retention policy. Any subscription stops immediately and stored Stripe payment methods are removed. This cannot be undone. Download an export first.
           </div>
           {!armed ? (
             <Button variant="danger" className="mt-3" onClick={() => setArmed(true)}>
