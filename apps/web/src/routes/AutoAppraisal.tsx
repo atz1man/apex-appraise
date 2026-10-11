@@ -1,3 +1,4 @@
+import { expectedReviewSources, reviewSourcesChanged } from '../lib/review-source-versions';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { AutoAppraisalResult } from '@apex/appraisal-engine';
@@ -20,7 +21,7 @@ type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict }
 
 interface RunState {
   source: 'manual' | 'ai' | 'whatif';
-  references?: Array<{ unitIndex: number; documentId: string; page: number | null; locator: string }>;
+  references?: Array<{ unitIndex: number; documentId: string; version?: string; page: number | null; locator: string }>;
   extraction: Extraction;
   buildPerSqft: number;
   indicative: Indicative;
@@ -221,7 +222,7 @@ export default function AutoAppraisal() {
   const [buildRate, setBuildRate] = useState(105);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   // real data-room documents the AI can read (PDFs/images with a stored file)
-  const { data: roomDocs, isPending: sourcesPending, isError: sourcesFailed } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
+  const { data: roomDocs, isPending: sourcesPending, isError: sourcesFailed, isFetching: sourcesRefreshing, refetch: refreshSources } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
   const readableDocs = (roomDocs?.documents ?? []).filter(
     (d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xlsm'].includes(d.ext.toLowerCase()),
   );
@@ -250,7 +251,12 @@ export default function AutoAppraisal() {
   const reviewUnits = unitDraft && unitDraft.run === run ? unitDraft.units : run?.extraction.units ?? [];
   const reviewDocumentIds = [...new Set([...(run?.sourceDocuments ?? []).map(d => d.id), ...(run?.references ?? []).map(r => r.documentId)])];
   const referencesValid = reviewDocumentIds.length <= 12 && (run?.references ?? []).every(r => (r.page !== null && Number.isInteger(r.page) && r.page > 0 && r.page <= 10000) || (r.page === null && !!r.locator.trim()));
-  const sourcesChanged = !!roomDocs && (run?.sourceDocuments ?? []).some(source => source.version && roomDocs.documents.find(d => d.id === source.id)?.version !== source.version);
+  const expectedSources = expectedReviewSources(run?.sourceDocuments ?? [], run?.references ?? []);
+  const extractedSourcesChanged = reviewSourcesChanged(run?.sourceDocuments ?? [], roomDocs?.documents);
+  const sourcesChanged = reviewSourcesChanged(expectedSources, roomDocs?.documents);
+  const sourceChangeHelp = extractedSourcesChanged
+    ? 'A source changed since extraction. Reload the source documents and extract again before recording this review.'
+    : 'A referenced source changed. Clear the affected reference, select the current document and check its page or location again.';
   const reviewAccepted = !!run && acceptedRun === run && referencesValid && !sourcesChanged;
   const reviewDirty = !!run && unitDraft?.run === run && JSON.stringify(reviewUnits) !== JSON.stringify(run.extraction.units);
   useUnsavedWarning(reviewDirty || (!!run?.references?.length && !reviewAccepted), 'extraction corrections and source references');
@@ -400,7 +406,7 @@ export default function AutoAppraisal() {
         source: run.source,
         sourceReview: run.source !== 'manual' ? {
           accepted: true, references: run.references ?? [], documentIds: reviewDocumentIds,
-          expectedSources: run.sourceDocuments?.filter(d => d.version).map(d => ({ id: d.id, version: d.version! })),
+          expectedSources,
           sample: !!run.extraction.sample, omissions: run.skipped,
         } : undefined,
         asNewVersion: !!existingAppraisal,
@@ -855,7 +861,8 @@ export default function AutoAppraisal() {
               {run.source !== 'manual' && (
                 <Panel title="Review extracted inputs">
                   <p className="text-[12px] text-ink-2">Check the original drawings and schedules. Areas below are square feet; values are £ per square foot. A confidence label is not verification.</p>
-                  <p role="alert" className="mt-2 text-[12px] text-status-red">{sourcesChanged ? 'A source changed since extraction. Reload the source documents and extract again before recording this review.' : ''}</p>
+                  <Button className="mt-2" variant="secondary" loading={sourcesRefreshing} onClick={() => { void refreshSources(); }}>Refresh source documents</Button>
+                  <p role="alert" className="mt-2 text-[12px] text-status-red">{sourcesChanged ? sourceChangeHelp : sourcesFailed ? 'Source documents could not be refreshed. Try again before checking your references.' : ''}</p>
                   <div className="mt-3 flex gap-3 flex-wrap">
                     {run.sourceDocuments?.map(document => {
                       const current = roomDocs?.documents.find(d => d.id === document.id);
@@ -885,16 +892,17 @@ export default function AutoAppraisal() {
                           <NumBox label={`Review unit ${index + 1} area sq ft`} value={unit.area} onChange={area => update({ area })} />
                           <NumBox label={`Review unit ${index + 1} value per sq ft`} value={unit.value} onChange={value => update({ value })} />
                         </div>
-                        {readableDocs.length > 0 && <fieldset disabled={reviewDirty} className="mt-3 space-y-2">
+                        {(readableDocs.length > 0 || reference) && <fieldset disabled={reviewDirty} className="mt-3 space-y-2">
                           <legend className="text-[12px] font-semibold">Input source reference</legend>
                           <p className="text-[11px] text-ink-2">User-entered reference; page existence and drawing measurements are not verified. Apply unit corrections before editing references.</p>
                           <label className="block text-[12px]">Source document for unit {index + 1}
-                            <select className="w-full" value={reference?.documentId ?? ''} onChange={e => setReference({ documentId: e.target.value, page: null, locator: '' })}>
+                            <select className="w-full" value={reference?.documentId ?? ''} onChange={e => setReference({ documentId: e.target.value, version: roomDocs?.documents.find(d => d.id === e.target.value)?.version, page: null, locator: '' })}>
                               <option value="">No structured reference</option>
                               {readableDocs.map(d => <option key={d.id} value={d.id}>{d.name}{readableDocs.filter(other => other.name === d.name).length > 1 ? ` · ${d.id.slice(-6)}` : ''}</option>)}
                             </select>
                           </label>
                           {reference && <>
+                            {reviewSourcesChanged([{ id: reference.documentId, version: reference.version }], roomDocs?.documents) && <p className="text-[12px] text-status-red">This reference uses a changed or unavailable source. Clear it and select the current document before checking its page or location.</p>}
                             {referenceDoc?.ext.toLowerCase() === 'pdf' && <label className="block text-[12px]">PDF page for unit {index + 1}<input className="w-full" type="number" min="1" max="10000" step="1" value={reference.page ?? ''} onChange={e => setReference({ page: e.target.value ? Number(e.target.value) : null })} /></label>}
                             <label className="block text-[12px]">Drawing, sheet or cell reference for unit {index + 1}<input className="w-full" maxLength={120} value={reference.locator} onChange={e => setReference({ locator: e.target.value })} /></label>
                           </>}
@@ -919,7 +927,7 @@ export default function AutoAppraisal() {
                     <input type="checkbox" checked={reviewAccepted} disabled={sourcesChanged || !referencesValid || reviewDirty || reviewPending || whatIf.isPending} aria-describedby="review-help" onChange={e => setAcceptedRun(e.target.checked ? run : null)} />
                     I have checked the inputs, source citations and omitted content. These assumptions are ready to save.
                   </label>
-                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{sourcesChanged ? 'A source changed since extraction. Extract again before accepting this review.' : !referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
+                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{sourcesChanged ? 'Resolve the changed source references above before accepting this review.' : !referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
                 </Panel>
               )}
 

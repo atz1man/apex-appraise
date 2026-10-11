@@ -424,3 +424,25 @@ and existing review/export journeys. Older clients and source reviews remain
 compatible. This is an optimistic concurrency stamp supplied by the client, not
 an authenticated extraction receipt, a storage rehash or proof of model accuracy.
 Durable extraction receipts and release/customer acceptance remain outstanding.
+
+
+### Manually referenced source versions — 11 October 2026
+
+Structured unit references can name a document that was not used for extraction.
+Those selections now retain the source version seen by the reviewer and submit it
+with extracted-source versions to the existing scoped save check. Editing a page
+or locator preserves the selected version. Refreshing the source list never
+silently updates that evidence. Known changed or missing references block acceptance
+and identify the affected unit. A refresh action updates the list without losing
+review edits; an unavailable reference remains removable even with no readable
+documents left. Clearing and selecting a current source resets its
+page/locator for review. An extracted source still requires re-extraction.
+
+Tests cover combined/deduplicated expected sources, incompatible versions of one
+source, missing sources, unknown/legacy state and removal. The browser journey
+uses a deliberately stale document-list version with a real upload and real save:
+the server refuses it, refreshing the list blocks acceptance, and explicit
+reselection plus a new locator can be saved and reopened. No provider call,
+financial arithmetic, API contract or schema change. These remain optional client
+concurrency stamps, not authenticated extraction receipts. Durable receipts and
+the documented integration/customer release gates remain the next priority.
