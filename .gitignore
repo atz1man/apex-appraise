@@ -26,3 +26,6 @@ test-results/
 # rule that depends on remembering it is not a rule.
 apps/web/playwright.local.config.ts
 playwright-report/
+
+# Generated HTTP load evidence (published as CI artifacts).
+apps/web/performance-results/
