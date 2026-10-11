@@ -178,8 +178,11 @@ describe('isolation', () => {
     const { blocks, used, skipped } = await read([theirs.id]);
     expect(blocks).toEqual([]);
     expect(used).toEqual([]);
-    // not even named: the query never saw it, so there is nothing to report
-    expect(skipped).toEqual([]);
+    // Same response for missing and foreign IDs; never expose a foreign name or ID.
+    expect(skipped).toEqual((await read(['nonexistent-source'])).skipped);
+    expect(skipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }]);
+    expect(JSON.stringify(skipped)).not.toContain(theirs.name);
+    expect(JSON.stringify(skipped)).not.toContain(theirs.id);
   });
 });
 
@@ -292,13 +295,13 @@ describe('the guarded extraction procedure', () => {
     await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'tampered');
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 }));
     vi.stubGlobal('fetch', request);
-    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [good.id, bad.id] });
+    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [good.id, bad.id, 'deleted-selection'] });
     const sent = JSON.parse(request.mock.calls[0][1].body);
     const documents = sent.messages[0].content.filter((block: { type: string }) => block.type === 'document');
     expect(documents).toHaveLength(1);
     expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
     expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name }]);
-    expect(result.documentsSkipped).toEqual([{ name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+    expect(result.documentsSkipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }, { name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
     expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');
     expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');
   });
@@ -313,4 +316,21 @@ it('enforces the shared byte budget and still allows a later smaller source', as
   expect(result.used.map(d => d.id)).toEqual([first.id, last.id]);
   expect(result.skipped).toEqual([{ name: large.name, reason: expect.stringContaining('remaining 20 MB extraction byte budget') }]);
   expect(result.blocks.filter(b => b.type === 'document')).toHaveLength(2);
+});
+
+
+it('reports unique unavailable selections alongside readable sources without counting duplicate IDs twice', async () => {
+  const good = await doc('Available.pdf', 'pdf', Buffer.from('%PDF-1.4 available'));
+  const result = await read([good.id, 'deleted-source', 'deleted-source', good.id]);
+  expect(result.used.map(d => d.id)).toEqual([good.id]);
+  expect(result.blocks).toHaveLength(1);
+  expect(result.skipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }]);
+  expect((await read([])).skipped).toEqual([]);
+});
+
+it('refuses an unavailable selection before a model request with actionable source-list guidance', async () => {
+  vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+  const request = vi.fn(); vi.stubGlobal('fetch', request);
+  await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: ['deleted-a', 'deleted-b'] })).rejects.toThrow(/2 selected documents are unavailable.*Reload the source list/);
+  expect(request).not.toHaveBeenCalled();
 });

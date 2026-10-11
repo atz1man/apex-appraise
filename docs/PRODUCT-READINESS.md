@@ -308,3 +308,20 @@ selection that exceeds the shared limit. This bounds encoded source reads only:
 workbook decompression/parser memory, model context limits and overall extraction
 concurrency remain separate resource controls. No engine arithmetic or schema
 changed. The extraction-receipt and release-integration priorities above remain.
+
+
+### Unavailable source selections — 11 October 2026
+
+A deleted or inaccessible selected document previously disappeared from the
+scoped source lookup. When other sources remained readable, extraction could
+succeed without disclosing the incomplete selection. It now reports the number
+of unique unavailable selections and asks the reviewer to reload the source
+list. Missing and foreign-workspace IDs produce the same generic warning; no
+foreign filename, ID, storage path or existence claim is disclosed. Duplicate
+IDs do not inflate the count. Entirely unavailable selections refuse the model
+request; mixed selections retain the warning in the existing review flow.
+
+Regression evidence covers tenant non-disclosure, duplicate IDs, mixed valid/
+unavailable selections and the guarded extraction procedure. No live model call,
+financial arithmetic or schema change is involved. Durable extraction receipts,
+release integration and customer-pack acceptance remain the next priorities.

@@ -1585,6 +1585,11 @@ export async function documentBlocks(
   const integrityFailures: Array<{ id: string; name: string; dealId: string }> = [];
   const used: Array<{ id: string; name: string; dealId: string }> = [];
   const skipped: Array<{ name: string; reason: string }> = [];
+  // The tenant-scoped query intentionally cannot distinguish missing from foreign
+  // IDs. Report only the caller's unavailable selection count, never source details.
+  const available = new Set(docs.map((doc: { id: string }) => doc.id));
+  const unavailable = [...new Set(documentIds)].filter(id => !available.has(id)).length;
+  if (unavailable) skipped.push({ name: 'Selected sources', reason: `${unavailable} selected document${unavailable === 1 ? ' is' : 's are'} unavailable in this workspace. Reload the source list and review the selection.` });
   let totalBytes = 0;
   let textBudget = 100_000;
   for (const doc of docs.slice(0, 12)) {
