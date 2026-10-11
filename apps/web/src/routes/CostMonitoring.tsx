@@ -191,8 +191,8 @@ export default function CostMonitoring() {
   const [taskDraft, setTaskDraft] = useState('');
   // the firm's real members, defaulting to whoever is raising the action — not the demo firm's initials
   const { data: members } = trpc.org.members.useQuery();
-  const assignees = useMemo(() => Array.from(new Set((members ?? []).map((m) => m.initials))), [members]);
-  const [taskWho, setTaskWho] = useState(getPrincipal()?.initials ?? '');
+  const assignees = useMemo(() => members ?? [], [members]);
+  const [taskWho, setTaskWho] = useState(getPrincipal()?.userId ?? '');
   const [photoCap, setPhotoCap] = useState('');
   const [photoCid, setPhotoCid] = useState('');
   const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -774,14 +774,14 @@ export default function CostMonitoring() {
                   onChange={(e) => setTaskDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && taskDraft.trim() && !createTask.isPending) {
-                      createTask.mutate({ dealId, title: taskDraft.trim(), aspect: 'Cost monitoring', assignee: taskWho });
+                      createTask.mutate({ dealId, title: taskDraft.trim(), aspect: 'Cost monitoring', assigneeId: taskWho });
                       setTaskDraft('');
                     }
                   }}
                 />
                 {assignees.map((w) => (
-                  <button key={w} aria-pressed={taskWho === w} onClick={() => setTaskWho(w)} className="rounded-full shrink-0 cursor-pointer" style={{ outline: taskWho === w ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
-                    <Avatar initials={w} size={24} />
+                  <button key={w.id} aria-label={`Assign new task to ${w.name}`} aria-pressed={taskWho === w.id} onClick={() => setTaskWho(w.id)} className="rounded-full shrink-0 cursor-pointer" style={{ outline: taskWho === w.id ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}>
+                    <Avatar initials={w.initials} size={24} />
                   </button>
                 ))}
                 <Button
@@ -790,7 +790,7 @@ export default function CostMonitoring() {
                   disabled={!taskDraft.trim() || createTask.isPending}
                   onClick={() => {
                     if (!taskDraft.trim()) return;
-                    createTask.mutate({ dealId, title: taskDraft.trim(), aspect: 'Cost monitoring', assignee: taskWho });
+                    createTask.mutate({ dealId, title: taskDraft.trim(), aspect: 'Cost monitoring', assigneeId: taskWho });
                     setTaskDraft('');
                   }}
                 >

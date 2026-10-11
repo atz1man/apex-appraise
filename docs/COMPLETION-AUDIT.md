@@ -365,3 +365,40 @@ Exact-head CI evidence belongs to this increment's PR. No deployment occurred.
 Next: stable member-ID assignment and version-linked observation evidence,
 then explicit reviewed observation-to-appraisal proposals. Offline task submission,
 server-side create idempotency and external launch acceptance remain outstanding.
+
+## Stable task member identity — 12 October 2026
+
+PR #61 was green and merged at `bff7e7876bd4d976af9647b300dfc5fef338c303`
+before this increment. Live remains `818ed258`; none of the later increments
+are implied to be deployed.
+
+Tasks now store a nullable stable `assigneeId` alongside the existing initials
+snapshot. New field, calendar, appraisal and cost-monitoring pickers submit
+member IDs; duplicate initials no longer make two colleagues indistinguishable.
+Server lookups require the current workspace and an internal member, with no
+fallback from an invalid ID to a matching label. Default assignment uses the
+current user's ID. Initials-only callers can still create for a unique current
+member. The edit snapshot includes the ID, so switching between colleagues with
+the same initials invalidates an old draft. An older editor without that ID
+refuses an ID-linked task rather than bypassing conflict protection.
+
+Migration `20261012002000_task_member_identity` adds only the nullable column.
+It deliberately does not backfill historical ownership from initials. Legacy
+rows stay under Whole team, with an unresolved-assignment label; a field edit
+requires explicitly selecting a colleague. Renaming a member does not change
+ownership; removing one leaves the historical ID unavailable, not reassigned to
+someone reusing the initials. The ID has no foreign-key cascade that could erase
+the task on member removal. Workspace task erasure remains unchanged.
+
+47 task/edit/tenant/viewer cases pass, covering same-initial colleagues,
+same-initial reassignment conflicts, rename/removal, foreign/portal IDs and
+explicit legacy resolution. Three local browser journeys pass, including
+same-initial assignment and separate calendar filters, field edit/conflict/date
+recovery, and the appraisal member picker. 388 web checks, API/web typechecks and
+build/bundle guards pass; exact-head CI evidence belongs to this increment's PR.
+The development database received the additive schema update. No live database,
+credentials or deployment were changed.
+
+Next: version-linked observation evidence and reviewed observation-to-appraisal
+proposals. General-task legacy reassignment UI, offline task submission,
+server-side create idempotency and external launch acceptance remain outstanding.

@@ -615,16 +615,19 @@ export const tasksRouter = router({
    * it, and initials nobody in the firm has are refused rather than stored as
    * a name that will never resolve. Internal members only: a buyer's or an
    * investor's login is not a colleague a to-do can be handed to.
+   * New callers select stable IDs. Initials-only callers remain supported only
+   * for unique current members; old stored assignments are never guessed.
    */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
+    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), assigneeId: z.string().min(1).optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
       const assignee = input.assignee ?? ctx.principal.initials;
+      const assigneeId = input.assigneeId ?? (input.assignee === undefined ? ctx.principal.userId : undefined);
       const members = await ctx.prisma.user.findMany({
-        where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: assignee },
-        select: { id: true }, orderBy: { id: 'asc' }, take: 2,
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', ...(assigneeId ? { id: assigneeId } : { initials: assignee }) },
+        select: { id: true, initials: true }, orderBy: { id: 'asc' }, take: 2,
       });
       if (!members.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `“${assignee}” is not a member of this workspace.` });
       if (members.length > 1) throw new TRPCError({ code: 'BAD_REQUEST', message: `More than one workspace member uses “${assignee}”. Choose a colleague with unique initials.` });
@@ -634,7 +637,8 @@ export const tasksRouter = router({
           dealId: input.dealId,
           title: input.title,
           aspect: input.aspect,
-          assignee,
+          assignee: members[0]!.initials,
+          assigneeId: members[0]!.id,
           due: input.due ? new Date(input.due) : new Date(Date.now() + 7 * 86400e3),
         },
       });
@@ -643,28 +647,29 @@ export const tasksRouter = router({
   update: internalProcedure.input(z.object({
     id: z.string(),
     title: z.string().trim().min(1).max(240),
-    assignee: z.string().min(1),
+    assignee: z.string().optional(),
+    assigneeId: z.string().min(1).optional(),
     due: z.string().date('Choose a valid due date in YYYY-MM-DD format.').nullable().optional(),
-    expected: z.object({ title: z.string(), assignee: z.string(), due: z.string().datetime().nullable(), done: z.boolean() }),
+    expected: z.object({ title: z.string(), assignee: z.string(), assigneeId: z.string().nullable().default(null), due: z.string().datetime().nullable(), done: z.boolean() }),
   })).mutation(async ({ ctx, input }) => {
     return ctx.prisma.$transaction(async tx => {
       const task = await tx.task.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
       if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
       const members = await tx.user.findMany({
-        where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: input.assignee },
-        select: { id: true }, orderBy: { id: 'asc' }, take: 2,
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', ...(input.assigneeId ? { id: input.assigneeId } : { initials: input.assignee ?? '' }) },
+        select: { id: true, initials: true }, orderBy: { id: 'asc' }, take: 2,
       });
       if (members.length !== 1) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a current workspace member with unique initials.' });
       // Compare the snapshot the editor opened, in the write itself. Refreshing
       // the list must never silently advance that snapshot beneath a draft.
       const changed = await tx.task.updateMany({
         where: { id: task.id, orgId: ctx.principal.orgId, ...input.expected, due: input.expected.due ? new Date(input.expected.due) : null },
-        data: { title: input.title, assignee: input.assignee, ...(input.due !== undefined ? { due: input.due ? new Date(input.due) : null } : {}) },
+        data: { title: input.title, assignee: members[0]!.initials, assigneeId: members[0]!.id, ...(input.due !== undefined ? { due: input.due ? new Date(input.due) : null } : {}) },
       });
       if (changed.count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'This follow-up changed since you opened it. Keep your draft, review the latest task, then reopen the editor.' });
       await tx.activityEvent.create({ data: {
         orgId: ctx.principal.orgId, dealId: task.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
-        action: 'updated a task', target: JSON.stringify({ before: input.expected, after: { title: input.title, assignee: input.assignee, due: input.due === undefined ? input.expected.due : input.due, done: input.expected.done } }),
+        action: 'updated a task', target: JSON.stringify({ before: input.expected, after: { title: input.title, assignee: members[0]!.initials, assigneeId: members[0]!.id, due: input.due === undefined ? input.expected.due : input.due, done: input.expected.done } }),
       } });
       return { ok: true };
     });

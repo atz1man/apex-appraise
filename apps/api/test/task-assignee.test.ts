@@ -95,3 +95,37 @@ describe('task due dates preserve the chosen calendar day', () => {
     expect(task.due!.getTime()).toBeLessThanOrEqual(Date.now() + 7 * 86400e3);
   });
 });
+
+it('uses stable IDs for colleagues sharing initials and refuses stale same-initial reassignment', async () => {
+  const tenant = await makeTenant('Stable ownership');
+  const colleagues = [];
+  for (const [i, name] of ['Alex Baker', 'Amelia Brown'].entries()) {
+    colleagues.push(await prisma.user.create({ data: { orgId: tenant.orgId, email: `stable-${i}@example.test`, password: 'x', name, initials: 'AB', principalType: 'internal', role: 'ANALYST' } }));
+  }
+  const task = await callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'Inspect roof', aspect: 'Field inspection', assigneeId: colleagues[0]!.id });
+  expect(task).toMatchObject({ assignee: 'AB', assigneeId: colleagues[0]!.id });
+  const expected = { title: task.title, assignee: task.assignee, assigneeId: task.assigneeId, due: task.due!.toISOString(), done: task.done };
+  await callerFor(tenant.principal).tasks.update({ id: task.id, title: task.title, assigneeId: colleagues[1]!.id, expected });
+  await expect(callerFor(tenant.principal).tasks.update({ id: task.id, title: 'Stale title', assigneeId: colleagues[0]!.id, expected })).rejects.toMatchObject({ code: 'CONFLICT' });
+  await prisma.user.update({ where: { id: colleagues[1]!.id }, data: { name: 'Amelia Jones', initials: 'AJ' } });
+  const saved = (await callerFor(tenant.principal).tasks.list({ dealId: tenant.dealId })).find(row => row.id === task.id)!;
+  expect(saved.assigneeId).toBe(colleagues[1]!.id);
+  expect(saved.assignee).toBe('AB'); // immutable display snapshot, not identity
+  await prisma.user.delete({ where: { id: colleagues[1]!.id } });
+  expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).assigneeId).toBe(colleagues[1]!.id);
+  await expect(callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'Removed colleague', aspect: 'General', assigneeId: colleagues[1]!.id })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+});
+
+it('refuses foreign and portal member IDs without falling back to initials', async () => {
+  const portal = await prisma.user.create({ data: { orgId: T.orgId, email: 'portal-id@example.test', password: 'x', name: 'Investor', initials: 'IP', role: 'VIEWER', principalType: 'investor' } });
+  for (const assigneeId of [other.userId, portal.id, 'missing-member']) {
+    await expect(callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Wrong member', aspect: 'General', assigneeId, assignee: T.principal.initials })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  }
+});
+
+it('keeps legacy assignments unresolved until an explicit edit selects a member', async () => {
+  const legacy = await prisma.task.create({ data: { orgId: T.orgId, dealId: T.dealId, title: 'Legacy task', aspect: 'Field inspection', assignee: T.principal.initials } });
+  expect((await callerFor(T.principal).tasks.list({ dealId: T.dealId })).find(row => row.id === legacy.id)?.assigneeId).toBeNull();
+  await callerFor(T.principal).tasks.update({ id: legacy.id, title: legacy.title, assigneeId: T.userId, expected: { title: legacy.title, assignee: legacy.assignee, assigneeId: null, due: null, done: false } });
+  expect((await prisma.task.findUniqueOrThrow({ where: { id: legacy.id } })).assigneeId).toBe(T.userId);
+});

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/ui-tokens';
-import { trpc } from '../lib/trpc';
+import { getPrincipal, trpc } from '../lib/trpc';
 import { firmDayKey, firmDayLabel, firmToday, groupByDue, isPastDue, keyOf, viewOf } from '../lib/firm-day';
 import { useToast } from '../components/Toast';
 import { Avatar, Button, Dot, EmptyState, EyebrowTitle, Panel, Skeleton, SkeletonRows, StatCard, TopBar , writeAttrs} from '../components/ui';
@@ -55,7 +55,7 @@ export default function Calendar() {
   const [title, setTitle] = useState('');
   const [dealId, setDealId] = useState('');
   const [aspect, setAspect] = useState('General');
-  const [assignee, setAssignee] = useState('AO');
+  const [assignee, setAssignee] = useState(getPrincipal()?.userId ?? '');
   const [due, setDue] = useState(todayKey);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +64,7 @@ export default function Calendar() {
   /** the workspace's real members, in the shape this screen uses */
   const { data: members } = trpc.org.members.useQuery();
   const PEOPLE = (members ?? []).map((m) => ({
+    id: m.id,
     initials: m.initials,
     name: m.name,
     short: m.name.split(/\s+/)[0] ?? m.name,
@@ -83,7 +84,7 @@ export default function Calendar() {
   const dealSel = dealId || deals[0]?.id || '';
 
   const allTasks = taskData ?? [];
-  const tasks = useMemo(() => (filter === 'all' ? allTasks : allTasks.filter((t) => t.assignee === filter)), [allTasks, filter]);
+  const tasks = useMemo(() => (filter === 'all' ? allTasks : allTasks.filter((t) => t.assigneeId === filter)), [allTasks, filter]);
 
   const isOverdue = (t: { done: boolean; due: Date | null }) => !t.done && isPastDue(t.due, todayKey);
 
@@ -137,7 +138,7 @@ export default function Calendar() {
   const submit = () => {
     const t = title.trim();
     if (!t || !dealSel || createTask.isPending) return;
-    createTask.mutate({ dealId: dealSel, title: t, aspect, assignee, due });
+    createTask.mutate({ dealId: dealSel, title: t, aspect, assigneeId: assignee, due });
   };
 
   const prev = () => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }));
@@ -209,13 +210,14 @@ export default function Calendar() {
             actions={
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[12px] text-ink-3">Team</span>
-                {[{ initials: 'all', name: 'Whole team', short: 'All' }, ...PEOPLE].map((p) => {
-                  const on = filter === p.initials;
+                {[{ id: 'all', initials: 'all', name: 'Whole team', short: 'All' }, ...PEOPLE].map((p) => {
+                  const on = filter === p.id;
                   return (
                     <button
-                      key={p.initials}
+                      key={p.id}
                       title={p.name}
-                      onClick={() => setFilter(p.initials)}
+                      aria-label={`Filter tasks for ${p.name}`}
+                      onClick={() => setFilter(p.id)}
                       aria-pressed={on}
                       className="flex items-center gap-1.5 px-2.5 py-[5px] rounded-[9px] border transition-colors cursor-pointer"
                       style={{
@@ -364,13 +366,13 @@ export default function Calendar() {
                 <div className="flex gap-1">
                   {PEOPLE.map((p) => (
                     <button
-                      key={p.initials}
+                      key={p.id}
                       title={p.name}
                       aria-label={`Assign to ${p.name}`}
-                      aria-pressed={assignee === p.initials}
-                      onClick={() => setAssignee(p.initials)}
+                      aria-pressed={assignee === p.id}
+                      onClick={() => setAssignee(p.id)}
                       className="rounded-full shrink-0 cursor-pointer"
-                      style={{ outline: assignee === p.initials ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}
+                      style={{ outline: assignee === p.id ? `2px solid ${brand[700]}` : 'none', outlineOffset: 1 }}
                     >
                       <Avatar initials={p.initials} size={26} />
                     </button>
@@ -396,7 +398,7 @@ export default function Calendar() {
                     </div>
                     {g.tasks.map((t) => {
                       const over = isOverdue(t);
-                      const person = PEOPLE.find((p) => p.initials === t.assignee);
+                      const person = PEOPLE.find((p) => p.id === t.assigneeId);
                       return (
                         <div key={t.id} className="flex items-start gap-[11px] px-3.5 py-2.5 rounded-[11px] hover:bg-sunken transition-colors">
                           <button
@@ -415,6 +417,7 @@ export default function Calendar() {
                             </div>
                             <div className="mt-[3px] flex items-center gap-[7px] flex-wrap">
                               <span className="text-[11px] text-ink-3">{t.deal.name}</span>
+                              {!person && <span className="text-[11px] text-ink-3">{t.assigneeId ? 'Assigned member unavailable' : `Legacy assignment: ${t.assignee}; shown under Whole team`}</span>}
                               <span className="fig px-[7px] py-[2px] rounded-[5px] text-[9px] font-semibold" style={{ background: neutral.sunken2, color: neutral.ink2b, letterSpacing: '0.3px' }}>
                                 {t.aspect}
                               </span>
@@ -423,7 +426,7 @@ export default function Calendar() {
                               </span>
                             </div>
                           </div>
-                          <span title={person?.name ?? t.assignee}><Avatar initials={t.assignee} size={26} /></span>
+                          <span title={person?.name ?? `${t.assignee} (${t.assigneeId ? 'member unavailable' : 'legacy assignment'})`}><Avatar initials={t.assignee} size={26} /></span>
                           {/*
                             Delete, as distinct from tick. `toggle` was the only way
                             out of a task, and marking one done is a CLAIM that the

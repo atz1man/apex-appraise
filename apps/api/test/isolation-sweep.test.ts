@@ -31,7 +31,7 @@ let B: Tenant;
 const ID_FIELDS = new Set([
   'id', 'dealId', 'versionId', 'fromId', 'toId', 'unitId', 'tenancyId', 'investorId',
   'contractorId', 'packageId', 'documentId', 'paymentId', 'userId', 'memberId',
-  'scenarioId', 'comparableId', 'inspectionId', 'accountId', 'taskId', 'cashflowId',
+  'scenarioId', 'comparableId', 'inspectionId', 'accountId', 'assigneeId', 'taskId', 'cashflowId',
 ]);
 
 /**
@@ -260,6 +260,7 @@ beforeAll(async () => {
     paymentId: payment.id,
     userId: B.userId,
     memberId: B.userId,
+    assigneeId: B.userId,
     taskId: task.id,
     comparableId: comparable.id,
     scenarioId: scenario.id,
