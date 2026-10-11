@@ -1,0 +1,62 @@
+{
+  "mode": "local Codex subscription pdf evaluation",
+  "imageSha256": null,
+  "pdf": {
+    "sha256": "e4d566135fbfe3defb936b98cceb209a252510fd7bb70e3ed95ee819848e410e",
+    "pages": [
+      {
+        "page": 1,
+        "sha256": "9e11cc1a64f65c8485a27946ebf5bd9a1649fa27203dfa7c996330732216c011"
+      },
+      {
+        "page": 2,
+        "sha256": "1a1bc929c6cc052c3d8fee2c1f3c3a7ab29d16d29e5060c34b297d70b05f1fd6"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "pdf-revision",
+      "passed": true
+    },
+    {
+      "id": "pdf-missing-value",
+      "passed": true
+    }
+  ],
+  "passed": 2,
+  "total": 2,
+  "limits": "Synthetic text/raster and locally rasterised PDF extraction only. Not native provider PDF handling, scale measurement, real customer plans, the Anthropic route, production integration or professional acceptance.",
+  "usage": {
+    "input_tokens": 19996,
+    "cached_input_tokens": 0,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 91,
+    "reasoning_output_tokens": 0
+  },
+  "recordedAt": "2026-10-11",
+  "response": {
+    "cases": [
+      {
+        "id": "pdf-revision",
+        "asking": 510000,
+        "s106": null,
+        "units": [
+          {
+            "label": "flats",
+            "count": 4,
+            "area": 775,
+            "value": 425,
+            "source": "pdf-revision: page 2: Sheet P02 | Rev B - CURRENT"
+          }
+        ]
+      },
+      {
+        "id": "pdf-missing-value",
+        "asking": null,
+        "s106": null,
+        "units": []
+      }
+    ]
+  }
+}

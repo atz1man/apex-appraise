@@ -84,8 +84,44 @@ area confusion and wrong suite identity. The text suite still has 17 tests.
 
 This is an initial, repeatable text/annotated-image evaluation harness, not exhaustive AI testing
 or activation of the website's Extract button through Codex. It does not test
-PDF parsing, unannotated/scaled drawing measurement, real customer documents, citation page accuracy,
-professional acceptance or production load. Next: add independently labelled
-multi-page PDF fixtures and approved anonymised real packs, then test their
-review/save/report journey with honest source provenance. Website provider
+general PDF handling, unannotated/scaled drawing measurement, real customer documents, full citation accuracy,
+professional acceptance or production load. The multi-page PDF extension below covers a fixed synthetic pack. The next
+workflow is review/save/report with honest source provenance, followed by approved
+anonymised real packs. Website provider
 integration remains a separate explicit development change.
+
+## Multi-page PDF mode — 11 October 2026
+
+Run `pnpm --filter @apex/api eval:codex --pdf`. This mode requires local Poppler
+`pdfinfo` and `pdftoppm` commands. It renders the fixed synthetic two-page
+`revision-pack.pdf` at 100 DPI, verifies the page count and both PNG outputs,
+and attaches the pages in numeric order. Each Poppler process has a 30-second
+limit. Missing tools, an unexpected page count or failed rendering stops before
+any model request. The CLI receives page images, not native PDF input or an
+extracted text transcript. This is not the hosted provider's PDF handling path.
+
+The pack contains a superseded flat schedule on page 1, its current replacement
+on page 2, and a separate house schedule with no sales value and a later-page
+build-cost note. The scorer checks exact current values and a `case-id: page 2:
+locator` source for the flat schedule. It rejects page 1, page 20 and missing
+locators. This checks the expected page and nonempty locator, not the semantic
+accuracy of arbitrary citation text.
+
+The real subscription run passed both cases (2/2). The synthetic response, PDF
+hash and rendered-page hashes are saved in `pdf-run-2026-10-11.json` beside the
+fixture. Seventeen PDF tests cover that replay, stale revisions, wrong page
+references, cost/value confusion, page-count mismatch, unavailable/failed
+renderers, missing page output and numeric attachment ordering. Ordinary CI
+replays saved evidence and tests the conversion orchestration with stubs; it
+makes no model call and does not require Poppler. Real local conversion was
+executed and both rendered pages were visually reviewed before the model run.
+
+Rebuild the fixture with `python3 apps/api/test/fixtures/auto-appraisal/create-revision-pdf.py`
+(requires ReportLab). Its invariant PDF output avoids timestamp drift. Review
+both pages and the independent gold answers after edits. A changed PDF requires
+new evidence; the saved-response test pins its SHA-256.
+
+Next: an approved review/save/report journey using these extracted inputs and
+source provenance, then anonymised real packs. Real-world scans, encrypted or
+malformed PDFs, lengthy packs, geometric measurement, native provider behaviour,
+production integration and professional acceptance remain unverified.

@@ -1,0 +1,42 @@
+"""Rebuild the synthetic, deterministic PDF fixture; requires reportlab."""
+from pathlib import Path
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+out = Path(__file__).with_name('revision-pack.pdf')
+c = canvas.Canvas(str(out), pagesize=A4, invariant=1)
+c.setTitle('Synthetic Apex revision pack - not a real site')
+def line(y, text, size=14):
+    c.setFont('Helvetica', size)
+    c.drawString(40, y, text)
+def header(page):
+    line(800, 'APEX SYNTHETIC REVISION PACK', 20)
+    line(773, 'Not a real site. Not to scale. Do not derive areas from geometry.', 11)
+    line(35, f'Page {page} of 2 | Synthetic evaluation evidence only', 11)
+header(1)
+line(720, 'Case: pdf-revision | Sheet P01 | Rev A - SUPERSEDED', 15)
+line(680, '6 flats, each 900 sqft. Sales value: GBP 350 per sqft.')
+line(650, 'Land asking price: GBP 700,000. S106: not supplied.')
+line(615, 'This schedule is replaced by Rev B on page 2.', 13)
+c.rect(40, 480, 240, 100)
+c.rect(280, 480, 240, 100)
+line(520, 'Superseded schematic - not a measured survey', 12)
+line(400, 'Case: pdf-missing-value | Sheet H01 | CURRENT Rev A', 15)
+line(360, '3 houses, each 1,100 sqft. Sales values not supplied.')
+line(330, 'Land asking price and S106 not supplied.')
+line(300, 'See the cost note on page 2. It is not a sales valuation.', 13)
+c.showPage()
+header(2)
+line(720, 'Case: pdf-revision | Sheet P02 | Rev B - CURRENT', 15)
+line(680, '4 flats, each 775 sqft. Sales value: GBP 425 per sqft.')
+line(650, 'Land asking price: GBP 510,000. S106: not supplied.')
+line(615, 'This replaces the entire Rev A schedule on page 1.', 13)
+for i in range(4):
+    c.rect(40 + i*125, 480, 125, 100)
+    line(520, '', 12)
+    c.drawString(55 + i*125, 525, f'Flat {i+1}')
+line(400, 'Case: pdf-missing-value | Cost note', 15)
+line(360, 'BUILD COST only: GBP 220 per sqft.')
+line(330, 'No sales value is stated anywhere in this pack.')
+line(300, 'The current house schedule remains on page 1.', 13)
+c.save()
+print(out)

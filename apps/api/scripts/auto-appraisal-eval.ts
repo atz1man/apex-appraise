@@ -35,7 +35,8 @@ function propertyType(label: string) {
   return types.size === 1 ? [...types][0] : null;
 }
 const zEnvelope = z.object({ cases: z.array(z.unknown()) }).strict();
-export function grade(raw: unknown, fixtures = cases) {
+export type EvaluationCase = { id: string; notes: string; units: { label: string; count: number; area: number; value: number }[]; asking: number | null; s106: number | null };
+export function grade(raw: unknown, fixtures: EvaluationCase[] = cases) {
   const rows = zEnvelope.parse(raw).cases;
   if (!Array.isArray(rows) || rows.length !== fixtures.length) throw new Error('Expected exactly the complete fixture set');
   const ids = rows.map(r => (r as { id?: string })?.id);
