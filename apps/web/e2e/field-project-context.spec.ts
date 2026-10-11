@@ -118,5 +118,44 @@ for (const surface of ['field', 'workbench'] as const) test(`${surface} refresh 
     expect(stored.approachWeights).toEqual(desk.approachWeights);
     expect(stored.updatedAt).toBe(desk.updatedAt);
     expect((Array.isArray(payload) ? payload[0] : payload).error?.json?.data?.code).toBe('CONFLICT');
+    await expect(page.getByText('A newer inspection has been saved', { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const recoveryPanel = page.getByRole('alert').filter({ hasText: 'A newer inspection has been saved' });
+    await recoveryPanel.scrollIntoViewIfNeeded();
+    await recoveryPanel.screenshot({ path: test.info().outputPath(`${surface}-conflict-recovery.png`) });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download my draft', exact: true }).click();
+    const download = await downloading;
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    const exported = JSON.parse(Buffer.concat(chunks).toString());
+    expect(exported.dealId).toBe(deal.id);
+    expect(exported.draft.baseUpdatedAt).toBe(first.updatedAt);
+    expect(exported.draft.source).toBe(surface);
+    if (surface === 'field') expect(exported.draft.rooms[0].notes).toBe(draft);
+    else expect(exported.draft.approachWeights.salesComparison).toBe(65);
+    expect(JSON.stringify(exported)).not.toContain(token);
+    const opening = page.waitForEvent('popup');
+    await page.getByRole('link', { name: 'Open latest in new tab', exact: true }).click();
+    const latest = await opening;
+    try {
+      if (surface === 'field') await latest.getByRole('button', { name: 'Review inspection', exact: true }).click();
+      const latestInput = surface === 'field' ? latest.getByLabel('Notes for Exterior') : latest.getByRole('spinbutton', { name: /^Weight/ }).first();
+      await expect(latestInput).toHaveValue(surface === 'field' ? 'Desk evidence checked' : '10');
+      await expect(notes).toHaveValue(draft);
+      await latestInput.fill(surface === 'field' ? 'Desk evidence checked; field observation reviewed' : '15');
+      const recovered = latest.waitForResponse(r => r.url().includes('inspections.save') && r.request().method() === 'POST');
+      await latest.getByRole('button', { name: surface === 'field' ? 'Save' : 'Save valuation', exact: true }).click();
+      expect((await recovered).status()).toBe(200);
+      const verified = await request.get('/trpc/inspections.get', { headers: { authorization: `Bearer ${token}` }, params: { input: JSON.stringify({ json: deal.id }) } });
+      const saved = (await verified.json()).result.data.json;
+      expect(saved.rooms[0].notes).toBe(surface === 'field' ? 'Desk evidence checked; field observation reviewed' : 'Desk evidence checked');
+      expect(saved.approachWeights.salesComparison).toBe(surface === 'field' ? 10 : 15);
+      await expect(latest.getByText('A newer inspection has been saved', { exact: true })).toHaveCount(0);
+      await expect(notes).toHaveValue(draft);
+    } finally { await latest.close(); }
+
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });

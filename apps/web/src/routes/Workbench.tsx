@@ -5,6 +5,7 @@ import { useUnsavedWarning } from '../lib/unsaved';
 import { formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Dot, EmptyState, Panel, Skeleton, SkeletonRows, StatCard, Td, Th, TopBar } from '../components/ui';
+import { InspectionConflict } from '../components/InspectionConflict';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, onFill } from '@apex/ui-tokens';
 
@@ -237,6 +238,13 @@ export default function Workbench() {
           </>
         }
       />
+
+      {save.error?.data?.code === 'CONFLICT' && (
+        <div className="px-4 sm:px-6">
+          <InspectionConflict dealId={dealId} latestUrl={`/deal/${dealId}/workbench`}
+            draft={{ source: 'workbench', baseUpdatedAt: held, approachValues: values, approachWeights: weights, reconciledValue: Math.round(reconciled) || null }} />
+        </div>
+      )}
 
       {/* field-sync banner */}
       {isSynced && !dismissed && (
