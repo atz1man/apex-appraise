@@ -624,7 +624,7 @@ export const tasksRouter = router({
       const assignee = input.assignee ?? ctx.principal.initials;
       const members = await ctx.prisma.user.findMany({
         where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: assignee },
-        select: { id: true }, take: 2,
+        select: { id: true }, orderBy: { id: 'asc' }, take: 2,
       });
       if (!members.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `“${assignee}” is not a member of this workspace.` });
       if (members.length > 1) throw new TRPCError({ code: 'BAD_REQUEST', message: `More than one workspace member uses “${assignee}”. Choose a colleague with unique initials.` });
