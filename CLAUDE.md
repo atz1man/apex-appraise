@@ -135,7 +135,7 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 Release checks are part of the contract too: CI runs the web unit suite, including
 its component sweeps. The manual Deploy workflow requires a successful `ci.yml`
 push run on main for the exact release commit (`.github/scripts/require-ci.cjs`;
-tested with `node --test .github/scripts/require-ci.test.cjs`). An older green
+tested with `node --test --test-timeout=30000 .github/scripts/*.test.cjs`). An older green
 commit or an unfinished run cannot authorise a release. Hand deployments must
 check that evidence themselves. The root `.dockerignore` excludes local secrets,
 databases and uploads from remote build contexts; never remove those exclusions

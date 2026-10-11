@@ -17,8 +17,20 @@ ships main to Fly on `workflow_dispatch`, from the Actions tab or a phone.
 Run it from **Actions → Deploy → Run workflow**, choosing `both`, `api` or `web`. It deploys
 the API before the web app (nginx proxies `/trpc`, so the reverse order breaks every data
 screen for the length of the second deploy), then proves the site is actually serving by
-asking the public host for `/login` and `/ready` — the second is proxied to the API and
-checks the database, which a front-end-only smoke test would miss.
+checking the public `/login` HTML, its same-origin JavaScript/CSS entry assets,
+and the explicit API/database JSON at `/ready`. HTTP 200 alone is insufficient:
+a fallback HTML page or a missing JavaScript bundle can still leave the app broken.
+The check uses bounded responses/timeouts, rejects redirects, and retries the
+complete check up to five times, with 2, 5, 10 and 15 second delays. It does not
+exercise authenticated workflows or attest which release is running. The Actions
+serving step has a three-minute process limit in addition to request deadlines. Verify the
+serving image against the intended commit separately.
+
+For a hand deployment, run the same check after both apps are serving:
+
+```bash
+node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
+```
 
 Before deploying, the workflow requires a successful CI push run on `main` for
 the exact commit selected by the workflow. A missing, running, failed or cancelled
@@ -242,8 +254,8 @@ sample payments instantly.
 
 ## Ops: backups, restores and monitoring
 
-Three scripts, each of which exits non-zero when it fails, so `cron`'s `MAILTO` reaches you
-even before you configure anything cleverer.
+Three scripts, each of which exits non-zero when it fails. Configure your scheduler
+to alert on failure; the redirected log examples below do not deliver email by themselves.
 
 ```bash
 # nightly backup — Postgres + uploaded files, verified before it replaces anything
@@ -260,8 +272,8 @@ These run from cron, which has no shell environment, so both scripts begin by
 checking that `docker compose` can read its own configuration — it interpolates
 the whole file for `exec`, so a missing `JWT_SECRET` or `POSTGRES_PASSWORD`
 would otherwise surface as a confusing failure inside `pg_dump`. That is what
-the `.env` file above is for. Set `BACKUP_DB_URL` (backup) or `SERVER_URL`
-(restore-check) instead if your database is managed and compose is not involved.
+the `.env` file above is for. Set `BACKUP_DB_URL` for either script to reach a managed database. The backup
+script still requires a running compose API for its uploaded-file snapshot.
 
 On a managed database (RDS, Fly, Neon) both scripts take the connection instead
 of the compose service — `BACKUP_DB_URL` for each. Pass the full URL including
@@ -273,6 +285,22 @@ there when it connects to the scratch database.
 newest dump into a scratch database, counts the rows, and drops it. Until it has passed once,
 you have a backup process, not a backup — `pg_dump` exiting 0 only means it wrote a file.
 
+A backup run is complete only when both the database archive and uploaded-file
+archive verify. Missing/stopped API containers, failed upload snapshots or malformed
+archives cause a non-zero exit and prevent all retention pruning. A valid database
+copy is still kept and sent offsite when configured, even if uploads fail. Alert on
+that exit status: a partial database copy is not a complete recovery set.
+`BACKUP_KEEP` accepts integers from 1 to 999999 (default 14); invalid retention
+settings fail before any backup writes or pruning. Retention counts matching
+database/upload pairs; newer database-only dumps cannot displace older complete
+pairs. Orphan dumps and diagnostic `.part` files require operator review and
+cleanup. Repeated failures preserve old
+copies and can grow disk usage, so resolve the alert rather than ignoring it.
+
+The restore-check script verifies the database only. Uploaded-file restoration,
+consistency with document records and an actual isolated production restore drill
+remain separate required evidence.
+
 Offsite is one variable, and until you set it the backups live on the disk they are protecting:
 
 ```bash
@@ -281,6 +309,18 @@ export BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'   # or aws s3 cp "$
 
 `BACKUP_DB_URL` makes both scripts talk to a managed Postgres (RDS, Fly Postgres, Neon)
 instead of the compose `db` service.
+
+Compose dumps are verified with the database container's `pg_restore`, matching
+the `pg_dump` version. Managed database mode uses locally installed PostgreSQL
+client tools; install a version compatible with the target server.
+
+CI runs both scripts against its disposable PostgreSQL 18 compose stack. It
+compares restored table/organisation/deal counts, extracts and byte-compares a
+synthetic upload, rejects a corrupt database archive, checks scratch database
+cleanup and verifies the original counts remain unchanged. The fixture script
+is `.github/scripts/backup-restore-smoke.sh`; do not run it on a customer stack.
+This is synthetic recovery regression evidence, not a production restore drill,
+a complete document-reference integrity check or proof of offsite recovery.
 
 ### Health endpoints — the two are not interchangeable
 

@@ -66,7 +66,7 @@ else
     echo "FAILED: docker compose cannot read its configuration." >&2
     echo "  $COMPOSE_ERR" >&2
     echo "  Put JWT_SECRET and POSTGRES_PASSWORD in a .env file in the repo root," >&2
-    echo "  or set SERVER_URL to reach a managed database directly." >&2
+    echo "  or set BACKUP_DB_URL to reach a managed database directly." >&2
     exit 1
   fi
   psql_srv() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U apex -d postgres "$@"; }

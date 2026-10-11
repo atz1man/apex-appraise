@@ -3,16 +3,17 @@
 #
 #   ./infra/backup.sh [backup-dir]
 #
-# Cron (2am nightly, from the repo root). Non-zero exit means the backup did NOT
-# happen, so cron's MAILTO reaches you:
+# Cron (2am nightly, from the repo root). Non-zero exit means the backup run did NOT
+# complete (a useful database copy may still exist), so alert on failure:
 #   0 2 * * * cd /opt/apex-appraise && ./infra/backup.sh /var/backups/apex >> /var/log/apex-backup.log 2>&1
 #
-# Prove it works, once, before you trust it:  ./infra/restore-check.sh
+# Check database restoration: ./infra/restore-check.sh
+# Uploaded-file restoration needs a separate drill; see infra/DEPLOY.md.
 #
 # Environment:
 #   BACKUP_DB_URL      dump this connection directly (managed Postgres — RDS, Fly,
 #                      Neon). Unset: dump the compose `db` service.
-#   BACKUP_KEEP        how many of each artefact to retain (default 14)
+#   BACKUP_KEEP        how many complete archive pairs to retain (1–999999, default 14)
 #   BACKUP_UPLOAD_CMD  offsite. Run once per new file with the path as $1, e.g.
 #                        BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'
 #                      A backup that lives only on the machine it is backing up
@@ -22,6 +23,12 @@ set -euo pipefail
 
 BACKUP_DIR="${1:-./backups}"
 KEEP="${BACKUP_KEEP:-14}"
+# Validate before creating or pruning anything; zero/negative retention can erase
+# every usable backup, and arithmetic must never interpret arbitrary input.
+if ! [[ "$KEEP" =~ ^[1-9][0-9]{0,5}$ ]]; then
+  echo "FAILED: BACKUP_KEEP must be an integer from 1 to 999999" >&2
+  exit 1
+fi
 STAMP="$(date +%Y%m%d-%H%M%S)"
 now() { date -u +%FT%TZ; }
 
@@ -82,7 +89,9 @@ dump_db() {
 # restore-check.sh, which actually restores.
 verify_dump() {
   local f="$1" toc
-  if command -v pg_restore >/dev/null 2>&1; then
+  # Use the same toolchain that produced the dump. An older host pg_restore
+  # can reject a valid archive from the compose database (e.g. PostgreSQL 18).
+  if [ -n "${BACKUP_DB_URL:-}" ]; then
     toc="$(pg_restore --list "$f" 2>/dev/null)" || return 1
   else
     toc="$(docker compose exec -T db pg_restore --list < "$f" 2>/dev/null)" || return 1
@@ -112,16 +121,18 @@ echo "$(now) database backup verified: $DB_OUT ($(du -h "$DB_OUT" | cut -f1))"
 # ---------------------------------------------------------------------------
 UP_OUT="$BACKUP_DIR/uploads-$STAMP.tar.gz"
 UP_PART="$UP_OUT.part"
+UPLOADS_OK=0
 if [ -n "$(docker compose ps -q api 2>/dev/null)" ]; then
   if docker compose exec -T api tar -czf - -C /app/apps/api uploads > "$UP_PART" 2>/dev/null && [ -s "$UP_PART" ] && tar -tzf "$UP_PART" >/dev/null 2>&1; then
     mv "$UP_PART" "$UP_OUT"
+    UPLOADS_OK=1
     echo "$(now) uploads backup verified: $UP_OUT ($(du -h "$UP_OUT" | cut -f1))"
   else
     rm -f "$UP_PART"
-    echo "$(now) WARNING: uploads snapshot failed — database backup above is still good" >&2
+    echo "$(now) FAILED: uploads snapshot failed — database backup above is still good" >&2
   fi
 else
-  echo "$(now) WARNING: api container is not running — uploaded FILES were not backed up" >&2
+  echo "$(now) FAILED: api container is not running — uploaded FILES were not backed up" >&2
 fi
 
 # Offsite, before pruning: a copy that never left the machine has not survived
@@ -138,16 +149,32 @@ if [ -n "${BACKUP_UPLOAD_CMD:-}" ]; then
   done
 fi
 
-# Prune only now, and only ever files we verified on their way in. .part files
-# are left alone: they are evidence, not backups.
-prune() {
-  local glob="$1"
-  # shellcheck disable=SC2012
-  ls -1t "$BACKUP_DIR"/$glob 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
-    rm -f "$old" && echo "$(now) pruned: $(basename "$old")"
-  done
-}
-prune 'apex-*.dump'
-prune 'uploads-*.tar.gz'
+# Preserve a useful database copy offsite even when uploads failed, but never
+# declare a partial run successful or prune the previous recovery material.
+if [ "$UPLOADS_OK" -ne 1 ]; then
+  echo "$(now) FAILED: backup is incomplete — database copy kept, nothing pruned" >&2
+  exit 1
+fi
 
-echo "$(now) done — $(ls -1 "$BACKUP_DIR"/apex-*.dump 2>/dev/null | wc -l) database backup(s) retained"
+# Retain complete pairs, not independent counts: database-only dumps from failed
+# nights must never displace the database half of an older complete pair.
+# Orphan dumps and .part files remain diagnostic/recovery material for operators.
+shopt -s nullglob
+PAIRS=()
+for db in "$BACKUP_DIR"/apex-*.dump; do
+  stamp="${db##*/apex-}"
+  stamp="${stamp%.dump}"
+  [ -f "$BACKUP_DIR/uploads-$stamp.tar.gz" ] && PAIRS+=("$db")
+done
+if [ "${#PAIRS[@]}" -gt "$KEEP" ]; then
+  # Generated backup names contain no newlines. Quoting preserves directory spaces.
+  # shellcheck disable=SC2012
+  ls -1t "${PAIRS[@]}" | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
+    stamp="${old##*/apex-}"
+    stamp="${stamp%.dump}"
+    rm -f "$old" "$BACKUP_DIR/uploads-$stamp.tar.gz"
+    echo "$(now) pruned complete pair: $stamp"
+  done
+fi
+
+echo "$(now) done — database and uploads verified; at most $KEEP complete backup pair(s) retained"

@@ -177,3 +177,100 @@ Live inspection confirms test Stripe, absent SMTP/AI, and an existing reset toke
 was invoked. Earlier records saying all reset configuration was disabled are
 superseded by this inspection. This code release does not complete customer-launch
 acceptance or commercial provider activation.
+
+
+## Release serving checks — 11 October 2026
+
+The HTTPS correction was deployed as web Fly release 74 from main `95589d8`;
+API release 57 runs `9eefc0e` (the correction did not change API application code).
+Both public login/readiness checks and authenticated live login, appraisal screens
+and a real PDF download passed. The release evidence is recorded in #44/#45.
+
+The deployment workflow now uses a shared read-only serving check: verify the
+login application HTML, fetch and validate its same-origin module and stylesheet entry assets,
+and require explicit `apex-api` and database readiness in JSON. It refuses redirects,
+HTML fallbacks, wrong/empty asset bodies, unhealthy readiness and responses beyond
+its byte/time limits. Twelve local HTTP regression cases plus the eleven existing
+exact-commit release-gate checks pass. CI also runs the shared checker against
+the built application stack. The same checker passed against the live
+site without signing in or invoking any provider. This improves rollout detection;
+it does not prove release identity, authenticated journeys, asset execution, rollback automation,
+mail, billing, professional acceptance or customer readiness. GitHub deployment
+credentials and the existing customer-launch acceptance gates remain outstanding.
+
+
+## Backup completeness — 11 October 2026
+
+The compose backup script previously continued to retention pruning after an
+uploaded-file snapshot failed or the API container was absent. With an older
+uploads archive present, it could exit successfully despite missing the new
+supporting documents. It now exits unsuccessfully before any pruning when
+uploads are incomplete. A verified database dump remains available and is sent
+offsite when configured. Invalid or zero retention settings fail before writes.
+
+Fifteen isolated command-level regressions execute the actual shell script with
+fake container/database boundaries and real tar archives, covering missing,
+failed and corrupt uploads, successful paired publication/pruning, offsite
+failure, database/configuration failures, managed database partial runs and unsafe
+retention inputs. Retention now preserves matching archive pairs instead of letting
+newer partial dumps displace older complete recovery material. These checks use synthetic files and do
+not establish production backup contents or restorability. No live backups,
+credentials or databases were changed. The deployment serving checks originated
+in PR #46. Next operational priority is an isolated restore drill
+covering both database and uploaded documents; customer-launch owner/provider
+acceptance gates remain open.
+
+
+## Synthetic recovery exercise — 11 October 2026
+
+The follow-up to #47 runs the actual backup and restore-check commands against
+CI's disposable PostgreSQL 18 stack after the customer browser journeys. It
+checks restored table/organisation/deal counts, byte-for-byte recovery of a
+synthetic uploaded file, rejection of a corrupt database archive and scratch
+database cleanup after both success and failure. Original row counts and fixture
+bytes must remain unchanged. It uses no live credentials or customer data.
+
+The initial CI exercise caught dump verification failing when compose used
+PostgreSQL 18 but the script selected the host restore tool. Compose backups now
+verify with the database container toolchain; managed connections use the local
+toolchain that produces their dump. A regression makes the host verifier fail
+and confirms compose backup verification still succeeds.
+
+This covers the operator command path beyond mocked command regressions. It
+does not verify a real production backup, offsite retrieval, all document
+references, recovery duration at production scale or concurrent-write snapshot
+consistency. The next recovery acceptance remains an isolated production
+restore drill with those checks and an identified operator.
+
+
+## Consolidated verification and recovery candidate — 11 October 2026
+
+PR #48 now combines the serving checks from #46, backup completeness from #47
+and the real CI recovery exercise, preserving their commit histories. Integration
+resolved competing insertions in the browser workflow and release record: both
+the serving check and recovery drill run after browser journeys, followed by the
+renderer signal checks. The serving-check unit tests remain in the release-test
+glob. No application, schema, financial calculation or live configuration changed
+in this integration.
+
+The separate prior CI runs remain evidence for their individual commits. The
+combined head requires its own full CI result, recorded on #48; individual green
+runs are not substituted for it. Production restore acceptance, deployment
+credentials and the customer-launch gates remain open. The next delivery step is
+review of this combined candidate, followed by exact-main CI before any authorized
+release. No production deployment is included in this consolidation.
+
+
+The combined local run exposed a stalled-body timeout regression in the serving
+checker: its timeout test hit the five-second test limit. The checker now races
+an explicit request deadline independently of transport abort, clears its timer
+and aborts the transport on completion. A never-settling transport regression
+covers that deadline in addition to the real HTTP stalled-body test. This is a
+release-check reliability fix; it does not change application request handling.
+
+The serving-check workflow steps also have a three-minute process limit, since
+an abandoned transport handle could keep a CLI process alive after its request
+promise rejects. The synthetic restore step has a five-minute limit. CI checks
+serving again after the recovery drill, so passing the pre-drill check cannot
+hide a service damaged during the exercise. The never-settling transport test
+also passed in isolation; it does not depend on earlier tests initializing fetch.
