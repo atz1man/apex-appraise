@@ -62,6 +62,7 @@ export function DealNav({ dealId, active }: { dealId: string; active: DealTool }
           {label}
         </Link>
       ))}
+      <Link to={`/field?dealId=${encodeURIComponent(dealId)}`} className="px-2.5 py-2 text-[12px] whitespace-nowrap text-brand-ink">Field companion</Link>
       </div>
       {data && data.deals.length > 1 && (
         <Listbox

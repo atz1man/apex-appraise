@@ -143,3 +143,35 @@ not delete uploaded file bytes. Do not claim physical document erasure from the
 existing workspace-deletion tests. Prioritise durable file cleanup and its failure,
 concurrency and isolation regressions before further capacity expansion. See
 LOAD-BASELINE.md. No production deployment or live-provider activation occurred.
+
+## Field Companion project continuity — 11 October 2026
+
+The field audit found that the workbench's field link discarded the selected
+project, and Field Companion defaulted to the first available project. Project
+navigation and the existing workbench link now carry the deal ID. Field Companion
+retains that selection on reload and refuses an unavailable project instead of
+quietly opening another. A connected-project panel shows the current saved
+appraisal/version status, inspection state and comparable count, with same-project
+links to overview, appraisal, documents and workbench, plus explicit refresh.
+Errors remain distinct from missing evidence. Phone controls use 44px targets.
+
+The fixed decorative comparable pins are replaced with the existing map component
+using saved coordinates only, with missing-location and source-limit disclosures.
+Removed the unsupported caption claiming a native mobile build. No valuation
+arithmetic or inspection approval behavior changed; field observations remain
+reviewable evidence rather than automatically replacing appraisal inputs.
+
+Local evidence: five Field Companion browser journeys passed, including existing
+photo/offline recovery and the new two-project navigation/refresh/unavailable-ID
+journey. Web's 388 unit/safeguard tests, TypeScript, production build and bundle
+checks passed. The phone context panel was visually inspected. Exact-commit CI is
+recorded on the PR. This is a connected-workflow increment, not complete mobile
+acceptance or automated appraisal intelligence. Real-device camera/storage tests,
+fully offline project access, configurable inspection templates, explicit review
+of observation-to-appraisal changes and shared-task handoff remain open.
+
+The prior contention profile PR #53 passed CI and merged at
+`43c9841` (full SHA in Git). Its artifact verified six distinct file uploads,
+foreign-read refusals, four busy PDF responses, two successful burst reports and
+two successful subsequent reports. The physical-upload erasure defect remains
+open and must not be obscured by the Field Companion work.
