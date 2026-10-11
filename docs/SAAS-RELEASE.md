@@ -191,7 +191,8 @@ login application HTML, load its same-origin module and stylesheet entry assets,
 and require explicit `apex-api` and database readiness in JSON. It refuses redirects,
 HTML fallbacks, wrong/empty asset bodies, unhealthy readiness and responses beyond
 its byte/time limits. Twelve local HTTP regression cases plus the eleven existing
-exact-commit release-gate checks pass. The same checker passed against the live
+exact-commit release-gate checks pass. CI also runs the shared checker against
+the built application stack. The same checker passed against the live
 site without signing in or invoking any provider. This improves rollout detection;
 it does not prove authenticated journeys, asset execution, rollback automation,
 mail, billing, professional acceptance or customer readiness. GitHub deployment
