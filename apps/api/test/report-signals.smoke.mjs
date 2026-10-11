@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 // Runs separately from Vitest in the built API image, where Chromium is installed.
-// Keep an HTTP listener alive: without it a renderer-only process would exit even
-// when Playwright swallows the signal, hiding the production failure.
+// Keep an HTTP listener alive to reproduce the API process remaining available
+// after Playwright has closed the renderer in response to a signal.
 for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) {
   test(`API process honours ${signal} after rendering a PDF`, { timeout: 30_000 }, async () => {
     const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
@@ -21,7 +21,7 @@ for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) {
       await page.close();
       process.send('rendered');
     `], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-    const exited = once(child, 'exit');
+    const exited = once(child, 'close');
     let stderr = '';
     child.stderr.on('data', chunk => { stderr += chunk; });
     const timers = [];

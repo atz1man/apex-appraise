@@ -332,8 +332,8 @@ release integration and customer-pack acceptance remain the next priorities.
 Rendering a PDF installed Playwright signal handlers in the API process. Its
 SIGTERM/SIGHUP handlers closed Chromium but left the HTTP listener running,
 turning a normal deployment stop into a forced kill. Renderer launches now leave
-TERM, HUP and INT handling to the host process. Playwright retains its process
-exit cleanup for the browser.
+TERM, HUP and INT handling to the host process. These checks do not establish
+browser-child cleanup following a signal.
 
 A real-process smoke check opens an HTTP listener, renders an actual PDF with
 the production renderer module and sends each signal. The old implementation
