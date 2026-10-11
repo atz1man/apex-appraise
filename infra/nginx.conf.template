@@ -1,3 +1,9 @@
+# Compute HSTS at http scope: a location-level if can discard try_files.
+map $http_x_forwarded_proto $apex_hsts {
+  default "";
+  https "max-age=31536000; includeSubDomains";
+}
+
 server {
   listen 80;
   root /usr/share/nginx/html;

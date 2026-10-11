@@ -67,7 +67,7 @@ describe('the front door sets the headers the docs say it sets', () => {
     ['X-Content-Type-Options', /nosniff/],
     ['Referrer-Policy', /strict-origin-when-cross-origin/],
     ['X-Frame-Options', /DENY/],
-    // the value is a VARIABLE, so the max-age lives on the `set` line above it;
+    // the value is a VARIABLE, so the max-age lives in the http-scope map;
     // the dedicated HSTS case below checks both halves
     ['Strict-Transport-Security', /\$apex_hsts/],
     ['Content-Security-Policy-Report-Only', /default-src 'self'/],
@@ -116,11 +116,9 @@ describe('the front door sets the headers the docs say it sets', () => {
    * self-hoster's host to HTTPS and lock them out of a stack serving none.
    */
   it('emits HSTS only when the request arrived over TLS', () => {
-    expect(snippet).toMatch(/if \(\$http_x_forwarded_proto = "https"\)/);
+    expect(template).toMatch(/^map \$http_x_forwarded_proto \$apex_hsts \{\s*default "";\s*https "max-age=\d+[^"]*";\s*\}/m);
     expect(snippet).toMatch(/add_header Strict-Transport-Security \$apex_hsts always;/);
-    // empty by default, and a real max-age only inside the https branch
-    expect(snippet).toMatch(/set \$apex_hsts "";/);
-    expect(snippet).toMatch(/set \$apex_hsts "max-age=\d+[^"]*";/);
+    expect(snippet).not.toMatch(/^\s*(if|set)\s/m);
   });
 
   /**

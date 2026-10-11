@@ -149,3 +149,31 @@ for customer acceptance. The public operator identity and any versioned terms
 acceptance policy still need owner confirmation. Multi-instance abuse limits,
 capacity/load testing and restore exercises are separate release evidence;
 passing the application tests does not establish them.
+
+
+## 11 October 2026 release and HTTPS routing correction
+
+Owner-authorized release integration #44 put the reviewed stack on main at
+`9eefc0e1cc5bc4d1097997afdb65866393e960a6`. CI run 38125404919 passed
+2,038 unit/API tests, 226 browser tests and the migration/renderer checks.
+Fresh Fly snapshots were confirmed before migration: database
+`vs_KlVAk3Lv5q66sZLZ3m8AA`, uploads `vs_ebJnby82Vz5fQXjA03ew` (five-day
+retention; snapshots are not a restore-drill claim). The API deployment applied
+38 migrations with no failed migration; counts remained 2 organisations,
+7 users, 12 deals and 14 documents.
+
+The first web rollout exposed an HTTPS-only routing defect: a rewrite-module
+`if` in the repeated security-header snippet disabled `try_files` in its implicit
+location. The plain-HTTP CI stack did not enter that branch. Public `/login`
+returned 404 although loopback HTTP returned 200. The previous web image was
+restored, and public `/login` returned 200. The correction computes HSTS using an
+http-scope `map`, leaving the repeated header snippet declarative. A built-stack
+browser regression sends the HTTPS forwarding header and checks SPA routes,
+assets, missing assets and HSTS; plain HTTP must still omit HSTS. Final deployment
+and exact-commit CI evidence are recorded in the release PR.
+
+Live inspection confirms test Stripe, absent SMTP/AI, and an existing reset token
+(the reset workflow is manual-only). Credentials were not changed and no reset
+was invoked. Earlier records saying all reset configuration was disabled are
+superseded by this inspection. This code release does not complete customer-launch
+acceptance or commercial provider activation.
