@@ -161,9 +161,14 @@ jobs:
           E2E_BASE_URL: http://localhost:8080
         run: pnpm --filter @apex/web exec playwright test
       - name: Deployment serving check against the built stack
+        timeout-minutes: 3
         run: node .github/scripts/check-serving.cjs http://localhost:8080
       - name: Restore database and upload backups in the disposable stack
+        timeout-minutes: 5
         run: bash .github/scripts/backup-restore-smoke.sh
+      - name: Verify serving after the recovery drill
+        timeout-minutes: 3
+        run: node .github/scripts/check-serving.cjs http://localhost:8080
       - name: Report renderer process signals
         run: docker compose exec -T api node --test test/report-signals.smoke.mjs
       - name: API logs on failure

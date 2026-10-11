@@ -267,3 +267,10 @@ an explicit request deadline independently of transport abort, clears its timer
 and aborts the transport on completion. A never-settling transport regression
 covers that deadline in addition to the real HTTP stalled-body test. This is a
 release-check reliability fix; it does not change application request handling.
+
+The serving-check workflow steps also have a three-minute process limit, since
+an abandoned transport handle could keep a CLI process alive after its request
+promise rejects. The synthetic restore step has a five-minute limit. CI checks
+serving again after the recovery drill, so passing the pre-drill check cannot
+hide a service damaged during the exercise. The never-settling transport test
+also passed in isolation; it does not depend on earlier tests initializing fetch.

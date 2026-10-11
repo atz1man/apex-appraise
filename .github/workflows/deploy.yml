@@ -92,6 +92,7 @@ jobs:
         with:
           node-version: 22
       - name: Prove it is actually serving
+        timeout-minutes: 3
         run: node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
 
       - name: Say what is now live
