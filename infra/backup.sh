@@ -89,7 +89,9 @@ dump_db() {
 # restore-check.sh, which actually restores.
 verify_dump() {
   local f="$1" toc
-  if command -v pg_restore >/dev/null 2>&1; then
+  # Use the same toolchain that produced the dump. An older host pg_restore
+  # can reject a valid archive from the compose database (e.g. PostgreSQL 18).
+  if [ -n "${BACKUP_DB_URL:-}" ]; then
     toc="$(pg_restore --list "$f" 2>/dev/null)" || return 1
   else
     toc="$(docker compose exec -T db pg_restore --list < "$f" 2>/dev/null)" || return 1

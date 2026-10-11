@@ -31,6 +31,10 @@ printf 'synthetic appraisal evidence for recovery drill\n' > "$WORK/expected.txt
 docker compose exec -T api sh -c 'set -eu; set -C; mkdir -p /app/apps/api/uploads; cat > "/app/apps/api/uploads/$1"' _ "$FIXTURE" < "$WORK/expected.txt"
 FIXTURE_CREATED=1
 
+# Record tool versions to make archive-format mismatches diagnosable.
+docker compose exec -T db pg_restore --version
+if command -v pg_restore >/dev/null 2>&1; then pg_restore --version; fi
+
 # Run the actual operator commands, not a mock or a second implementation.
 bash infra/backup.sh "$WORK/backups"
 bash infra/restore-check.sh "$WORK/backups" | tee "$WORK/restore.log"

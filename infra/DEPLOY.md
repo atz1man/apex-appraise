@@ -298,6 +298,10 @@ export BACKUP_UPLOAD_CMD='rclone copy "$1" b2:apex-backups/'   # or aws s3 cp "$
 `BACKUP_DB_URL` makes both scripts talk to a managed Postgres (RDS, Fly Postgres, Neon)
 instead of the compose `db` service.
 
+Compose dumps are verified with the database container's `pg_restore`, matching
+the `pg_dump` version. Managed database mode uses locally installed PostgreSQL
+client tools; install a version compatible with the target server.
+
 CI runs both scripts against its disposable PostgreSQL 18 compose stack. It
 compares restored table/organisation/deal counts, extracts and byte-compares a
 synthetic upload, rejects a corrupt database archive, checks scratch database

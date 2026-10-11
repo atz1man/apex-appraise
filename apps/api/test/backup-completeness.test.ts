@@ -27,10 +27,11 @@ function run(mode = 'ok', keep = '1', offsiteFails = false, options: { managed?:
   }
   const executable = (name: string, body: string) => writeFileSync(join(bin, name), '#!/bin/bash\nset -eu\n' + body, { mode: 0o755 });
   executable('pg_dump', '[ "$FIXTURE_MODE" != dumpfailed ] || exit 1\nprintf "fixture database archive"\n');
-  executable('pg_restore', '[ "$FIXTURE_MODE" != invaliddump ] || exit 1\nprintf "TABLE DATA public Organisation\\n"\n');
+  executable('pg_restore', '[ "$FIXTURE_MODE" != wronghostversion ] || exit 1\n[ "$FIXTURE_MODE" != invaliddump ] || exit 1\nprintf "TABLE DATA public Organisation\\n"\n');
   executable('docker', `
 case "$*" in
   'compose config --quiet') [ "$FIXTURE_MODE" != configfailed ]; exit $? ;;
+  'compose exec -T db pg_restore --list') [ "$FIXTURE_MODE" != invaliddump ] || exit 1; cat >/dev/null; printf 'TABLE DATA public Organisation'; exit 0 ;;
   'compose exec -T db pg_dump '*) [ "$FIXTURE_MODE" != dumpfailed ] || exit 1; printf 'fixture database archive'; exit 0 ;;
   'compose ps -q api') [ "$FIXTURE_MODE" != stopped ] && echo container; exit 0 ;;
   'compose exec -T api tar '*)
@@ -87,6 +88,11 @@ describe('backup completion and retention', () => {
     expect(files).toContain('apex-old.dump');
     expect(files).toContain('uploads-old.tar.gz');
     expect(files).toHaveLength(4);
+  });
+  it('verifies a compose archive with its matching container tool despite an incompatible host verifier', () => {
+    const { result } = run('wronghostversion');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('database backup verified');
   });
   it('does not let partial dumps displace an older complete recovery pair', () => {
     const { result, files } = run('ok', '2', false, { partials: true });

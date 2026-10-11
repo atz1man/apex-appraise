@@ -210,6 +210,12 @@ synthetic uploaded file, rejection of a corrupt database archive and scratch
 database cleanup after both success and failure. Original row counts and fixture
 bytes must remain unchanged. It uses no live credentials or customer data.
 
+The initial CI exercise caught dump verification failing when compose used
+PostgreSQL 18 but the script selected the host restore tool. Compose backups now
+verify with the database container toolchain; managed connections use the local
+toolchain that produces their dump. A regression makes the host verifier fail
+and confirms compose backup verification still succeeds.
+
 This covers the operator command path beyond mocked command regressions. It
 does not verify a real production backup, offsite retrieval, all document
 references, recovery duration at production scale or concurrent-write snapshot
