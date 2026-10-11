@@ -177,3 +177,22 @@ Live inspection confirms test Stripe, absent SMTP/AI, and an existing reset toke
 was invoked. Earlier records saying all reset configuration was disabled are
 superseded by this inspection. This code release does not complete customer-launch
 acceptance or commercial provider activation.
+
+
+## Release serving checks — 11 October 2026
+
+The HTTPS correction was deployed as web Fly release 74 from main `95589d8`;
+API release 57 runs `9eefc0e` (the correction did not change API application code).
+Both public login/readiness checks and authenticated live login, appraisal screens
+and a real PDF download passed. The release evidence is recorded in #44/#45.
+
+The deployment workflow now uses a shared read-only serving check: verify the
+login application HTML, load its same-origin module and stylesheet entry assets,
+and require explicit `apex-api` and database readiness in JSON. It refuses redirects,
+HTML fallbacks, wrong/empty asset bodies, unhealthy readiness and responses beyond
+its byte/time limits. Twelve local HTTP regression cases plus the eleven existing
+exact-commit release-gate checks pass. The same checker passed against the live
+site without signing in or invoking any provider. This improves rollout detection;
+it does not prove authenticated journeys, asset execution, rollback automation,
+mail, billing, professional acceptance or customer readiness. GitHub deployment
+credentials and the existing customer-launch acceptance gates remain outstanding.

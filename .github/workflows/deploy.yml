@@ -86,21 +86,13 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_WEB_API_TOKEN || secrets.FLY_API_TOKEN }}
         run: flyctl deploy -c infra/fly.web.toml --remote-only --yes
 
-      # A deploy that reported success and left the site refusing requests is
-      # the failure this whole workflow exists to make visible, so ask the
-      # public host rather than trusting the exit code. /login is unauthenticated
-      # and served by nginx, so a 200 proves the web app is up; /ready is
-      # proxied to the API and checks the DATABASE, which is the half a
-      # front-end-only smoke test would miss.
+      # Check the public entry, its built assets and explicit API/database
+      # readiness. Status 200 alone can be a SPA fallback or a broken shell.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Prove it is actually serving
-        run: |
-          set -euo pipefail
-          for path in /login /ready; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 5 \
-              --retry-all-errors "https://apex-appraise-web.fly.dev${path}")
-            echo "${path} -> ${code}"
-            [ "$code" = "200" ] || { echo "::error::${path} answered ${code}, not 200"; exit 1; }
-          done
+        run: node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
 
       - name: Say what is now live
         run: |
