@@ -21,7 +21,7 @@ export function uploadPathFor(url: string): string | null {
   const prefix = '/uploads/files/';
   if (!url.startsWith(prefix)) return null;
   const key = url.slice(prefix.length);
-  if (key.includes('/') || key.includes('..')) return null; // no traversal
+  if (!key || key === '.' || key === '..' || /[\\/\x00]/.test(key)) return null; // one filename, no traversal
   return path.join(UPLOAD_DIR, key);
 }
 
@@ -179,7 +179,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
 
   app.get<{ Params: { '*': string }; Querystring: { t?: string } }>('/uploads/files/*', async (req, reply) => {
     const key = req.params['*'];
-    if (!key || key.includes('..')) return reply.code(400).send({ error: 'bad key' });
+    if (!uploadPathFor(`/uploads/files/${key}`)) return reply.code(400).send({ error: 'bad key' });
 
     const access = await accessForKey(key, db);
     const owner = access.owner;

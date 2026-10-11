@@ -23,7 +23,7 @@ const token = (t: Tenant) => jwt.sign({ sub: t.userId }, JWT_SECRET, { expiresIn
 async function upload(t: Tenant, kind: 'document' | 'photo' | 'logo') {
   const b = '----erasure-test';
   const payload = `--${b}\r\nContent-Disposition: form-data; name="dealId"\r\n\r\n${t.dealId}\r\n` +
-    `--${b}\r\nContent-Disposition: form-data; name="file"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\nsynthetic-${kind}\r\n--${b}--\r\n`;
+    `--${b}\r\nContent-Disposition: form-data; name="file"; filename="fixture..png"\r\nContent-Type: image/png\r\n\r\nsynthetic-${kind}\r\n--${b}--\r\n`;
   const response = await app.inject({ method: 'POST', url: `/uploads/${kind}`, headers: {
     authorization: `Bearer ${token(t)}`, 'content-type': `multipart/form-data; boundary=${b}`,
   }, payload });
@@ -122,4 +122,11 @@ it('queues a rejected upload when immediate unlink fails', async () => {
   expect((await readFile(uploadPathFor(url)!)).length).toBeGreaterThan(0);
   expect(await drainUploadErasure(prisma, { now: new Date(Date.now() + 1000) })).toEqual({ removed: 1, deferred: 0 });
   await expect(readFile(uploadPathFor(url)!)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('accepts dots inside a filename but never directories or separators', () => {
+  expect(uploadPathFor('/uploads/files/uuid-survey..png')).toMatch(/uuid-survey\.\.png$/);
+  for (const url of ['/uploads/files/', '/uploads/files/.', '/uploads/files/..', '/uploads/files/../secret', '/uploads/files/a/b', '/uploads/files/a\\b', '/uploads/files/a\0b']) {
+    expect(uploadPathFor(url)).toBeNull();
+  }
 });
