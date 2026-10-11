@@ -117,3 +117,15 @@ deployment, credentials, schema or financial calculations changed. Next: retain
 these import limitations during representative customer migration acceptance,
 and establish the load/cost baseline in the ordered work above. Owner setup and
 professional acceptance remain open.
+
+## Concurrent workspace baseline — 11 October 2026
+
+Added a bounded, reproducible HTTP workload and retained CI artifact, described
+in LOAD-BASELINE.md. One then three workers exercise separate synthetic workspaces
+through 800 requests, including 200 save/reload engine comparisons and 200 foreign
+read refusals. Local development-stack verification passed with complete cleanup.
+Exact built-stack CI evidence is recorded on the pull request. This begins the
+load baseline item; it does not close capacity, large-document, sustained-load,
+resource-cost or live-AI budget acceptance. Next extend representative data sizes
+and measure the report/upload workload before proposing customer service targets.
+PR #51's spreadsheet fix is merged at `1d247ae7527d7a2144028d3c9e34ecd7c569f552`.

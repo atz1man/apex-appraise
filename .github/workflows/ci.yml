@@ -160,6 +160,17 @@ jobs:
         env:
           E2E_BASE_URL: http://localhost:8080
         run: pnpm --filter @apex/web exec playwright test
+      - name: Concurrent workspace HTTP baseline
+        timeout-minutes: 3
+        env:
+          E2E_BASE_URL: http://localhost:8080
+        run: pnpm --filter @apex/web exec playwright test --config playwright.performance.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workspace-load-baseline
+          path: apps/web/performance-results/
+          retention-days: 14
       - name: Deployment serving check against the built stack
         timeout-minutes: 3
         run: node .github/scripts/check-serving.cjs http://localhost:8080
