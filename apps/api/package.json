@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval:codex": "tsx scripts/eval-auto-appraisal-codex.ts"
   },
   "dependencies": {
     "@apex/appraisal-engine": "workspace:*",
