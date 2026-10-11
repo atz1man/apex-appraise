@@ -389,6 +389,21 @@ describe('extraction completion commits the prepared source identities', () => {
     const second = await doc('Atomic second.pdf', 'pdf', Buffer.from('second'));
     const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] });
     expect(result.sourceDocuments).toEqual([{ id: first.id, name: first.name, version: expect.any(String) }, { id: second.id, name: second.name, version: expect.any(String) }]);
+    const api = callerFor(T.principal);
+    const listed = (await api.documents.list({ dealId: T.dealId })).documents;
+    for (const source of result.sourceDocuments) expect(listed.find(d => d.id === source.id)?.version).toBe(source.version);
+    const input = {
+  units: [{ label: 'Apartments', count: 4, area: 750, cap: 400, source: 'Schedule.xlsx, Units!B4' }],
+  efficiency: 85, trades: [{ label: 'Build', rate: 110 }], profFeePct: 11, contingencyPct: 5, otherCosts: [],
+  finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' as const },
+  site: { mode: 'residual' as const, landFixed: 0, acqPct: 6.8 },
+  disposal: { agentPct: 1.5, legalPct: 0.5 }, targetProfitOnGdvPct: 20,
+};
+    await api.appraisal.save({ dealId: T.dealId, input, source: 'ai', sourceReview: {
+      accepted: true, documentIds: result.sourceDocuments.map(d => d.id), expectedSources: result.sourceDocuments,
+      sample: false, omissions: [],
+    } });
+    expect((await api.appraisal.getCurrent(T.dealId))?.sourceReview?.documents.map(d => d.status)).toEqual(['unchanged', 'unchanged']);
     expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['EXTRACTED', 'EXTRACTED']);
     expect(await prisma.activityEvent.count({ where: { orgId: T.orgId, dealId: T.dealId, action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(2);
   });

@@ -416,7 +416,10 @@ storage identities and revisions rather than pinning a newer source to older
 extracted inputs. Sharing and extraction-status changes do not invalidate a source.
 
 API regressions exercise changed and unchanged sources and omitted/foreign
-expected IDs. Browser verification covers controlled stale-extraction metadata
+expected IDs; the extraction response is also round-tripped through document listing
+and appraisal save. Claude review prompted clearer changed-source copy and an
+accessible explanation beside the disabled acceptance control. Browser verification
+covers controlled stale-extraction metadata
 and existing review/export journeys. Older clients and source reviews remain
 compatible. This is an optimistic concurrency stamp supplied by the client, not
 an authenticated extraction receipt, a storage rehash or proof of model accuracy.

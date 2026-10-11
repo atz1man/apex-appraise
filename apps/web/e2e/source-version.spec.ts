@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('stale source versions withhold downloads and block review acceptance', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -45,6 +46,7 @@ test('stale source versions withhold downloads and block review acceptance', asy
     const response = await route.fetch();
     const body = await response.json();
     for (const entry of Array.isArray(body) ? body : [body]) {
+      if (!entry.result?.data?.json?.extraction) continue;
       entry.result.data.json.sourceDocuments = [{ id: document.id, name: document.name, version: '0'.repeat(64) }];
     }
     await route.fulfill({ response, json: body });

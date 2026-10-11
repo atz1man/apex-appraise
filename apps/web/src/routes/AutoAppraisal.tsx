@@ -855,12 +855,12 @@ export default function AutoAppraisal() {
               {run.source !== 'manual' && (
                 <Panel title="Review extracted inputs">
                   <p className="text-[12px] text-ink-2">Check the original drawings and schedules. Areas below are square feet; values are £ per square foot. A confidence label is not verification.</p>
-                  {sourcesChanged && <p role="alert" className="mt-2 text-[12px] text-status-red">A source changed since extraction. Reload the source documents and extract again before recording this review.</p>}
+                  <p role="alert" className="mt-2 text-[12px] text-status-red">{sourcesChanged ? 'A source changed since extraction. Reload the source documents and extract again before recording this review.' : ''}</p>
                   <div className="mt-3 flex gap-3 flex-wrap">
                     {run.sourceDocuments?.map(document => {
                       const current = roomDocs?.documents.find(d => d.id === document.id);
                       const url = !document.version || current?.version === document.version ? current?.url : null;
-                      return url ? <a key={document.id} href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-brand-ink underline">Download source: {document.name}</a> : <span key={document.id} className="text-[12px] text-ink-2">{document.name} — {sourcesPending ? 'loading source link…' : sourcesFailed ? 'source links could not be loaded' : 'source unavailable'}</span>;
+                      return url ? <a key={document.id} href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-brand-ink underline">Download source: {document.name}</a> : <span key={document.id} className="text-[12px] text-ink-2">{document.name} — {sourcesPending ? 'loading source link…' : sourcesFailed ? 'source links could not be loaded' : current && document.version && current.version !== document.version ? 'source changed — extract again' : 'source unavailable'}</span>;
                     })}
                   </div>
                   <div className="mt-3 space-y-4">
@@ -919,7 +919,7 @@ export default function AutoAppraisal() {
                     <input type="checkbox" checked={reviewAccepted} disabled={sourcesChanged || !referencesValid || reviewDirty || reviewPending || whatIf.isPending} aria-describedby="review-help" onChange={e => setAcceptedRun(e.target.checked ? run : null)} />
                     I have checked the inputs, source citations and omitted content. These assumptions are ready to save.
                   </label>
-                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{!referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
+                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{sourcesChanged ? 'A source changed since extraction. Extract again before accepting this review.' : !referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
                 </Panel>
               )}
 
