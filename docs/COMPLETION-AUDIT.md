@@ -92,3 +92,28 @@ The regression failed before the fix and the new journey plus both report-pin
 journeys passed after it. This does not establish complete concurrent-edit,
 issued-report retention or real-team usability acceptance; those remain in the
 matrix. No financial computation, schema or provider configuration changed.
+
+## Spreadsheet formula evidence — 11 October 2026
+
+The migration-fixture audit found two extraction defects: cached formula results
+were presented as ordinary values without a recalculation limitation, and the
+spreadsheet library's copied value dropped cached zero/false results. Apex now
+reads the underlying result accessor, labels cached values individually and
+returns a sheet-specific review warning. It does not evaluate workbook formulas.
+
+A real XLSX regression contains a deliberately stale result (150 for `100*2`),
+zero, false, an Excel error and a literal input. It verifies source coordinates,
+unchanged cached values, visible errors, retained document identity and warning
+propagation through the actual extraction API with a mocked model response.
+The regression failed before the fix; the extraction, source-review and appraisal
+round-trip suites passed afterwards (68 tests). This is parser/API evidence,
+not live-provider acceptance or a general workbook migration guarantee.
+
+PR #50's team-review fix was merged as
+`f7cbe55c76763012128bf1be2784b83f243c6c6e`; its exact-head CI passed at
+`6632aeb28d2037a4cb1c872b688b26a703bb0eba` (run 38154807209).
+Exact-commit CI for this increment is recorded on its pull request. No production
+deployment, credentials, schema or financial calculations changed. Next: retain
+these import limitations during representative customer migration acceptance,
+and establish the load/cost baseline in the ordered work above. Owner setup and
+professional acceptance remain open.
