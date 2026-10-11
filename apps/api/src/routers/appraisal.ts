@@ -1567,6 +1567,11 @@ async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: st
  * and a model handed the bytes would invent. Storing one in the data room is
  * still useful; feeding it to an extraction never was.
  */
+type ExtractionSource = {
+  id: string; name: string; dealId: string; url: string; sha256: string | null;
+  ext: string; sizeBytes: bigint; addedAt: Date;
+};
+
 export async function documentBlocks(
   prisma: any,
   orgId: string,
@@ -1574,7 +1579,7 @@ export async function documentBlocks(
 ): Promise<{
   blocks: ContentBlock[];
   integrityFailures: Array<{ id: string; name: string; dealId: string }>;
-  used: Array<{ id: string; name: string; dealId: string }>;
+  used: ExtractionSource[];
   skipped: Array<{ name: string; reason: string }>;
 }> {
   const { uploadPathFor } = await import('../uploads.js');
@@ -1583,7 +1588,7 @@ export async function documentBlocks(
   const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
   const blocks: ContentBlock[] = [];
   const integrityFailures: Array<{ id: string; name: string; dealId: string }> = [];
-  const used: Array<{ id: string; name: string; dealId: string }> = [];
+  const used: ExtractionSource[] = [];
   const skipped: Array<{ name: string; reason: string }> = [];
   // The tenant-scoped query intentionally cannot distinguish missing from foreign
   // IDs. Report only the caller's unavailable selection count, never source details.
@@ -1654,7 +1659,8 @@ export async function documentBlocks(
     }
     // Report legacy identity only after successful content preparation.
     if (doc.sha256 == null) skipped.push({ name: doc.name, reason: 'No upload fingerprint was recorded. The file was read for extraction, but its bytes cannot be verified against the original upload.' });
-    used.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
+    used.push({ id: doc.id, name: doc.name, dealId: doc.dealId, url: doc.url,
+      sha256: doc.sha256 ?? null, ext: doc.ext, sizeBytes: doc.sizeBytes, addedAt: doc.addedAt });
   }
   for (const doc of docs.slice(12)) skipped.push({ name: doc.name, reason: 'omitted by the 12-document extraction limit' });
   return { blocks, used, skipped, integrityFailures };
@@ -1861,13 +1867,21 @@ export const autoAppraisalRouter = router({
         }
       }
       const extraction = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
-      // successful read hardens the data-room status + audit trail
-      for (const doc of blocks.used) {
-        await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: 'EXTRACTED' } });
-        await ctx.prisma.activityEvent.create({
-          data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: AI_ACTOR, action: 'extracted scheme from', target: doc.name },
-        });
-      }
+      // A model call can outlive a source revision or deletion. Compare the exact
+      // prepared identity at the write, and commit every status + audit together.
+      // A stale source must not leave earlier files marked as a successful run.
+      if (blocks.used.length) await ctx.prisma.$transaction(async (tx) => {
+        for (const doc of blocks.used) {
+          const { count } = await tx.document.updateMany({
+            where: { ...doc, orgId: ctx.principal.orgId, supersededById: null },
+            data: { extraction: 'EXTRACTED' },
+          });
+          if (count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'A source changed while extraction was running. Reload the source documents and extract again.' });
+          await tx.activityEvent.create({
+            data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: AI_ACTOR, action: 'extracted scheme from', target: doc.name },
+          });
+        }
+      });
       return {
         extraction,
         indicative: indicative(extraction, input.buildPerSqft),

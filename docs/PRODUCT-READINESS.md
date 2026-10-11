@@ -343,3 +343,25 @@ with its system Chromium after the browser journeys. This establishes signal
 behaviour, not graceful draining of active requests or operational rollback
 acceptance. No financial arithmetic, credentials or schema changed. Durable
 extraction receipts and integration/customer acceptance remain next priorities.
+
+
+### Extraction completion integrity — 11 October 2026
+
+After a model response, extraction previously marked each selected file extracted
+and wrote its audit separately, without checking whether its source had changed
+while the model was running. Completion now compares the prepared document
+identity (workspace/deal, file path, fingerprint, name/type/size/upload time and
+current revision status) in the status update. All successful source statuses
+and audits commit in one transaction. A changed, superseded or deleted source
+refuses the result with reload/re-extract guidance; an audit failure rolls back
+the earlier source writes too.
+
+Guarded procedure regressions change storage, fingerprint and revision state or
+delete a source during a stubbed model request. A database trigger fails the
+second audit insert to verify complete rollback; the unchanged two-source case
+verifies success. No live model call or financial arithmetic change is involved.
+This checks database source identity at completion, not a second storage rehash,
+model accuracy or a durable extraction receipt. The model request may already
+have incurred provider usage when a concurrent source change is detected.
+Durable receipts linking accepted inputs to a specific request remain the next
+priority, followed by stacked-release integration and customer-pack acceptance.

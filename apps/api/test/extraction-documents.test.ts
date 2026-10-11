@@ -334,3 +334,51 @@ it('refuses an unavailable selection before a model request with actionable sour
   await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: ['deleted-a', 'deleted-b'] })).rejects.toThrow(/2 selected documents are unavailable.*Reload the source list/);
   expect(request).not.toHaveBeenCalled();
 });
+
+const modelReply = () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 });
+
+describe('extraction completion commits the prepared source identities', () => {
+  it.each(['fingerprint', 'storage', 'revision', 'deletion'] as const)('refuses a concurrent %s change and rolls back earlier source status/audit writes', async change => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const first = await doc(`First ${change}.pdf`, 'pdf', Buffer.from('first'));
+    const second = await doc(`Second ${change}.pdf`, 'pdf', Buffer.from('second'));
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      if (change === 'deletion') await prisma.document.delete({ where: { id: second.id } });
+      else await prisma.document.update({ where: { id: second.id }, data:
+        change === 'fingerprint' ? { sha256: 'a'.repeat(64) } :
+          change === 'storage' ? { url: '/uploads/files/replaced.pdf' } : { supersededById: first.id },
+      });
+      return modelReply();
+    }));
+    await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow(/source changed.*Reload the source documents/);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: first.id } })).extraction).toBe('STORED');
+    if (change !== 'deletion') expect((await prisma.document.findUniqueOrThrow({ where: { id: second.id } })).extraction).toBe('STORED');
+    expect(await prisma.activityEvent.count({ where: { action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(0);
+  });
+
+  it('rolls back every source status and audit when the second audit insert fails', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    vi.stubGlobal('fetch', vi.fn(async () => modelReply()));
+    const first = await doc('Audit first.pdf', 'pdf', Buffer.from('first'));
+    const second = await doc('Audit second.pdf', 'pdf', Buffer.from('second'));
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_extraction_audit BEFORE INSERT ON ActivityEvent WHEN NEW.action = 'extracted scheme from' AND NEW.target = 'Audit second.pdf' BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END`);
+    try {
+      await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow();
+      expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['STORED', 'STORED']);
+      expect(await prisma.activityEvent.count({ where: { action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER fail_extraction_audit');
+    }
+  });
+
+  it('commits both statuses and scoped audit entries for unchanged sources', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    vi.stubGlobal('fetch', vi.fn(async () => modelReply()));
+    const first = await doc('Atomic first.pdf', 'pdf', Buffer.from('first'));
+    const second = await doc('Atomic second.pdf', 'pdf', Buffer.from('second'));
+    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] });
+    expect(result.sourceDocuments).toEqual([{ id: first.id, name: first.name }, { id: second.id, name: second.name }]);
+    expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['EXTRACTED', 'EXTRACTED']);
+    expect(await prisma.activityEvent.count({ where: { orgId: T.orgId, dealId: T.dealId, action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(2);
+  });
+});
