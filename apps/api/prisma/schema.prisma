@@ -815,7 +815,8 @@ model Task {
   deal    Deal   @relation(fields: [dealId], references: [id])
   title   String
   aspect  String
-  assignee String // a member’s initials — the demo founder’s used to be the default for every firm
+  assignee String // display snapshot; legacy rows retain their original initials
+  assigneeId String? // stable member identity; null means unresolved legacy assignment
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())

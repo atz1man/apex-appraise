@@ -27,6 +27,9 @@ test('saved field observations become reviewed project tasks and calendar comple
   };
   try {
     const deal = await rpc('deals.create', { name: 'Follow-up project', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
+    await rpc('org.invite', { name: 'Field Observer', email: `field-observer-${Date.now()}@example.test`, role: 'ANALYST' });
+    const colleague = (await query('org.members', undefined)).find((member: { name: string }) => member.name === 'Field Observer');
+    expect(colleague.initials).toBe('FO');
     const other = await rpc('deals.create', { name: 'Other project', address: 'Synthetic site B', assetType: 'RESIDENTIAL' });
     await rpc('inspections.save', { dealId: deal.id, rooms: [{ name: 'Exterior', condition: 2, photos: [], notes: 'Crack beside the entrance; investigate before valuation.' }], reconciledValue: null, approachWeights: { salesComparison: 60, cost: 20, income: 20 }, status: 'draft' });
     // API callers must not roll an impossible deadline into another month.
@@ -48,6 +51,7 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(panel.getByLabel('Follow-up title')).toHaveValue(/Crack beside/);
     const title = 'Arrange structural review of entrance crack';
     await panel.getByLabel('Follow-up title').fill(title);
+    await panel.getByLabel('Assign follow-up to').selectOption(colleague.id);
     await panel.getByLabel('Follow-up due date').fill('2030-03-31');
     page.once('dialog', dialog => dialog.dismiss());
     await page.getByRole('button', { name: 'Continue inspection', exact: true }).click();
@@ -67,8 +71,9 @@ test('saved field observations become reviewed project tasks and calendar comple
     expect(saved).toHaveLength(1);
     expect(saved[0].title).toBe(title);
     expect(saved[0].assignee).toBe('FO');
+    expect(saved[0].assigneeId).toBe(colleague.id);
     expect(saved[0].due).toBe('2030-03-31T00:00:00.000Z');
-    await expect(taskRow).toContainText('Field Owner');
+    await expect(taskRow).toContainText('Field Observer');
     expect(await query('tasks.list', { dealId: other.id })).toEqual([]);
     expect(await query('appraisal.getCurrent', deal.id)).toBeNull();
     // An exact duplicate open title is flagged before another submit.
@@ -77,6 +82,10 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(panel.getByRole('button', { name: 'Create project follow-up', exact: true })).toBeDisabled();
     await panel.getByRole('button', { name: 'Cancel follow-up', exact: true }).click();
     await panel.getByRole('link', { name: 'Open task calendar', exact: true }).click();
+    await page.getByRole('button', { name: 'Filter tasks for Field Owner', exact: true }).click();
+    await expect(page.getByText(title, { exact: true })).not.toBeVisible();
+    await page.getByRole('button', { name: 'Filter tasks for Field Observer', exact: true }).click();
+    await expect(page.getByText(title, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Complete task', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
     await page.goto(`/field?dealId=${deal.id}`);
@@ -127,7 +136,7 @@ test('a field follow-up can be handed to a real colleague with a chosen due date
     const panel = page.getByRole('region', { name: 'Field follow-ups', exact: true });
     await panel.getByRole('button', { name: /^Review follow-up for/ }).first().click();
     await panel.getByLabel('Follow-up title').fill(title);
-    await panel.getByLabel('Assign follow-up to').selectOption(colleague.initials);
+    await panel.getByLabel('Assign follow-up to').selectOption(colleague.id);
     await panel.getByLabel('Follow-up due date').fill('2030-10-27');
     // Member lookup failure must block assignment without discarding the form.
     await page.route('**/trpc/**', route => route.request().url().includes('org.members') ? route.abort() : route.continue());
@@ -152,7 +161,7 @@ test('a field follow-up can be handed to a real colleague with a chosen due date
     await expect(row).toContainText('27 Oct');
     await row.getByRole('button', { name: 'Edit follow-up', exact: true }).click();
     await panel.getByLabel('Follow-up title').fill(`${title} revised`);
-    await panel.getByLabel('Assign follow-up to').selectOption(session.principal.initials);
+    await panel.getByLabel('Assign follow-up to').selectOption(session.principal.userId);
     await panel.getByLabel('Follow-up due date').fill('2030-03-31');
     await page.route('**/trpc/tasks.update*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
     await panel.getByRole('button', { name: 'Save follow-up changes', exact: true }).click();
@@ -167,7 +176,7 @@ test('a field follow-up can be handed to a real colleague with a chosen due date
     await panel.getByLabel('Follow-up title').fill(`${title} unsaved draft`);
     const competing = await request.post('/trpc/tasks.update', {
       headers: { authorization: `Bearer ${session.token}` },
-      data: { json: { id: task.id, title: `${title} desk revision`, assignee: colleague.initials, expected: { title: edited.title, assignee: edited.assignee, due: edited.due, done: edited.done } } },
+      data: { json: { id: task.id, title: `${title} desk revision`, assignee: colleague.initials, expected: { title: edited.title, assignee: edited.assignee, assigneeId: edited.assigneeId, due: edited.due, done: edited.done } } },
     });
     expect(competing.status()).toBe(200);
     await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();

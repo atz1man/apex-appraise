@@ -86,7 +86,7 @@ test('a task can be given to any member of the firm, and only to a member', asyn
     await page.goto(`/deal/${id}/appraisal`);
     await expect(page.getByText('Unit schedule')).toBeVisible({ timeout: 20_000 });
     // the picker offers the new colleague, because it is the team and not a list
-    await expect(page.getByRole('button', { name: 'Assign new task to ZQ' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Assign new task to Zed Quill' })).toBeVisible();
     // and the API will not take initials the firm does not have
     const nobody = await call(page, 'tasks.create', { dealId: id, title: 'Nobody’s', aspect: 'Costs', assignee: 'QQ' });
     expect(nobody.ok).toBe(false);

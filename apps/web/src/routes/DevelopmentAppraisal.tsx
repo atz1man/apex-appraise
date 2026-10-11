@@ -328,9 +328,9 @@ export default function DevelopmentAppraisal() {
    * them as the default assignee of every task raised anywhere.
    */
   const { data: members } = trpc.org.members.useQuery();
-  const assignees = useMemo(() => Array.from(new Set((members ?? []).map((m) => m.initials))), [members]);
-  const myInitials = getPrincipal()?.initials ?? '';
-  const [newWho, setNewWho] = useState(myInitials);
+  const assignees = useMemo(() => members ?? [], [members]);
+  const myUserId = getPrincipal()?.userId ?? '';
+  const [newWho, setNewWho] = useState(myUserId);
 
   /** A DCF is a cross-check, so it starts from conventional UK settings. */
   const DEFAULT_DCF: DcfInput = {
@@ -1802,14 +1802,14 @@ export default function DevelopmentAppraisal() {
                   onChange={(e) => setNewTask(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newTask.trim() && !createTask.isPending) {
-                      createTask.mutate({ dealId, title: newTask.trim(), aspect, assignee: newWho });
+                      createTask.mutate({ dealId, title: newTask.trim(), aspect, assigneeId: newWho });
                       setNewTask('');
                     }
                   }}
                 />
                 {assignees.map((w) => (
-                  <button key={w} aria-label={`Assign new task to ${w}`} aria-pressed={newWho === w} onClick={() => setNewWho(w)} className="rounded-full" style={{ outline: newWho === w ? '2px solid rgb(var(--brand-ink, 20 80 59))' : 'none', outlineOffset: 1 }}>
-                    <Avatar initials={w} size={24} />
+                  <button key={w.id} aria-label={`Assign new task to ${w.name}`} aria-pressed={newWho === w.id} onClick={() => setNewWho(w.id)} className="rounded-full" style={{ outline: newWho === w.id ? '2px solid rgb(var(--brand-ink, 20 80 59))' : 'none', outlineOffset: 1 }}>
+                    <Avatar initials={w.initials} size={24} />
                   </button>
                 ))}
               </div>

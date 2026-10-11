@@ -4,7 +4,7 @@ let tenant: Tenant;
 beforeAll(async () => { resetDatabase(); tenant = await makeTenant('Task edits'); });
 async function fixture() {
   const task = await callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'Inspect roof', aspect: 'Field inspection', due: '2030-03-31' });
-  return { id: task.id, title: 'Review roof report', assignee: task.assignee, due: '2030-10-27', expected: { title: task.title, assignee: task.assignee, due: task.due!.toISOString(), done: task.done } };
+  return { id: task.id, title: 'Review roof report', assignee: task.assignee, due: '2030-10-27', expected: { title: task.title, assignee: task.assignee, assigneeId: task.assigneeId, due: task.due!.toISOString(), done: task.done } };
 }
 it('edits in place, preserves project/status and records both states', async () => {
   const input = await fixture();

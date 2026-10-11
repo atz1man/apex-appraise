@@ -11,7 +11,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
   const inspection = trpc.inspections.get.useQuery(dealId);
   const members = trpc.org.members.useQuery();
   const tasks = trpc.tasks.list.useQuery({ dealId, aspect: 'Field inspection' });
-  const [draft, setDraft] = useState<{ observation: string; title: string; assignee: string; due: string; edit?: { id: string; title: string; assignee: string; due: string | null; done: boolean } } | null>(null);
+  const [draft, setDraft] = useState<{ observation: string; title: string; assignee: string; due: string; edit?: { id: string; title: string; assignee: string; assigneeId: string | null; due: string | null; done: boolean } } | null>(null);
   const [notice, setNotice] = useState('');
   useUnsavedWarning(!!draft, 'this field follow-up');
   const create = trpc.tasks.create.useMutation({
@@ -25,8 +25,8 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
   const pending = create.isPending || update.isPending;
   const toggle = trpc.tasks.toggle.useMutation({ onSuccess: () => { void utils.tasks.list.invalidate(); } });
   const title = draft?.title.trim() ?? '';
-  const uniqueMembers = (members.data ?? []).filter(member => members.data?.filter(other => other.initials === member.initials).length === 1);
-  const assigneeValid = !!draft && !members.isError && !members.isLoading && uniqueMembers.some(member => member.initials === draft.assignee);
+  const availableMembers = members.data ?? [];
+  const assigneeValid = !!draft && !members.isError && !members.isLoading && availableMembers.some(member => member.id === draft.assignee);
   const duplicate = tasks.data?.some(task => task.id !== draft?.edit?.id && task.title === title && !task.done) ?? false;
   const observations = inspection.data?.rooms.filter(room => room.notes.trim() || room.condition > 0) ?? [];
   return (
@@ -44,7 +44,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
               <p className="mt-1 whitespace-pre-wrap break-words text-[12px]">{room.notes || 'No saved note.'}</p>
               <Button size="sm" variant="secondary" className="mt-2 min-h-11" disabled={!!draft || pending} onClick={() => {
                 setNotice(''); create.reset();
-                setDraft({ assignee: getPrincipal()?.initials ?? '', due: '', observation: `${room.name}: ${room.notes || `Condition ${room.condition}/5; no note recorded.`}`, title: `Review ${room.name}: ${room.notes.trim().slice(0, 180) || `condition ${room.condition}/5`}` });
+                setDraft({ assignee: getPrincipal()?.userId ?? '', due: '', observation: `${room.name}: ${room.notes || `Condition ${room.condition}/5; no note recorded.`}`, title: `Review ${room.name}: ${room.notes.trim().slice(0, 180) || `condition ${room.condition}/5`}` });
               }}>Review follow-up for {room.name}</Button>
             </div>
           ))}
@@ -57,20 +57,20 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
           if (draft.edit) {
             const { id, ...expected } = draft.edit;
             const originalDay = expected.due ? firmDayKey(expected.due) : '';
-            update.mutate({ id, title, assignee: draft.assignee, expected, ...(draft.due !== originalDay ? { due: draft.due || null } : {}) });
-          } else create.mutate({ dealId, aspect: 'Field inspection', title, assignee: draft.assignee, due: draft.due || undefined });
+            update.mutate({ id, title, assigneeId: draft.assignee, expected, ...(draft.due !== originalDay ? { due: draft.due || null } : {}) });
+          } else create.mutate({ dealId, aspect: 'Field inspection', title, assigneeId: draft.assignee, due: draft.due || undefined });
         }}>
           <p className="text-[12px] whitespace-pre-wrap break-words">{draft.edit ? 'Editing an existing follow-up. Completion status stays unchanged.' : `Observation selected for review: ${draft.observation}`}</p>
           <label className="block text-[12px] font-semibold">Follow-up title
             <textarea {...writeAttrs()} disabled={pending} value={draft.title} maxLength={240} required rows={3} className="mt-1 block w-full rounded-lg border border-border-std bg-surface p-2 text-[13px]" onChange={event => setDraft({ ...draft, title: event.target.value })} />
           </label>
           <label className="block text-[12px] font-semibold">Assign follow-up to
-            <select {...writeAttrs()} value={uniqueMembers.some(member => member.initials === draft.assignee) ? draft.assignee : ''} required disabled={pending || members.isLoading || members.isError} className="mt-1 block min-h-11 w-full rounded-lg border border-border-std bg-surface p-2 text-[13px]" onChange={event => setDraft({ ...draft, assignee: event.target.value })}>
+            <select {...writeAttrs()} value={availableMembers.some(member => member.id === draft.assignee) ? draft.assignee : ''} required disabled={pending || members.isLoading || members.isError} className="mt-1 block min-h-11 w-full rounded-lg border border-border-std bg-surface p-2 text-[13px]" onChange={event => setDraft({ ...draft, assignee: event.target.value })}>
               <option value="">Choose a colleague</option>
-              {(members.data ?? []).map(member => <option key={member.id} value={member.initials} disabled={!uniqueMembers.includes(member)}>{member.name} ({member.initials}){!uniqueMembers.includes(member) ? ' — shared initials' : ''}</option>)}
+              {(members.data ?? []).map(member => <option key={member.id} value={member.id}>{member.name} ({member.initials})</option>)}
             </select>
           </label>
-          {members.isError ? <p role="status" className="text-[12px]">Workspace members could not be loaded. <Button variant="ghost" size="sm" onClick={() => { void members.refetch(); }}>Retry members</Button></p> : members.isLoading ? <p role="status" className="text-[12px]">Loading workspace members…</p> : !assigneeValid ? <p role="status" className="text-[12px]">Choose a current member with unique initials before saving the follow-up.</p> : null}
+          {members.isError ? <p role="status" className="text-[12px]">Workspace members could not be loaded. <Button variant="ghost" size="sm" onClick={() => { void members.refetch(); }}>Retry members</Button></p> : members.isLoading ? <p role="status" className="text-[12px]">Loading workspace members…</p> : !assigneeValid ? <p role="status" className="text-[12px]">Choose a current member before saving the follow-up.</p> : null}
           <label className="block text-[12px] font-semibold">Follow-up due date
             <input {...writeAttrs()} type="date" disabled={pending} value={draft.due} className="mt-1 block min-h-11 w-full rounded-lg border border-border-std bg-surface p-2 text-[13px]" onChange={event => setDraft({ ...draft, due: event.target.value })} />
           </label>
@@ -91,10 +91,10 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
           <ul className="mt-2 space-y-3">
             {tasks.data.map(task => <li key={task.id} className="rounded-lg border border-border-std p-3">
               <p className="text-[12px] break-words">{task.title}</p>
-              <p className="mt-1 text-[11px] text-ink-2">{task.done ? 'Completed' : 'Open'} · {uniqueMembers.find(member => member.initials === task.assignee)?.name ?? (members.isLoading ? task.assignee : `${task.assignee} (member details unavailable or ambiguous)`)}{task.due ? ` · due ${firmDayLabel(task.due)}` : ''}</p>
+              <p className="mt-1 text-[11px] text-ink-2">{task.done ? 'Completed' : 'Open'} · {availableMembers.find(member => member.id === task.assigneeId)?.name ?? (members.isLoading ? task.assignee : `${task.assignee} (${task.assigneeId ? 'member unavailable' : 'legacy assignment; select a colleague when editing'})`)}{task.due ? ` · due ${firmDayLabel(task.due)}` : ''}</p>
               <Button size="sm" variant="secondary" className="mt-2 mr-2 min-h-11" disabled={!!draft || pending || toggle.isPending} onClick={() => {
                 setNotice(''); update.reset(); create.reset();
-                setDraft({ observation: '', title: task.title, assignee: task.assignee, due: task.due ? firmDayKey(task.due) : '', edit: { id: task.id, title: task.title, assignee: task.assignee, due: task.due ? new Date(task.due).toISOString() : null, done: task.done } });
+                setDraft({ observation: '', title: task.title, assignee: task.assigneeId ?? '', due: task.due ? firmDayKey(task.due) : '', edit: { id: task.id, title: task.title, assignee: task.assignee, assigneeId: task.assigneeId, due: task.due ? new Date(task.due).toISOString() : null, done: task.done } });
               }}>Edit follow-up</Button>
               <Button writes size="sm" variant="secondary" className="mt-2 min-h-11" disabled={!!draft || pending || toggle.isPending} onClick={() => toggle.mutate(task.id)}>{task.done ? 'Reopen follow-up' : 'Complete follow-up'}</Button>
             </li>)}
