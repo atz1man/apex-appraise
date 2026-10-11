@@ -150,10 +150,51 @@ test('a field follow-up can be handed to a real colleague with a chosen due date
     await page.reload();
     await expect(row).toContainText(colleague.name);
     await expect(row).toContainText('27 Oct');
+    await row.getByRole('button', { name: 'Edit follow-up', exact: true }).click();
+    await panel.getByLabel('Follow-up title').fill(`${title} revised`);
+    await panel.getByLabel('Assign follow-up to').selectOption(session.principal.initials);
+    await panel.getByLabel('Follow-up due date').fill('2030-03-31');
+    await page.route('**/trpc/tasks.update*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+    await panel.getByRole('button', { name: 'Save follow-up changes', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('update could not be confirmed');
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(`${title} revised`);
+    await page.unroute('**/trpc/tasks.update*');
+    await panel.getByRole('button', { name: 'Save follow-up changes', exact: true }).click();
+    await expect(panel.getByRole('status')).toContainText('Follow-up updated');
+    const edited = (await query('tasks.list', { dealId })).find((item: { id: string }) => item.id === task.id);
+    expect(edited).toMatchObject({ title: `${title} revised`, assignee: session.principal.initials, due: '2030-03-31T00:00:00.000Z', done: false });
+    await row.getByRole('button', { name: 'Edit follow-up', exact: true }).click();
+    await panel.getByLabel('Follow-up title').fill(`${title} unsaved draft`);
+    const competing = await request.post('/trpc/tasks.update', {
+      headers: { authorization: `Bearer ${session.token}` },
+      data: { json: { id: task.id, title: `${title} desk revision`, assignee: colleague.initials, expected: { title: edited.title, assignee: edited.assignee, due: edited.due, done: edited.done } } },
+    });
+    expect(competing.status()).toBe(200);
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(row).toContainText('desk revision');
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(`${title} unsaved draft`);
+    await panel.getByRole('button', { name: 'Save follow-up changes', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('changed elsewhere');
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(`${title} unsaved draft`);
+    expect((await query('tasks.list', { dealId })).find((item: { id: string }) => item.id === task.id).title).toBe(`${title} desk revision`);
+    await panel.locator('form').screenshot({ path: test.info().outputPath('field-edit-conflict.png') });
+    await panel.getByRole('button', { name: 'Cancel follow-up', exact: true }).click();
+    await row.getByRole('button', { name: 'Edit follow-up', exact: true }).click();
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(`${title} desk revision`);
+    await panel.getByLabel('Follow-up due date').fill('');
+    await panel.getByRole('button', { name: 'Save follow-up changes', exact: true }).click();
+    await expect(panel.getByRole('status')).toContainText('Follow-up updated');
+    expect((await query('tasks.list', { dealId })).find((item: { id: string }) => item.id === task.id).due).toBeNull();
+    await panel.getByRole('link', { name: 'Open task calendar', exact: true }).click();
+    await expect(page.getByText(`${title} desk revision`, { exact: true })).toBeVisible();
+    await page.goto(`/field?dealId=${dealId}`);
+    await expect(row).toContainText('desk revision');
+    await expect(row).not.toContainText('due');
+
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     const tasks = await query('tasks.list', { dealId });
-    for (const task of tasks.filter((task: { title: string }) => task.title === title)) {
+    for (const task of tasks.filter((task: { title: string }) => task.title.startsWith(title))) {
       const response = await request.post('/trpc/tasks.remove', { headers: { authorization: `Bearer ${session.token}` }, data: { json: task.id } });
       expect(response.status()).toBe(200);
     }
