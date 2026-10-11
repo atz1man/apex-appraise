@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { InspectionConflict } from '../components/InspectionConflict';
 import { SiteMap } from '../components/SiteMap';
@@ -10,8 +10,12 @@ import { indexedDbPhotoStore, memoryPhotoStore, type PhotoStore } from '../lib/p
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
+import { unsavedWork, unsavedMessage } from '../lib/unsaved';
 import { loadFailure } from '../lib/load-failure';
 import { accent, brand, brandInk, fixed, neutral, onFill, placeholderGradients } from '@apex/ui-tokens';
+
+// The project follow-up tools load only when a project is opened.
+const FieldFollowups = lazy(() => import('../components/FieldFollowups').then(module => ({ default: module.FieldFollowups })));
 
 /**
  * `photos` is a list of `SitePhoto` ids, not a count.
@@ -549,6 +553,8 @@ export default function FieldApp() {
 
   const go = (s: Screen) => {
     if (s !== 'appraisals' && !dealId) return;
+    const unsaved = unsavedWork();
+    if (s !== screen && unsaved && !confirm(unsavedMessage(unsaved))) return;
     setScreen(s);
   };
 
@@ -712,7 +718,7 @@ export default function FieldApp() {
         <div className="relative h-[248px]" style={{ background: placeholderGradients.scene }}>
           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(10,20,15,0.28) 0%,rgba(10,20,15,0) 32%,rgba(10,20,15,0) 52%,rgba(10,20,15,0.55) 100%)' }} />
           <div className="absolute top-[54px] left-[18px] right-[18px] flex justify-between">
-            <BackBtn light onClick={() => setScreen('appraisals')} />
+            <BackBtn light onClick={() => go('appraisals')} />
           </div>
           <div className="absolute left-5 bottom-[18px] right-5">
             <span className="inline-flex px-[9px] py-1 rounded-[7px] bg-white/85 label-mono" style={{ color: 'rgb(var(--brand-ink, 20 80 59))' }}>
@@ -740,6 +746,8 @@ export default function FieldApp() {
           </div>
           <p className="mt-3 text-[11px] text-ink-3">Save inspection observations to share them with the desk. They do not automatically change the appraisal figures.</p>
         </section>
+
+        <Suspense fallback={<p role="status" className="m-4 text-[12px]">Loading field follow-ups…</p>}><FieldFollowups key={deal.id} dealId={deal.id} /></Suspense>
 
         {/* key facts */}
         <div className="flex bg-surface border-b border-border-std py-[15px] px-1.5">
@@ -805,13 +813,13 @@ export default function FieldApp() {
       <CtaBar>
         <div className="flex gap-2.5">
           <button
-            onClick={() => setScreen('inspection')}
+            onClick={() => go('inspection')}
             className={`flex-1 flex items-center justify-center gap-2 h-[52px] rounded-[15px] bg-brand-700 text-white text-[15px] font-semibold ${PRESS}`}
           >
             {inspection?.status === 'submitted' ? 'Review inspection' : rated > 0 ? 'Continue inspection' : 'Start inspection'} {ARROW}
           </button>
           <button
-            onClick={() => setScreen('comps')}
+            onClick={() => go('comps')}
             aria-label="Comparable sales"
             className={`flex-none w-[52px] h-[52px] rounded-[15px] border border-border-strong bg-surface flex items-center justify-center text-brand-ink ${PRESS}`}
           >
