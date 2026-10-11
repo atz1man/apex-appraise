@@ -45,3 +45,30 @@ then agree latency/error targets and measure sustained load on an authorised
 staging environment. Provider-funded extraction and actual infrastructure costs
 remain separate owner-dependent evidence. Never run this fixture against a
 customer workspace or substitute its timings for professional acceptance.
+
+## Report/upload contention profile
+
+The same command also runs `report-upload.spec.ts` and retains `report-upload.json`.
+It creates two synthetic workspaces and concurrently uploads six byte-distinct,
+small PDFs with the same filename. Downloads must match the original SHA-256,
+storage URLs must be unique, and the other workspace must receive 404. Six PDF
+report requests then compete for the existing two renderer slots: successful
+responses must have PDF headers, the expected filename and a complete PDF marker;
+busy responses must be 503 with Retry-After 5 and actionable retry text. After all
+burst jobs settle, a sequential report request from each workspace must succeed.
+
+Both profiles passed locally on 11 October 2026. CI evidence belongs to the exact
+PR commit and artifact. This adds real renderer saturation/recovery and file-byte
+checks; it does not compare PDF text/layout, model large scans or establish cost,
+sustained throughput or customer capacity. No paid provider requests are made.
+
+### File lifecycle finding
+
+The audit found that `org.deleteWorkspace` deletes database records through
+`orgCascadeDeletes` but does not remove referenced files from upload storage.
+The contention fixture removes its workspace records; disposable CI volume
+teardown removes residual fixture bytes. This is **not evidence of physical file
+erasure by the product**. The next priority is durable, retryable cleanup of the
+workspace's uploaded documents/photos/logos, with tests for failures, shared
+references, concurrent uploads and preservation of other tenants' data. Backups
+and published retention policy require separate operator evidence.

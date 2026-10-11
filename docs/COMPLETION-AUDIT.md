@@ -129,3 +129,17 @@ load baseline item; it does not close capacity, large-document, sustained-load,
 resource-cost or live-AI budget acceptance. Next extend representative data sizes
 and measure the report/upload workload before proposing customer service targets.
 PR #51's spreadsheet fix is merged at `1d247ae7527d7a2144028d3c9e34ecd7c569f552`.
+
+## Report/upload contention and lifecycle finding — 11 October 2026
+
+The new report/upload profile verifies six concurrent same-name uploads across
+two synthetic workspaces, byte-exact downloads, foreign access refusals, bounded
+PDF renderer busy responses and successful retry after the burst. Both HTTP
+profiles passed locally; exact-head built-stack results belong to the PR artifact.
+The baseline increment PR #52 merged as `12625c98bd153f1eeb8baf84a53602bff7205853`.
+
+**New open defect:** workspace erasure deletes records but its current path does
+not delete uploaded file bytes. Do not claim physical document erasure from the
+existing workspace-deletion tests. Prioritise durable file cleanup and its failure,
+concurrency and isolation regressions before further capacity expansion. See
+LOAD-BASELINE.md. No production deployment or live-provider activation occurred.
