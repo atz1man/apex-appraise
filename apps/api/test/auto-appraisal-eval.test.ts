@@ -31,4 +31,29 @@ describe('Codex extraction evaluation discriminates incorrect results', () => {
     output.cases[0]!.units[0]!.area = 450;
     expect(grade(output).filter(c => !c.passed).map(c => c.id)).toEqual(['explicit', 'revision']);
   });
+  it('rejects numerically correct schedules assigned to the wrong property types', () => {
+    const output = correct();
+    const mixed = output.cases.find(c => c.id === 'mixed-schedule')!;
+    [mixed.units[0]!.label, mixed.units[1]!.label] = [mixed.units[1]!.label, mixed.units[0]!.label];
+    expect(grade(output).find(c => c.id === mixed.id)!.passed).toBe(false);
+  });
+  it.each(['', '   ', 'units', 'flat houses'])('rejects ambiguous or missing property type: %j', label => {
+    const output = correct(); output.cases[0]!.units[0]!.label = label;
+    expect(grade(output)[0]!.passed).toBe(false);
+  });
+  it('accepts descriptive labels, singular types and reordered rows without losing identity', () => {
+    const output = correct();
+    output.cases[0]!.units[0]!.label = 'Schedule A FLAT';
+    const mixed = output.cases.find(c => c.id === 'mixed-schedule')!;
+    mixed.units[0]!.label = 'Block A flats'; mixed.units[1]!.label = 'Block B house';
+    mixed.units.reverse(); output.cases.reverse();
+    expect(grade(output).every(c => c.passed)).toBe(true);
+  });
+  it.each(['not-explicit', 'explicit-other', 'another-case: mentions explicit'])('rejects substring-only source identity: %s', source => {
+    const output = correct(); output.cases[0]!.units[0]!.source = source;
+    expect(grade(output)[0]!.passed).toBe(false);
+  });
+  it('rejects invented top-level financial output', () => {
+    expect(() => grade({ ...correct(), gdv: 123456 })).toThrow();
+  });
 });

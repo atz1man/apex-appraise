@@ -21,11 +21,15 @@ key. A fresh temporary directory holds the raw response and report. The final
 console line gives the report path. There is a three-minute process timeout,
 read-only sandbox and no API fallback; runs that use tools are rejected.
 
-Scoring checks exact numeric inputs and raw nulls before production defaults can
-hide missing evidence, requires case-linked sources, refuses unknown fields and
+Scoring checks exact numeric inputs paired with property types and raw nulls before production defaults can
+hide missing evidence, requires exact case IDs at the start of sources, refuses unknown fields and
 validates each result through Apex's `zExtraction`. Missing core unit fields must
 produce no invented units. The model does not compute appraisal money. Existing
 appraisal round-trip and engine tests exercise the deterministic calculations.
+For these fixtures, labels must retain `flat`/`flats` or `house`/`houses`;
+descriptive prefixes and singular/plural forms are accepted. Ambiguous labels
+containing both types fail. Sources may be the case ID alone or begin with
+`case-id:`; this checks fixture identity, not the truth of a citation's text.
 
 Run `pnpm --filter @apex/api exec vitest run test/auto-appraisal-eval.test.ts`
 for deterministic scorer regressions without using the subscription. Those tests
@@ -40,6 +44,15 @@ synthetic cases; 87 existing API regressions passed across extraction documents,
 source review, model deadlines, AI disclosure, appraisal round-trips and demo
 behaviour. These API tests mock provider responses; they do not prove Claude
 quality or paid-provider availability.
+
+The follow-up scorer audit reproduced eight false acceptances: swapped property
+types, three missing/ambiguous type labels, three substring-only source IDs and
+invented top-level financial output. All are rejected after the fix. The scorer
+suite now has 17 passing tests, including reordered rows and descriptive labels
+that must still pass. Replaying the original saved Codex response passes all
+eight fixtures under the stricter scorer, without another provider request.
+The prompt now states the label/source formatting contract explicitly; the
+replay is evidence about the stored response, not a new run of that prompt.
 
 This is an initial, repeatable text-evaluation harness, not exhaustive AI testing
 or activation of the website's Extract button through Codex. It does not test

@@ -28,8 +28,15 @@ const zRaw = z.object({
   id: z.string(), asking: z.number().nullable(), s106: z.number().nullable(),
   units: z.array(z.object({ label: z.string().min(1), count: z.number(), area: z.number(), value: z.number(), source: z.string().min(1) }).strict()),
 }).strict();
+// This fixture vocabulary allows descriptive prefixes without treating a correct
+// numeric tuple attached to the wrong property type as correct extraction.
+function propertyType(label: string) {
+  const types = new Set((label.toLowerCase().match(/\b(?:flats?|houses?)\b/g) ?? []).map(t => t.replace(/s$/, '')));
+  return types.size === 1 ? [...types][0] : null;
+}
+const zEnvelope = z.object({ cases: z.array(z.unknown()) }).strict();
 export function grade(raw: unknown) {
-  const rows = (raw as { cases?: unknown[] } | null)?.cases;
+  const rows = zEnvelope.parse(raw).cases;
   if (!Array.isArray(rows) || rows.length !== cases.length) throw new Error('Expected exactly the complete fixture set');
   const ids = rows.map(r => (r as { id?: string })?.id);
   if (new Set(ids).size !== cases.length || cases.some(c => !ids.includes(c.id))) throw new Error('Missing, duplicate or unexpected fixture identity');
@@ -37,11 +44,11 @@ export function grade(raw: unknown) {
     const row = rows.find(r => (r as { id: string }).id === c.id) as Record<string, unknown>;
     const parsed = zExtraction.safeParse(row);
     // Judge raw missing values, before production defaults could conceal invention.
-    const observed = parsed.success ? parsed.data.units.map(u => [u.count, u.area, u.value]).sort() : null;
-    const expected = c.units.map(u => [u.count, u.area, u.value]).sort();
+    const observed = parsed.success ? parsed.data.units.map(u => [propertyType(u.label), u.count, u.area, u.value]).sort() : null;
+    const expected = c.units.map(u => [propertyType(u.label), u.count, u.area, u.value]).sort();
     const passed = zRaw.safeParse(row).success && parsed.success && JSON.stringify(observed) === JSON.stringify(expected)
       && row.asking === c.asking && row.s106 === c.s106
-      && parsed.data.units.every(u => typeof u.source === 'string' && u.source.includes(c.id));
+      && parsed.data.units.every(u => typeof u.source === 'string' && (u.source === c.id || u.source.startsWith(`${c.id}:`)));
     return { id: c.id, passed };
   });
 }
