@@ -197,3 +197,27 @@ acceptance. No engine arithmetic, schema or provider configuration changed.
 PR #54 was merged before this increment. Next retain explicit conflict recovery
 and reviewable observation-to-task/appraisal handoffs in the field roadmap; the
 physical-upload erasure defect remains open and is still a release concern.
+
+
+## Inspection conflict recovery — 11 October 2026
+
+PR #55's snapshot protection was merged at `c426c86054f60dda78a23bc9fc1c26c6df82bb5c`
+before this increment. Field and Workbench now present a persistent recovery panel
+when a save conflicts. Users can download their current draft and open the latest
+same-project record in a separate tab, compare it and explicitly enter reviewed
+changes. Recovery never silently adopts a newer save stamp or overwrites the
+original tab. The JSON is labelled unsaved/manual-review only; it includes photo
+references, not image bytes or queued photos, and has no automatic import.
+
+The real browser regressions now verify draft contents and original version stamp,
+absence of the session token in the export, latest-record loading in a new tab,
+successful reviewed saves checked against the API, and preservation of the original
+draft. Both surfaces passed at 390px without horizontal overflow. Seven focused
+field/photo/offline/project journeys, 388 web unit/guard checks, web typecheck,
+production build and bundle budget passed locally. Exact-commit CI is recorded
+on the PR. This is manual recovery, not automatic merging, cold-offline notes
+backup, full mobile acceptance or production deployment.
+
+Next priorities remain durable physical-upload erasure and explicit reviewed
+observation-to-task/appraisal handoff. Live provider, release and professional
+acceptance gaps in this audit remain open.

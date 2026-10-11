@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { InspectionConflict } from '../components/InspectionConflict';
 import { SiteMap } from '../components/SiteMap';
 import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal, getToken } from '../lib/trpc';
@@ -577,6 +578,11 @@ export default function FieldApp() {
   ];
   const readyPct = Math.round((readiness.filter(([, ok]) => ok).length / readiness.length) * 100);
 
+  const conflict = save.error?.data?.code === 'CONFLICT' && save.variables?.dealId === dealId ? (
+    <InspectionConflict dealId={dealId} latestUrl={`/field?dealId=${dealId}`}
+      draft={{ source: 'field', baseUpdatedAt: held, rooms, reconciledValue: value, approachWeights: weights }} />
+  ) : null;
+
   // ---------- screens ----------
 
   const appraisalsScreen = (
@@ -841,6 +847,7 @@ export default function FieldApp() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
+        {conflict}
         {/**
           * The viewfinder, showing the camera.
           *
@@ -1159,6 +1166,7 @@ export default function FieldApp() {
         <div className="text-[19px] font-bold tracking-[-0.4px]">Valuation</div>
       </div>
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
+        {conflict}
         {/* hero value */}
         <div className="relative rounded-[20px] overflow-hidden p-5" style={{ background: `linear-gradient(155deg,${brand[600]} 0%,${brand[700]} 60%,${brand[800]} 100%)` }}>
           <div className="absolute rounded-full" style={{ top: -30, right: -30, width: 140, height: 140, background: 'rgba(255,255,255,0.06)' }} />
