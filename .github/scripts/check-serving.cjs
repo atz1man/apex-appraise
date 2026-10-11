@@ -1,24 +1,38 @@
 const { setTimeout: delay } = require('node:timers/promises');
 
 async function readResponse(url, timeoutMs) {
-  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
-  if (response.status !== 200) {
-    await response.body?.cancel();
-    throw new Error(`${url.pathname}: expected HTTP 200, received ${response.status}`);
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > 2 * 1024 * 1024) throw new Error(`${url.pathname}: response exceeds 2 MiB check budget`);
-      chunks.push(Buffer.from(value));
+  const controller = new AbortController();
+  let timer;
+  // Bound the caller independently of fetch/body cancellation. A transport that
+  // stalls during abort cleanup must not hold the deployment workflow open.
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${url.pathname}: response deadline exceeded`));
+      controller.abort();
+    }, timeoutMs);
+  });
+  const read = async () => {
+    const response = await fetch(url, { redirect: 'error', signal: controller.signal });
+    if (response.status !== 200) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error(`${url.pathname}: expected HTTP 200, received ${response.status}`);
     }
-  } finally { await reader.cancel().catch(() => {}); }
-  return { type: (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase(), text: Buffer.concat(chunks).toString('utf8') };
+    const reader = response.body.getReader();
+    const chunks = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 2 * 1024 * 1024) throw new Error(`${url.pathname}: response exceeds 2 MiB check budget`);
+        chunks.push(Buffer.from(value));
+      }
+    } finally { void reader.cancel().catch(() => {}); }
+    return { type: (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase(), text: Buffer.concat(chunks).toString('utf8') };
+  };
+  try { return await Promise.race([read(), deadline]); }
+  finally { clearTimeout(timer); controller.abort(); }
 }
 
 /** Public, read-only serving checks; no accounts, payments or provider requests. */

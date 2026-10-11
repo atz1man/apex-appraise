@@ -68,3 +68,8 @@ test('times out a response that stalls after sending headers', { timeout: 5000 }
   const { url } = await fixture(t, { '/login': (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.write('<div'); } });
   await assert.rejects(checkServing(url, { timeoutMs: 100 }));
 });
+
+test('bounds the caller even when a transport never settles after abort', { timeout: 1000 }, async t => {
+  t.mock.method(globalThis, 'fetch', () => new Promise(() => {}));
+  await assert.rejects(checkServing('http://127.0.0.1', { timeoutMs: 25 }), /response deadline exceeded/);
+});

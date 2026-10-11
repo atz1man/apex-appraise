@@ -259,3 +259,11 @@ runs are not substituted for it. Production restore acceptance, deployment
 credentials and the customer-launch gates remain open. The next delivery step is
 review of this combined candidate, followed by exact-main CI before any authorized
 release. No production deployment is included in this consolidation.
+
+
+The combined local run exposed a stalled-body timeout regression in the serving
+checker: its timeout test hit the five-second test limit. The checker now races
+an explicit request deadline independently of transport abort, clears its timer
+and aborts the transport on completion. A never-settling transport regression
+covers that deadline in addition to the real HTTP stalled-body test. This is a
+release-check reliability fix; it does not change application request handling.
