@@ -5,6 +5,7 @@ import { registerAdmin } from './admin.js';
 import { createContext } from './context.js';
 import { appRouter } from './router.js';
 import { registerUploads } from './uploads.js';
+import { startUploadErasure } from './upload-erasure.js';
 import { registerReports } from './reports.js';
 import { registerTiles } from './tiles.js';
 import { registerStaticMap } from './staticmap.js';
@@ -141,6 +142,12 @@ async function main() {
   } catch (e) {
     app.log.error(e, 'sealing existing credentials failed — they remain readable in the database');
   }
+
+  const stopErasure = startUploadErasure(prisma,
+    (result) => app.log.warn(result, 'upload erasure drain'),
+    () => app.log.error('upload erasure drain failed'),
+  );
+  app.addHook('onClose', async () => { stopErasure(); });
 
   const drain = setInterval(() => {
     void drainWebhooks(prisma).catch((e: unknown) => app.log.error(e, 'webhook drain failed'));

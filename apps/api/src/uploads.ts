@@ -8,6 +8,7 @@ import { Transform } from 'node:stream';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { lockUploadOwner } from './upload-owner.js';
 import type { PrismaClient } from '@prisma/client';
 import { issuedBefore, prisma, principalFromAuthHeader } from './context.js';
 import { guard, internalWriter } from './http-guards.js';
@@ -20,7 +21,7 @@ export function uploadPathFor(url: string): string | null {
   const prefix = '/uploads/files/';
   if (!url.startsWith(prefix)) return null;
   const key = url.slice(prefix.length);
-  if (key.includes('/') || key.includes('..')) return null; // no traversal
+  if (!key || key === '.' || key === '..' || /[\\/\x00]/.test(key)) return null; // one filename, no traversal
   return path.join(UPLOAD_DIR, key);
 }
 
@@ -139,6 +140,17 @@ async function refuse(reply: FastifyReply, code: number, error: string, ...keys:
   return reply.code(code).send({ error });
 }
 
+/** A rejected in-flight upload must remain retryable if unlink fails, including
+ * when its workspace was erased while the bytes were streaming. */
+async function discardUpload(db: PrismaClient, key: string) {
+  try { await unlink(path.join(UPLOAD_DIR, key)); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    const url = `/uploads/files/${key}`;
+    await db.uploadErasure.upsert({ where: { url }, create: { url }, update: {} });
+  }
+}
+
 export async function registerUploads(app: FastifyInstance, db: PrismaClient = prisma) {
   await mkdir(UPLOAD_DIR, { recursive: true });
   await app.register(multipart, {
@@ -167,7 +179,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
 
   app.get<{ Params: { '*': string }; Querystring: { t?: string } }>('/uploads/files/*', async (req, reply) => {
     const key = req.params['*'];
-    if (!key || key.includes('..')) return reply.code(400).send({ error: 'bad key' });
+    if (!uploadPathFor(`/uploads/files/${key}`)) return reply.code(400).send({ error: 'bad key' });
 
     const access = await accessForKey(key, db);
     const owner = access.owner;
@@ -248,6 +260,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
       const ext = stored.filename.includes('.') ? stored.filename.split('.').pop()! : 'pdf';
       const upload = stored;
       const doc = await db.$transaction(async (tx) => {
+        await lockUploadOwner(tx, user.orgId);
         const row = await tx.document.create({
           data: {
             orgId: user.orgId,
@@ -276,7 +289,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
       retained = true;
       return { id: doc.id, url: doc.url };
     } finally {
-      if (stored && !retained) await unlink(path.join(UPLOAD_DIR, stored.key)).catch(() => {});
+      if (stored && !retained) await discardUpload(db, stored.key);
     }
   });
 
@@ -318,7 +331,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
       retained = true;
       return { url };
     } finally {
-      if (stored && !retained) await unlink(path.join(UPLOAD_DIR, stored.key)).catch(() => {});
+      if (stored && !retained) await discardUpload(db, stored.key);
     }
   });
 
@@ -372,6 +385,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
       const wc = new Date(taken);
       wc.setUTCDate(wc.getUTCDate() - ((wc.getUTCDay() + 6) % 7));
       const photo = await db.$transaction(async (tx) => {
+        await lockUploadOwner(tx, user.orgId);
         const row = await tx.sitePhoto.create({
           data: {
             orgId: user.orgId,
@@ -408,7 +422,7 @@ export async function registerUploads(app: FastifyInstance, db: PrismaClient = p
       retained = true;
       return { id: photo.id, url: photo.url };
     } finally {
-      if (key && !retained) await unlink(path.join(UPLOAD_DIR, key)).catch(() => {});
+      if (key && !retained) await discardUpload(db, key);
     }
   });
 }

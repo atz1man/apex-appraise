@@ -26,6 +26,18 @@ export async function orgCascadeDeletes(
   const users = await prisma.user.findMany({ where: { orgId }, select: { email: true } });
   const throttleKeys = users.flatMap((u) => throttleKeysFor(u.email));
   return [
+    // Serialise the snapshot with upload commits. A no-op update takes a row
+    // lock in Postgres (and a write lock in SQLite) without changing firm data.
+    prisma.$executeRaw`UPDATE "Organisation" SET "id" = "id" WHERE "id" = ${orgId}`,
+    // Snapshot inside the SAME transaction as deletion, before references go.
+    // This outbox intentionally outlives the org and retries after a restart.
+    prisma.$executeRaw`INSERT INTO "UploadErasure" ("url", "createdAt", "nextAttemptAt")
+      SELECT "url", ${new Date()}, ${new Date()} FROM (
+        SELECT "url" FROM "Document" WHERE "orgId" = ${orgId}
+        UNION SELECT "url" FROM "SitePhoto" WHERE "orgId" = ${orgId}
+        UNION SELECT "logoUrl" AS "url" FROM "Organisation" WHERE "id" = ${orgId}
+      ) AS files WHERE "url" LIKE '/uploads/files/%'
+      ON CONFLICT ("url") DO NOTHING`,
     prisma.salesMilestone.deleteMany({ where: { unit: { orgId } } }),
     prisma.holding.deleteMany({ where: { investor: { orgId } } }),
     prisma.cashflow.deleteMany({ where: { investor: { orgId } } }),

@@ -221,3 +221,28 @@ backup, full mobile acceptance or production deployment.
 Next priorities remain durable physical-upload erasure and explicit reviewed
 observation-to-task/appraisal handoff. Live provider, release and professional
 acceptance gaps in this audit remain open.
+
+## Durable workspace file cleanup — 11 October 2026
+
+PR #56 was green and merged at `5e277f131a791bef2a742292d9d3f3e29d9fe6c2`
+before this increment. The physical-upload gap now has a bounded implementation:
+workspace deletion and demo reset queue currently referenced document/photo/logo
+files in the same database transaction as record deletion. The durable outbox
+survives the workspace and retries on startup and every minute. The worker
+preserves live references from any tenant, refuses nonlocal paths, handles a crash
+between unlink and acknowledgement, and backs off failures. Upload metadata
+commits serialise with the workspace snapshot; a stream finishing after deletion
+is refused and cleaned up. Failed rejected-upload removal is also queued.
+
+Settings describes asynchronous active-storage removal and separate backup
+retention. Real Fastify uploads plus tRPC deletion tests inspect actual bytes,
+cover all three file kinds, failed unlink/retry, transaction rollback, surviving
+foreign files/shared references, invalid paths and upload/delete interleavings.
+Scheduler checks cover startup, no overlapping drains, retry and stop. Exact-head
+CI evidence is recorded on the PR; no production deletion or deployment occurred.
+
+Remaining erasure work: historical orphan inventory, crash-during-stream cleanup,
+backup retention and post-restore erasure reconciliation, operator alert delivery
+and a measured deletion SLA. This does not close comprehensive erasure acceptance.
+Next customer-workflow priority remains reviewed field-observation handoff into
+project tasks/appraisal inputs; all provider/professional acceptance gates remain.
