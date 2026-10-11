@@ -29,7 +29,7 @@ if (decoded.some(e => toolTypes.has(e.item?.type))) throw new Error('Evaluation 
 const results = grade(JSON.parse(readFileSync(join(dir, 'output.json'), 'utf8')));
 const report = { mode: 'local Codex subscription evaluation', cases: results, passed: results.filter(r => r.passed).length, total: results.length,
   limits: 'Synthetic text extraction only. Not the Anthropic route, PDF/drawing interpretation, production integration or professional acceptance.',
-  usage: decoded.findLast(e => e.type === 'turn.completed')?.usage ?? null,
+  usage: [...decoded].reverse().find(e => e.type === 'turn.completed')?.usage ?? null,
 };
 writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ passed: report.passed, total: report.total, report: join(dir, 'report.json') }));
