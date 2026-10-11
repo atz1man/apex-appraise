@@ -30,18 +30,18 @@ memory, or commits between the two.
 ## Commands
 
 - `pnpm install && pnpm db:push && pnpm seed && pnpm dev` — full local start.
-- `pnpm --filter @apex/appraisal-engine test` — engine tests (296; golden Bournemouth fixture
+- `pnpm --filter @apex/appraisal-engine test` — engine tests (319; golden Bournemouth fixture
   locked to the penny — GDV £4,278,000, residual £406,711.36, PoC 25%).
-- `cd apps/api && npx vitest run` — API tests (1084). See the container gotcha below before
+- `cd apps/api && npx vitest run` — API tests (1314). See the container gotcha below before
   trusting a green run.
-- `cd apps/web && npx vitest run` — web unit tests (360): the pure decision modules in
+- `cd apps/web && npx vitest run` — web unit tests (388): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, comp-proximity, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, review-source-versions, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.
   A judgement worth testing at its boundaries gets lifted out of the component that cannot be.
-- `cd apps/web && npx playwright test` — e2e (197, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
+- `cd apps/web && npx playwright test` — e2e (226, incl. a both-theme WCAG contrast sweep; needs web 5273 + api 4100 running).
 - `pnpm --filter @apex/mcp-server test` — MCP server tests (17), driven over a real
   in-memory transport with a real client rather than by calling the handlers: what can be
   wrong is the WIRING — a schema that will not accept what a model would sensibly send, a
@@ -132,6 +132,27 @@ Logins (seed): `arthur@apexappraise.co.uk` / `demo`; also investor@demo.co.uk, b
 
 ## Mechanical guards (whole-codebase sweeps)
 
+Release checks are part of the contract too: CI runs the web unit suite, including
+its component sweeps. The manual Deploy workflow requires a successful `ci.yml`
+push run on main for the exact release commit (`.github/scripts/require-ci.cjs`;
+tested with `node --test .github/scripts/require-ci.test.cjs`). An older green
+commit or an unfinished run cannot authorise a release. Hand deployments must
+check that evidence themselves. The root `.dockerignore` excludes local secrets,
+databases and uploads from remote build contexts; never remove those exclusions
+to fix a build. Email logs record delivery failures only, never message contents,
+recipients or raw SMTP errors (`apps/api/test/email-logging.test.ts`); demo admins
+read undelivered messages through the scoped mailbox in Settings.
+
+Subscription access also reconciles from signed Stripe subscription/invoice
+webhooks, not only from Settings (`subscription-webhook.test.ts`). Match the
+stored customer to exactly one workspace; metadata is not a tenant selector.
+Read current Stripe state rather than replaying an event's plan, and return a
+failure if reconciliation fails so Stripe retries. The plan update compares the
+stored billing fields with the pre-fetch snapshot and writes its audit event in
+the same transaction; an overlapping stale response must not replace a newer
+plan. Empty workspaces still get an organisation-level audit event. Existing
+Stripe endpoints must enable the additional event types listed in `infra/DEPLOY.md`.
+
 Each of these walks the REAL router or schema rather than a hand-kept list, because each
 was written after the same defect was found and fixed by hand several times over. Adding a
 procedure or a model without satisfying them fails CI with a message naming yours — that is
@@ -216,6 +237,47 @@ the point, so read the failure rather than adding an exemption.
   mistake with a different number; a fixed character count is a guess about how far away the thing
   you are looking for is. NOT PROVEN and said in the test: that the message reaches anybody — a
   `throw` into a swallowing `catch` passes it. The audible channel is `announcements`' business.
+- **A panel that reports an analysis has done the analysis** (`web/src/lib/comp-proximity.test.ts`
+  + `packages/appraisal-engine/test/geo.test.ts` + a case in `seed-depth.test.ts`). The
+  Comparables screen's "Evidence quality" panel — the panel a valuer reads to decide whether the
+  evidence supports the rate they are about to sign — printed the row "Comps within 0.8 mi" as
+  `{comps.length} / {comps.length}`. Every comparable, always, on every deal. Nothing in this
+  repository computed a DISTANCE at all, so a file of evidence twenty miles from the subject read
+  as entirely local. It is not a cosmetic figure: proximity is the first thing comparable evidence
+  is argued on, the adjustment grid carries a Location column precisely because distance has to be
+  priced, and the row sat two inches under a map that already knew which comparables were located
+  and said "3 of 5 geolocated" — the screen held the facts, drew them, and asserted something else
+  beside them. `distanceMiles` (`engine/geo.ts`) is the engine's for the reason
+  `one-engine-sweep` keeps; haversine rather than the law of cosines, which is the same arithmetic
+  rearranged and loses precision at exactly the range this is used over, where two comparables on
+  the same street must not come back zero. THE JUDGEMENT WITH BOUNDARIES, and why it is a module
+  rather than a line in the route: **unknown is not far.** The obvious fix counts the comps inside
+  the radius and divides by the total, and that is wrong in the two states where a distance cannot
+  be had — a subject with no usable postcode, and a comparable nobody has geocoded. Both come out
+  as "0 of 5 within 0.8 mi", which a reader takes as "none of your evidence is local" and which is
+  the original defect's mirror image: a confident claim about data that does not exist. Each of
+  those states says what it does not know, and a PARTIAL measurement counts over the located
+  comparables and NAMES the ones it left out, because dividing by the full count scores an
+  ungeocoded comp as distant and dividing by the located ones silently answers about a subset of
+  the file. The panel also prints the FURTHEST, which is the figure a valuer is actually looking
+  for and the one a ratio hides. Deliberately NOT done: folding any of this into the confidence
+  badge beside it — the grid already has `adjLocation`, where the valuer prices location
+  themselves, and a product that asks for that judgement and then silently re-scores it has taken
+  the same fact into account twice, once without saying so. The DEMO was the same defect one layer
+  down: every seeded comparable wrote a distance into its own text ("Sold Apr 2026 · 0.6 mi ·")
+  and stored no coordinates, so the honest panel would have read "none of the 4 comparables are
+  geolocated" beside a meta claiming a distance, on the one workspace anyone can try. They are
+  placed now, from ONE `miles` feeding both the offset and the sentence, through one `offsetFrom`
+  that `demo-seed.ts` imports rather than restating (Northgate keeps its hand-written evidence and
+  predates the depth seed, which is exactly how two copies of the trigonometry would have got in),
+  and `seed-depth.test.ts` measures every one of them back with the engine against the deal's
+  cached geocode. That guard found a real one in the writing: a 0.25-mile step puts a comparable
+  at 0.55 mi whose text rounds to "0.6", so the step is 0.3 — every distance exact to the decimal
+  the meta prints, and the last two outside the radius, so the demo reads "2 / 4" and exercises
+  the counting instead of showing another hundred per cent. NOT reachable statically, and said in
+  the test: whether a comparable's stored coordinate is the RIGHT building. A distance is checkable
+  because it is arithmetic over two points; that the points are the ones the addresses name is a
+  geocoding question, and `lat`/`lng` are nullable on purpose because that lookup can fail.
 - **A figure the marketing page says this product computes, something computes**
   (`web/src/lib/landing-claims.test.ts`). `Landing.tsx` listed "CIL, S106, SDLT & VAT computed,
   not guessed". Three are true — `cilCharge`, `sdltCommercial`, and S106 as a figure stated in the
@@ -584,6 +646,18 @@ the point, so read the failure rather than adding an exemption.
   the edit safe needs verify-before-promote — a pending connection, a test sign-in through it,
   then promotion — which is a larger piece and sidesteps the migration problem rather than
   solving it.
+- `comparable-integrity.spec.ts` — the evidence grid's total and range use the
+  workspace's rate unit. Missing evidence is not high confidence or a zero value.
+  Blur saves are serialized, and Apply waits for them and any remaining edits
+  before the API reads the evidence. A failed save leaves edits visible and does
+  not apply old figures; editing, adding or removing evidence resets the applied
+  confirmation. The browser guard delays and refuses saves without changing the
+  shared demo appraisal; its batched mock runs operations concurrently like tRPC.
+  Add comp opens a blank evidence form rather than inventing a £220/ft² sale;
+  the address, entered rate and source are saved only on submission. Rates convert
+  from the workspace unit through the shared unit helper. Unsaved evidence warns
+  before navigation. `comparable-entry.test.ts` rejects blank addresses and
+  non-positive or non-finite rates at the API, including patches.
 - `outbound.ts` (not a sweep, but the same shape of rule) — the ONLY two URLs a customer
   chooses and this server then fetches are a webhook endpoint and an SSO issuer. Both go
   through `assertPublicHttpsUrl`, at the moment they are saved AND at every fetch, because
@@ -593,8 +667,11 @@ the point, so read the failure rather than adding an exemption.
   resolve — a name with no answer reaches nothing, and refusing here would make the guard
   depend on the machine running it having DNS, which is green on a laptop and red in CI.
   Both fetches also set `redirect: 'manual'`: a checked address stops being the address
-  reached the moment a 302 is honoured. NOT closed: DNS rebinding, which needs the
-  connection pinned to the checked address and so needs undici as a real dependency.
+  reached the moment a 302 is honoured. `publicHttpsFetch` also uses an undici
+  dispatcher whose socket lookup validates the exact addresses it returns, closing
+  DNS rebinding without changing Host, TLS SNI or certificate verification. DNS
+  failure at connection time fails closed. `outbound-connection.test.ts` drives a
+  public preflight followed by private socket resolution through real fetch.
 - `security.ts` batch rule — the rate limiter counts REQUESTS and tRPC batching puts many
   operations in one, so the 10/min `auth` budget was 10 BATCHES/min. Measured: one request
   carrying 60 logins was accepted whole and counted once; at maxParamLength 5000 a single
@@ -1053,6 +1130,34 @@ the point, so read the failure rather than adding an exemption.
   four e2e specs whose premise was "this seeded deal is a shell", which now make their own
   with `createDeal` — a spec that depends on a seeded deal being empty is a spec that stops
   the demo being filled in.
+- `agent-docs` (API suite) — **`AGENTS.md` keeps its promises.** Codex CLI, Copilot and
+  Cursor read `AGENTS.md` at the repo root by convention, the way Claude Code reads this
+  file, so the moment it exists a second agent's first act here is to believe it — and an
+  onboarding document naming a command that does not run, or a guard that no longer
+  exists, is worse than none, because the reader stops looking. Same argument
+  `security-headers` records about two files claiming a protection nothing enforced.
+  `AGENTS.md` deliberately does NOT restate the rules: this file is the one table, and two
+  agent documents paraphrasing the same non-negotiables is `trpc.ts`'s own complaint about
+  a rule written in several places, in documentation form. What it adds is an INDEX — "if
+  you are adding a tRPC procedure, these are the sweeps that will fail you" — plus the
+  branch-and-PR protocol for working beside another agent, and the MCP config, because an
+  agent that reasons its way to a GDV has broken the LLM-never-computes rule exactly as a
+  procedure would. The sweep checks the three CHECKABLE kinds of claim, each of which rots
+  differently: a COMMAND (a renamed package script), a GUARD NAME in the index (renamed or
+  folded into another file — and the index is precisely where that is invisible, since a
+  stale row still reads as authoritative), and a PATH. Writing it found three faults in its
+  own prose, which is the point: `e2e/reachable.spec.ts` is not openable from the repo root,
+  and the index's right-hand column carried `ENGINE_VERSION` and `data-decorative` — an
+  identifier and an attribute, not guards — so that column means one thing now. It also
+  found a real defect in `packages/mcp-server/README.md`: the documented root command
+  `node --import tsx packages/…` fails with `ERR_MODULE_NOT_FOUND`, because `tsx` is that
+  package's own dev dependency and not the workspace root's. Both the filtered form and the
+  `npx -y tsx` form an MCP client uses are now driven through a real `initialize` +
+  `tools/list` handshake, 13 tools, the npx one from outside the repo. NOT PROVEN, and said
+  in the test: that `AGENTS.md` does not DUPLICATE what it points at. No matcher reads two
+  documents and decides whether one restates the other; the length check is a proxy that
+  would catch a wholesale copy and miss a paraphrased paragraph. Four mutants recorded, one
+  per parser.
 - `security-headers` (API suite) — the headers the docs said the front door enforced. It
   enforced none: the ONLY `add_header` directives in `nginx.conf.template` were five
   `Cache-Control` lines, with no CSP, no HSTS, no `X-Frame-Options`, no `nosniff` and no
@@ -1158,6 +1263,55 @@ the point, so read the failure rather than adding an exemption.
   procedure nobody can reach is a capability the firm does not have. Forecast opens EQUAL to
   budget: a scheme not yet let is forecast at what it was appraised at, so the variance starts
   at zero instead of reading as the whole build saved.
+- **A sensitivity grid says something, or it says why it cannot**
+  (`sensitivity-structure.test.ts`). Measured in the browser on the demo workspace: the
+  appraisal's "Sensitivity — GDV × build" panel showed **23% in all twenty-five cells**, and the
+  printed investment report carried a whole page of the same under the heading "Sensitivity —
+  profit on cost". The arithmetic was right and the panel was a lie by omission — a valuer reads
+  a 5×5 grid of one number as "insensitive to a ten per cent swing in values and costs", which is
+  the opposite of what it means. The report was worse than the screen, because its closing
+  sentence READ THE SAME TWO NUMBERS: "a +10% build-cost overrun combined with a −10% fall in GDV
+  moves the return on cost from 23% to 23%" — a signed document telling a lender that a cost
+  overrun and a revenue fall have no effect, with no toggle to escape it as the screen had.
+  The cause is structural, not a bug in `sensitivityGrid`. In RESIDUAL mode — the mode every
+  appraisal starts in — profit is `gdv × t` and the land takes the remainder, so
+  `totalCost = gdv − profit` and RoC ≡ `t / (1 − t)`: the target restated, unmovable by any shock.
+  Profit moves with GDV alone, since build cost never enters `gdv × t`. PROFIT mode pins the other
+  end — `residualNet` IS `landFixed`, so a grid of it echoes an input back. `sensitivityStructure`
+  (the ENGINE, because it is a fact about the engine's own arithmetic: change how a mode solves
+  and this must change with it) declares `varies | gdvOnly | pinned` per metric plus the metric to
+  open on, and the test checks the declaration against the REAL grid in both directions — a metric
+  declared pinned must be constant to the penny, one declared `varies` must move on BOTH axes, and
+  one declared `gdvOnly` must move along the columns and not the rows. The identity is asserted
+  as algebra at three target rates rather than observed once. The panel now opens on the metric
+  the mode can move, follows a mode change until the valuer chooses for themselves, and renders a
+  pinned metric as its ONE value with the reason and a way out rather than twenty-five copies.
+  Three mutants recorded: the default back to RoC, `gdvOnly` mislabelled `varies`, and the
+  histogram off-by-one below. NOT caught by anything that existed: `one-engine-sweep` watches for
+  a figure re-derived outside the engine, and this was the engine's own figure displayed in a
+  context that made it meaningless. A first version asserted `varies` means 25 distinct values and
+  failed on priced-land RoC at 24 — two cells coincide to the penny, which is a coincidence of one
+  fixture and not the property being claimed; it asserts both AXES move.
+- **The risk panel shows the distribution, not three numbers.** `monteCarlo` ran 400 iterations
+  and threw the samples away, and the screen drew P10–P90 as a flat rectangle — which draws every
+  distribution identically whatever its tail, and the tail is the question a lender is asking.
+  `MonteCarloResult.histogram` is equal-WIDTH bins (equal count would redraw the same rectangle),
+  computed in the engine so the screen, the printed report and a customer's integration describe
+  one distribution rather than three roundings of it; the samples are not returned, because 400
+  figures re-binned at the far end is the same arithmetic twice with two chances to differ. Every
+  sample lands in exactly one bin and the counts sum to `iterations`, asserted — a histogram that
+  silently drops its own maximum understates the tail, which is the one thing it is read for, so
+  the top bin is closed at both ends. A degenerate sample answers ONE bin rather than dividing by
+  zero. `ProfitDistribution` (`components/charts.tsx`) is one series, so one hue and no legend;
+  the bins wholly at or below zero are a STATUS rather than a second series and carry a sentence
+  and a marked zero rule as well as a colour, because a reader who cannot separate the hues must
+  still find the losses.
+- **The engine is typechecked.** The package where ALL money maths lives was the one package
+  nothing ran `tsc` over: `site: { mode: 'fixed' }` sat in its own tests against a `SiteMode` of
+  `'residual' | 'profit'`, passing only because an unknown mode falls into the else branch and
+  behaves like `'profit'` — so a test named "holds for a fixed land price too" covered a third
+  mode that does not exist. `pnpm --filter @apex/appraisal-engine lint` runs in CI before the
+  golden tests.
 - `nullable-figure-sweep` (same directory) — a figure the engine types `number | null`
   is never `??`-defaulted to a number by any consumer. The null IS the engine's answer
   (`rocAtAsking` is null when nobody named an asking price; `projIrr` when the cashflows
@@ -1336,3 +1490,70 @@ TEMPLATE — the model path has to be driven with a stubbed `fetch`.
 Long-running project state (roadmap, iteration journal, mistake log) lives in this project's
 Claude memory: `~/.claude/projects/-Users-ahmedosman-Desktop-apex-appraise/memory/` —
 read `loop-log.md` before starting improvement work.
+
+## Customer lifecycle release guards
+
+- Signup is transactional: the organisation, first administrator and connector catalogue
+  either all exist or none exist. `signup-atomic.test.ts` drives concurrent requests for
+  one email and counts the resulting organisations.
+- `billing.checkout` refuses any nonterminal subscription server-side and reuses an open
+  checkout rather than opening another. Customer and checkout creation use Stripe
+  idempotency keys; price lookup failures must not be interpreted as missing prices.
+- Stripe payment status is stored separately from the feature plan. `past_due` retains
+  access during Stripe retries; `unpaid`, `incomplete` and `paused` retain the subscription
+  for recovery but grant no paid access. The Stripe retry policy must terminate prolonged
+  nonpayment. `billing.paymentPortal` is admin-only, tenant-scoped and reachable on expiry.
+- Workspace erasure first closes the Stripe customer, which cancels billing and prevents
+  new subscriptions; a failed external close preserves local data. Retry accepts a customer
+  already deleted by a prior attempt. `billing-customer-lifecycle.test.ts` checks this.
+- Manual/AI/what-if runs retain their origin when opened as a full appraisal. The customer
+  browser journey checks the exported manual origin as well as signup, report and erasure.
+- `pnpm release:check` checks configuration without exposing secrets. The remaining real
+  delivery, payment, valuation and recovery evidence belongs in `docs/SAAS-RELEASE.md`;
+  neither configuration shape nor green CI proves those external acceptance steps.
+
+## Location evidence contracts
+
+A source outage is not successful empty evidence. Sold-price samples require
+all requested postcode batches to succeed, with source-side date ordering.
+Postcode centres are not exact properties or title boundaries; planning results
+are point screening with incomplete England coverage. Preserve known source
+territory and leave unknown country metadata unknown. EPC records require
+exact normalized address/postcode identity and one certificate before using an
+area to compute a rate. Use the engine's `analysedPsf` and `SQFT_PER_SQM`.
+Missing credentials and transient failures must not persist as successful cache
+entries; EPC caches are workspace-scoped. Map popup labels are text, never HTML;
+static imagery keeps its full frame/attribution and fails visibly into the street
+map. The customer release check requires a production tile service, attribution
+and contactable user agent. See `docs/PRODUCT-READINESS.md` for provider choices
+and the evidence needed before claiming commercial differentiation.
+
+
+## Workfile upload and report hardening
+
+- File storage uses UUIDs and exclusive creation, never millisecond/name identity.
+  Failed streams, excess multipart parts and failed database/audit transactions
+  remove only bytes this request created. Upload routes allow one file. Logos
+  enforce 2MB while streaming. Invalid photo dates are refused, not rolled over.
+- Uploaded documents download as attachments, except displayable raster files.
+  Every upload response carries sandbox/nosniff and private/no-store; the static
+  file plugin must not overwrite that cache policy. `workfile-upload` exercises
+  real HTTP requests, simultaneous tenant writes and injected audit failures.
+- Portal file links recheck current sharing flags and the buyer unit/investor
+  holding on every request. Withdrawing access revokes already minted links.
+- Internal PDF URLs obey the session cutoff. `report-revocation` checks all
+  report kinds before the renderer is invoked. Explicit public share links
+  retain their own existing expiry/revocation rules.
+- All three PDF routes share two active contexts per API process (at most one public-share job) and a 60-second
+  render deadline. No unbounded waiting queue. Timeout closes the context; a
+  late context is closed without printing. Failed cleanup retires the browser;
+  if neither can close, capacity stays occupied until the process is recovered.
+  `report-capacity` tests busy, failure, timeout, late creation and broken cleanup.
+- Internal PDF actions share `ReportDownloadButton`: progress, duplicate-click
+  suppression, bounded fetch, visible failure/retry and a validated PDF response.
+  The customer lifecycle downloads the real generated PDF through this UI.
+
+- Production dependencies are audited in CI (`pnpm audit --prod --audit-level high`).
+  Root `pnpm.overrides` pin compatible security fixes for transitive packages.
+  Audit before changing/removing these overrides; regenerate the lockfile and
+  verify the HTTP, report, spreadsheet and MCP surfaces after dependency updates.

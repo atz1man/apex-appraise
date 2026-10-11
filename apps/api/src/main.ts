@@ -52,6 +52,7 @@ async function main() {
     prefix: '/trpc',
     trpcOptions: {
       router: appRouter,
+      allowMethodOverride: true,
       createContext,
       /**
        * Only INTERNAL_SERVER_ERROR is captured. A NOT_FOUND or a FORBIDDEN is the

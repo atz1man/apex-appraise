@@ -78,37 +78,40 @@ export type IntegrationConnector =
       readonly feeds: string;
       /** Whether `integrations.sync` writes rows onto a deal for it. */
       readonly syncs: boolean;
+      /** Geographic/product coverage, not a promise of completeness or health. */
+      readonly coverage: string;
+      readonly limitations: string;
     }
   | { readonly connects: false; readonly instead: string };
 
 export const INTEGRATION_CONNECTORS: Record<IntegrationProvider, IntegrationConnector> = {
   // `fetchSoldPrices` — the open Price Paid data, no key
-  'HM Land Registry': { connects: true, auth: 'none', feeds: 'Comparables and the site pack', syncs: true },
+  'HM Land Registry': { connects: true, auth: 'none', feeds: 'Comparables and the site pack', syncs: true, coverage: 'England and Wales', limitations: 'Registered sales, not asking prices or title ownership. Nearby-postcode sample; recent registrations can be incomplete.' },
   // `fetchEpc` — MHCLG's service, Bearer token from the workspace's own key.
   // NOT syncable: the sync branch wrote a Document row for a certificate PDF
   // that does not exist, which is the rule about a portal never offering a file
   // it cannot open, one layer up. The records themselves are live on the pack.
-  'EPC Register': { connects: true, auth: 'key', feeds: 'The site pack’s EPC panel', syncs: false },
-  'Companies House': { connects: true, auth: 'key', feeds: 'The site pack’s counterparty panel', syncs: false },
+  'EPC Register': { connects: true, auth: 'key', feeds: 'The site pack’s EPC panel', syncs: false, coverage: 'England and Wales', limitations: 'Recorded certificates, not a measured survey. Floor areas contribute a rate only after an unambiguous address and postcode match.' },
+  'Companies House': { connects: true, auth: 'key', feeds: 'The site pack’s counterparty panel', syncs: false, coverage: 'UK registered companies', limitations: 'Filed company information; not land ownership, a credit check or verification of the accuracy of filings.' },
   // `fetchConstraints` — planning.data.gov.uk, no key. Designations and
   // constraints, which is what the card says now; it is not application history.
-  'Planning Portal': { connects: true, auth: 'none', feeds: 'The site pack’s planning constraints', syncs: false },
+  'Planning Portal': { connects: true, auth: 'none', feeds: 'The site pack’s planning constraints', syncs: false, coverage: 'England; coverage varies by dataset and authority', limitations: 'Postcode-centre intersections, not full site-boundary or adjacent-property checks. No application history or legal search.' },
   // `fetchFloodWarnings` — the Environment Agency's flood-monitoring API, no key
-  'Environment Agency': { connects: true, auth: 'none', feeds: 'The site pack’s flood panel', syncs: false },
+  'Environment Agency': { connects: true, auth: 'none', feeds: 'The site pack’s flood panel', syncs: false, coverage: 'England', limitations: 'Current warnings nearby; no warnings does not mean low flood risk. No long-term risk, surface-water or contamination assessment.' },
   // `xero.ts` — a real OAuth connector with its own panel in Settings
-  Xero: { connects: true, auth: 'oauth', feeds: 'Cost monitoring, via Settings → Integrations', syncs: false },
+  Xero: { connects: true, auth: 'oauth', feeds: 'Cost monitoring, via Settings → Integrations', syncs: false, coverage: 'The authorised Xero organisation', limitations: 'Requires OAuth and mapping of deals to accounting records. Connection alone does not reconcile a deal.' },
 
   'Ordnance Survey': {
     connects: false,
     instead:
-      'Mapping and site measurement are already served without an OS Data Hub key: the site map is this '
-      + 'server’s own tile proxy, and areas are entered as GIA/NIA on the appraisal.',
+      'Street maps and optional aerial imagery are available on the site pack. This product does not yet '
+      + 'provide OS address identification, title boundaries or measured site polygons. Enter verified GIA/NIA on the appraisal.',
   },
   BCIS: {
     connects: false,
     instead:
-      'Build-rate validation comes from Benchmarking — the pooled medians of real schemes this and other '
-      + 'firms have completed, which is evidence of what things cost here rather than a published index.',
+      'Benchmarking provides pooled evidence from completed schemes. It is not a substitute for a licensed '
+      + 'BCIS index. Add your quantity surveyor’s sourced cost assumptions to the appraisal.',
   },
   DocuSign: {
     connects: false,
@@ -119,8 +122,8 @@ export const INTEGRATION_CONNECTORS: Record<IntegrationProvider, IntegrationConn
   'PriceHubble AVM': {
     connects: false,
     instead:
-      'A cross-check on the valuation comes from the comparables and the UKHPI series on Benchmarking. An '
-      + 'automated estimate from a third party would enter the evidence file as a figure nobody can source.',
+      'A licensed AVM connector is not implemented. Use recorded comparables and UKHPI as cross-checks for now. '
+      + 'A future provider estimate must retain its valuation date, inputs, confidence and source, separately from the engine appraisal.',
   },
 };
 

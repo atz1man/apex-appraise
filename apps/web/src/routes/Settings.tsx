@@ -903,7 +903,7 @@ function DataPrivacyPanel() {
           <div className="text-[13.5px] font-semibold text-status-red">Danger zone</div>
           <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[460px]">
             Permanently delete this workspace — every deal, appraisal, document record, member and investor
-            position. This cannot be undone. Download an export first.
+            position. Any subscription stops immediately and stored Stripe payment methods are removed. This cannot be undone. Download an export first.
           </div>
           {!armed ? (
             <Button variant="danger" className="mt-3" onClick={() => setArmed(true)}>
@@ -1292,13 +1292,16 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
   const sync = trpc.billing.sync.useMutation({
     onSuccess: (res) => {
       utils.billing.config.invalidate();
-      if (res.plan !== 'TRIAL') toast.success(`Subscription active — ${res.plan} plan`);
+      toast.success('Billing status updated.');
     },
   });
   const checkout = trpc.billing.checkout.useMutation({
     onSuccess: (res) => {
       if (res.url) window.location.href = res.url;
     },
+  });
+  const paymentPortal = trpc.billing.paymentPortal.useMutation({
+    onSuccess: (res) => { if (res.url) window.location.href = res.url; },
   });
   /**
    * The button on a workspace that already subscribes.
@@ -1550,6 +1553,23 @@ function BillingPanel({ isAdmin }: { isAdmin: boolean }) {
                   </Button>
                 </>
               )}
+            </div>
+          )}
+          {data.paymentStatus && ['past_due', 'unpaid', 'incomplete', 'paused'].includes(data.paymentStatus) && (
+            <div role="status" className="mt-4 rounded-card border border-border-strong p-3 text-[12px]">
+              {data.paymentStatus === 'past_due'
+                ? 'Your subscription payment is overdue. Stripe is retrying it; your plan remains available during those retries.'
+                : 'Your subscription needs payment attention before paid access can resume.'}
+              {' '}An administrator can update the payment method or pay the outstanding invoice below.
+            </div>
+          )}
+          {isAdmin && data.configured && data.hasCustomer && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button writes size="sm" variant="secondary" loading={paymentPortal.isPending}
+                onClick={() => paymentPortal.mutate()}>
+                Payment details & invoices
+              </Button>
+              <span className="text-[12px] text-ink-2">Update your card or pay an outstanding invoice securely in Stripe.</span>
             </div>
           )}
           {data.configured && (

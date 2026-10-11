@@ -36,6 +36,7 @@ model Organisation {
   trialEndsAt DateTime?
   stripeCustomerId String?
   stripeSubscriptionId String?
+  subscriptionStatus String?
   // When a cancellation already scheduled in Stripe takes effect. Stored rather
   // than fetched, so the panel can say "ends on the 1st" on a plain page load
   // without a Stripe call per view.
@@ -140,6 +141,7 @@ model Appraisal {
   reviewedAt     DateTime?
   reviewNote     String?
   source     String  @default("manual") // manual | ai | field
+  sourceReview String? // JSON server-stamped input review; separate from professional approval
   efficiency Float   @default(90)
   units      String  // JSON AppraisalUnit[] {label,count,area,cap,conf,source} — cap in £/sqft
   trades     String  // JSON BuildTrade[] {label, rate £/ft²}
@@ -377,6 +379,8 @@ model Document {
   ext      String
   sizeBytes BigInt
   url      String @default("")
+  sha256 String? // server-computed upload fingerprint; null for legacy files
+  supersededById String? // later uploaded revision, same deal; original bytes retained
   extraction String @default("STORED") // EXTRACTED | LINKED | STORED
   // WHICH buyer this is shared with. A document offered to a buyer is offered to
   // A buyer: `signedAt` is one column, so a row shared across a development

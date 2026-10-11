@@ -9,6 +9,7 @@
  */
 
 import { hpiSlugFor } from '@apex/types/uk-regions';
+import { analysedPsf, SQFT_PER_SQM } from '@apex/appraisal-engine';
 
 const TIMEOUT_MS = 12_000;
 
@@ -49,27 +50,28 @@ export interface Geo {
   longitude: number;
   district: string;
   region: string;
+  country?: 'England' | 'Wales' | 'Scotland' | 'Northern Ireland' | null;
 }
 
 export async function geocodePostcode(postcode: string): Promise<Geo> {
   const clean = postcode.replace(/\s+/g, '').toUpperCase();
-  const d = await getJson<{ result: { postcode: string; latitude: number; longitude: number; admin_district: string; region: string } }>(
+  const d = await getJson<{ result: { postcode: string; latitude: number; longitude: number; admin_district: string; region: string; country?: string | null } }>(
     `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}`,
   );
   const r = d.result;
-  return { postcode: r.postcode, latitude: r.latitude, longitude: r.longitude, district: r.admin_district, region: r.region };
+  const country: Geo['country'] = r.country === 'England' || r.country === 'Wales' || r.country === 'Scotland' || r.country === 'Northern Ireland' ? r.country : null;
+  return { postcode: r.postcode, latitude: r.latitude, longitude: r.longitude, district: r.admin_district, region: r.region, country };
 }
 
 async function nearestPostcodes(postcode: string, limit = 8): Promise<string[]> {
   const clean = postcode.replace(/\s+/g, '').toUpperCase();
-  try {
-    const d = await getJson<{ result: Array<{ postcode: string }> | null }>(
-      `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}/nearest?limit=${limit}&radius=1000`,
-    );
-    return (d.result ?? []).map((r) => r.postcode);
-  } catch {
-    return [postcode];
-  }
+  const d = await getJson<{ result: Array<{ postcode: string }> | null }>(
+    `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}/nearest?limit=${limit}&radius=1000`,
+  );
+  if (d.result !== null && !Array.isArray(d.result)) throw new Error('Invalid nearby-postcode response');
+  // A valid empty neighbourhood still permits looking up the subject itself.
+  // An outage must not silently narrow a nearby search to one postcode.
+  return [...new Set([postcode, ...(d.result ?? []).map((r) => r.postcode)])].slice(0, limit);
 }
 
 export interface SoldPrice {
@@ -90,23 +92,24 @@ export async function bulkGeocode(postcodes: string[]): Promise<Map<string, { la
   const unique = [...new Set(postcodes.filter(Boolean))].slice(0, 100);
   const out = new Map<string, { lat: number; lng: number }>();
   if (!unique.length) return out;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     const res = await fetch('https://api.postcodes.io/postcodes', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ postcodes: unique }),
       signal: ctrl.signal,
     });
-    clearTimeout(timer);
-    if (!res.ok) return out;
+    if (!res.ok) throw new HttpError(res.status, 'https://api.postcodes.io/postcodes');
     const d = (await res.json()) as { result: Array<{ query: string; result: { latitude: number; longitude: number } | null }> };
-    for (const r of d.result ?? []) {
+    if (!Array.isArray(d.result)) throw new Error('Invalid bulk postcode response');
+    for (const r of d.result) {
       if (r.result) out.set(r.query.toUpperCase(), { lat: r.result.latitude, lng: r.result.longitude });
     }
-  } catch {
-    /* map stays partial — pins degrade gracefully */
+  } finally {
+    // Keep the deadline through JSON consumption, including a stalled body.
+    clearTimeout(timer);
   }
   return out;
 }
@@ -127,14 +130,18 @@ export async function fetchSoldPrices(postcode: string): Promise<SoldPrice[]> {
   const batches = await Promise.allSettled(
     codes.map((pc) =>
       getJson<{ result: { items: any[] } }>(
-        `https://landregistry.data.gov.uk/data/ppi/transaction-record.json?propertyAddress.postcode=${encodeURIComponent(pc)}&_pageSize=25`,
+        `https://landregistry.data.gov.uk/data/ppi/transaction-record.json?propertyAddress.postcode=${encodeURIComponent(pc)}&_pageSize=40&_sort=-transactionDate`,
       ),
     ),
   );
+  // An incomplete fan-out is an unavailable search, not an empty or complete
+  // result. In particular cached() must never store an outage for a week.
+  if (batches.some((b) => b.status === 'rejected')) throw new Error('HM Land Registry search incomplete; retry later');
   const out: SoldPrice[] = [];
   for (const b of batches) {
     if (b.status !== 'fulfilled') continue;
-    for (const t of b.value.result.items ?? []) {
+    if (!Array.isArray(b.value.result?.items)) throw new Error('Invalid HM Land Registry response');
+    for (const t of b.value.result.items) {
       const a = t.propertyAddress ?? {};
       const addressParts = [a.saon, a.paon, label(a.street) || a.street, a.town].filter(Boolean);
       const date = new Date(t.transactionDate);
@@ -206,6 +213,8 @@ export async function fetchConstraints(lat: number, lng: number): Promise<{ chec
 
 export interface EpcRecord {
   address: string;
+  postcode?: string;
+  certificateNumber?: string;
   floorAreaSqm: number;
   rating: string;
   propertyType: string;
@@ -261,6 +270,8 @@ export async function fetchEpc(
         const det = details[i]?.status === 'fulfilled' ? ((details[i] as PromiseFulfilledResult<{ data?: any }>).value.data ?? {}) : {};
         return {
           address: [s.addressLine1, s.addressLine2, s.addressLine3, s.addressLine4].filter(Boolean).join(', '),
+          postcode: String(s.postcode ?? det.postcode ?? postcode),
+          certificateNumber: String(s.certificateNumber ?? ''),
           // domestic certificates carry total_floor_area at the top level;
           // non-domestic (CEPC) nest it under technical_information.floor_area
           floorAreaSqm: Number(det.total_floor_area) || Number(det.technical_information?.floor_area) || 0,
@@ -379,14 +390,23 @@ export async function fetchHpi(region: string, months = 12): Promise<{ region: s
   return { region, series };
 }
 
-/** Try to pair a sold price with an EPC floor area (house-number match) → £/ft². */
+/**
+ * A rate needs one identifiable floor-area record. House numbers alone join
+ * different streets and flats, which puts another property's area under a
+ * real sale price. Keep unclear or ambiguous addresses unknown for the analyst
+ * to verify; spelling/punctuation differences are not a licence for fuzzy joins.
+ */
 export function matchPsf(sold: SoldPrice, epc: EpcRecord[]): number | null {
-  const num = sold.address.match(/\b(\d+[A-Za-z]?)\b/)?.[1]?.toLowerCase();
-  if (!num) return null;
-  const hit = epc.find((r) => {
-    const rnum = r.address.match(/\b(\d+[A-Za-z]?)\b/)?.[1]?.toLowerCase();
-    return rnum === num && r.floorAreaSqm > 10;
-  });
-  if (!hit) return null;
-  return Math.round(sold.price / (hit.floorAreaSqm * 10.764));
+  const addressKey = (address: string) => address.toUpperCase().replace(/[,\s]+/g, ' ').trim();
+  const postcodeKey = (postcode: string) => postcode.toUpperCase().replace(/\s+/g, '');
+  const address = addressKey(sold.address);
+  const postcode = postcodeKey(sold.postcode);
+  if (!address || !postcode || !Number.isFinite(sold.price) || sold.price <= 0) return null;
+  const matches = epc.filter((r) => addressKey(r.address) === address && !!r.postcode && postcodeKey(r.postcode) === postcode);
+  if (matches.length !== 1) return null;
+  const hit = matches[0]!;
+  if (!Number.isFinite(hit.floorAreaSqm) || hit.floorAreaSqm <= 10) return null;
+  const floorAreaSqft = hit.floorAreaSqm * SQFT_PER_SQM;
+  if (!Number.isFinite(floorAreaSqft)) return null;
+  return analysedPsf(sold.price, floorAreaSqft);
 }

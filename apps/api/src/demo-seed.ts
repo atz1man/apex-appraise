@@ -11,7 +11,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { depositsHeldAt } from '@apex/appraisal-engine';
 import { hashPassword } from './auth/password.js';
-import { seedDepth } from './demo-seed-depth.js';
+import { offsetFrom, seedDepth, siteCoordOf } from './demo-seed-depth.js';
 
 const hash = (s: string) => hashPassword(s);
 /** pounds → integer pence */
@@ -431,9 +431,28 @@ export async function seedDemo(prisma: PrismaClient): Promise<string> {
     ['5 Birch Hollow Court', 'Sold Mar 2026 · 0.8 mi · 20,400 ft²', 226, 4, 2, 6, -2],
     ['Quayside Industrial', 'Sold Feb 2026 · 0.7 mi · 26,100 ft²', 240, -6, -4, 7, 3],
   ];
-  for (const [address, meta, basePsf, adjSize, adjCondition, adjDate, adjLocation] of compRows) {
+  /**
+   * These four carry a distance in their own text ("· 0.3 mi ·") and used to
+   * carry no coordinates, so nothing could check the claim and the Comparables
+   * screen could not measure it. The site's coordinate comes from `SPECS` via
+   * `siteCoordOf` rather than being restated here, and `offsetFrom` is the
+   * depth seed's own placement — one implementation, so a comparable cannot sit
+   * at one distance and say another. `test/seed-depth.test.ts` measures every
+   * one of them back with the engine.
+   */
+  const northgateSite = siteCoordOf('Northgate Trade & Industrial Park');
+  for (let i = 0; i < compRows.length; i++) {
+    const [address, meta, basePsf, adjSize, adjCondition, adjDate, adjLocation] = compRows[i]!;
+    const miles = Number(/·\s([\d.]+)\smi\s·/.exec(meta)?.[1]);
+    const at =
+      northgateSite && Number.isFinite(miles)
+        ? offsetFrom(northgateSite, miles, (i * 2 * Math.PI) / compRows.length + 0.6)
+        : null;
     await prisma.comparable.create({
-      data: { orgId: org.id, dealId: northgate, address, meta, basePsf, adjSize, adjCondition, adjDate, adjLocation },
+      data: {
+        orgId: org.id, dealId: northgate, address, meta, basePsf, adjSize, adjCondition, adjDate, adjLocation,
+        lat: at?.lat ?? null, lng: at?.lng ?? null,
+      },
     });
   }
 

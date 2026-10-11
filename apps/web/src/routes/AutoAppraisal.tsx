@@ -1,3 +1,4 @@
+import { expectedReviewSources, reviewSourcesChanged } from '../lib/review-source-versions';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { AutoAppraisalResult } from '@apex/appraisal-engine';
@@ -8,6 +9,8 @@ import { useUnits } from '../lib/region';
 import { Button, Dot, EmptyState, FormError, Panel, ProgressBar, SegmentedToggle, Spinner, Td, Th, TopBar , writeAttrs} from '../components/ui';
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
+import { useUnsavedWarning } from '../lib/unsaved';
+import { reviewedUnits } from '../lib/extraction-review';
 import { manualDefaultsFor, manualIsRunnable, type ManualState, type ManualUnit } from '../lib/auto-defaults';
 
 // ---------- types ----------
@@ -17,12 +20,15 @@ type Verdict = 'Proceed' | 'Caution' | 'Decline';
 type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict };
 
 interface RunState {
+  source: 'manual' | 'ai' | 'whatif';
+  references?: Array<{ unitIndex: number; documentId: string; version?: string; page: number | null; locator: string }>;
   extraction: Extraction;
   buildPerSqft: number;
   indicative: Indicative;
   /** display label for the headline (manual mode keeps the free-text asset type) */
   assetLabel: string;
   sourceNote: string;
+  sourceDocuments?: Array<{ id: string; name: string; version?: string }>;
   /**
    * Documents the server could NOT read, each with the reason.
    *
@@ -212,20 +218,19 @@ export default function AutoAppraisal() {
 
   const [engine, setEngine] = useState<'ai' | 'manual'>('ai');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result'>('idle');
-  const [notes, setNotes] = useState(SAMPLE_NOTES);
+  const [notes, setNotes] = useState('');
   const [buildRate, setBuildRate] = useState(105);
-  const [docsOn, setDocsOn] = useState<number[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   // real data-room documents the AI can read (PDFs/images with a stored file)
-  const { data: roomDocs } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
+  const { data: roomDocs, isPending: sourcesPending, isError: sourcesFailed, isFetching: sourcesRefreshing, refetch: refreshSources } = trpc.documents.list.useQuery({ dealId }, { enabled: !!dealId });
   const readableDocs = (roomDocs?.documents ?? []).filter(
-    (d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()),
+    (d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg', 'xlsx', 'xlsm'].includes(d.ext.toLowerCase()),
   );
   const toggleDoc = (id: string) =>
     setSelectedDocs((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else if (next.size < 4) next.add(id);
+      else if (next.size < 12) next.add(id);
       return next;
     });
   /**
@@ -240,6 +245,21 @@ export default function AutoAppraisal() {
     if (deal && !touched.current) setManual(manualDefaultsFor(deal));
   }, [deal]);
   const [run, setRun] = useState<RunState | null>(null);
+  const [acceptedRun, setAcceptedRun] = useState<RunState | null>(null);
+  const [unitDraft, setUnitDraft] = useState<{ run: RunState; units: Extraction['units'] } | null>(null);
+  const [reviewPending, setReviewPending] = useState(false);
+  const reviewUnits = unitDraft && unitDraft.run === run ? unitDraft.units : run?.extraction.units ?? [];
+  const reviewDocumentIds = [...new Set([...(run?.sourceDocuments ?? []).map(d => d.id), ...(run?.references ?? []).map(r => r.documentId)])];
+  const referencesValid = reviewDocumentIds.length <= 12 && (run?.references ?? []).every(r => (r.page !== null && Number.isInteger(r.page) && r.page > 0 && r.page <= 10000) || (r.page === null && !!r.locator.trim()));
+  const expectedSources = expectedReviewSources(run?.sourceDocuments ?? [], run?.references ?? []);
+  const extractedSourcesChanged = reviewSourcesChanged(run?.sourceDocuments ?? [], roomDocs?.documents);
+  const sourcesChanged = reviewSourcesChanged(expectedSources, roomDocs?.documents);
+  const sourceChangeHelp = extractedSourcesChanged
+    ? 'A source changed since extraction. Reload the source documents and extract again before recording this review.'
+    : 'A referenced source changed. Clear the affected reference, select the current document and check its page or location again.';
+  const reviewAccepted = !!run && acceptedRun === run && referencesValid && !sourcesChanged;
+  const reviewDirty = !!run && unitDraft?.run === run && JSON.stringify(reviewUnits) !== JSON.stringify(run.extraction.units);
+  useUnsavedWarning(reviewDirty || (!!run?.references?.length && !reviewAccepted), 'extraction corrections and source references');
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [chatInput, setChatInput] = useState('');
@@ -271,18 +291,22 @@ export default function AutoAppraisal() {
   // ---- AI extraction run: real documents + notes ----
   const onGenerate = async () => {
     const docIds = [...selectedDocs];
-    if (phase === 'loading' || (notes.trim().length < 10 && docIds.length === 0)) return;
+    if (reviewDirty || whatIf.isPending || save.isPending || reviewPending || phase === 'loading' || (notes.trim().length < 10 && docIds.length === 0)) return;
     setError(null);
     setPhase('loading');
     try {
       const res = await extract.mutateAsync({ notes, documentIds: docIds, buildPerSqft: buildRate });
       if (docIds.length) utils.documents.list.invalidate();
       setRun({
+        sourceDocuments: res.sourceDocuments,
+        source: 'ai',
         extraction: res.extraction,
         buildPerSqft: buildRate,
         indicative: res.indicative,
         assetLabel: res.extraction.assetType,
-        sourceNote: res.documentsRead?.length
+        sourceNote: res.extraction.sample
+          ? 'Worked example. These figures were not extracted from your project.'
+          : res.documentsRead?.length
           ? `Generated by AI from ${res.documentsRead.length} document${res.documentsRead.length === 1 ? '' : 's'}: ${res.documentsRead.join('; ')}${notes.trim() ? ' + your notes' : ''}.`
           : 'Generated by AI from your document text.',
         skipped: res.documentsSkipped ?? [],
@@ -297,7 +321,7 @@ export default function AutoAppraisal() {
 
   // ---- manual run: build an Extraction from the form, compute server-side ----
   const onRunManual = async () => {
-    if (phase === 'loading' || !manualIsRunnable(manual)) return;
+    if (reviewDirty || whatIf.isPending || save.isPending || reviewPending || phase === 'loading' || !manualIsRunnable(manual)) return;
     const m = manual;
     const extraction: Extraction = {
       // manual entry is the user's own scheme, never the worked example
@@ -329,7 +353,7 @@ export default function AutoAppraisal() {
     setPhase('loading');
     try {
       const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: buildRate });
-      setRun({ extraction, buildPerSqft: buildRate, indicative, assetLabel: m.assetType, sourceNote: 'Calculated from your manual inputs.', skipped: [] });
+      setRun({ source: 'manual', extraction, buildPerSqft: buildRate, indicative, assetLabel: m.assetType, sourceNote: 'Calculated from your manual inputs.', skipped: [] });
       setChat([]);
       setPhase('result');
     } catch (e) {
@@ -340,30 +364,53 @@ export default function AutoAppraisal() {
 
   // ---- what-if chat ----
   const onAsk = async () => {
+    if (reviewDirty || reviewPending) return;
     const q = chatInput.trim();
     if (!q || !run || whatIf.isPending) return;
     setChat((c) => [...c, { role: 'user', text: q }]);
     setChatInput('');
     try {
       const res = await whatIf.mutateAsync({ extraction: run.extraction, buildPerSqft: run.buildPerSqft, prompt: q });
-      setRun((r) => (r ? { ...r, extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
+      setRun((r) => (r ? { ...r, source: 'whatif', references: [], extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
       setChat((c) => [...c, { role: 'ai', text: res.reply }]);
     } catch {
       setChat((c) => [...c, { role: 'ai', text: 'Something went wrong — try again.' }]);
     }
   };
 
+  const applyReview = async () => {
+    if (!run || reviewPending || whatIf.isPending) return;
+    const current = run;
+    setError(null);
+    setReviewPending(true);
+    try {
+      const extraction = { ...current.extraction, units: reviewedUnits(current.extraction.units, reviewUnits) };
+      const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: current.buildPerSqft });
+      setRun(latest => latest === current ? { ...current, extraction, indicative } : latest);
+      setChat([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not apply corrections.');
+    } finally {
+      setReviewPending(false);
+    }
+  };
+
   // ---- open full appraisal: map extraction → AppraisalInput, save, navigate ----
   const onOpenFull = async () => {
-    if (!run || save.isPending) return;
+    if (!run || save.isPending || reviewPending || whatIf.isPending || (run.source !== 'manual' && (!reviewAccepted || reviewDirty))) return;
     const x = run.extraction;
     const ind = run.indicative;
     try {
       await save.mutateAsync({
         dealId,
-        source: 'ai',
+        source: run.source,
+        sourceReview: run.source !== 'manual' ? {
+          accepted: true, references: (run.references ?? []).map(({ unitIndex, documentId, page, locator }) => ({ unitIndex, documentId, page, locator })), documentIds: reviewDocumentIds,
+          expectedSources,
+          sample: !!run.extraction.sample, omissions: run.skipped,
+        } : undefined,
         asNewVersion: !!existingAppraisal,
-        label: existingAppraisal ? 'Auto-Appraisal' : undefined,
+        label: existingAppraisal ? run.source === 'manual' ? 'Manual appraisal' : run.source === 'whatif' ? 'What-if appraisal' : 'Auto-Appraisal' : undefined,
         input: {
           units: x.units.map((u) => ({ label: u.label, count: u.count, area: u.area, cap: u.value, conf: u.conf, source: u.source })),
           efficiency: x.efficiency,
@@ -396,6 +443,7 @@ export default function AutoAppraisal() {
   };
 
   const onReset = () => {
+    if (reviewDirty || reviewPending || whatIf.isPending || save.isPending) return;
     setPhase('idle');
     setRun(null);
     setChat([]);
@@ -488,32 +536,18 @@ export default function AutoAppraisal() {
 
           {engine === 'ai' ? (
             <>
-              {/* doc-type tiles (decorative selected states) */}
               <div className="mt-4 grid grid-cols-2 gap-2.5">
-                {DOC_TILES.map((t, i) => {
-                  const on = docsOn.includes(i);
-                  return (
-                    <button
-                      key={t.label}
-                      aria-pressed={on}
-                      onClick={() => setDocsOn((d) => (on ? d.filter((k) => k !== i) : [...d, i]))}
-                      className="rounded-[12px] p-3.5 flex items-center gap-2.5 text-left transition-colors"
-                      style={{ border: on ? '1.5px solid rgb(var(--brand-ink, 20 80 59))' : '1.5px dashed rgb(var(--checkbox-border, 210 209 202))', background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
-                    >
-                      <span className="w-[30px] h-[30px] rounded-chip bg-tint-success inline-flex items-center justify-center shrink-0">{t.icon}</span>
-                      <span>
-                        <span className="block text-[12px] font-semibold">{t.label}</span>
-                        <span className="block text-[10px] text-ink-3">{t.sub}</span>
-                      </span>
-                    </button>
-                  );
-                })}
+                {DOC_TILES.map(t => <div key={t.label} className="rounded-[12px] border border-border-std p-3.5 flex items-center gap-2.5">
+                  <span className="w-[30px] h-[30px] rounded-chip bg-tint-success inline-flex items-center justify-center shrink-0">{t.icon}</span>
+                  <span><span className="block text-[12px] font-semibold">{t.label}</span><span className="block text-[10px] text-ink-3">{t.sub}</span></span>
+                </div>)}
               </div>
+              <Button to={`/deal/${dealId}/dataroom`} variant="secondary" className="mt-3">Add source documents</Button>
 
               {/* real documents from the data room — the AI reads the actual PDFs */}
               {readableDocs.length > 0 && (
                 <div className="mt-4">
-                  <MicroLabel>Read documents from the data room · {selectedDocs.size}/4 selected</MicroLabel>
+                  <MicroLabel>Read documents from the data room · {selectedDocs.size}/12 selected</MicroLabel>
                   <div className="mt-2 flex flex-col gap-1.5 max-h-[168px] overflow-y-auto rounded-[12px] border border-border-std p-2">
                     {readableDocs.map((d) => {
                       const on = selectedDocs.has(d.id);
@@ -522,6 +556,7 @@ export default function AutoAppraisal() {
                           key={d.id}
                           aria-pressed={on}
                           onClick={() => toggleDoc(d.id)}
+                          disabled={!on && selectedDocs.size >= 12}
                           className="flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left transition-colors"
                           style={{ background: on ? 'rgb(var(--tint-success, 236 243 239))' : 'transparent' }}
                         >
@@ -543,7 +578,7 @@ export default function AutoAppraisal() {
                     })}
                   </div>
                   <div className="mt-1.5 text-[10.5px] text-ink-3">
-                    The AI reads the selected PDFs/images directly — every extracted figure cites its source document.
+                    PDFs, images and Excel workbooks are supported. Up to 12 documents / 20 MB per run. Review extracted citations against the originals; they are not independently verified.
                   </div>
                 </div>
               )}
@@ -551,6 +586,7 @@ export default function AutoAppraisal() {
               <div className="mt-4">
                 <MicroLabel>Scheme notes &amp; document text</MicroLabel>
               </div>
+              <Button variant="secondary" className="mt-2" onClick={() => setNotes(SAMPLE_NOTES)}>Load worked example</Button>
               <textarea
                 aria-label="Scheme notes and document text"
                 className="mt-2 w-full h-[208px] text-[12.5px] leading-relaxed resize-y p-3 rounded-[12px]"
@@ -565,13 +601,13 @@ export default function AutoAppraisal() {
                   size="lg"
                   className="flex-1"
                   loading={phase === 'loading'}
-                  disabled={notes.trim().length < 10 && selectedDocs.size === 0}
+                  disabled={reviewDirty || whatIf.isPending || save.isPending || reviewPending || (notes.trim().length < 10 && selectedDocs.size === 0)}
                 >
                   <Sparkle /> Generate appraisal
                 </Button>
               </div>
               <div className="mt-2.5 text-[11px] text-ink-3b">
-                Tip: the sample text describes a Bournemouth trade-counter scheme — edit it or paste your own.
+                Start with your own notes or select uploaded documents. The worked example is separate from your project.
               </div>
             </>
           ) : (
@@ -686,7 +722,7 @@ export default function AutoAppraisal() {
                   size="lg"
                   className="flex-1"
                   loading={phase === 'loading'}
-                  disabled={!manualIsRunnable(manual)}
+                  disabled={reviewDirty || whatIf.isPending || save.isPending || reviewPending || !manualIsRunnable(manual)}
                   title={manualIsRunnable(manual) ? undefined : `Add a unit with a count, an area and a £/${U.unit} first`}
                 >
                   Run appraisal
@@ -707,7 +743,7 @@ export default function AutoAppraisal() {
               <EmptyState icon={<Sparkle size={30} color="rgb(var(--crumb, 201 205 200))" />}>
                 <div className="text-[16px] font-bold text-ink">Your appraisal will appear here</div>
                 <div className="mt-1 max-w-[380px] text-[13px] text-ink-3 leading-relaxed">
-                  GIA, {U.terms.gdv}, build, finance, VAT, {U.terms.landTax}, {U.terms.infraLevy}, profit, planning risk and an
+                  GIA, {U.terms.gdv}, build, finance, {U.terms.landTax}, {U.terms.infraLevy}, profit, planning risk and an
                   investment recommendation — generated from your documents.
                 </div>
               </EmptyState>
@@ -822,6 +858,79 @@ export default function AutoAppraisal() {
                 </div>
               </Panel>
 
+              {run.source !== 'manual' && (
+                <Panel title="Review extracted inputs">
+                  <p className="text-[12px] text-ink-2">Check the original drawings and schedules. Areas below are square feet; values are £ per square foot. A confidence label is not verification.</p>
+                  <Button className="mt-2" variant="secondary" loading={sourcesRefreshing} onClick={() => { void refreshSources(); }}>Refresh source documents</Button>
+                  <p role="alert" className="mt-2 text-[12px] text-status-red">{sourcesChanged ? sourceChangeHelp : sourcesFailed ? 'Source documents could not be refreshed. Try again before checking your references.' : ''}</p>
+                  <div className="mt-3 flex gap-3 flex-wrap">
+                    {run.sourceDocuments?.map(document => {
+                      const current = roomDocs?.documents.find(d => d.id === document.id);
+                      const url = !document.version || current?.version === document.version ? current?.url : null;
+                      return url ? <a key={document.id} href={url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-brand-ink underline">Download source: {document.name}</a> : <span key={document.id} className="text-[12px] text-ink-2">{document.name} — {sourcesPending ? 'loading source link…' : sourcesFailed ? 'source links could not be loaded' : current && document.version && current.version !== document.version ? 'source changed — extract again' : 'source unavailable'}</span>;
+                    })}
+                  </div>
+                  <div className="mt-3 space-y-4">
+                    {reviewUnits.map((unit, index) => {
+                      const update = (patch: Partial<typeof unit>) => {
+                        setAcceptedRun(null);
+                        setUnitDraft({ run, units: reviewUnits.map((u, i) => i === index ? { ...u, ...patch } : u) });
+                      };
+                      const reference = run.references?.find(r => r.unitIndex === index);
+                      const setReference = (patch: Partial<NonNullable<RunState['references']>[number]>) => {
+                        setAcceptedRun(null);
+                        setRun({ ...run, references: [...(run.references ?? []).filter(r => r.unitIndex !== index),
+                          { unitIndex: index, documentId: '', page: null, locator: '', ...reference, ...patch }].filter(r => r.documentId) });
+                      };
+                      const referenceDoc = roomDocs?.documents.find(d => d.id === reference?.documentId);
+                      return <fieldset key={index} disabled={reviewPending || whatIf.isPending || save.isPending} className="rounded-panel border border-border-std p-3">
+                        <legend className="text-[12px] font-semibold px-1">Review unit {index + 1}</legend>
+                        <p className="mb-3 text-[12px] text-ink-2 break-words">Source and review history: {run.extraction.units[index]?.source || 'No citation supplied'}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <TextBox label={`Review unit ${index + 1} name`} value={unit.label} onChange={label => update({ label })} />
+                          <NumBox label={`Review unit ${index + 1} count`} value={unit.count} onChange={count => update({ count })} />
+                          <NumBox label={`Review unit ${index + 1} area sq ft`} value={unit.area} onChange={area => update({ area })} />
+                          <NumBox label={`Review unit ${index + 1} value per sq ft`} value={unit.value} onChange={value => update({ value })} />
+                        </div>
+                        {(readableDocs.length > 0 || reference) && <fieldset disabled={reviewDirty} className="mt-3 space-y-2">
+                          <legend className="text-[12px] font-semibold">Input source reference</legend>
+                          <p className="text-[11px] text-ink-2">User-entered reference; page existence and drawing measurements are not verified. Apply unit corrections before editing references.</p>
+                          <label className="block text-[12px]">Source document for unit {index + 1}
+                            <select className="w-full" value={reference?.documentId ?? ''} onChange={e => setReference({ documentId: e.target.value, version: roomDocs?.documents.find(d => d.id === e.target.value)?.version, page: null, locator: '' })}>
+                              <option value="">No structured reference</option>
+                              {readableDocs.map(d => <option key={d.id} value={d.id}>{d.name}{readableDocs.filter(other => other.name === d.name).length > 1 ? ` · ${d.id.slice(-6)}` : ''}</option>)}
+                            </select>
+                          </label>
+                          {reference && <>
+                            {reviewSourcesChanged([{ id: reference.documentId, version: reference.version }], roomDocs?.documents) && <p className="text-[12px] text-status-red">This reference uses a changed or unavailable source. Clear it and select the current document before checking its page or location.</p>}
+                            {referenceDoc?.ext.toLowerCase() === 'pdf' && <label className="block text-[12px]">PDF page for unit {index + 1}<input className="w-full" type="number" min="1" max="10000" step="1" value={reference.page ?? ''} onChange={e => setReference({ page: e.target.value ? Number(e.target.value) : null })} /></label>}
+                            <label className="block text-[12px]">Drawing, sheet or cell reference for unit {index + 1}<input className="w-full" maxLength={120} value={reference.locator} onChange={e => setReference({ locator: e.target.value })} /></label>
+                          </>}
+                        </fieldset>}
+                      </fieldset>;
+                    })}
+                  </div>
+                  <Button className="mt-3" variant="secondary" onClick={applyReview} loading={reviewPending} disabled={!reviewDirty || whatIf.isPending || save.isPending}>Apply corrections and recalculate</Button>
+              {run.skipped.length > 0 && (
+                <div role="status" className="mt-2 text-[11px] text-ink-2 text-center leading-relaxed max-w-[560px] mx-auto">
+                  Incomplete source coverage:{' '}
+                  {run.skipped.map((sk, i) => (
+                    <span key={`${sk.name}-${i}`}>
+                      {i > 0 ? '; ' : ''}
+                      <b className="font-semibold">{sk.name}</b> — {sk.reason}
+                    </span>
+                  ))}
+                  .
+                </div>
+              )}
+                  <label className="mt-4 flex items-start gap-2 text-[12px] text-ink-2">
+                    <input type="checkbox" checked={reviewAccepted} disabled={sourcesChanged || !referencesValid || reviewDirty || reviewPending || whatIf.isPending} aria-describedby="review-help" onChange={e => setAcceptedRun(e.target.checked ? run : null)} />
+                    I have checked the inputs, source citations and omitted content. These assumptions are ready to save.
+                  </label>
+                  <p id="review-help" role="status" className="mt-2 text-[12px] text-ink-2">{sourcesChanged ? 'Resolve the changed source references above before accepting this review.' : !referencesValid ? 'Use at most 12 source documents and complete each reference with a positive PDF page or a drawing/sheet/cell location.' : reviewDirty ? 'Apply corrections to update the appraisal figures before accepting this review.' : 'Check the scheme assumptions below before saving.'}</p>
+                </Panel>
+              )}
+
               {/* auto-generated appraisal */}
               <Panel title="Auto-generated appraisal">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
@@ -927,7 +1036,7 @@ export default function AutoAppraisal() {
                   <button
                     onClick={onAsk}
                     aria-label="Send question"
-                    disabled={whatIf.isPending || !chatInput.trim()}
+                    disabled={whatIf.isPending || reviewDirty || reviewPending || !chatInput.trim()}
                     {...writeAttrs()}
                     className="flex-none w-[46px] h-10 rounded-[10px] bg-brand-700 hover:bg-brand-600 inline-flex items-center justify-center transition-colors disabled:opacity-50"
                   >
@@ -943,7 +1052,7 @@ export default function AutoAppraisal() {
 
               {/* actions */}
               <div className="flex gap-3">
-                <Button writes onClick={onOpenFull} size="lg" className="flex-1" loading={save.isPending}>
+                <Button writes onClick={onOpenFull} size="lg" className="flex-1" loading={save.isPending} disabled={reviewPending || whatIf.isPending || (run.source !== 'manual' && (!reviewAccepted || reviewDirty))}>
                   {!save.isPending && (
                     <>
                       Open full appraisal
@@ -953,7 +1062,7 @@ export default function AutoAppraisal() {
                     </>
                   )}
                 </Button>
-                <Button variant="secondary" size="lg" className="flex-none" onClick={onReset}>
+                <Button variant="secondary" size="lg" className="flex-none" disabled={reviewDirty || reviewPending || whatIf.isPending || save.isPending} onClick={onReset}>
                   New deal
                 </Button>
               </div>
@@ -964,18 +1073,7 @@ export default function AutoAppraisal() {
                 * absence somebody has to be told about, and `role="status"` is
                 * what makes it reach a screen reader at all.
                 */}
-              {run.skipped.length > 0 && (
-                <div role="status" className="mt-2 text-[11px] text-ink-2 text-center leading-relaxed max-w-[560px] mx-auto">
-                  Not read:{' '}
-                  {run.skipped.map((sk, i) => (
-                    <span key={`${sk.name}-${i}`}>
-                      {i > 0 ? '; ' : ''}
-                      <b className="font-semibold">{sk.name}</b> — {sk.reason}
-                    </span>
-                  ))}
-                  .
-                </div>
-              )}
+
             </div>
           )}
         </div>

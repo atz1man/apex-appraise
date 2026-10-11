@@ -6,7 +6,7 @@ import { fM } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { Button, Listbox, Panel, Skeleton, SkeletonRows, StatusChip, TopBar } from '../components/ui';
 import { DealNav } from '../components/DealNav';
-import { openReport } from '../lib/download';
+import { ReportDownloadButton } from '../components/ReportDownloadButton';
 
 /**
  * Terms of engagement (RICS Red Book VPS 1) — drafted from the deal, edited by
@@ -86,7 +86,6 @@ const STATUS_TONE = { DRAFT: 'amber', ISSUED: 'blue', ACCEPTED: 'green' } as con
 export default function Engagement() {
   const { dealId = '' } = useParams();
   const utils = trpc.useUtils();
-  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const toast = useToast();
   const { data: deal } = trpc.deals.get.useQuery(dealId, { enabled: !!dealId });
   const { data: saved, isLoading } = trpc.engagement.get.useQuery(dealId, { enabled: !!dealId });
@@ -262,12 +261,7 @@ export default function Engagement() {
           <>
             <StatusChip status={STATUS_TONE[status]} label={status} />
             <Button variant="secondary" to={`/deal/${dealId}/engagement/document`}>Preview</Button>
-            <Button
-              variant="secondary"
-              onClick={() => void openReport(mintDownload.mutateAsync, 'engagement', `/reports/${dealId}/engagement.pdf`, dealId)}
-            >
-              Download PDF
-            </Button>
+            <ReportDownloadButton variant="secondary" disabled={dirty || save.isPending} kind="engagement" path={`/reports/${dealId}/engagement.pdf`} dealId={dealId} />
             <Button writes onClick={() => save.mutate({ dealId, terms, expectedUpdatedAt: stamp ?? undefined })} loading={save.isPending} disabled={!dirty || locked}>
               {dirty ? 'Save terms' : 'Saved'}
             </Button>

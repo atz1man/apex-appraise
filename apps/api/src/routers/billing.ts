@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { APP_URL } from '../email.js';
 import { PLANS, ensurePrice, stripeConfigured, stripeFetch, stripePublishableKey } from '../stripe.js';
-import { planLookupKey, reconcileSubscription, soleSubscription } from '../billing.js';
+import { assertExclusiveStripeCustomer, assertStripeCustomerOpen, liveSubscriptions, planLookupKey, reconcileSubscription, soleSubscription } from '../billing.js';
 import { recordAudit } from '../audit.js';
 import { adminProcedure, authedProcedure, internalProcedure, router } from '../trpc.js';
 import { usageFor } from '../entitlements.js';
@@ -50,6 +50,8 @@ export const billingRouter = router({
        * against a customer who already subscribes is a second subscription.
        */
       subscribed: !!org?.stripeSubscriptionId,
+      hasCustomer: !!org?.stripeCustomerId,
+      paymentStatus: org?.subscriptionStatus ?? null,
       /**
        * A cancellation already scheduled. Read off the row rather than from
        * Stripe, so opening Settings does not cost a Stripe call per view —
@@ -72,6 +74,12 @@ export const billingRouter = router({
       if (!stripeConfigured()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Stripe is not configured on this server' });
       const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
       if (!org) throw new TRPCError({ code: 'NOT_FOUND' });
+      // A disabled Subscribe button is not a server-side guard. A stale tab
+      // or direct call must not create a second paid subscription.
+      if (org.stripeCustomerId) await assertExclusiveStripeCustomer(ctx.prisma, org.stripeCustomerId, org.id);
+      if (org.stripeSubscriptionId || (org.stripeCustomerId && (await liveSubscriptions(org.stripeCustomerId)).length)) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'This workspace already has a subscription. Change its plan in Billing instead.' });
+      }
       const plan = PLANS.find((p) => p.key === input.plan)!;
 
       let customerId = org.stripeCustomerId;
@@ -79,11 +87,28 @@ export const billingRouter = router({
         const customer = await stripeFetch<{ id: string }>('/customers', {
           name: org.name,
           'metadata[orgId]': org.id,
-        });
+        }, 'POST', `apex-customer-${org.id}`);
         customerId = customer.id;
         await ctx.prisma.organisation.update({ where: { id: org.id }, data: { stripeCustomerId: customerId } });
       }
 
+      await assertStripeCustomerOpen(customerId);
+      const sessions = await stripeFetch<{ data: Array<{ id: string; status: string; mode: string; url: string | null; metadata?: { plan?: string } }> }>(
+        '/checkout/sessions', { customer: customerId, limit: '100' }, 'GET',
+      );
+      const previous = sessions.data.filter(s => s.mode === 'subscription')[0];
+      const open = sessions.data.find(s => s.mode === 'subscription' && s.status === 'open');
+      if (open) {
+        if (open.metadata?.plan !== plan.key || !open.url) throw new TRPCError({
+          code: 'CONFLICT', message: 'An unfinished checkout already exists for this workspace. Complete that checkout or wait for it to expire before choosing another plan.',
+        });
+        return { url: open.url };
+      }
+      // A completion can arrive between the first subscription check and this
+      // session read. Recheck before allowing a replacement session.
+      if ((await liveSubscriptions(customerId)).length) throw new TRPCError({
+        code: 'CONFLICT', message: 'This workspace already has a subscription. Change its plan in Billing instead.',
+      });
       const priceId = await ensurePrice(plan);
       const session = await stripeFetch<{ id: string; url: string }>('/checkout/sessions', {
         mode: 'subscription',
@@ -96,7 +121,7 @@ export const billingRouter = router({
         'metadata[plan]': plan.key,
         'subscription_data[metadata][orgId]': org.id,
         'subscription_data[metadata][plan]': plan.key,
-      });
+      }, 'POST', `apex-checkout-${org.id}-${previous?.id ?? 'first'}`);
       return { url: session.url };
     }),
 
@@ -106,6 +131,25 @@ export const billingRouter = router({
    * dependency for the tunnel/dev setup.
    */
   sync: internalProcedure.mutation(({ ctx }) => reconcileSubscription(ctx.prisma, ctx.principal.orgId)),
+
+  /** Stripe hosts payment-method updates and invoice history, including after a failed payment. */
+  paymentPortal: adminProcedure.mutation(async ({ ctx }) => {
+    if (!stripeConfigured()) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Stripe is not configured on this server' });
+    const org = await ctx.prisma.organisation.findUnique({ where: { id: ctx.principal.orgId } });
+    if (!org?.stripeCustomerId) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Subscribe to a plan before managing payment details.' });
+    await assertExclusiveStripeCustomer(ctx.prisma, org.stripeCustomerId, org.id);
+    await assertStripeCustomerOpen(org.stripeCustomerId);
+    // Never accept a customer ID or return URL from the browser.
+    const session = await stripeFetch<{ url: string }>('/billing_portal/sessions', {
+      customer: org.stripeCustomerId,
+      return_url: `${APP_URL()}/settings?billing=success`,
+    });
+    await recordAudit(ctx.prisma, {
+      orgId: org.id, userId: ctx.principal.userId, actor: ctx.principal.name,
+      action: 'opened billing management', target: 'Stripe payment details and invoices', ip: ctx.ip,
+    });
+    return { url: session.url };
+  }),
 
   /**
    * Move an existing subscription to another plan, in place.
@@ -134,6 +178,9 @@ export const billingRouter = router({
       const found = await theSubscription(ctx.prisma, ctx.principal.orgId);
       const plan = PLANS.find((p) => p.key === input.plan)!;
       const already = found.sub.items?.data?.[0]?.price?.lookup_key === planLookupKey(plan.key);
+      if (already && found.sub.cancel_at_period_end) {
+        await stripeFetch(`/subscriptions/${found.id}`, { cancel_at_period_end: 'false' });
+      }
       if (!already) {
         const priceId = await ensurePrice(plan);
         await stripeFetch(`/subscriptions/${found.id}`, {
@@ -154,7 +201,7 @@ export const billingRouter = router({
       }
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, userId: ctx.principal.userId, actor: ctx.principal.name,
-        action: already ? 'confirmed the subscription plan' : 'changed the subscription plan',
+        action: already && found.sub.cancel_at_period_end ? 'withdrew the subscription cancellation' : already ? 'confirmed the subscription plan' : 'changed the subscription plan',
         target: `${plan.name} (£${(plan.pricePencePerMonth / 100).toLocaleString('en-GB')}/mo)`, ip: ctx.ip,
       });
       return reconcileSubscription(ctx.prisma, ctx.principal.orgId);

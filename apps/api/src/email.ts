@@ -3,8 +3,8 @@ import { demoFallbacksAllowed } from './demo-mode.js';
 
 /**
  * Outbound email. Configured with SMTP_URL (e.g. smtp://user:pass@smtp.postmarkapp.com:587)
- * + EMAIL_FROM. Without SMTP_URL, mail is logged to the API console (dev/demo mode) so
- * flows remain testable; callers receive { emailed: false } and surface the fallback UI.
+ * + EMAIL_FROM. Without SMTP_URL, callers receive { emailed: false } and surface
+ * the fallback UI. Only the scoped demo mailbox may retain message contents.
  */
 
 let transporter: Transporter | null = null;
@@ -80,9 +80,9 @@ export function readMailbox(orgId: string): typeof mailbox {
 export async function sendMail(orgId: string, to: string, subject: string, text: string): Promise<{ emailed: boolean }> {
   const t = getTransporter();
   if (!t) {
-    // logged either way: on an instance with neither SMTP nor demo mode, the
-    // console is the only place an operator can find what would have been sent
-    console.log(`[email:not-sent] to=${to} subject="${subject}"\n${text}\n`);
+    // Reset links and temporary passwords are credentials. Logs have a different
+    // audience and retention policy from the tenant-scoped demo mailbox.
+    console.log('[email:not-sent] SMTP is not configured; no message was delivered.');
     if (mailboxEnabled()) {
       mailbox.push({ orgId, to, subject, text, at: new Date().toISOString() });
       if (mailbox.length > MAILBOX_LIMIT) mailbox.shift();
@@ -92,8 +92,9 @@ export async function sendMail(orgId: string, to: string, subject: string, text:
   try {
     await t.sendMail({ from: FROM(), to, subject, text });
     return { emailed: true };
-  } catch (e) {
-    console.error('[email] send failed:', e instanceof Error ? e.message : e);
+  } catch {
+    // Transport errors can echo SMTP credentials, recipients or message text.
+    console.error('[email] SMTP delivery failed; check the mail service configuration and availability.');
     return { emailed: false };
   }
 }

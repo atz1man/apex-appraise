@@ -148,7 +148,9 @@ describe('delivery', () => {
      * schedule was not applied to anything. It was the bug written down as the
      * expected behaviour.
      */
-    let clock = Date.now();
+    // Start at the persisted due time, not a wall clock which can fall just
+    // before SQLite's default timestamp under load.
+    let clock = (await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } })).nextAttemptAt.getTime();
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       await drainWebhooks(prisma, { deliver: async () => ({ status: 500 }), now: () => new Date(clock) });
       clock += RETRY_DELAYS[i + 1] !== undefined ? RETRY_DELAYS[i + 1]! * 1000 : 0;
@@ -219,13 +221,15 @@ describe('delivery', () => {
     await prisma.webhookEndpoint.update({ where: { id: made.id }, data: { failureCount: FAILURE_LIMIT - 1 } });
 
     await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
-    await drainWebhooks(prisma, { deliver: async () => ({ status: 503 }) });
+    const due = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId, status: 'pending' } });
+    await drainWebhooks(prisma, { deliver: async () => ({ status: 503 }), now: () => due.nextAttemptAt });
     const parked = await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: made.id } });
     expect(parked.active, 'an endpoint that never answers should stop being tried').toBe(false);
 
     await prisma.webhookEndpoint.update({ where: { id: made.id }, data: { active: true, failureCount: 5 } });
     await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd2' });
-    await drainWebhooks(prisma, { deliver: async () => ({ status: 200 }) });
+    const recovery = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId, status: 'pending' }, orderBy: { nextAttemptAt: 'asc' } });
+    await drainWebhooks(prisma, { deliver: async () => ({ status: 200 }), now: () => recovery.nextAttemptAt });
     const recovered = await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: made.id } });
     expect(recovered.failureCount).toBe(0);
   });
@@ -243,9 +247,11 @@ describe('delivery', () => {
     await addEndpoint(t, 'https://a.example.com/once-only', ['deal.created']);
     await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'd1' });
 
+    const due = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
     const posts: string[] = [];
     const instance = () =>
       drainWebhooks(prisma, {
+        now: () => due.nextAttemptAt,
         deliver: async (_url, body, headers) => {
           posts.push(headers['apex-delivery']!);
           return { status: 200 };

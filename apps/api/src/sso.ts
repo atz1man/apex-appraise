@@ -1,7 +1,7 @@
 import { createHash, createPublicKey, randomBytes } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { PrismaClient } from '@prisma/client';
-import { assertPublicHttpsUrl } from './outbound.js';
+import { publicHttpsFetch } from './outbound.js';
 
 /**
  * Single sign-on, over OIDC.
@@ -49,8 +49,7 @@ export interface OidcTransport {
  * request ends at.
  */
 export const realTransport: OidcTransport = async (url, init) => {
-  await assertPublicHttpsUrl(url);
-  const res = await fetch(url, {
+  const res = await publicHttpsFetch(url, {
     ...(init ?? { method: 'GET', headers: {} }),
     redirect: 'manual',
     signal: AbortSignal.timeout(15_000),

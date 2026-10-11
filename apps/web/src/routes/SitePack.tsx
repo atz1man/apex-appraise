@@ -93,7 +93,7 @@ export default function SitePack() {
 
   /** "still coming" and "refused" are different statements to a valuer. */
   const stateNote = (status: string, source: string) =>
-    status === 'slow' ? `Still fetching from ${source} — this panel fills in shortly.` : `${source} unreachable right now.`;
+    status === 'out-of-coverage' ? `${source} does not cover this country's site. Obtain local evidence separately.` : status === 'slow' ? `Still fetching from ${source} — this panel fills in shortly.` : `${source} unreachable right now.`;
   const soldItems = ok?.soldPrices.status === 'ok' ? ok.soldPrices.items : [];
   const keyOf = (s: { address: string; date: string; price: number }) => `${s.address}|${s.date}|${s.price}`;
   const toggle = (k: string) =>
@@ -148,7 +148,7 @@ export default function SitePack() {
         right={
           ok && (
             <span className="inline-flex items-center gap-2 rounded-[9px] bg-tint-success px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink">
-              <Dot color="rgb(var(--status-green, 30 122 85))" /> Live public data · {ok.geo.postcode}
+              <Dot color="rgb(var(--status-green, 30 122 85))" /> Public evidence · {ok.geo.postcode}
             </span>
           )
         }
@@ -161,8 +161,8 @@ export default function SitePack() {
             <div className="eyebrow">Public record</div>
             <h1 className="mt-1.5 text-[32px] font-bold tracking-[-1.2px]">Site pack</h1>
             <div className="mt-1 text-[13.5px] text-ink-2 max-w-[560px]">
-              Real sold prices, planning constraints and flood zones for this site — pulled live from
-              HM Land Registry and planning.data.gov.uk, with provenance on every figure.
+              Review recorded sales, planning layers and current flood warnings around the site. Each source shows its
+              availability; postcode-based screening needs professional verification.
             </div>
           </div>
           <div className="flex items-end gap-2">
@@ -199,7 +199,7 @@ export default function SitePack() {
               ))}
             </div>
             {/* sold-price table + map placeholder skeletons */}
-            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 xl:[grid-template-columns:minmax(0,1.4fr)_minmax(380px,1fr)]">
               <Panel>
                 <Skeleton height={18} width={260} />
                 <div className="mt-4">
@@ -241,20 +241,32 @@ export default function SitePack() {
           </div>
         ) : ok ? (
           <>
+            <Panel level={2} title="Evidence coverage" className="mt-5">
+              <p className="text-[12px] text-ink-3">Each source is checked independently. Review coverage and the source records before relying on this screening in an appraisal.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {[
+                  ['Sold prices', ok.soldPrices.status], ['Planning layers', ok.constraints.status],
+                  ['EPC records', ok.epc.status], ['Flood warnings', ok.floodWarnings.status], ['Amenities', ok.amenities.status],
+                ].map(([name, status]) => <div key={name} className="rounded-[9px] border border-border-faint bg-sunken p-3">
+                  <div className="mb-2 text-[11px] font-semibold text-ink-2">{name}</div>
+                  <StatusChip status={status === 'ok' ? 'green' : 'neutral'} label={status === 'ok' ? 'Available' : status === 'slow' ? 'Fetching' : status === 'not-configured' ? 'Key required' : status === 'out-of-coverage' ? 'Outside coverage' : 'Unavailable'} />
+                </div>)}
+              </div>
+            </Panel>
             {/* location strip */}
             <div className="mt-6 flex gap-3 flex-wrap">
               <StatCard label="Postcode" value={ok.geo.postcode} />
               <StatCard label="District" value={<span className="text-[15px]">{ok.geo.district}</span>} />
               <StatCard label="Region" value={<span className="text-[15px]">{ok.geo.region}</span>} />
-              <StatCard label="Sold records" value={String(soldItems.length)} tone="rgb(var(--brand-ink, 20 80 59))" />
+              <StatCard label="Sold records" value={ok.soldPrices.status === 'ok' ? String(soldItems.length) : '—'} tone="rgb(var(--brand-ink, 20 80 59))" />
               <StatCard
                 label="Constraints hit"
-                value={String(ok.constraints.hits.length)}
-                tone={ok.constraints.hits.length ? 'rgb(var(--status-amber, 154 98 18))' : 'rgb(var(--status-green, 30 122 85))'}
+                value={ok.constraints.status === 'ok' ? String(ok.constraints.hits.length) : '—'}
+                tone={ok.constraints.status !== 'ok' ? neutral.ink3 : ok.constraints.hits.length ? 'rgb(var(--status-amber, 154 98 18))' : 'rgb(var(--status-green, 30 122 85))'}
               />
             </div>
 
-            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 lg:[grid-template-columns:minmax(0,1fr)_360px]">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 xl:[grid-template-columns:minmax(0,1.4fr)_minmax(380px,1fr)]">
               {/* sold prices */}
               <Panel level={2}
                 title="Sold prices — HM Land Registry"
@@ -278,7 +290,7 @@ export default function SitePack() {
                 {ok.soldPrices.status !== 'ok' ? (
                   <EmptyState>{stateNote(ok.soldPrices.status, 'HM Land Registry')}</EmptyState>
                 ) : soldItems.length === 0 ? (
-                  <EmptyState>No sold-price records within ~1km of {ok.geo.postcode} in the Price Paid dataset.</EmptyState>
+                  <EmptyState>No sold-price records returned for the sampled nearby postcodes around {ok.geo.postcode}. This is not an exhaustive local market search.</EmptyState>
                 ) : (
                   <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
                     <table className="w-full min-w-[640px]">
@@ -325,7 +337,7 @@ export default function SitePack() {
                               </Td>
                               <Td right fig className="whitespace-nowrap text-[11.5px]">{fdate(s.date)}</Td>
                               <Td right fig className="font-semibold">£{Math.round(s.price).toLocaleString('en-GB')}</Td>
-                              <Td right fig>{s.psf ? `£${s.psf}` : <span className="text-ink-3b">—</span>}</Td>
+                              <Td right fig>{s.psf ? U.rate(s.psf) : <span className="text-ink-3b">—</span>}</Td>
                               <Td><span className="text-[11px] text-ink-2 capitalize">{s.propertyType.replace(/-/g, ' ')}</span></Td>
                             </tr>
                           );
@@ -336,7 +348,8 @@ export default function SitePack() {
                 )}
                 <div className="mt-3 text-[10.5px] text-ink-3">
                   Contains HM Land Registry data © Crown copyright, licensed under the Open Government Licence v3.0.
-                  £/{U.unit} shown where an EPC floor-area match exists.
+                  £/{U.unit} shown where an EPC floor-area match exists. England and Wales data; a sample of up to 40 records from nearby postcodes; registration dates can lag completed sales.
+                  {ok.soldPrices.status === 'ok' && asAtNote((ok.soldPrices as { asAt?: string }).asAt)}
                 </div>
               </Panel>
 
@@ -344,7 +357,7 @@ export default function SitePack() {
               <div className="flex flex-col gap-4">
                 <Panel level={2} title="Location of evidence">
                   <SiteMap
-                    height={260}
+                    height={320}
                     pins={[
                       { lat: ok.geo.latitude, lng: ok.geo.longitude, label: ok.dealName, sub: `${ok.address} · subject site`, kind: 'subject' as const },
                       ...soldItems
@@ -361,16 +374,17 @@ export default function SitePack() {
                   />
                   <div className="mt-2 flex gap-4 text-[11px] text-ink-2">
                     <span className="inline-flex items-center gap-1.5"><Dot color={brandInk} /> Subject site</span>
-                    <span className="inline-flex items-center gap-1.5"><Dot color={brand[400]} /> Sold within ~1km</span>
+                    <span className="inline-flex items-center gap-1.5"><Dot color={brand[400]} /> Recorded sales</span>
                   </div>
+                  <p className="mt-2 text-[10.5px] text-ink-3">Pins use postcode centres, which may overlap. They do not identify individual buildings or a legal site boundary.</p>
                 </Panel>
 
                 <Panel level={2} title="Planning constraints">
                   {ok.constraints.status !== 'ok' ? (
-                    <EmptyState>planning.data.gov.uk is unreachable right now.</EmptyState>
+                    <EmptyState>{stateNote(ok.constraints.status, 'planning.data.gov.uk')}</EmptyState>
                   ) : ok.constraints.hits.length === 0 ? (
                     <div className="rounded-[10px] bg-tint-success-2 px-3.5 py-3 text-[12.5px] text-brand-ink font-medium">
-                      Clean screen — none of the {ok.constraints.checked.length} constraint layers intersect this point.
+                      No intersections returned in the {ok.constraints.checked.length} queried layers at this postcode centre. The England dataset coverage may be incomplete; check the site boundary and local authority records.
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
@@ -400,7 +414,7 @@ export default function SitePack() {
                   </div>
                 </Panel>
 
-                <Panel level={2} title="EPC register" right={<StatusChip status={ok.epc.status === 'ok' ? 'green' : 'neutral'} label={ok.epc.status === 'ok' ? 'LIVE' : 'NOT CONFIGURED'} />}>
+                <Panel level={2} title="EPC register" right={<StatusChip status={ok.epc.status === 'ok' ? 'green' : 'neutral'} label={ok.epc.status === 'ok' ? 'AVAILABLE' : ok.epc.status === 'slow' ? 'FETCHING' : ok.epc.status === 'error' ? 'UNAVAILABLE' : ok.epc.status === 'out-of-coverage' ? 'OUTSIDE COVERAGE' : 'NOT CONFIGURED'} />}>
                   {ok.epc.status === 'ok' ? (
                     ok.epc.records.length === 0 ? (
                       <EmptyState>No EPC records for {ok.geo.postcode}.</EmptyState>
@@ -414,7 +428,7 @@ export default function SitePack() {
                             <span className="flex-1 min-w-0 truncate text-[11.5px] leading-tight">{r.address}</span>
                             {/* the register states square metres; SQFT_PER_SQM is the engine's,
                                 not a second copy of it — see appraisal-engine/src/format.ts */}
-                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{U.area(r.floorAreaSqm * SQFT_PER_SQM)}</span>
+                            <span className="fig text-[11px] text-ink-2 whitespace-nowrap">{Number.isFinite(r.floorAreaSqm) && r.floorAreaSqm > 0 ? U.area(r.floorAreaSqm * SQFT_PER_SQM) : 'Area unavailable'}</span>
                           </div>
                         ))}
                       </div>

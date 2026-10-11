@@ -65,6 +65,7 @@ test.describe('internal screens', () => {
     test.setTimeout(120_000); // live LLM extraction can take ~15-40s
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/auto`);
+    await page.getByRole('button', { name: 'Load worked example', exact: true }).click();
     await page.getByRole('button', { name: /Generate appraisal/ }).click();
     // live LLM extraction when ANTHROPIC_API_KEY is set takes ~15-40s; demo mode is instant
     await expect(page.getByText('Extracted accommodation')).toBeVisible({ timeout: 90_000 });
@@ -208,14 +209,14 @@ test.describe('internal screens', () => {
     await expect(page.getByText('Ask the workfile')).toBeVisible();
   });
 
-  test('data room answers a question from an uploaded document', async ({ page }) => {
+  test('data room explains why metadata-only documents cannot answer a question', async ({ page }) => {
     test.setTimeout(120_000); // live document Q&A can take a while when a key is set
     const id = await northgateId(page);
     await page.goto(`/deal/${id}/dataroom`);
     await page.getByPlaceholder('e.g. What does the cost plan allow for M&E?').fill('What documents can you see?');
     await page.getByRole('button', { name: 'Ask' }).click();
     // seeded documents are metadata-only (no stored files) → the workfile has nothing readable
-    await expect(page.getByText('Upload PDFs or images and the AI can answer from them.')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('No answer was generated because no source files could be read.', { exact: false })).toBeVisible({ timeout: 90_000 });
   });
 
   test('benchmarking renders percentile strips', async ({ page }) => {
@@ -1777,7 +1778,11 @@ test('the appraisal report prints an investment section without desyncing pagina
   await page.goto(`/deal/${ids.sales}/report`);
   await page.waitForSelector('.a4-page');
   await expect(page.getByText('Investment valuation')).toHaveCount(0);
-  await expect(page.getByText('4 · Sensitivity — profit on cost')).toBeVisible();
+  // the NUMBER is the claim here — the section shifts from 5 to 4 without the
+  // investment sheet. The metric in the title follows the appraisal's site mode
+  // (`sensitivityStructure`), so pinning "profit on cost" would pin the one that
+  // is uninformative on a residual scheme.
+  await expect(page.getByText(/^4 · Sensitivity — /)).toBeVisible();
   const noInv = await measure();
   expect(noInv.overflowing, `pages past A4: ${JSON.stringify(noInv.tooTall)}`).toBe(0);
   // TWO sheets separate them now: the investment valuation and, since the scheme
@@ -2419,6 +2424,7 @@ test('a new signup reaches the appraisal form in one click, on its own deal', as
    * one click produces a full appraisal even with no AI key configured, which is
    * the self-hosted and CI case.
    */
+  await page.getByRole('button', { name: 'Load worked example', exact: true }).click();
   await page.getByRole('button', { name: /Generate appraisal/i }).click();
   /**
    * 90s, not 60s: this is a live model call, and every other live-LLM assertion

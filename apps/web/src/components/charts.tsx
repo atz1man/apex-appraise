@@ -476,3 +476,123 @@ export function ProfitBridge({
     </div>
   );
 }
+
+/**
+ * The profit distribution from the Monte Carlo — the SHAPE, not three numbers.
+ *
+ * The risk panel drew P10, P50 and P90 as a flat band. Two schemes can share all
+ * three and have completely different tails, and the tail is the question a
+ * lender is actually asking: not "what is the middle" but "how bad is the bad
+ * case, and how much of the distribution is below nothing".
+ *
+ * ONE SERIES, so one hue and no legend — the panel title names it. The bars that
+ * sit entirely at or below zero are not a second series: they are a STATUS, and
+ * they carry a label and a marked zero rule as well as a colour, because a
+ * reader who cannot separate the two hues must still be able to see where the
+ * losses are. The same reason the "Prob of loss" tile sits beside this.
+ *
+ * Equal-width bins come from the engine (`monteCarlo().histogram`) rather than
+ * being derived here, so the screen, the printed report and a customer's own
+ * integration describe one distribution rather than three roundings of it.
+ */
+export function ProfitDistribution({
+  bins,
+  p10,
+  p50,
+  p90,
+  probLoss,
+  iterations,
+  height = 92,
+}: {
+  bins: ReadonlyArray<{ from: number; to: number; count: number }>;
+  p10: number;
+  p50: number;
+  p90: number;
+  probLoss: number;
+  iterations: number;
+  height?: number;
+}) {
+  if (bins.length === 0) return null;
+  const W = 300;
+  const H = height;
+  const PAD = 1;
+  const lo = bins[0]!.from;
+  const hi = bins[bins.length - 1]!.to;
+  const span = hi - lo || 1;
+  const tallest = Math.max(...bins.map((b) => b.count), 1);
+  const xOf = (v: number) => ((v - lo) / span) * W;
+  // 2px of surface between columns — the spacer that stops a histogram reading
+  // as one solid block; never wider than the column itself
+  const slot = W / bins.length;
+  const barW = Math.max(1, slot - Math.min(2, slot / 3));
+
+  const pct = (n: number) => Math.round(n * 100);
+  const summary =
+    `Profit distribution over ${iterations} runs. `
+    + `P10 ${fM(p10)}, median ${fM(p50)}, P90 ${fM(p90)}. `
+    + (probLoss > 0 ? `${pct(probLoss)}% of runs make a loss.` : 'No run makes a loss.');
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} role="img" aria-label={summary}>
+        {/**
+          * The P10–P90 span, so the eye finds the middle 80% without reading a
+          * number. STRUCTURAL, like the area washes above it: the extent it
+          * marks is also printed as P10 and P90 beneath the chart, so nothing
+          * here is carried by this wash alone, and a band drawn at 3:1 across
+          * the middle of the plot would compete with the bars and the median
+          * rule it exists to frame. Found by `e2e/graphics-contrast.spec.ts`,
+          * which measures everything not declared decorative — 1.10:1 on light
+          * and 1.07:1 on dark.
+          */}
+        <rect
+          data-decorative
+          x={xOf(p10)}
+          y={0}
+          width={Math.max(0, xOf(p90) - xOf(p10))}
+          height={H - 10}
+          fill="rgb(var(--tint-green-deep, 223 239 231))"
+          opacity={0.55}
+        />
+        {bins.map((b, i) => {
+          const h = (b.count / tallest) * (H - 14);
+          // "a loss" is a bin wholly at or below zero — a straddling bin is not
+          // coloured as one, because part of it is not
+          const loss = b.to <= 0;
+          const share = iterations > 0 ? Math.round((b.count / iterations) * 1000) / 10 : 0;
+          return (
+            <rect
+              key={i}
+              x={xOf(b.from) + PAD}
+              y={H - 10 - h}
+              width={barW}
+              height={Math.max(b.count > 0 ? 1 : 0, h)}
+              rx={2}
+              fill={loss ? 'rgb(var(--status-red, 178 58 46))' : brand[500]}
+            >
+              <title>{`${fM(b.from)} to ${fM(b.to)} — ${b.count} run${b.count === 1 ? '' : 's'} (${share}%)`}</title>
+            </rect>
+          );
+        })}
+        {/* the median, and zero where the range reaches it */}
+        <line x1={xOf(p50)} x2={xOf(p50)} y1={0} y2={H - 10} stroke={brandInk} strokeWidth={2} />
+        {lo < 0 && hi > 0 && (
+          <line x1={xOf(0)} x2={xOf(0)} y1={0} y2={H - 10} stroke="rgb(var(--status-red, 178 58 46))" strokeWidth={1} strokeDasharray="2 2" />
+        )}
+        {/* the baseline the columns stand on — a rule, not a mark, as everywhere above */}
+        <line x1={0} x2={W} y1={H - 10} y2={H - 10} stroke={GRID} strokeWidth={1} data-decorative />
+      </svg>
+      <div className="flex justify-between text-[10.5px] fig text-ink-3">
+        <span>P10 {fM(p10)}</span>
+        <span className="font-semibold text-brand-ink">P50 {fM(p50)}</span>
+        <span>P90 {fM(p90)}</span>
+      </div>
+      {/* the status, said rather than left to the colour of three bars */}
+      {probLoss > 0 && (
+        <div className="mt-1 text-[10.5px] text-status-red">
+          {pct(probLoss)}% of runs fall below zero — shown in red, left of the dashed line.
+        </div>
+      )}
+    </div>
+  );
+}

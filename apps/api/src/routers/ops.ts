@@ -1,3 +1,5 @@
+import { sourceVersion } from '../source-version.js';
+import { withModelDeadline } from '../model-deadline.js';
 import { TRPCError } from '@trpc/server';
 import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
@@ -679,7 +681,8 @@ export const documentsRouter = router({
       await assertOwnDeal(ctx, input.dealId);
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId, ...(input.category ? { category: input.category } : {}) },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const all = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
@@ -703,6 +706,7 @@ export const documentsRouter = router({
          */
         documents: docs.map((d) => ({
           ...d,
+          version: sourceVersion(d),
           sizeBytes: Number(d.sizeBytes),
           url: signFileUrl(d.url, ctx.principal.userId),
         })),
@@ -821,6 +825,31 @@ export const documentsRouter = router({
         },
       });
       return doc;
+    }),
+
+  setRevision: internalProcedure
+    .input(z.object({ documentId: z.string(), toId: z.string().nullable(), expected: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const doc = await ctx.prisma.document.findFirst({ where: { id: input.documentId, orgId: ctx.principal.orgId } });
+      if (!doc) throw new TRPCError({ code: 'NOT_FOUND' });
+      let replacement = null;
+      if (input.toId) {
+        replacement = await ctx.prisma.document.findFirst({ where: { id: input.toId, orgId: ctx.principal.orgId, dealId: doc.dealId } });
+        if (!replacement) throw new TRPCError({ code: 'NOT_FOUND' });
+        // Strict upload order makes revision cycles impossible, including concurrent links.
+        const newer = replacement.addedAt > doc.addedAt || (+replacement.addedAt === +doc.addedAt && replacement.id > doc.id);
+        if (!doc.url || !replacement.url || !newer || replacement.supersededById) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a later uploaded, current document on this deal. Both documents must have files.' });
+        }
+      }
+      await ctx.prisma.$transaction(async tx => {
+        const changed = await tx.document.updateMany({ where: { id: doc.id, orgId: ctx.principal.orgId, supersededById: input.expected }, data: { supersededById: input.toId } });
+        if (changed.count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'This revision link changed. Reload the data room and try again.' });
+        await tx.activityEvent.create({ data: { orgId: ctx.principal.orgId, dealId: doc.dealId, userId: ctx.principal.userId,
+          actor: ctx.principal.name, action: input.toId ? 'recorded a superseding document revision' : 'removed a document revision link',
+          target: replacement ? `${doc.name} → ${replacement.name}` : doc.name } });
+      });
+      return { id: doc.id };
     }),
 
   setExtraction: internalProcedure
@@ -1000,12 +1029,21 @@ export const documentsRouter = router({
       // readable = a stored file the AI can actually open (mirrors Auto-Appraisal)
       const docs = await ctx.prisma.document.findMany({
         where: { dealId: input.dealId, orgId: ctx.principal.orgId },
-        orderBy: { addedAt: 'desc' },
+        // Same-time uploads must keep their positions after a sharing update.
+        orderBy: [{ addedAt: 'desc' }, { id: 'asc' }],
       });
       const readable = docs
-        .filter((d) => d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
+        .filter((d) => !d.supersededById && d.url?.startsWith('/uploads/files/') && ['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()))
         .slice(0, 4);
-      if (readable.length === 0) return { status: 'no-docs' as const };
+      const selected = new Set(readable.map(d => d.id));
+      const excluded = docs.filter(d => !selected.has(d.id)).map(d => ({
+        name: d.name,
+        reason: d.supersededById ? 'Superseded by a later revision.' :
+          !d.url?.startsWith('/uploads/files/') ? 'No stored workfile is available.' :
+          !['pdf', 'png', 'jpg', 'jpeg'].includes(d.ext.toLowerCase()) ? 'Workfile questions currently read PDF and image files only.' :
+          'Not included: workfile questions read at most four of the newest current PDF/image files per answer.',
+      }));
+      if (readable.length === 0) return { status: 'no-docs' as const, documentsRead: [] as string[], documentsSkipped: excluded };
       const audit = () =>
         ctx.prisma.activityEvent.create({
           data: {
@@ -1027,17 +1065,19 @@ export const documentsRouter = router({
          */
         return {
           status: 'demo' as const,
-          answer: `The workfile holds ${readable.length} readable document${readable.length === 1 ? '' : 's'} (${readable.map((d) => d.name).join('; ')}). Configure ANTHROPIC_API_KEY and the AI will answer questions directly from their contents.`,
+          answer: `No files were read. Configure ANTHROPIC_API_KEY to answer questions from uploaded PDF and image files.`,
           sources: [] as string[],
-          documentsRead: readable.map((d) => d.name),
+          documentsRead: [] as string[],
+          documentsSkipped: excluded,
         };
       }
       const blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, readable.map((d) => d.id));
-      if (blocks.blocks.length === 0) return { status: 'no-docs' as const }; // files missing on disk
+      const documentsSkipped = [...excluded, ...blocks.skipped];
+      if (blocks.blocks.length === 0) return { status: 'no-docs' as const, documentsRead: [] as string[], documentsSkipped };
       const names = blocks.used.map((d) => d.name);
       const { answer, sources } = await answerFromWorkfile(input.question, blocks.blocks, names);
       await audit();
-      return { status: 'ok' as const, answer, sources, documentsRead: names };
+      return { status: 'ok' as const, answer, sources, documentsRead: names, documentsSkipped };
     }),
 });
 
@@ -1068,35 +1108,37 @@ async function answerFromWorkfile(
   docBlocks: Awaited<ReturnType<typeof documentBlocks>>['blocks'],
   docNames: string[],
 ): Promise<{ answer: string; sources: string[] }> {
-  const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
+  return withModelDeadline(async signal => {
+    const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
 
 QUESTION:
 ${question}`;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      max_tokens: 1500,
-      tools: [ANSWER_TOOL],
-      tool_choice: { type: 'tool', name: 'record_answer' },
-      messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
-    }),
-  });
-  if (res.ok) {
-    const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
-    const toolUse = body.content.find((c) => c.type === 'tool_use');
-    const parsed = zWorkfileAnswer.safeParse(toolUse?.input);
-    if (parsed.success) {
-      return { answer: parsed.data.answer, sources: parsed.data.sources.filter((s) => docNames.includes(s)) };
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal,
+      headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 1500,
+        tools: [ANSWER_TOOL],
+        tool_choice: { type: 'tool', name: 'record_answer' },
+        messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
+      }),
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+      const toolUse = body.content.find((c) => c.type === 'tool_use');
+      const parsed = zWorkfileAnswer.safeParse(toolUse?.input);
+      if (parsed.success) {
+        return { answer: parsed.data.answer, sources: parsed.data.sources.filter((s) => docNames.includes(s)) };
+      }
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'The AI returned an unusable answer — try again.' });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'The AI returned an unusable answer — try again.' });
-  }
-  // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
-  const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-  throw new TRPCError({
-    code: 'BAD_REQUEST',
-    message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+    });
   });
 }
 
@@ -1722,24 +1764,26 @@ export const integrationsRouter = router({
       if (input.provider === 'HM Land Registry') {
         // REAL sold-price data from the open PPD API when the deal has a postcode
         let live = 0;
+        let lookupFailed = false;
         if (deal.postcode) {
+          let sold: import('../opendata.js').SoldPrice[] = [];
           try {
             const { fetchSoldPrices } = await import('../opendata.js');
-            const sold = (await fetchSoldPrices(deal.postcode)).slice(0, 3);
-            for (const s of sold) {
-              await ctx.prisma.comparable.create({
-                data: {
-                  orgId: ctx.principal.orgId,
-                  dealId: deal.id,
-                  address: s.address,
-                  meta: `Sold ${s.date} · £${Math.round(s.price).toLocaleString('en-GB')} · ${s.propertyType} · HM Land Registry PPD`,
-                  basePsf: 0, // analyst sets £/ft² (or use the Site pack's EPC match)
-                },
-              });
-              live++;
-            }
+            sold = (await fetchSoldPrices(deal.postcode)).slice(0, 3);
           } catch {
-            live = 0;
+            lookupFailed = true;
+          }
+          for (const s of sold) {
+            await ctx.prisma.comparable.create({
+              data: {
+                orgId: ctx.principal.orgId,
+                dealId: deal.id,
+                address: s.address,
+                meta: `Sold ${s.date} · £${Math.round(s.price).toLocaleString('en-GB')} · ${s.propertyType} · HM Land Registry PPD`,
+                basePsf: 0, // analyst sets £/ft² (or use the Site pack's EPC match)
+              },
+            });
+            live++;
           }
         }
         if (live > 0) {
@@ -1755,7 +1799,9 @@ export const integrationsRouter = router({
           throw new TRPCError({
             code: 'PRECONDITION_FAILED',
             message: deal.postcode
-              ? `No Price Paid records came back for ${deal.postcode}. Nothing has been added — add comparables by hand, or try again later.`
+              ? lookupFailed
+                ? 'The Price Paid search is unavailable or incomplete. Nothing has been added — try again later, or add verified comparables by hand.'
+                : `No Price Paid records came back for ${deal.postcode}. Nothing has been added — add comparables by hand, or try again later.`
               : 'This deal has no postcode, so there is nothing to look up. Add one on the deal first.',
           });
         } else {
@@ -1783,4 +1829,3 @@ export const integrationsRouter = router({
       return { created };
     }),
 });
-

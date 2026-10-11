@@ -28,7 +28,7 @@ test('self-serve registration creates a fresh empty workspace', async ({ page })
    * who changes their mind closes it, which is what happens here before checking
    * the empty pipeline behind it.
    */
-  await page.getByRole('link', { name: /New deal from documents/ }).click();
+  await page.getByRole('link', { name: 'Continue setup →', exact: true }).click();
   await expect(page.getByText('New deal', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Your pipeline is empty')).toBeVisible();

@@ -27,6 +27,8 @@ server {
     proxy_pass http://${API_UPSTREAM};
     proxy_set_header Host $host;
     include /etc/nginx/client-ip.conf;
+    # Let the 90-second model deadline return its actionable tRPC error.
+    proxy_read_timeout 120s;
   }
 
   # ^~ matters: without it the .png/.webp regex location below wins over this

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { clearSession, getPrincipal, trpc } from '../lib/trpc';
 import { fM } from '../lib/format';
 import { useUnits } from '../lib/region';
-import { Avatar, Button, Icon, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
+import { Avatar, Button, Icon, Listbox, Skeleton, StatusChip, TopBar, SPARKLE } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
 import { workingDeal } from '../lib/working-deal';
 
@@ -36,12 +36,13 @@ const ICONS = {
 type IconKey = keyof typeof ICONS;
 
 function GettingStarted({ flagshipId }: { flagshipId?: string }) {
-  const { data: ob } = trpc.org.onboarding.useQuery(undefined, { staleTime: 30_000 });
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem('apex_onboarding_hidden') === '1');
+  const { data: ob } = trpc.org.onboarding.useQuery(undefined, { staleTime: 30_000, refetchOnMount: 'always' });
+  const dismissalKey = `apex_onboarding_hidden_${getPrincipal()?.userId ?? 'anonymous'}`;
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissalKey) === '1');
   if (!ob || dismissed) return null;
   const dealPath = (tool: string) => (flagshipId ? `/deal/${flagshipId}/${tool}` : '/board');
   const steps: Array<[done: boolean, label: string, to: string]> = [
-    [ob.hasDeal, 'Create your first deal', '/board'],
+    [ob.hasDeal, 'Create your first deal', '/board?new=1'],
     [ob.hasAppraisal, 'Save an appraisal', dealPath('appraisal')],
     [ob.hasDocument, 'Add a document to the data room', dealPath('dataroom')],
     [ob.hasComparable, 'Support the values with comparables', dealPath('comparables')],
@@ -49,6 +50,7 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
   ];
   const done = steps.filter(([d]) => d).length;
   if (done === steps.length) return null;
+  const next = steps.find(([complete]) => !complete)!;
   return (
     <section className="mt-6 bg-surface border border-border-strong rounded-panel shadow-rest p-5" data-testid="getting-started">
       <div className="flex items-center gap-3 flex-wrap">
@@ -60,12 +62,19 @@ function GettingStarted({ flagshipId }: { flagshipId?: string }) {
         <button
           className="ml-auto text-[11.5px] font-medium text-ink-3 hover:text-ink"
           onClick={() => {
-            localStorage.setItem('apex_onboarding_hidden', '1');
+            localStorage.setItem(dismissalKey, '1');
             setDismissed(true);
           }}
         >
           Hide
         </button>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[15px] font-semibold">Your next step</h2>
+          <p className="mt-1 text-[12.5px] text-ink-2">{next[1]}</p>
+        </div>
+        <Button to={next[2]}>Continue setup →</Button>
       </div>
       <div className="mt-3 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map(([isDone, label, to]) => (
@@ -98,7 +107,7 @@ export default function Hub() {
   const navigate = useNavigate();
   const principal = getPrincipal();
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.deals.list.useQuery({});
+  const { data, isLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
   const { data: queue } = trpc.appraisal.reviewQueue.useQuery(undefined, { staleTime: 15_000 });
   const loadSample = trpc.org.loadSampleDeal.useMutation({
@@ -108,7 +117,10 @@ export default function Hub() {
     },
   });
   // the deal the firm is on — `lib/working-deal.ts` says how that is decided
-  const flagship = workingDeal(data?.deals);
+  const selectionKey = `apex_working_deal_${principal?.userId ?? 'anonymous'}`;
+  const [selectedDealId, setSelectedDealId] = useState(() => sessionStorage.getItem(selectionKey) ?? '');
+  // Only a deal returned for this signed-in workspace can become the tool target.
+  const flagship = data?.deals.find((d) => d.id === selectedDealId) ?? workingDeal(data?.deals);
   // icon tile tints by tool category — appraise green, site amber, sell blue, records purple
   const TOOL_TINTS: Record<string, string> = {
     appraise: 'bg-tint-success text-brand-ink',
@@ -121,13 +133,14 @@ export default function Hub() {
         ['auto', 'Auto-Appraisal', 'Documents in → appraisal out, AI or manual', `/deal/${flagship.id}/auto`, 'appraise'],
         ['appraisal', 'Development appraisal', 'Residual, cashflow, finance & returns', `/deal/${flagship.id}/appraisal`, 'appraise'],
         ['comps', 'Comparables', `Adjustment grid → supported £/${U.unit}`, `/deal/${flagship.id}/comparables`, 'appraise'],
+        ['comps', 'Site evidence', 'Maps, recorded sales, planning & EPCs', `/deal/${flagship.id}/sitepack`, 'site'],
         ['scenarios', 'Scenarios', 'Compare scheme options side-by-side', `/deal/${flagship.id}/scenarios`, 'appraise'],
         ['costs', 'Cost monitoring', 'Budget vs actual, contractors, photo log', `/deal/${flagship.id}/costs`, 'site'],
         ['sales', 'Sales & lettings', 'Unit tracker, progression, rent roll', `/deal/${flagship.id}/sales`, 'sell'],
         ['dataroom', 'Data room', 'Deal documents with live extraction', `/deal/${flagship.id}/dataroom`, 'records'],
         ['appraisal', 'Appraisal report', 'Print-ready investment pack + Red Book', `/deal/${flagship.id}/report`, 'records'],
         ['comps', 'Field inspection', 'Mobile capture → valuation workbench', '/field', 'site'],
-        ['bench', 'Benchmarking', 'Your deals vs the market — the data moat', '/benchmarking', 'appraise'],
+        ['bench', 'Benchmarking', 'Consented scheme benchmarks and coverage', '/benchmarking', 'appraise'],
         // the register, not the LP's own page: an internal user is not an LP, and
         // `investors.myPosition` answered them FORBIDDEN
         ['investor', 'Investors', 'The register — holdings, distributions, capital calls, portal logins', '/investors', 'sell'],
@@ -136,7 +149,7 @@ export default function Hub() {
         // A4. It was complete, tested and reachable only by typing the URL: every
         // one of its e2e specs opens it with `page.goto`, which is the tell.
         ['pack', 'Portfolio funding pack', 'The book as a lender receives it — exposure, covenants, exceptions', '/portfolio/pack', 'records'],
-        ['integrations', 'Integrations', 'Land Registry, EPC, AVM & more', '/integrations', 'records'],
+        ['integrations', 'Integrations', 'Supported feeds, coverage & credentials', '/integrations', 'records'],
       ]
     : [];
 
@@ -212,6 +225,10 @@ export default function Hub() {
           )}
         </section>
 
+        {dealsError && <div role="alert" className="mt-6 rounded-panel border border-border-strong bg-surface p-5">
+          <p className="text-[13px] text-ink-2">Your deals could not be loaded. Retry to open your workfiles.</p>
+          <Button className="mt-3" onClick={() => void refetchDeals()}>Retry deals</Button>
+        </div>}
         <GettingStarted flagshipId={flagship?.id} />
 
         {/* empty-workspace onboarding for freshly registered orgs */}
@@ -220,8 +237,8 @@ export default function Hub() {
             <div className="eyebrow">Get started</div>
             <h2 className="mt-1.5 text-[22px] font-bold tracking-[-0.6px]">Add your first deal</h2>
             <p className="mt-2 text-[13.5px] text-ink-2 max-w-[460px] mx-auto leading-relaxed">
-              Create a deal on the pipeline board, then run the Auto-Appraisal — paste your planning
-              text and cost-plan notes and get a full residual appraisal in seconds.
+              Create a deal, then enter your scheme manually or extract assumptions from documents.
+              Review the inputs, save your appraisal and prepare the report.
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5 flex-wrap">
               {/* straight into the form. Landing on the board — where the same
@@ -285,7 +302,16 @@ export default function Hub() {
         {/* deal tools grid */}
         <section className="mt-9">
           <div className="eyebrow">Deal tools</div>
-          <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">Everything on {flagship?.name ?? 'your pipeline'}</h2>
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="mt-1 text-[21px] font-bold tracking-[-0.5px]">Everything on {flagship?.name ?? 'your pipeline'}</h2>
+              {flagship && <p className="mt-1 text-[12px] text-ink-3">Choose the deal you are working on. Every deal tool below opens that workfile.</p>}
+            </div>
+            {flagship && data && <div className="w-full sm:w-[300px]">
+              <Listbox ariaLabel="Working deal" value={flagship.id} options={data.deals.map((d) => ({ value: d.id, label: d.name }))}
+                onChange={(id) => { setSelectedDealId(id); sessionStorage.setItem(selectionKey, id); }} />
+            </div>}
+          </div>
           <div className="mt-4 grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(255px, 1fr))' }}>
             {isLoading &&
               Array.from({ length: 8 }, (_, i) => (
@@ -313,7 +339,7 @@ export default function Hub() {
 
         <Link to="/integrations" className="mt-7 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-ink hover:text-brand-600 transition-colors">
           <span aria-hidden="true" className="inline-flex"><Icon d={ICONS.integrations} size={15} /></span>
-          Connected data sources — Land Registry, EPC, AVM →
+          Data sources — capabilities and coverage →
         </Link>
       </main>
     </div>

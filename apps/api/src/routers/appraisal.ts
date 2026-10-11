@@ -1,3 +1,10 @@
+import { sourceVersion } from '../source-version.js';
+import { withModelDeadline } from '../model-deadline.js';
+import { readBoundedFile } from '../bounded-file.js';
+import { createHash } from 'node:crypto';
+import type { Appraisal } from '@prisma/client';
+import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
+import { signFileUrl } from '../uploads.js';
 import { TRPCError } from '@trpc/server';
 import { unsupportedClaims, unsupportedFigures } from '../narrative-guard.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
@@ -27,7 +34,7 @@ import { SHARE_DEFAULT_DAYS, SHARE_MAX_DAYS, newShareToken, shareRefusal } from 
 import { signDownloadToken } from '../download-token.js';
 import { emitWebhook } from '../webhook-delivery.js';
 import { feedApproved } from '../benchmark-feed.js';
-import { pinFor, verify as verifyPin } from '../approval-pin.js';
+import { inputHashOf, pinFor, verify as verifyPin } from '../approval-pin.js';
 import { SERIALISATION_FAILURE, assertUnchanged, retryOnSerialisationFailure } from '../optimistic.js';
 import { SCENARIO_ASSUMPTIONS, scenarioMetrics } from '@apex/appraisal-engine';
 
@@ -174,7 +181,26 @@ export const appraisalRouter = router({
     const row = await currentAppraisal(ctx.prisma.appraisal, input, ctx.principal.orgId);
     if (!row) return null;
     const engineInput = appraisalRowToEngineInput(row);
+    const review = readSourceReview(row);
+    const sourceDocs = review ? await ctx.prisma.document.findMany({
+      where: { orgId: ctx.principal.orgId, dealId: row.dealId, id: { in: review.documents.map(d => d.id) } },
+      orderBy: { id: 'asc' },
+    }) : [];
+    const sourceReview = review ? {
+      reviewerName: review.reviewerName, reviewedAt: review.reviewedAt,
+      inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,
+      documents: review.documents.map(({ storagePath, ...snapshot }) => {
+        const current = sourceDocs.find(d => d.id === snapshot.id);
+        const unchanged = !!current && current.url === storagePath && current.name === snapshot.name
+          && current.sizeBytes.toString() === snapshot.sizeBytes && current.addedAt.toISOString() === snapshot.addedAt
+          && (snapshot.sha256 === null || current.sha256 === snapshot.sha256);
+        return { ...snapshot, supersededById: current?.supersededById ?? null, status: !current ? 'missing' as const : current.supersededById ? 'superseded' as const : unchanged ? 'unchanged' as const : 'changed' as const,
+          url: unchanged && !current?.supersededById ? signFileUrl(current!.url, ctx.principal.userId) : null };
+      }),
+    } : null;
     return {
+      sourceReview,
+      sourceReviewState: review ? 'recorded' as const : row.sourceReview !== null ? 'unreadable' as const : 'absent' as const,
       id: row.id,
       dealId: row.dealId,
       label: row.label,
@@ -227,6 +253,7 @@ export const appraisalRouter = router({
         dealId: z.string(),
         input: zAppraisalInput,
         source: z.string().default('manual'),
+        sourceReview: zSourceReviewRequest.optional(),
         // versioning: asNewVersion snapshots the current row into history and
         // creates a fresh current version under the given label
         asNewVersion: z.boolean().default(false),
@@ -256,7 +283,41 @@ export const appraisalRouter = router({
         ...inputToRow(input.input),
         source: input.source,
         resultCache: JSON.stringify({ result, jv }),
+        // An ordinary save retains the historical record; its hash exposes any changed inputs.
+        sourceReview: input.asNewVersion ? null : existing?.sourceReview ?? null,
       };
+      if (input.sourceReview) {
+        const ids = [...new Set(input.sourceReview.documentIds)];
+        const documents = await ctx.prisma.document.findMany({
+          where: { orgId: ctx.principal.orgId, dealId: input.dealId, id: { in: ids } }, orderBy: { id: 'asc' },
+        });
+        if (documents.length !== ids.length || documents.some(d => !d.url || d.supersededById)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'A reviewed source is unavailable in this deal. Reload the source documents before saving.' });
+        }
+        if (documents.some(d => d.sha256 !== null && !zSourceFingerprint.safeParse(d.sha256).success)) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'A source has an invalid upload fingerprint. Contact your administrator before recording a review.' });
+        }
+        for (const expected of input.sourceReview.expectedSources ?? []) {
+          const document = documents.find(d => d.id === expected.id);
+          if (!document || sourceVersion(document) !== expected.version) {
+            throw new TRPCError({ code: 'CONFLICT', message: 'A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.' });
+          }
+        }
+        for (const ref of input.sourceReview.references) {
+          const doc = documents.find(d => d.id === ref.documentId);
+          if (!doc || ref.unitIndex >= input.input.units.length || (ref.page !== null && doc.ext.toLowerCase() !== 'pdf') || (ref.page === null && !ref.locator)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each input reference needs a reviewed document, a valid unit, and a PDF page or sheet/cell reference.' });
+          }
+        }
+        data.sourceReview = JSON.stringify({
+          references: input.sourceReview.references.map(ref => ({ ...ref, unitLabel: input.input.units[ref.unitIndex].label })),
+          version: 1, reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name,
+          reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
+          sample: input.sourceReview.sample, omissions: input.sourceReview.omissions,
+          documents: documents.map(d => ({ id: d.id, name: d.name, sizeBytes: d.sizeBytes.toString(),
+            addedAt: d.addedAt.toISOString(), storagePath: d.url, sha256: d.sha256 })),
+        });
+      }
       let row;
       if (existing && input.asNewVersion) {
         /**
@@ -1435,43 +1496,70 @@ type ContentBlock =
  * is only needed when somebody actually selects a spreadsheet, and the same rule
  * applies on a server as in the browser.
  *
- * Bounded at the first worksheet's first 400 rows and 40 columns, which is a
- * decision rather than a guard: a cost plan's figures are at the top left, and a
- * 20,000-row export would spend the request budget on a model's context without
- * telling anybody. The bound is REPORTED when it bites, for the same reason the
- * skips are.
+ * Up to ten worksheets, 400 rows and 40 columns each, within a shared text
+ * budget. Every truncated sheet is named. Cell addresses remain in the text
+ * so a reviewer can locate an extracted figure in the original workbook.
  */
-async function spreadsheetText(filePath: string): Promise<{ text: string; truncated: boolean }> {
+async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: string; warnings: string[] }> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
-  const sheet = wb.worksheets[0];
-  if (!sheet) return { text: '', truncated: false };
-  const MAX_ROWS = 400;
-  const MAX_COLS = 40;
-  const lines: string[] = [`[sheet: ${sheet.name}]`];
-  let truncated = sheet.rowCount > MAX_ROWS || sheet.columnCount > MAX_COLS;
-  sheet.eachRow({ includeEmpty: false }, (row: { getCell: (c: number) => { value: unknown } }, n: number) => {
-    if (n > MAX_ROWS) return;
-    const cells: string[] = [];
-    for (let c = 1; c <= Math.min(sheet.columnCount, MAX_COLS); c++) {
-      const v = row.getCell(c).value;
-      cells.push(
-        v == null
-          ? ''
-          : typeof v === 'object' && 'result' in (v as object)
-            ? String((v as { result: unknown }).result ?? '')
-            : typeof v === 'object' && 'text' in (v as object)
-              ? String((v as { text: unknown }).text ?? '')
-              : String(v),
-      );
+  await wb.xlsx.load(new Uint8Array(data).buffer);
+  const lines: string[] = [];
+  const warnings: string[] = [];
+  let chars = 0;
+  let readableRows = 0;
+  const MAX_CHARS = budget;
+  for (const sheet of wb.worksheets.slice(0, 10)) {
+    const heading = `[sheet: ${sheet.name}]`;
+    if (chars + heading.length + 1 > MAX_CHARS) {
+      warnings.push(`${sheet.name}: omitted because the shared 100,000-character spreadsheet budget was reached`);
+      continue;
     }
-    // trailing empties carry nothing and cost context
-    while (cells.length && cells[cells.length - 1] === '') cells.pop();
-    if (cells.length) lines.push(cells.join('\t'));
-  });
-  if (wb.worksheets.length > 1) truncated = true;
-  return { text: lines.join('\n'), truncated };
+    lines.push(heading);
+    chars += heading.length + 1;
+    if (sheet.rowCount > 400) warnings.push(`${sheet.name}: only the first 400 rows were read`);
+    if (sheet.columnCount > 40) warnings.push(`${sheet.name}: only the first 40 columns were read`);
+    let exhausted = false;
+    let missingFormula = false;
+    for (let n = 1; n <= Math.min(sheet.rowCount, 400) && !exhausted; n++) {
+      const row = sheet.getRow(n);
+      const cells: string[] = [];
+      for (let c = 1; c <= Math.min(sheet.columnCount, 40); c++) {
+        const cell = row.getCell(c);
+        const v = cell.value;
+        if (v == null) continue;
+        let text: string;
+        if (typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) {
+          if (v.result == null) {
+            missingFormula = true;
+            text = '[formula has no cached result; recalculate in Excel]';
+          } else if (typeof v.result === 'object' && 'error' in v.result) {
+            text = `[formula error: ${v.result.error}]`;
+            missingFormula = true;
+          } else text = String(v.result);
+        } else if (typeof v === 'object' && 'richText' in v) {
+          text = v.richText.map(part => part.text).join('');
+        } else if (typeof v === 'object' && 'text' in v) text = String(v.text);
+        else if (v instanceof Date) text = v.toISOString();
+        else if (typeof v === 'object' && 'error' in v) text = `[cell error: ${v.error}]`;
+        else text = String(v);
+        cells.push(`${cell.address}: ${text}`);
+      }
+      if (!cells.length) continue;
+      const line = cells.join(' | ');
+      if (chars + line.length + 1 > MAX_CHARS) {
+        exhausted = true;
+        warnings.push(`${sheet.name}: remaining rows omitted at the shared 100,000-character spreadsheet budget`);
+        break;
+      }
+      chars += line.length + 1;
+      lines.push(line);
+      readableRows++;
+    }
+    if (missingFormula) warnings.push(`${sheet.name}: formulas without cached results or with errors need recalculation in Excel`);
+  }
+  for (const sheet of wb.worksheets.slice(10)) warnings.push(`${sheet.name}: omitted by the 10-worksheet limit`);
+  return { text: readableRows ? lines.join('\n') : '', warnings };
 }
 
 /**
@@ -1487,25 +1575,38 @@ async function spreadsheetText(filePath: string): Promise<{ text: string; trunca
  * and a model handed the bytes would invent. Storing one in the data room is
  * still useful; feeding it to an extraction never was.
  */
+type ExtractionSource = {
+  id: string; name: string; dealId: string; url: string; sha256: string | null;
+  ext: string; sizeBytes: bigint; addedAt: Date; version: string;
+};
+
 export async function documentBlocks(
   prisma: any,
   orgId: string,
   documentIds: string[],
 ): Promise<{
   blocks: ContentBlock[];
-  used: Array<{ id: string; name: string; dealId: string }>;
+  integrityFailures: Array<{ id: string; name: string; dealId: string }>;
+  used: ExtractionSource[];
   skipped: Array<{ name: string; reason: string }>;
 }> {
   const { uploadPathFor } = await import('../uploads.js');
-  const { readFile } = await import('node:fs/promises');
-  // ordered: `slice(0, 4)` below means the order can decide which documents are
+  // ordered: `slice(0, 12)` below means the order can decide which documents are
   // read at all, and the blocks reach a model in this sequence
   const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
   const blocks: ContentBlock[] = [];
-  const used: Array<{ id: string; name: string; dealId: string }> = [];
+  const integrityFailures: Array<{ id: string; name: string; dealId: string }> = [];
+  const used: ExtractionSource[] = [];
   const skipped: Array<{ name: string; reason: string }> = [];
+  // The tenant-scoped query intentionally cannot distinguish missing from foreign
+  // IDs. Report only the caller's unavailable selection count, never source details.
+  const available = new Set(docs.map((doc: { id: string }) => doc.id));
+  const unavailable = [...new Set(documentIds)].filter(id => !available.has(id)).length;
+  if (unavailable) skipped.push({ name: 'Selected sources', reason: `${unavailable} selected document${unavailable === 1 ? ' is' : 's are'} unavailable in this workspace. Reload the source list and review the selection.` });
   let totalBytes = 0;
-  for (const doc of docs.slice(0, 4)) {
+  let textBudget = 100_000;
+  for (const doc of docs.slice(0, 12)) {
+    if (doc.supersededById) { skipped.push({ name: doc.name, reason: 'Superseded by a later document revision; select the current source.' }); continue; }
     const filePath = doc.url ? uploadPathFor(doc.url) : null;
     if (!filePath) {
       skipped.push({ name: doc.name, reason: 'no file has been uploaded for it yet' });
@@ -1525,30 +1626,36 @@ export async function documentBlocks(
       });
       continue;
     }
-    let data: Buffer;
+    let data: Buffer | null;
     try {
-      data = await readFile(filePath);
+      data = await readBoundedFile(filePath, 20 * 1024 * 1024 - totalBytes);
     } catch {
       // the row says there is a file and the disk disagrees; that is worth saying
       skipped.push({ name: doc.name, reason: 'its file could not be read from storage' });
       continue;
     }
-    if (totalBytes + data.length > 20 * 1024 * 1024) {
-      skipped.push({ name: doc.name, reason: 'the 20 MB limit for one extraction was already used by the documents before it' });
+    if (data === null) {
+      skipped.push({ name: doc.name, reason: 'exceeds the remaining 20 MB extraction byte budget — split the source or select fewer documents' });
+      continue;
+    }
+    const sha256 = createHash('sha256').update(data).digest('hex');
+    if (doc.sha256 != null && doc.sha256 !== sha256) {
+      integrityFailures.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
+      skipped.push({ name: doc.name, reason: 'Stored file does not match its upload fingerprint. It was not read for extraction; upload the correct source as a new document.' });
       continue;
     }
     totalBytes += data.length;
     if (spreadsheet) {
       try {
-        const { text, truncated } = await spreadsheetText(filePath);
+        const prefix = `--- ${doc.name} ---\n`;
+        const { text, warnings } = await spreadsheetText(data, Math.max(0, textBudget - prefix.length));
+        if (warnings.length) skipped.push({ name: doc.name, reason: warnings.join('; ') });
         if (!text.trim()) {
-          skipped.push({ name: doc.name, reason: 'the spreadsheet has no readable cells' });
+          skipped.push({ name: doc.name, reason: 'no readable cells were found within the extraction limits' });
           continue;
         }
-        blocks.push({ type: 'text', text: `--- ${doc.name} ---\n${text}` });
-        if (truncated) {
-          skipped.push({ name: doc.name, reason: 'only its first worksheet and first 400 rows were read' });
-        }
+        blocks.push({ type: 'text', text: prefix + text });
+        textBudget = Math.max(0, textBudget - prefix.length - text.length);
       } catch {
         skipped.push({ name: doc.name, reason: 'the spreadsheet could not be opened — re-save it as .xlsx' });
         continue;
@@ -1558,9 +1665,13 @@ export async function documentBlocks(
     } else {
       blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType!, data: data.toString('base64') } });
     }
-    used.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
+    // Report legacy identity only after successful content preparation.
+    if (doc.sha256 == null) skipped.push({ name: doc.name, reason: 'No upload fingerprint was recorded. The file was read for extraction, but its bytes cannot be verified against the original upload.' });
+    used.push({ id: doc.id, name: doc.name, dealId: doc.dealId, url: doc.url,
+      sha256: doc.sha256 ?? null, ext: doc.ext, sizeBytes: doc.sizeBytes, addedAt: doc.addedAt, version: sourceVersion(doc) });
   }
-  return { blocks, used, skipped };
+  for (const doc of docs.slice(12)) skipped.push({ name: doc.name, reason: 'omitted by the 12-document extraction limit' });
+  return { blocks, used, skipped, integrityFailures };
 }
 
 /**
@@ -1572,10 +1683,10 @@ export async function documentBlocks(
  */
 async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], docNames: string[] = []): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (key) {
+  if (key) return withModelDeadline(async signal => {
     const instruction = `Extract the development-appraisal INPUTS via record_extraction from the attached documents${docNames.length ? ` (${docNames.join('; ')})` : ''}${notes.trim() ? ' and the notes below' : ''}. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated; source cites the document/page or note it came from). Anything the documents do not state: null.${notes.trim() ? `\n\nNOTES:\n${notes}` : ''}`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+      method: 'POST', signal,
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
@@ -1603,7 +1714,7 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
       code: 'BAD_REQUEST',
       message: `AI extraction unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Use manual entry, or fix the API key/credits.`,
     });
-  }
+  });
   /**
    * No key. What follows is the built-in worked example, not a reading of the
    * user's documents — right for a demo, dangerous in production, and the
@@ -1725,7 +1836,7 @@ export const autoAppraisalRouter = router({
       z
         .object({
           notes: z.string().default(''),
-          documentIds: z.array(z.string()).max(4).default([]),
+          documentIds: z.array(z.string()).max(12).default([]),
           buildPerSqft: z.number().positive().default(105),
         })
         .refine((v) => v.notes.trim().length >= 10 || v.documentIds.length > 0, {
@@ -1733,12 +1844,20 @@ export const autoAppraisalRouter = router({
         }),
     )
     .mutation(async ({ ctx, input }) => {
-      let blocks: Awaited<ReturnType<typeof documentBlocks>> = { blocks: [], used: [], skipped: [] };
+      let blocks: Awaited<ReturnType<typeof documentBlocks>> = { blocks: [], used: [], skipped: [], integrityFailures: [] };
       if (input.documentIds.length > 0) {
         if (!process.env.ANTHROPIC_API_KEY) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reading documents needs the AI configured (ANTHROPIC_API_KEY) — paste the text as notes instead.' });
         }
         blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, input.documentIds);
+        // Verification is read-only; persist failures here in the mutation, including
+        // entirely refused selections, without attributing a model action that never ran.
+        for (const doc of blocks.integrityFailures) {
+          await ctx.prisma.activityEvent.create({ data: {
+            orgId: ctx.principal.orgId, dealId: doc.dealId, actor: ctx.principal.name,
+            action: 'refused extraction from mismatched source', target: `${doc.name} (${doc.id})`,
+          } });
+        }
         if (blocks.blocks.length === 0) {
           /**
            * Naming each one and why. This said "None of the selected documents
@@ -1756,17 +1875,30 @@ export const autoAppraisalRouter = router({
         }
       }
       const extraction = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
-      // successful read hardens the data-room status + audit trail
-      for (const doc of blocks.used) {
-        await ctx.prisma.document.update({ where: { id: doc.id }, data: { extraction: 'EXTRACTED' } });
-        await ctx.prisma.activityEvent.create({
-          data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: AI_ACTOR, action: 'extracted scheme from', target: doc.name },
-        });
-      }
+      // A model call can outlive a source revision or deletion. Compare the exact
+      // prepared identity at the write, and commit every status + audit together.
+      // A stale source must not leave earlier files marked as a successful run.
+      if (blocks.used.length) await ctx.prisma.$transaction(async (tx) => {
+        for (const doc of blocks.used) {
+          const { count } = await tx.document.updateMany({
+            where: {
+              id: doc.id, orgId: ctx.principal.orgId, dealId: doc.dealId,
+              url: doc.url, sha256: doc.sha256, supersededById: null,
+              name: doc.name, ext: doc.ext, sizeBytes: doc.sizeBytes, addedAt: doc.addedAt,
+            },
+            data: { extraction: 'EXTRACTED' },
+          });
+          if (count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'A source changed while extraction was running. Reload the source documents and extract again.' });
+          await tx.activityEvent.create({
+            data: { orgId: ctx.principal.orgId, dealId: doc.dealId, actor: AI_ACTOR, action: 'extracted scheme from', target: doc.name },
+          });
+        }
+      });
       return {
         extraction,
         indicative: indicative(extraction, input.buildPerSqft),
         documentsRead: blocks.used.map((d) => d.name),
+        sourceDocuments: blocks.used.map(({ id, name, version }) => ({ id, name, version })),
         /**
          * What was NOT read, and why. A partial skip — one PDF and one DWG — used
          * to read as a complete success: the screen said "Generated by AI from 1
@@ -1880,9 +2012,9 @@ export const comparablesRouter = router({
          * columns should both land. Only the same column is last-write-wins,
          * which is what editing one number means.
          */
-        address: z.string().optional(),
+        address: z.string().trim().min(1).optional(),
         meta: z.string().optional(),
-        basePsf: z.number().optional(),
+        basePsf: z.number().finite().positive().optional(),
         adjSize: z.number().optional(),
         adjCondition: z.number().optional(),
         adjDate: z.number().optional(),

@@ -40,7 +40,7 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
   {
     label: 'Property & market data',
     items: [
-      { provider: 'HM Land Registry', name: 'HM Land Registry', mark: 'LR', desc: 'Sold price paid data and title information for comparable evidence and ownership.' },
+      { provider: 'HM Land Registry', name: 'HM Land Registry', mark: 'LR', desc: 'Recorded residential sale prices for comparable evidence. This connector does not retrieve title ownership.' },
       { provider: 'EPC Register', name: 'EPC Register', mark: 'EP', desc: 'Energy performance certificates — floor areas and ratings for the subject and comps.' },
       { provider: 'Companies House', name: 'Companies House', mark: 'CH', desc: 'Counterparty due diligence — officers, charges and filing status on the site pack.' },
       { provider: 'PriceHubble AVM', name: 'PriceHubble AVM', mark: 'PH', desc: 'Third-party automated valuation and market intelligence, sold as a subscription.' },
@@ -58,7 +58,7 @@ const GROUPS: Array<{ label: string; items: ProviderMeta[] }> = [
        */
       { provider: 'Planning Portal', name: 'Planning data', mark: 'PD', desc: 'Designations and constraints intersecting the site, from planning.data.gov.uk — conservation areas, listed buildings, flood zones, green belt.' },
       { provider: 'Ordnance Survey', name: 'Ordnance Survey', mark: 'OS', desc: 'Ordnance Survey mapping and boundaries, through the OS Data Hub.' },
-      { provider: 'Environment Agency', name: 'Environment Agency', mark: 'EA', desc: 'Flood-risk zones and contaminated-land screening for site due diligence.' },
+      { provider: 'Environment Agency', name: 'Environment Agency', mark: 'EA', desc: 'Current flood warnings near the site. This connector does not assess long-term flood risk or contaminated land.' },
     ],
   },
   {
@@ -199,8 +199,7 @@ export default function Integrations() {
         <div className="mt-8 mb-5">
           <div className="text-[32px] font-bold tracking-[-1.2px]">Connect your data sources</div>
           <div className="mt-1 text-[13.5px] text-ink-3 max-w-[620px] leading-relaxed">
-            Live data feeds make extraction trustworthy and appraisals defensible — comparable evidence, planning, EPCs and mapping flow
-            straight into every deal.
+            Check which sources are supported and what they provide. Connected sources supply evidence for review; coverage and source limitations remain part of the appraisal.
           </div>
           {deals.length > 0 && (
             <div className="mt-3 flex items-center gap-2.5 flex-wrap">
@@ -296,7 +295,7 @@ export default function Integrations() {
                         </div>
                       )}
                       {connector.connects && (
-                        <div className="mt-2.5 fig text-[10.5px] text-ink-3">Feeds {connector.feeds.toLowerCase()}</div>
+                        <div className="mt-2.5 text-[10.5px] text-ink-3"><p>Feeds {connector.feeds.toLowerCase()}</p><p className="mt-1 font-semibold">Coverage: {connector.coverage}</p><p className="mt-1 leading-relaxed">{connector.limitations}</p></div>
                       )}
                       {syncResult[item.provider] && (
                         <div className="mt-2.5 rounded-[8px] bg-tint-success px-2.5 py-1.5 text-[11px] text-brand-ink">

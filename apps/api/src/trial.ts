@@ -59,10 +59,16 @@ export const allowedWhileExpired = (path: string) => ALLOWED_WHILE_EXPIRED.some(
 
 export async function assertTrialLive(prisma: PrismaClient, orgId: string, path: string) {
   if (allowedWhileExpired(path)) return;
-  const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { plan: true, trialEndsAt: true } });
+  const org = await prisma.organisation.findUnique({ where: { id: orgId }, select: { plan: true, trialEndsAt: true, subscriptionStatus: true } });
   if (!org) return;
   const state = trialStateOf(org);
   if (!state.expired) return;
+  if (org.subscriptionStatus && ['unpaid', 'incomplete', 'paused'].includes(org.subscriptionStatus)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Your subscription needs payment attention. Everything stays readable. An administrator can open Payment details & invoices in Settings to restore access.',
+    });
+  }
   throw new TRPCError({
     code: 'FORBIDDEN',
     message: `Your ${TRIAL_DAYS}-day trial ended on ${state.endsAt!.toLocaleDateString('en-GB', {

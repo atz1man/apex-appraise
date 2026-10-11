@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { documentBlocks } from '../src/routers/appraisal.js';
-import { makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
  * Which documents an extraction can read, and what it says about the rest.
@@ -43,6 +44,7 @@ async function doc(name: string, ext: string, bytes: Buffer | null) {
     data: {
       orgId: T.orgId, dealId: T.dealId, name, category: 'Planning', ext,
       sizeBytes: BigInt(bytes?.length ?? 0), url, addedById: T.userId,
+      sha256: bytes ? createHash('sha256').update(bytes).digest('hex') : null,
     },
   });
 }
@@ -62,6 +64,8 @@ beforeAll(async () => {
   resetDatabase();
   T = await makeTenant('ExtractDocs');
 }, 120_000);
+
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 afterAll(async () => {
   await Promise.all(made.map((f) => rm(f, { force: true })));
@@ -101,9 +105,12 @@ describe('a spreadsheet is read', () => {
 
   it('reports a file that is not really a workbook rather than failing the run', async () => {
     const d = await doc('Not really.xlsx', 'xlsx', Buffer.from('this is not a zip archive'));
+    await prisma.document.update({ where: { id: d.id }, data: { sha256: null } });
     const { blocks, skipped } = await read([d.id]);
     expect(blocks).toEqual([]);
     expect(skipped[0]!.reason).toMatch(/could not be opened/);
+    expect(skipped).toHaveLength(1); // no false claim that this legacy workbook was read
+
   });
 });
 
@@ -171,7 +178,309 @@ describe('isolation', () => {
     const { blocks, used, skipped } = await read([theirs.id]);
     expect(blocks).toEqual([]);
     expect(used).toEqual([]);
-    // not even named: the query never saw it, so there is nothing to report
-    expect(skipped).toEqual([]);
+    // Same response for missing and foreign IDs; never expose a foreign name or ID.
+    expect(skipped).toEqual((await read(['nonexistent-source'])).skipped);
+    expect(skipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }]);
+    expect(JSON.stringify(skipped)).not.toContain(theirs.name);
+    expect(JSON.stringify(skipped)).not.toContain(theirs.id);
   });
+});
+
+describe('multi-sheet workbooks retain source coordinates and limits', () => {
+  it('reads a cost plan beyond the cover sheet with cell references', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet('Cover').addRow(['Cost plan revision D']);
+    const costs = wb.addWorksheet('Costs');
+    costs.getCell('B7').value = 1296000;
+    costs.getCell('A7').value = { richText: [{ text: 'Frame ' }, { text: 'and envelope' }] };
+    const d = await doc('Multi-sheet.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+    const result = await read([d.id]);
+    const text = (result.blocks[0] as { text: string }).text;
+    expect(text).toContain('[sheet: Costs]');
+    expect(text).toContain('B7: 1296000');
+    expect(text).toContain('A7: Frame and envelope');
+    expect(result.skipped).toEqual([]);
+  });
+  it('names excluded sheets and uncached formulas rather than inventing results', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    for (let i = 0; i < 11; i++) wb.addWorksheet(`Sheet ${i + 1}`).addRow([i]);
+    wb.worksheets[0].getCell('B2').value = { formula: 'A1*2' };
+    const d = await doc('Limits.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+    const result = await read([d.id]);
+    const reasons = result.skipped.map(item => item.reason).join(' ');
+    expect(reasons).toContain('Sheet 11: omitted');
+    expect(reasons).toContain('formulas without cached results');
+    expect((result.blocks[0] as { text: string }).text).toContain('B2: [formula has no cached result');
+  });
+  it('reports an empty workbook as unreadable', async () => {
+    const d = await doc('Empty.xlsx', 'xlsx', await workbook([]));
+    expect((await read([d.id])).used).toEqual([]);
+  });
+  it('accepts more than four documents in one bounded extraction', async () => {
+    const files = await Promise.all(Array.from({ length: 5 }, (_, i) => doc(`Plan ${i}.pdf`, 'pdf', Buffer.from('%PDF-1.4'))));
+    expect((await read(files.map(file => file.id))).used).toHaveLength(5);
+  });
+});
+
+it('shares the spreadsheet text budget across workbooks and names omitted data', async () => {
+  const rows = Array.from({ length: 100 }, (_, i) => [`Row ${i}`, 'x'.repeat(1000)]);
+  const first = await doc('Large 1.xlsx', 'xlsx', await workbook(rows));
+  const second = await doc('Large 2.xlsx', 'xlsx', await workbook(rows));
+  const result = await read([first.id, second.id]);
+  expect(result.blocks.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0)).toBeLessThanOrEqual(100_000);
+  expect(result.skipped.map(item => item.reason).join(' ')).toContain('spreadsheet budget');
+});
+
+it('retains limits even when all populated worksheets fall outside them', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  for (let i = 0; i < 10; i++) wb.addWorksheet(`Empty ${i}`);
+  wb.addWorksheet('Costs omitted').addRow(['Total', 1296000]);
+  const d = await doc('Cover sheets.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+  const result = await read([d.id]);
+  expect(result.used).toHaveLength(0);
+  expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs omitted: omitted by the 10-worksheet limit');
+});
+
+
+describe('extraction verifies the exact bytes it consumes', () => {
+  it.each(['pdf', 'png', 'xlsx'])('refuses changed %s bytes even when size and metadata still match', async ext => {
+    const bytes = ext === 'xlsx' ? await workbook([['Original cost', 100]]) : Buffer.from('original bytes');
+    const d = await doc(`Changed.${ext}`, ext, bytes);
+    const changed = Buffer.from(bytes); changed[changed.length - 1] ^= 1;
+    await writeFile(path.join(UPLOADS, d.url.split('/').at(-1)!), changed);
+    const result = await read([d.id]);
+    expect(result.blocks).toEqual([]); expect(result.used).toEqual([]);
+    expect(result.skipped).toEqual([{ name: d.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+  });
+  it('keeps legacy sources usable while exposing their unverified upload identity', async () => {
+    const d = await doc('Legacy.pdf', 'pdf', Buffer.from('%PDF-1.4 legacy'));
+    await prisma.document.update({ where: { id: d.id }, data: { sha256: null } });
+    const result = await read([d.id]);
+    expect(result.used).toHaveLength(1); expect(result.blocks).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('No upload fingerprint was recorded');
+    expect(result.skipped[0].reason).toContain('file was read for extraction');
+  });
+  it('parses spreadsheet cells from the checked buffer without reopening the path', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const d = await doc('Single read.xlsx', 'xlsx', await workbook([['Verified source', 12345]]));
+    // Pins the previous second-read path; the routed test also checks prepared model bytes.
+    const reader = vi.spyOn(Object.getPrototypeOf(new ExcelJS.Workbook().xlsx), 'readFile').mockRejectedValue(new Error('A second path read is forbidden'));
+    const result = await read([d.id]);
+    expect(reader).not.toHaveBeenCalled();
+    expect(result.skipped).toEqual([]);
+    expect(result.blocks).toEqual([{ type: 'text', text: expect.stringContaining('12345') }]);
+  });
+});
+
+
+describe('the guarded extraction procedure', () => {
+  it('refuses an entirely changed selection before calling the model or marking files extracted', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    const d = await doc('Corrupt source.pdf', 'pdf', Buffer.from('original'));
+    await writeFile(path.join(UPLOADS, d.url.split('/').at(-1)!), 'tampered');
+    await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [d.id] })).rejects.toThrow(/does not match its upload fingerprint/);
+    expect(request).not.toHaveBeenCalled();
+    expect(await prisma.activityEvent.findFirst({ where: { dealId: d.dealId, action: 'refused extraction from mismatched source', target: `${d.name} (${d.id})` } })).toMatchObject({ orgId: T.orgId, actor: T.principal.name });
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: d.id } })).extraction).toBe('STORED');
+  });
+  it('sends only checked sources and returns the named integrity omission for a mixed selection', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const goodBytes = Buffer.from('%PDF-1.4 checked source');
+    const good = await doc('Checked.pdf', 'pdf', goodBytes);
+    const bad = await doc('Changed.pdf', 'pdf', Buffer.from('original'));
+    await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'tampered');
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [good.id, bad.id, 'deleted-selection'] });
+    const sent = JSON.parse(request.mock.calls[0][1].body);
+    const documents = sent.messages[0].content.filter((block: { type: string }) => block.type === 'document');
+    expect(documents).toHaveLength(1);
+    expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
+    expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name, version: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+    expect(result.documentsSkipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }, { name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');
+  });
+});
+
+
+it('enforces the shared byte budget and still allows a later smaller source', async () => {
+  const first = await doc('First.pdf', 'pdf', Buffer.alloc(19 * 1024 * 1024, 1));
+  const large = await doc('Too large.pdf', 'pdf', Buffer.alloc(2 * 1024 * 1024, 2));
+  const last = await doc('Fits.pdf', 'pdf', Buffer.from('%PDF-1.4 small'));
+  const result = await read([first.id, large.id, last.id]);
+  expect(result.used.map(d => d.id)).toEqual([first.id, last.id]);
+  expect(result.skipped).toEqual([{ name: large.name, reason: expect.stringContaining('remaining 20 MB extraction byte budget') }]);
+  expect(result.blocks.filter(b => b.type === 'document')).toHaveLength(2);
+});
+
+
+it('reports unique unavailable selections alongside readable sources without counting duplicate IDs twice', async () => {
+  const good = await doc('Available.pdf', 'pdf', Buffer.from('%PDF-1.4 available'));
+  const result = await read([good.id, 'deleted-source', 'deleted-source', good.id]);
+  expect(result.used.map(d => d.id)).toEqual([good.id]);
+  expect(result.blocks).toHaveLength(1);
+  expect(result.skipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }]);
+  expect((await read([])).skipped).toEqual([]);
+});
+
+it('refuses an unavailable selection before a model request with actionable source-list guidance', async () => {
+  vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+  const request = vi.fn(); vi.stubGlobal('fetch', request);
+  await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: ['deleted-a', 'deleted-b'] })).rejects.toThrow(/2 selected documents are unavailable.*Reload the source list/);
+  expect(request).not.toHaveBeenCalled();
+});
+
+const modelReply = () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 });
+
+describe('extraction completion commits the prepared source identities', () => {
+  it.each(['fingerprint', 'storage', 'revision', 'deletion', 'name', 'type', 'size', 'uploaded', 'workspace', 'deal'] as const)('refuses a concurrent %s change and rolls back earlier source status/audit writes', async change => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const first = await doc(`First ${change}.pdf`, 'pdf', Buffer.from('first'));
+    const second = await doc(`Second ${change}.pdf`, 'pdf', Buffer.from('second'));
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      if (change === 'deletion') await prisma.document.delete({ where: { id: second.id } });
+      else {
+        const other = change === 'workspace' || change === 'deal' ? await makeTenant(`Moved ${change}`) : null;
+        await prisma.document.update({ where: { id: second.id }, data:
+          change === 'fingerprint' ? { sha256: 'a'.repeat(64) } :
+          change === 'storage' ? { url: '/uploads/files/replaced.pdf' } :
+          change === 'revision' ? { supersededById: first.id } :
+          change === 'name' ? { name: 'Renamed.pdf' } :
+          change === 'type' ? { ext: 'png' } :
+          change === 'size' ? { sizeBytes: second.sizeBytes + 1n } :
+          change === 'uploaded' ? { addedAt: new Date(second.addedAt.getTime() + 1_000) } :
+          change === 'workspace' ? { orgId: other!.orgId } : { dealId: other!.dealId },
+        });
+      }
+      return modelReply();
+    }));
+    await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow(/source changed.*Reload the source documents/);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: first.id } })).extraction).toBe('STORED');
+    if (change !== 'deletion') expect((await prisma.document.findUniqueOrThrow({ where: { id: second.id } })).extraction).toBe('STORED');
+    expect(await prisma.activityEvent.count({ where: { action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(0);
+  });
+
+  it('rolls back every source status and audit when the second audit insert fails', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    vi.stubGlobal('fetch', vi.fn(async () => modelReply()));
+    const first = await doc('Audit first.pdf', 'pdf', Buffer.from('first'));
+    const second = await doc('Audit second.pdf', 'pdf', Buffer.from('second'));
+    // The API harness uses SQLite; fail the actual second insert, not a mock transaction.
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_extraction_audit BEFORE INSERT ON ActivityEvent WHEN NEW.action = 'extracted scheme from' AND NEW.target = 'Audit second.pdf' BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END`);
+    try {
+      await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow();
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['STORED', 'STORED']);
+      expect(await prisma.activityEvent.count({ where: { action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER fail_extraction_audit');
+    }
+  });
+
+  it('commits both statuses and scoped audit entries for unchanged sources', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    vi.stubGlobal('fetch', vi.fn(async () => modelReply()));
+    const first = await doc('Atomic first.pdf', 'pdf', Buffer.from('first'));
+    const second = await doc('Atomic second.pdf', 'pdf', Buffer.from('second'));
+    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] });
+    expect(result.sourceDocuments).toEqual([{ id: first.id, name: first.name, version: expect.any(String) }, { id: second.id, name: second.name, version: expect.any(String) }]);
+    const api = callerFor(T.principal);
+    const listed = (await api.documents.list({ dealId: T.dealId })).documents;
+    for (const source of result.sourceDocuments) expect(listed.find(d => d.id === source.id)?.version).toBe(source.version);
+    const input = {
+  units: [{ label: 'Apartments', count: 4, area: 750, cap: 400, source: 'Schedule.xlsx, Units!B4' }],
+  efficiency: 85, trades: [{ label: 'Build', rate: 110 }], profFeePct: 11, contingencyPct: 5, otherCosts: [],
+  finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' as const },
+  site: { mode: 'residual' as const, landFixed: 0, acqPct: 6.8 },
+  disposal: { agentPct: 1.5, legalPct: 0.5 }, targetProfitOnGdvPct: 20,
+};
+    await api.appraisal.save({ dealId: T.dealId, input, source: 'ai', sourceReview: {
+      accepted: true, documentIds: result.sourceDocuments.map(d => d.id), expectedSources: result.sourceDocuments,
+      sample: false, omissions: [],
+    } });
+    expect((await api.appraisal.getCurrent(T.dealId))?.sourceReview?.documents.map(d => d.status)).toEqual(['unchanged', 'unchanged']);
+    expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['EXTRACTED', 'EXTRACTED']);
+    expect(await prisma.activityEvent.count({ where: { orgId: T.orgId, dealId: T.dealId, action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(2);
+  });
+});
+
+describe('workfile answers disclose their coverage', () => {
+  it('keeps source integrity warnings beside a partial answer and sends only the readable file', async () => {
+    T = await makeTenant('Workfile partial');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const good = await doc('Read.pdf', 'pdf', Buffer.from('good'));
+    const bad = await doc('Changed.pdf', 'pdf', Buffer.from('before'));
+    await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'after');
+    const request = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { answer: 'Fixture answer', sources: [good.name, bad.name] } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    const answer = await callerFor(T.principal).documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer).toMatchObject({ status: 'ok', documentsRead: [good.name], sources: [good.name], documentsSkipped: [{ name: bad.name, reason: expect.stringContaining('does not match') }] });
+    const sent = JSON.parse((request.mock.calls as unknown as Array<[string, { body: string }]>)[0][1].body);
+    expect(sent.messages[0].content.filter((b: { type: string }) => b.type === 'document')).toHaveLength(1);
+  });
+
+  it('names unsupported, superseded and capped files without reading them', async () => {
+    T = await makeTenant('Workfile cap');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const old = await doc('Old.pdf', 'pdf', Buffer.from('old'));
+    await prisma.document.update({ where: { id: old.id }, data: { supersededById: 'replacement' } });
+    await doc('Plan.dwg', 'dwg', Buffer.from('cad'));
+    for (let i = 0; i < 5; i++) {
+      const current = await doc(`Current ${i}.pdf`, 'pdf', Buffer.from(`current ${i}`));
+      await prisma.document.update({ where: { id: current.id }, data: { addedAt: new Date(2030, 0, 1, 0, 0, i) } });
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { answer: 'Fixture', sources: [] } }] }), { status: 200 })));
+    const answer = await callerFor(T.principal).documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer.documentsRead).toHaveLength(4);
+    expect(answer.documentsSkipped).toEqual(expect.arrayContaining([
+      { name: old.name, reason: expect.stringContaining('Superseded') },
+      { name: 'Plan.dwg', reason: expect.stringContaining('PDF and image') },
+      { name: 'Current 0.pdf', reason: expect.stringContaining('newest current') },
+    ]));
+    expect(answer.documentsSkipped).toHaveLength(3);
+  });
+
+  it('does not call the model for unreadable files or claim reads when AI is unconfigured', async () => {
+    T = await makeTenant('Workfile unavailable');
+    const d = await doc('Gone.pdf', 'pdf', Buffer.from('gone'));
+    await doc('Awaited.pdf', 'pdf', null);
+    await rm(path.join(UPLOADS, d.url.split('/').at(-1)!));
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const caller = callerFor(T.principal);
+    const answer = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(answer.status).toBe('no-docs'); expect(answer.documentsRead).toEqual([]);
+    expect(answer.documentsSkipped).toEqual([{ name: 'Awaited.pdf', reason: 'No stored workfile is available.' }, { name: d.name, reason: expect.stringContaining('could not be read from storage') }]);
+    expect(request).not.toHaveBeenCalled();
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    const unconfigured = await caller.documents.ask({ dealId: T.dealId, question: 'What is recorded?' });
+    expect(unconfigured).toMatchObject({ status: 'demo', documentsRead: [], answer: expect.stringContaining('No files were read') });
+    expect(await prisma.activityEvent.count({ where: { dealId: T.dealId, action: 'asked the workfile about' } })).toBe(0);
+  });
+});
+
+it.each(['extraction', 'question'] as const)('a timed-out %s records no successful result and does not retry', async kind => {
+  T = await makeTenant(`Timeout ${kind}`);
+  const d = await doc('Slow.pdf', 'pdf', Buffer.from('source'));
+  vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => timeout(20));
+  const request = vi.fn((_url: unknown, init: RequestInit) => new Promise((_resolve, reject) => {
+    if (!init.signal) return reject(new Error('Model request omitted its deadline signal'));
+    if (init.signal.aborted) return reject(init.signal.reason);
+    init.signal.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+  }));
+  vi.stubGlobal('fetch', request);
+  const caller = callerFor(T.principal);
+  const result = kind === 'extraction' ? caller.autoAppraisal.extract({ documentIds: [d.id] }) :
+    caller.documents.ask({ dealId: T.dealId, question: 'What does the source say?' });
+  await expect(result).rejects.toMatchObject({ code: 'TIMEOUT', message: expect.stringContaining('no successful result') });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect((await prisma.document.findUniqueOrThrow({ where: { id: d.id } })).extraction).toBe('STORED');
+  expect(await prisma.activityEvent.count({ where: { dealId: T.dealId, action: { in: ['extracted scheme from', 'asked the workfile about'] } } })).toBe(0);
 });

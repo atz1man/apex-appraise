@@ -1,3 +1,4 @@
+import { sourceEvidenceLines, wrapEvidence, type SourceEvidence } from './source-evidence';
 import {
   capitaliseIncome,
   dcfSensitivity,
@@ -21,6 +22,9 @@ import type ExcelJSNS from 'exceljs';
  */
 
 export interface ExportOpts {
+  evidence?: SourceEvidence | null;
+  evidenceState?: string;
+  unsavedInputs?: boolean;
   dealName: string;
   address: string;
   /** whose workbook this is — falls back to Apex when a firm has no branding */
@@ -733,9 +737,19 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
     r.eachCell((c) => body(c));
   });
 
-  // every sheet, including any added after this was written
+  const evidence = wb.addWorksheet('Source evidence');
+  evidence.columns = Array.from({ length: 4 }, () => ({ width: 30 }));
+  titleBlock(evidence, dealName, address, 'Source input review', 4, firmName);
+  headerRow(evidence, ['SOURCE INPUT REVIEW']);
+  for (const line of wrapEvidence(sourceEvidenceLines(opts.evidence, opts.evidenceState, opts.unsavedInputs), 90)) {
+    const row = evidence.addRow([line]);
+    evidence.mergeCells(row.number, 1, row.number, 4);
+    row.height = 32;
+    row.getCell(1).font = { name: 'Arial', size: 11 };
+    row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+  }
+  // Apply branding and print settings after every sheet has been added.
   for (const ws of wb.worksheets) applyPrintSetup(ws, firmName, dealName);
-
   return wb;
 }
 

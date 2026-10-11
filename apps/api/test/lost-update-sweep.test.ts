@@ -96,8 +96,6 @@ const HOLDS_NOTHING: Record<string, string> = {
     'an OAuth code and its state, exchanged with Xero during the call.',
   'integrations.saveCredentials':
     'a provider name and the key an admin pastes, validated against the live upstream before it is stored. The key is never returned, so it cannot have been loaded.',
-  'autoAppraisal.extract':
-    'notes pasted now and document ids. Its defaults are inputs to the extraction it runs, not columns of a row being written back.',
 };
 
 describe('the sweep itself', () => {

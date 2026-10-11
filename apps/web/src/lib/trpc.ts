@@ -1,5 +1,5 @@
 import { createTRPCReact } from '@trpc/react-query';
-import { TRPCClientError, httpBatchLink } from '@trpc/client';
+import { TRPCClientError, httpBatchLink, httpLink, splitLink } from '@trpc/client';
 import { READ_ONLY_MESSAGE, isViewOnly, refusedForViewer } from './read-only';
 import superjson from 'superjson';
 import type { AppRouter } from '../../../api/src/router';
@@ -72,7 +72,9 @@ const readOnlyLink: Parameters<typeof trpc.createClient>[0]['links'][number] =
     const refusal = new TRPCClientError(READ_ONLY_MESSAGE, {
       // shaped like the server's refusal so everything upstream — toasts, retries,
       // the query cache — cannot tell the two apart and behave differently
-      result: { error: { code: -32003, message: READ_ONLY_MESSAGE, data: { code: 'FORBIDDEN', httpStatus: 403 } } } as never,
+      result: {
+        error: { code: -32003, message: READ_ONLY_MESSAGE, data: { code: 'FORBIDDEN', httpStatus: 403 } },
+      } as never,
     });
     return {
       subscribe(observer: { error?: (e: unknown) => void }) {
@@ -83,18 +85,25 @@ const readOnlyLink: Parameters<typeof trpc.createClient>[0]['links'][number] =
   };
 
 export function makeTrpcClient() {
+  const headers = () => {
+    const token = getToken();
+    return token ? { authorization: `Bearer ${token}` } : {};
+  };
   return trpc.createClient({
     links: [
       readOnlyLink,
-      httpBatchLink({
-        url: '/trpc',
-        transformer: superjson,
-        // safety net: split batches before the URL hits server limits (HTTP 414)
-        maxURLLength: 2000,
-        headers() {
-          const token = getToken();
-          return token ? { authorization: `Bearer ${token}` } : {};
-        },
+      splitLink({
+        // Citation-rich extraction inputs travel in a POST body, not a URL.
+        // The calculation remains a read-only query with its existing guards.
+        condition: (op) => op.path === 'autoAppraisal.compute',
+        true: httpLink({ url: '/trpc', transformer: superjson, methodOverride: 'POST', headers }),
+        false: httpBatchLink({
+          url: '/trpc',
+          transformer: superjson,
+          // safety net: split batches before the URL hits server limits (HTTP 414)
+          maxURLLength: 2000,
+          headers,
+        }),
       }),
     ],
   });

@@ -38,7 +38,7 @@ const A4Page = ({ children, pad = true }: { children: React.ReactNode; pad?: boo
 );
 import { CompsLadder } from '../components/charts';
 import { SiteMap } from '../components/SiteMap';
-import { openReport } from '../lib/download';
+import { ReportDownloadButton } from '../components/ReportDownloadButton';
 import { namedModel } from '../lib/ai-model';
 
 /* ------------------------------------------------------------------ */
@@ -208,7 +208,6 @@ export default function RedBookReport() {
       }
     : { name: 'Not yet stated in the terms of engagement', sub: '' };
   const utils = trpc.useUtils();
-  const mintDownload = trpc.appraisal.downloadToken.useMutation();
   const draftNarrative = trpc.appraisal.draftNarrative.useMutation({
     onSuccess: () => {
       utils.appraisal.getCurrent.invalidate(dealId);
@@ -305,16 +304,11 @@ export default function RedBookReport() {
           </Button>
         )}
         {exportable && (
-          <Button
-            variant="secondary"
-            onClick={() => void openReport(mintDownload.mutateAsync, 'redbook', `/reports/${dealId}/redbook.pdf`, dealId)}
-          >
-            Download PDF
-          </Button>
+          <ReportDownloadButton kind="redbook" path={`/reports/${dealId}/redbook.pdf`} dealId={dealId} />
         )}
         {exportable && <ShareLinks dealId={dealId} kind="redbook" />}
         {exportable && (
-        <Button onClick={() => window.print()}>
+        <Button variant="secondary" onClick={() => window.print()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z" /></svg>
           Print / Save PDF
         </Button>
@@ -730,7 +724,7 @@ export default function RedBookReport() {
             </div>
             <div className="shrink-0 rounded-[12px] overflow-hidden border border-border-strong relative" style={{ width: 300, height: 188, background: neutral.sunken2 }}>
               {subjectPin.length ? (
-                <SiteMap pins={subjectPin} height={188} />
+                <SiteMap pins={subjectPin} height={188} controls={false} />
               ) : (
                 /* Nothing plotted rather than a map of somewhere else: without a
                    resolved postcode there is no position to draw, and a panel
