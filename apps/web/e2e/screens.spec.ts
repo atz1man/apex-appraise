@@ -610,7 +610,8 @@ test.describe('internal screens', () => {
   test('field app frames the mobile companion', async ({ page }) => {
     await page.goto('/field');
     await expect(page.getByText('Appraisals').first()).toBeVisible();
-    await expect(page.getByText(/Field companion app/)).toBeVisible();
+    await expect(page.getByText('Field companion — mobile web workspace', { exact: true })).toBeVisible();
+    await expect(page.getByText(/ships as the native mobile build/)).toHaveCount(0);
   });
 });
 

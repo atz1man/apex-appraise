@@ -557,7 +557,7 @@ export default function Workbench() {
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
                   }
                   cta={
-                    <Button to="/field" variant="secondary" size="sm">
+                    <Button to={`/field?dealId=${encodeURIComponent(dealId)}`} variant="secondary" size="sm">
                       Open the field app →
                     </Button>
                   }

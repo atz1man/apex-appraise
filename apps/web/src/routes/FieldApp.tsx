@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { SiteMap } from '../components/SiteMap';
 import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal, getToken } from '../lib/trpc';
 import { awaitingAttribution, canSend, queueSentence, roomIndexFor, type QueuedPhoto } from '../lib/photo-queue';
@@ -40,13 +41,6 @@ const PRESS = 'transition-all duration-150 active:scale-[0.97] motion-reduce:tra
  * photographs the app said it had taken; those are real images now.
  */
 const THUMBS = placeholderGradients.stone;
-
-const PIN_POS = [
-  { top: 50, left: 96 },
-  { top: 118, left: 238 },
-  { top: 122, left: 118 },
-  { top: 60, left: 286 },
-];
 
 // ---------- in-frame chrome ----------
 
@@ -152,8 +146,13 @@ export default function FieldApp() {
   const { data: dealsData, isLoading: dealsLoading, error: dealsError, refetch: refetchDeals } = trpc.deals.list.useQuery({});
   const deals = dealsData?.deals ?? [];
 
-  const [screen, setScreen] = useState<Screen>('appraisals');
-  const [dealId, setDealId] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedDeal = searchParams.get('dealId') ?? '';
+  const [screen, setScreen] = useState<Screen>(requestedDeal ? 'detail' : 'appraisals');
+  const [dealId, setDealId] = useState(requestedDeal);
+  useEffect(() => {
+    if (requestedDeal) { setDealId(requestedDeal); setScreen('detail'); }
+  }, [requestedDeal]);
   const [q, setQ] = useState('');
 
   useEffect(() => {
@@ -164,9 +163,9 @@ export default function FieldApp() {
   const { data: inspStatuses } = trpc.inspections.statuses.useQuery(undefined, { staleTime: 15_000 });
 
   const deal = deals.find((d) => d.id === dealId);
-  const { data: inspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
-  const { data: compsData } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
-  const { data: appraisal } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  const { data: inspection, isLoading: inspectionLoading, error: inspectionError, refetch: refetchInspection } = trpc.inspections.get.useQuery(dealId, { enabled: !!dealId });
+  const { data: compsData, isLoading: compsLoading, error: compsError, refetch: refetchComps } = trpc.comparables.list.useQuery(dealId, { enabled: !!dealId });
+  const { data: appraisal, isLoading: appraisalLoading, error: appraisalError, refetch: refetchAppraisal } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
 
   // ---- per-deal local inspection state (hydrated from the saved inspection) ----
   const [rooms, setRooms] = useState<Room[]>(defaultRooms());
@@ -671,7 +670,7 @@ export default function FieldApp() {
             return (
               <button
                 key={d.id}
-                onClick={() => { setDealId(d.id); setScreen('detail'); }}
+                onClick={() => { setDealId(d.id); setSearchParams({ dealId: d.id }, { replace: true }); setScreen('detail'); }}
                 className={`bg-surface border border-border-std rounded-[18px] p-3 flex gap-3 text-left w-full cursor-pointer hover:bg-sunken ${PRESS}`}
               >
                 <div className="flex-none w-[74px] h-[74px] rounded-[13px]" style={{ background: THUMBS[i % THUMBS.length] }} />
@@ -718,6 +717,24 @@ export default function FieldApp() {
             <div className="text-[13px] text-white/85">{deal.address}</div>
           </div>
         </div>
+
+        <section aria-label="Project connection" className="mx-[18px] mt-4 rounded-card border border-border-std bg-surface p-4">
+          <h2 className="text-[15px] font-semibold">Connected project</h2>
+          <p className="mt-1 text-[12px] text-ink-2">This inspection, appraisal and evidence belong to {deal.name}.</p>
+          <dl className="mt-3 space-y-2 text-[12px]">
+            <div><dt className="text-ink-3">Current appraisal</dt><dd data-testid="field-appraisal-context">{appraisalError ? 'Appraisal could not be loaded' : appraisalLoading ? 'Loading appraisal…' : appraisal ? `${appraisal.label} · ${appraisal.reviewStatus.replaceAll('_', ' ').toLowerCase()}` : 'No appraisal saved yet'}</dd></div>
+            <div><dt className="text-ink-3">Saved inspection</dt><dd>{inspectionError ? 'Inspection could not be loaded' : inspectionLoading ? 'Loading inspection…' : inspection ? inspection.status === 'submitted' ? 'Submitted to the workbench' : 'Draft saved to this project' : 'Not started'}</dd></div>
+            <div><dt className="text-ink-3">Comparable evidence</dt><dd>{compsError ? 'Comparables could not be loaded' : compsLoading ? 'Loading evidence…' : `${comps.length} comparable${comps.length === 1 ? '' : 's'} saved to this project`}</dd></div>
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button to={`/deal/${deal.id}`} size="sm" className="min-h-11" variant="secondary">Project overview</Button>
+            <Button to={`/deal/${deal.id}/appraisal`} size="sm" className="min-h-11" variant="secondary">Current appraisal</Button>
+            <Button to={`/deal/${deal.id}/workbench`} size="sm" className="min-h-11" variant="secondary">Inspection workbench</Button>
+            <Button to={`/deal/${deal.id}/dataroom`} size="sm" className="min-h-11" variant="secondary">Project documents</Button>
+            <Button size="sm" className="min-h-11" variant="ghost" onClick={() => { void refetchInspection(); void refetchAppraisal(); void refetchComps(); void refetchDeals(); }}>Refresh project context</Button>
+          </div>
+          <p className="mt-3 text-[11px] text-ink-3">Save inspection observations to share them with the desk. They do not automatically change the appraisal figures.</p>
+        </section>
 
         {/* key facts */}
         <div className="flex bg-surface border-b border-border-std py-[15px] px-1.5">
@@ -1055,21 +1072,9 @@ export default function FieldApp() {
         <div className="text-[19px] font-bold tracking-[-0.4px]">Comparable sales</div>
       </div>
       <div className="flex-1 overflow-y-auto px-[22px] pb-4">
-        {/* mini map */}
-        <div className="relative h-[174px] rounded-[18px] overflow-hidden" style={{ background: placeholderGradients.map }}>
-          <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(120,140,130,0.18) 1px,transparent 1px),linear-gradient(90deg,rgba(120,140,130,0.18) 1px,transparent 1px)', backgroundSize: '34px 34px' }} />
-          <div className="absolute left-0 right-0" style={{ top: 42, height: 14, background: 'rgba(150,168,158,0.4)', transform: 'rotate(-8deg)' }} />
-          <div className="absolute left-0 right-0" style={{ top: 104, height: 20, background: 'rgba(150,168,158,0.32)', transform: 'rotate(5deg)' }} />
-          <div className="absolute" style={{ top: 74, left: 172 }}>
-            <div className="w-[30px] h-[30px] rounded-full bg-brand-700 flex items-center justify-center text-white" style={{ border: `3px solid ${onFill}`, boxShadow: '0 4px 10px rgba(20,30,25,0.3)' }}>{STAR}</div>
-          </div>
-          {comps.slice(0, PIN_POS.length).map((c, i) => (
-            <div key={c.id} className="absolute w-[18px] h-[18px] rounded-full bg-brand-400" style={{ ...PIN_POS[i], border: `2.5px solid ${onFill}`, boxShadow: '0 3px 7px rgba(20,30,25,0.25)' }} />
-          ))}
-          <div className="absolute bottom-3 left-3 px-2.5 py-[5px] rounded-[8px] fig text-[10px] font-medium bg-white/90 text-brand-ink">
-            {comps.length} comp{comps.length === 1 ? '' : 's'} · local evidence
-          </div>
-        </div>
+        <SiteMap height={200} pins={comps.flatMap(c => c.lat != null && c.lng != null ? [{ lat: c.lat, lng: c.lng, label: c.address, kind: 'comp' as const }] : [])} />
+        <p className="mt-2 text-[11px] text-ink-3">Only saved comparable coordinates are plotted. Locations have not been verified on site; this map does not establish proximity to the subject or title boundaries.</p>
+        <Link to={`/deal/${deal.id}/comparables`} className="inline-flex min-h-11 items-center text-[12px] font-semibold text-brand-ink">Review project comparables →</Link>
 
         {/* subject row */}
         <div className="mt-3.5 flex items-center gap-2.5 px-[13px] py-[11px] rounded-[13px] bg-brand-700 text-white">
@@ -1329,6 +1334,8 @@ export default function FieldApp() {
 
   const screens = dealsLoading && !deals.length ? (
     <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+  ) : requestedDeal && !deal && screen !== 'appraisals' ? (
+    <div role="status" className="p-6 text-[13px]"><p>{dealsError ? 'The project could not be loaded.' : 'This project is unavailable in your workspace.'}</p><Button className="mt-3" onClick={() => { setSearchParams({}); setDealId(''); setScreen('appraisals'); }}>Choose a project</Button></div>
   ) : (
     <>
       {screen === 'appraisals' && appraisalsScreen}
@@ -1359,7 +1366,7 @@ export default function FieldApp() {
       <TopBar
         crumb="Field app"
         right={
-          dealId ? (
+          deal ? (
             <Button to={`/deal/${dealId}/workbench`} variant="secondary" size="sm">
               Open valuation workbench →
             </Button>
@@ -1378,7 +1385,7 @@ export default function FieldApp() {
             {screens}
           </div>
         </div>
-        <div className="label-mono text-ink-3 font-medium tracking-[1px]">Field companion app — ships as the native mobile build</div>
+        <div className="label-mono text-ink-3 font-medium tracking-[1px]">Field companion — mobile web workspace</div>
       </main>
     </div>
   );
