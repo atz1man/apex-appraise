@@ -34,6 +34,7 @@ export default function Workbench() {
   const [weights, setWeights] = useState<Weights>({ salesComparison: 60, cost: 20, income: 20 });
   const [dismissed, setDismissed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [held, setHeld] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
   // the tab must not close on unsaved work without a word — see lib/unsaved.ts
   useUnsavedWarning(dirty, 'this valuation');
@@ -95,6 +96,8 @@ export default function Workbench() {
       income: derived.income.value ?? 0,
     });
     if (inspection) setWeights(inspection.approachWeights);
+    // The save stamp belongs to these editable values, not later query refreshes.
+    setHeld(inspection?.updatedAt ?? null);
     setHydrated(true);
   }, [hydrated, deal, inspLoading, compsLoading, apprLoading, compsData, appraisal, inspection]);
 
@@ -107,11 +110,6 @@ export default function Workbench() {
   const wSum = contributing.reduce((t, a) => t + weights[a.wKey], 0);
   const reconciled = wSum > 0 ? contributing.reduce((t, a) => t + values[a.key] * weights[a.wKey], 0) / wSum : 0;
 
-  // the stamp of the inspection this desk is holding — see FieldApp for why
-  const [held, setHeld] = useState<Date | null>(null);
-  useEffect(() => {
-    if (inspection?.updatedAt) setHeld(inspection.updatedAt);
-  }, [inspection?.updatedAt]);
   const save = trpc.inspections.save.useMutation({
     onSuccess: (res) => {
       setHeld(res.updatedAt);

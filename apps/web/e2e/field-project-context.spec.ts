@@ -61,3 +61,62 @@ test('field companion keeps the chosen project and refreshes shared appraisal co
     await expect(page.getByText('Chosen project', { exact: true })).toBeVisible();
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });
+
+for (const surface of ['field', 'workbench'] as const) test(`${surface} refresh cannot give an edited inspection a newer save stamp`, async ({ page, request }) => {
+  const orgName = `Field conflict ${Date.now()}`;
+  await page.goto('/register');
+  await page.getByLabel('Organisation name').fill(orgName);
+  await page.getByLabel('Your name').fill('Field Owner');
+  await page.getByLabel('Email', { exact: true }).fill(`field-conflict-${Date.now()}@example.test`);
+  await page.getByLabel('Password', { exact: true }).fill('long-test-password');
+  await page.getByLabel('Confirm password').fill('long-test-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+  const rpc = async (route: string, input: unknown) => {
+    const r = await request.post(`/trpc/${route}`, { headers: { authorization: `Bearer ${token}` }, data: { json: input } });
+    expect(r.status()).toBe(200);
+    return (await r.json()).result.data.json;
+  };
+  try {
+    const deal = await rpc('deals.create', { name: 'Shared inspection', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
+    const original = { dealId: deal.id, rooms: [{ name: 'Exterior', condition: 3, photos: [], notes: 'Initial observation' }], reconciledValue: null, approachWeights: { salesComparison: 60, cost: 20, income: 20 }, status: 'draft' };
+    const first = await rpc('inspections.save', original);
+    await page.goto(surface === 'field' ? `/field?dealId=${deal.id}` : `/deal/${deal.id}/workbench`);
+    if (surface === 'field') await page.getByRole('button', { name: 'Continue inspection', exact: true }).click();
+    const notes = surface === 'field' ? page.getByLabel('Notes for Exterior') : page.getByRole('spinbutton', { name: /^Weight/ }).first();
+    await expect(notes).toHaveValue(surface === 'field' ? 'Initial observation' : '60');
+    const draft = surface === 'field' ? 'Unreviewed field draft' : '65';
+    await notes.fill(draft);
+    // A separate desk request changes the saved record while the phone edits its copy.
+    const desk = await rpc('inspections.save', { ...original, id: first.id, expectedUpdatedAt: first.updatedAt, status: 'submitted', approachWeights: { salesComparison: 10, cost: 70, income: 20 }, rooms: [{ ...original.rooms[0], notes: 'Desk evidence checked' }] });
+    if (surface === 'field') {
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page.getByRole('button', { name: 'Refresh project context' }).click();
+      await expect(page.getByRole('region', { name: 'Project connection' })).toContainText('Submitted to the workbench');
+      await page.getByRole('button', { name: 'Review inspection', exact: true }).click();
+    } else {
+      // Queries are fresh for 5 seconds; advance browser time before refocusing.
+      await page.clock.install();
+      await page.clock.fastForward(6000);
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        window.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+        window.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expect(page.getByText('Desk evidence checked', { exact: false })).toBeVisible();
+    }
+    await expect(notes).toHaveValue(draft);
+    const saveResponse = page.waitForResponse(r => r.url().includes('inspections.save') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: surface === 'field' ? 'Save' : 'Save valuation', exact: true }).click();
+    const payload = await (await saveResponse).json();
+    await expect(notes).toHaveValue(draft);
+    const current = await request.get('/trpc/inspections.get', { headers: { authorization: `Bearer ${token}` }, params: { input: JSON.stringify({ json: deal.id }) } });
+    const stored = (await current.json()).result.data.json;
+    expect(stored.rooms[0].notes).toBe('Desk evidence checked');
+    expect(stored.approachWeights).toEqual(desk.approachWeights);
+    expect(stored.updatedAt).toBe(desk.updatedAt);
+    expect((Array.isArray(payload) ? payload[0] : payload).error?.json?.data?.code).toBe('CONFLICT');
+  } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
+});
