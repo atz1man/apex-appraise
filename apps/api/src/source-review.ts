@@ -14,6 +14,7 @@ export const zSourceReviewRequest = z.object({
   accepted: z.literal(true),
   references: z.array(zSourceReference).max(200).default([]),
   documentIds: z.array(z.string()).max(12),
+  expectedSources: z.array(z.object({ id: z.string(), version: zSourceFingerprint })).max(12).optional(),
   sample: z.boolean(),
   omissions: z.array(z.object({ name: z.string().max(500), reason: z.string().max(8000) })).max(36),
 });

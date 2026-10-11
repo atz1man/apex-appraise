@@ -1,3 +1,4 @@
+import { sourceVersion } from '../source-version.js';
 import { withModelDeadline } from '../model-deadline.js';
 import { TRPCError } from '@trpc/server';
 import { currentAppraisal } from '../current-appraisal.js';
@@ -705,6 +706,7 @@ export const documentsRouter = router({
          */
         documents: docs.map((d) => ({
           ...d,
+          version: sourceVersion(d),
           sizeBytes: Number(d.sizeBytes),
           url: signFileUrl(d.url, ctx.principal.userId),
         })),

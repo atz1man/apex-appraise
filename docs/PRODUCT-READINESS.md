@@ -403,3 +403,21 @@ an explicit retry. No live provider call, financial arithmetic or schema change.
 This bounds these two provider requests, not file preparation, synchronous parsing,
 all AI features or per-workspace concurrency. Durable extraction receipts and
 release/customer acceptance remain outstanding.
+
+
+### Source versions across review — 11 October 2026
+
+Extraction now returns an opaque metadata version for each prepared source. The
+review UI carries those versions to appraisal save, withholds a download link
+when the current source version differs and blocks acceptance with re-extraction
+guidance. The server compares submitted expected versions with its deal-scoped
+source rows before recording the review; it refuses changed names, fingerprints,
+storage identities and revisions rather than pinning a newer source to older
+extracted inputs. Sharing and extraction-status changes do not invalidate a source.
+
+API regressions exercise changed and unchanged sources and omitted/foreign
+expected IDs. Browser verification covers controlled stale-extraction metadata
+and existing review/export journeys. Older clients and source reviews remain
+compatible. This is an optimistic concurrency stamp supplied by the client, not
+an authenticated extraction receipt, a storage rehash or proof of model accuracy.
+Durable extraction receipts and release/customer acceptance remain outstanding.

@@ -300,7 +300,7 @@ describe('the guarded extraction procedure', () => {
     const documents = sent.messages[0].content.filter((block: { type: string }) => block.type === 'document');
     expect(documents).toHaveLength(1);
     expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
-    expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name }]);
+    expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name, version: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
     expect(result.documentsSkipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }, { name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
     expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');
     expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');
@@ -388,7 +388,7 @@ describe('extraction completion commits the prepared source identities', () => {
     const first = await doc('Atomic first.pdf', 'pdf', Buffer.from('first'));
     const second = await doc('Atomic second.pdf', 'pdf', Buffer.from('second'));
     const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] });
-    expect(result.sourceDocuments).toEqual([{ id: first.id, name: first.name }, { id: second.id, name: second.name }]);
+    expect(result.sourceDocuments).toEqual([{ id: first.id, name: first.name, version: expect.any(String) }, { id: second.id, name: second.name, version: expect.any(String) }]);
     expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['EXTRACTED', 'EXTRACTED']);
     expect(await prisma.activityEvent.count({ where: { orgId: T.orgId, dealId: T.dealId, action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(2);
   });

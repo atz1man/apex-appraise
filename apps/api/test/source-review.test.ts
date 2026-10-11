@@ -138,3 +138,40 @@ describe('durable source input review', () => {
   });
 
 });
+
+it.each(['name', 'fingerprint', 'storage'] as const)('refuses a source %s change between review preparation and save', async change => {
+  const { dealId, api } = await fresh(); const doc = await document(dealId);
+  const listed = (await api.documents.list({ dealId })).documents[0];
+  await prisma.document.update({ where: { id: doc.id }, data:
+    change === 'name' ? { name: 'Changed.xlsx' } : change === 'fingerprint' ? { sha256: 'b'.repeat(64) } : { url: '/uploads/files/replaced.xlsx' },
+  });
+  await expect(api.appraisal.save({ dealId, input, sourceReview: {
+    ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: doc.id, version: listed.version }],
+  } })).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining('changed since extraction') });
+  expect(await api.appraisal.getCurrent(dealId)).toBeNull();
+});
+
+it('keeps source stamps stable across extraction status and sharing changes and accepts an unchanged review', async () => {
+  const { dealId, api } = await fresh(); const doc = await document(dealId);
+  const before = (await api.documents.list({ dealId })).documents[0];
+  await prisma.document.update({ where: { id: doc.id }, data: { extraction: 'EXTRACTED', investorVisible: true } });
+  const after = (await api.documents.list({ dealId })).documents[0];
+  expect(after.version).toBe(before.version);
+  await api.appraisal.save({ dealId, input, sourceReview: {
+    ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: doc.id, version: before.version }],
+  } });
+  expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.documents[0]).toMatchObject({ name: doc.name, status: 'unchanged' });
+});
+
+it('refuses expected sources omitted from the reviewed deal without disclosing foreign identity', async () => {
+  const { dealId, api } = await fresh(); const doc = await document(dealId);
+  const source = (await api.documents.list({ dealId })).documents[0];
+  await expect(api.appraisal.save({ dealId, input, sourceReview: {
+    ...acknowledgement, expectedSources: [{ id: doc.id, version: source.version }],
+  } })).rejects.toMatchObject({ code: 'CONFLICT' });
+  const other = await makeTenant('Review foreign stamp'); const foreign = await document(other.dealId, other.orgId);
+  await expect(api.appraisal.save({ dealId, input, sourceReview: {
+    ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: foreign.id, version: source.version }],
+  } })).rejects.toMatchObject({ code: 'CONFLICT', message: 'A source changed since extraction. Reload the source documents and extract again before recording this review.' });
+  expect(await api.appraisal.getCurrent(dealId)).toBeNull();
+});
