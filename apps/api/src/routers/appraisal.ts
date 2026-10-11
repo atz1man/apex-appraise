@@ -1,3 +1,4 @@
+import { readBoundedFile } from '../bounded-file.js';
 import { createHash } from 'node:crypto';
 import type { Appraisal } from '@prisma/client';
 import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
@@ -1577,7 +1578,6 @@ export async function documentBlocks(
   skipped: Array<{ name: string; reason: string }>;
 }> {
   const { uploadPathFor } = await import('../uploads.js');
-  const { readFile } = await import('node:fs/promises');
   // ordered: `slice(0, 12)` below means the order can decide which documents are
   // read at all, and the blocks reach a model in this sequence
   const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
@@ -1608,16 +1608,16 @@ export async function documentBlocks(
       });
       continue;
     }
-    let data: Buffer;
+    let data: Buffer | null;
     try {
-      data = await readFile(filePath);
+      data = await readBoundedFile(filePath, 20 * 1024 * 1024 - totalBytes);
     } catch {
       // the row says there is a file and the disk disagrees; that is worth saying
       skipped.push({ name: doc.name, reason: 'its file could not be read from storage' });
       continue;
     }
-    if (totalBytes + data.length > 20 * 1024 * 1024) {
-      skipped.push({ name: doc.name, reason: 'the 20 MB limit for one extraction was already used by the documents before it' });
+    if (data === null) {
+      skipped.push({ name: doc.name, reason: 'exceeds the remaining 20 MB extraction byte budget — split the source or select fewer documents' });
       continue;
     }
     const sha256 = createHash('sha256').update(data).digest('hex');

@@ -292,3 +292,19 @@ page locations or exported storage. It does not yet persist an extraction receip
 binding the accepted inputs to that particular model request. Next priority:
 carry a durable extraction receipt into review, then integrate the stacked PRs
 and validate real customer packs against the SaaS release acceptance checklist.
+
+
+### Bounded source reads — 11 October 2026
+
+Extraction previously loaded a complete uploaded file before enforcing its 20 MB
+shared input budget. It now reads at most the remaining budget plus one overflow
+byte, closes the stream on overflow, and names the excluded source. Rejected
+large files do not consume the remaining budget, so a later smaller source can
+still be processed. Stored size metadata is not trusted for this decision.
+
+Tests measure actual stream bytes read and descriptor closure, exact-fit and
+zero-byte boundaries, missing storage, invalid budgets, and a multi-document
+selection that exceeds the shared limit. This bounds encoded source reads only:
+workbook decompression/parser memory, model context limits and overall extraction
+concurrency remain separate resource controls. No engine arithmetic or schema
+changed. The extraction-receipt and release-integration priorities above remain.

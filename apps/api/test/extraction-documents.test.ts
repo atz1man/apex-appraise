@@ -303,3 +303,14 @@ describe('the guarded extraction procedure', () => {
     expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');
   });
 });
+
+
+it('enforces the shared byte budget and still allows a later smaller source', async () => {
+  const first = await doc('First.pdf', 'pdf', Buffer.alloc(19 * 1024 * 1024, 1));
+  const large = await doc('Too large.pdf', 'pdf', Buffer.alloc(2 * 1024 * 1024, 2));
+  const last = await doc('Fits.pdf', 'pdf', Buffer.from('%PDF-1.4 small'));
+  const result = await read([first.id, large.id, last.id]);
+  expect(result.used.map(d => d.id)).toEqual([first.id, last.id]);
+  expect(result.skipped).toEqual([{ name: large.name, reason: expect.stringContaining('remaining 20 MB extraction byte budget') }]);
+  expect(result.blocks.filter(b => b.type === 'document')).toHaveLength(2);
+});
