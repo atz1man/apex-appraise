@@ -1873,7 +1873,11 @@ export const autoAppraisalRouter = router({
       if (blocks.used.length) await ctx.prisma.$transaction(async (tx) => {
         for (const doc of blocks.used) {
           const { count } = await tx.document.updateMany({
-            where: { ...doc, orgId: ctx.principal.orgId, supersededById: null },
+            where: {
+              id: doc.id, orgId: ctx.principal.orgId, dealId: doc.dealId,
+              url: doc.url, sha256: doc.sha256, supersededById: null,
+              name: doc.name, ext: doc.ext, sizeBytes: doc.sizeBytes, addedAt: doc.addedAt,
+            },
             data: { extraction: 'EXTRACTED' },
           });
           if (count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'A source changed while extraction was running. Reload the source documents and extract again.' });

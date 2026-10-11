@@ -354,10 +354,11 @@ identity (workspace/deal, file path, fingerprint, name/type/size/upload time and
 current revision status) in the status update. All successful source statuses
 and audits commit in one transaction. A changed, superseded or deleted source
 refuses the result with reload/re-extract guidance; an audit failure rolls back
-the earlier source writes too.
+the earlier source writes too. Metadata edits, including a rename, also require
+a retry because source labels and types are part of the prepared model input.
 
-Guarded procedure regressions change storage, fingerprint and revision state or
-delete a source during a stubbed model request. A database trigger fails the
+Guarded procedure regressions change storage, fingerprint, revision, metadata,
+workspace/deal identity or delete a source during a stubbed model request. A database trigger fails the
 second audit insert to verify complete rollback; the unchanged two-source case
 verifies success. No live model call or financial arithmetic change is involved.
 This checks database source identity at completion, not a second storage rehash,

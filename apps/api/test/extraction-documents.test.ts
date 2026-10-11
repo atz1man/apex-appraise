@@ -338,16 +338,25 @@ it('refuses an unavailable selection before a model request with actionable sour
 const modelReply = () => new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 });
 
 describe('extraction completion commits the prepared source identities', () => {
-  it.each(['fingerprint', 'storage', 'revision', 'deletion'] as const)('refuses a concurrent %s change and rolls back earlier source status/audit writes', async change => {
+  it.each(['fingerprint', 'storage', 'revision', 'deletion', 'name', 'type', 'size', 'uploaded', 'workspace', 'deal'] as const)('refuses a concurrent %s change and rolls back earlier source status/audit writes', async change => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
     const first = await doc(`First ${change}.pdf`, 'pdf', Buffer.from('first'));
     const second = await doc(`Second ${change}.pdf`, 'pdf', Buffer.from('second'));
     vi.stubGlobal('fetch', vi.fn(async () => {
       if (change === 'deletion') await prisma.document.delete({ where: { id: second.id } });
-      else await prisma.document.update({ where: { id: second.id }, data:
-        change === 'fingerprint' ? { sha256: 'a'.repeat(64) } :
-          change === 'storage' ? { url: '/uploads/files/replaced.pdf' } : { supersededById: first.id },
-      });
+      else {
+        const other = change === 'workspace' || change === 'deal' ? await makeTenant(`Moved ${change}`) : null;
+        await prisma.document.update({ where: { id: second.id }, data:
+          change === 'fingerprint' ? { sha256: 'a'.repeat(64) } :
+          change === 'storage' ? { url: '/uploads/files/replaced.pdf' } :
+          change === 'revision' ? { supersededById: first.id } :
+          change === 'name' ? { name: 'Renamed.pdf' } :
+          change === 'type' ? { ext: 'png' } :
+          change === 'size' ? { sizeBytes: second.sizeBytes + 1n } :
+          change === 'uploaded' ? { addedAt: new Date(second.addedAt.getTime() + 1_000) } :
+          change === 'workspace' ? { orgId: other!.orgId } : { dealId: other!.dealId },
+        });
+      }
       return modelReply();
     }));
     await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow(/source changed.*Reload the source documents/);
@@ -361,9 +370,11 @@ describe('extraction completion commits the prepared source identities', () => {
     vi.stubGlobal('fetch', vi.fn(async () => modelReply()));
     const first = await doc('Audit first.pdf', 'pdf', Buffer.from('first'));
     const second = await doc('Audit second.pdf', 'pdf', Buffer.from('second'));
+    // The API harness uses SQLite; fail the actual second insert, not a mock transaction.
     await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_extraction_audit BEFORE INSERT ON ActivityEvent WHEN NEW.action = 'extracted scheme from' AND NEW.target = 'Audit second.pdf' BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END`);
     try {
       await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [first.id, second.id] })).rejects.toThrow();
+      expect(fetch).toHaveBeenCalledTimes(1);
       expect((await prisma.document.findMany({ where: { id: { in: [first.id, second.id] } } })).map(d => d.extraction)).toEqual(['STORED', 'STORED']);
       expect(await prisma.activityEvent.count({ where: { action: 'extracted scheme from', target: { in: [first.name, second.name] } } })).toBe(0);
     } finally {
