@@ -300,7 +300,7 @@ export const appraisalRouter = router({
         for (const expected of input.sourceReview.expectedSources ?? []) {
           const document = documents.find(d => d.id === expected.id);
           if (!document || sourceVersion(document) !== expected.version) {
-            throw new TRPCError({ code: 'CONFLICT', message: 'A source changed since extraction. Reload the source documents and extract again before recording this review.' });
+            throw new TRPCError({ code: 'CONFLICT', message: 'A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.' });
           }
         }
         for (const ref of input.sourceReview.references) {

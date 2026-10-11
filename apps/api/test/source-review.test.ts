@@ -147,7 +147,7 @@ it.each(['name', 'fingerprint', 'storage'] as const)('refuses a source %s change
   });
   await expect(api.appraisal.save({ dealId, input, sourceReview: {
     ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: doc.id, version: listed.version }],
-  } })).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining('changed since extraction') });
+  } })).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining('changed since this review was prepared') });
   expect(await api.appraisal.getCurrent(dealId)).toBeNull();
 });
 
@@ -172,6 +172,6 @@ it('refuses expected sources omitted from the reviewed deal without disclosing f
   const other = await makeTenant('Review foreign stamp'); const foreign = await document(other.dealId, other.orgId);
   await expect(api.appraisal.save({ dealId, input, sourceReview: {
     ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: foreign.id, version: source.version }],
-  } })).rejects.toMatchObject({ code: 'CONFLICT', message: 'A source changed since extraction. Reload the source documents and extract again before recording this review.' });
+  } })).rejects.toMatchObject({ code: 'CONFLICT', message: 'A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.' });
   expect(await api.appraisal.getCurrent(dealId)).toBeNull();
 });

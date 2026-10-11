@@ -443,6 +443,9 @@ source, missing sources, unknown/legacy state and removal. The browser journey
 uses a deliberately stale document-list version with a real upload and real save:
 the server refuses it, refreshing the list blocks acceptance, and explicit
 reselection plus a new locator can be saved and reopened. No provider call,
-financial arithmetic, API contract or schema change. These remain optional client
+financial arithmetic, API contract or schema change. Claude review also prompted
+neutral server conflict guidance and an explicit citation payload without its
+session-only version field; saved reviews retain the server-pinned document
+metadata as before. These remain optional client
 concurrency stamps, not authenticated extraction receipts. Durable receipts and
 the documented integration/customer release gates remain the next priority.

@@ -36,7 +36,7 @@ memory, or commits between the two.
   trusting a green run.
 - `cd apps/web && npx vitest run` — web unit tests (388): the pure decision modules in
   `src/lib` (words, report-dates, valuation-confidence, situation, oneEngine, exportXlsx,
-  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, comp-proximity, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
+  firm-day, read-only, drawn-basis, photo-queue, photo-drain, sso-recovery, comp-proximity, approval-check, pack-pagination, pack-relayout, load-failure, valuer, client-contact, landing-claims, upload-failure, auto-defaults, working-deal, starting-income, review-source-versions, region, uk-regions, focus-trap, outline, section-name) plus the `no-raw-hex`, `asset-classes`, `hooks-order`, `route-reachable`,
   `accessible-names`, `icon-tables`, `page-title`, `dialogs`, `destructive`, `unsaved`, `announcements`, `symbol-buttons`, `headings`, `screen-heading` and `write-controls` sweeps. The suite runs under `TZ=America/New_York` on purpose (`vite.config.ts` says
   why): in UTC or London a test asserting "30 June" passes whether or not the code pins a
   zone, so the guard would be decoration.

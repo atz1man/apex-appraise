@@ -66,7 +66,7 @@ test('manually referenced source versions reject stale saves and recover after r
   await accept.check();
   // The server sees the real current version; this cached list is deliberately stale.
   await page.getByRole('button', { name: 'Open full appraisal', exact: true }).click();
-  await expect(page.locator('#page').getByText('A source changed since extraction. Reload the source documents and extract again before recording this review.', { exact: true })).toBeVisible();
+  await expect(page.locator('#page').getByText('A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.', { exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/deal/${dealId}/auto$`));
   staleList = false;
   await page.getByRole('button', { name: 'Refresh source documents', exact: true }).click();

@@ -405,7 +405,7 @@ export default function AutoAppraisal() {
         dealId,
         source: run.source,
         sourceReview: run.source !== 'manual' ? {
-          accepted: true, references: run.references ?? [], documentIds: reviewDocumentIds,
+          accepted: true, references: (run.references ?? []).map(({ unitIndex, documentId, page, locator }) => ({ unitIndex, documentId, page, locator })), documentIds: reviewDocumentIds,
           expectedSources,
           sample: !!run.extraction.sample, omissions: run.skipped,
         } : undefined,
