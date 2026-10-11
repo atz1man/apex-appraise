@@ -51,8 +51,9 @@ for (const [name, type, body] of [['HTML fallback', 'text/javascript', '<!doctyp
   });
 }
 test('does not follow redirects', async t => {
-  const { url } = await fixture(t, { '/login': (_req, res) => { res.writeHead(302, { Location: '/ready' }); res.end(); } });
+  const { url, paths } = await fixture(t, { '/login': (_req, res) => { res.writeHead(302, { Location: '/redirected-login' }); res.end(); }, '/redirected-login': [200, 'text/html', html] });
   await assert.rejects(checkServing(url));
+  assert.deepEqual(paths, ['/login']);
 });
 test('does not request entry assets from another origin', async t => {
   const { url, paths } = await fixture(t, { '/login': [200, 'text/html', html.replace('/assets/app.js', 'http://127.0.0.1:1/assets/app.js')] });
@@ -63,7 +64,7 @@ test('bounds response bytes', async t => {
   const { url } = await fixture(t, { '/assets/app.js': [200, 'text/javascript', 'x'.repeat(2 * 1024 * 1024 + 1)] });
   await assert.rejects(checkServing(url), /check budget/);
 });
-test('times out a response that stalls after sending headers', async t => {
+test('times out a response that stalls after sending headers', { timeout: 5000 }, async t => {
   const { url } = await fixture(t, { '/login': (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.write('<div'); } });
   await assert.rejects(checkServing(url, { timeoutMs: 100 }));
 });

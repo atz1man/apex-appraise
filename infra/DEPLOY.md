@@ -21,7 +21,9 @@ checking the public `/login` HTML, its same-origin JavaScript/CSS entry assets,
 and the explicit API/database JSON at `/ready`. HTTP 200 alone is insufficient:
 a fallback HTML page or a missing JavaScript bundle can still leave the app broken.
 The check uses bounded responses/timeouts, rejects redirects, and retries the
-complete check up to three times. It does not exercise authenticated workflows.
+complete check up to five times, with 2, 5, 10 and 15 second delays. It does not
+exercise authenticated workflows or attest which release is running. Verify the
+serving image against the intended commit separately.
 
 For a hand deployment, run the same check after both apps are serving:
 

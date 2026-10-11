@@ -29,6 +29,7 @@ async function checkServing(base, { timeoutMs = 10_000 } = {}) {
   }
   const login = await readResponse(new URL('/login', origin), timeoutMs);
   if (login.type !== 'text/html' || !/<div\b[^>]*\bid=["']root["'][^>]*>/i.test(login.text)) throw new Error('/login: expected the application HTML entry');
+  // Contract of the current Vite entry: module scripts and stylesheet links under /assets/.
   const assets = [];
   for (const match of login.text.matchAll(/<script\b[^>]*>/gi)) {
     const tag = match[0];
@@ -60,12 +61,13 @@ async function checkServing(base, { timeoutMs = 10_000 } = {}) {
 module.exports = { checkServing };
 
 if (require.main === module) (async () => {
+  const retryDelays = [2000, 5000, 10000, 15000];
   for (let attempt = 1; ; attempt++) {
     try { console.log(JSON.stringify(await checkServing(process.argv[2]))); return; }
     catch (error) {
-      if (attempt === 3) throw error;
+      if (attempt > retryDelays.length) throw error;
       console.error(`Serving check attempt ${attempt} failed: ${error.message}`);
-      await delay(2000);
+      await delay(retryDelays[attempt - 1]);
     }
   }
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

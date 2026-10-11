@@ -187,13 +187,13 @@ Both public login/readiness checks and authenticated live login, appraisal scree
 and a real PDF download passed. The release evidence is recorded in #44/#45.
 
 The deployment workflow now uses a shared read-only serving check: verify the
-login application HTML, load its same-origin module and stylesheet entry assets,
+login application HTML, fetch and validate its same-origin module and stylesheet entry assets,
 and require explicit `apex-api` and database readiness in JSON. It refuses redirects,
 HTML fallbacks, wrong/empty asset bodies, unhealthy readiness and responses beyond
 its byte/time limits. Twelve local HTTP regression cases plus the eleven existing
 exact-commit release-gate checks pass. CI also runs the shared checker against
 the built application stack. The same checker passed against the live
 site without signing in or invoking any provider. This improves rollout detection;
-it does not prove authenticated journeys, asset execution, rollback automation,
+it does not prove release identity, authenticated journeys, asset execution, rollback automation,
 mail, billing, professional acceptance or customer readiness. GitHub deployment
 credentials and the existing customer-launch acceptance gates remain outstanding.
