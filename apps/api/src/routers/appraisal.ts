@@ -1494,7 +1494,7 @@ type ContentBlock =
 async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: string; warnings: string[] }> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Uint8Array.from(data).buffer);
+  await wb.xlsx.load(new Uint8Array(data).buffer);
   const lines: string[] = [];
   const warnings: string[] = [];
   let chars = 0;
@@ -1572,6 +1572,7 @@ export async function documentBlocks(
   documentIds: string[],
 ): Promise<{
   blocks: ContentBlock[];
+  integrityFailures: Array<{ id: string; name: string; dealId: string }>;
   used: Array<{ id: string; name: string; dealId: string }>;
   skipped: Array<{ name: string; reason: string }>;
 }> {
@@ -1581,6 +1582,7 @@ export async function documentBlocks(
   // read at all, and the blocks reach a model in this sequence
   const docs = await prisma.document.findMany({ where: { id: { in: documentIds }, orgId }, orderBy: { id: 'asc' } });
   const blocks: ContentBlock[] = [];
+  const integrityFailures: Array<{ id: string; name: string; dealId: string }> = [];
   const used: Array<{ id: string; name: string; dealId: string }> = [];
   const skipped: Array<{ name: string; reason: string }> = [];
   let totalBytes = 0;
@@ -1620,11 +1622,10 @@ export async function documentBlocks(
     }
     const sha256 = createHash('sha256').update(data).digest('hex');
     if (doc.sha256 != null && doc.sha256 !== sha256) {
+      integrityFailures.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
       skipped.push({ name: doc.name, reason: 'Stored file does not match its upload fingerprint. It was not read for extraction; upload the correct source as a new document.' });
       continue;
     }
-    // Legacy bytes can be read, but cannot be vouched for against an upload record.
-    if (doc.sha256 == null) skipped.push({ name: doc.name, reason: 'No upload fingerprint was recorded; these file bytes cannot be verified against the original upload.' });
     totalBytes += data.length;
     if (spreadsheet) {
       try {
@@ -1646,10 +1647,12 @@ export async function documentBlocks(
     } else {
       blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType!, data: data.toString('base64') } });
     }
+    // Report legacy identity only after successful content preparation.
+    if (doc.sha256 == null) skipped.push({ name: doc.name, reason: 'No upload fingerprint was recorded. The file was read for extraction, but its bytes cannot be verified against the original upload.' });
     used.push({ id: doc.id, name: doc.name, dealId: doc.dealId });
   }
   for (const doc of docs.slice(12)) skipped.push({ name: doc.name, reason: 'omitted by the 12-document extraction limit' });
-  return { blocks, used, skipped };
+  return { blocks, used, skipped, integrityFailures };
 }
 
 /**
@@ -1822,12 +1825,20 @@ export const autoAppraisalRouter = router({
         }),
     )
     .mutation(async ({ ctx, input }) => {
-      let blocks: Awaited<ReturnType<typeof documentBlocks>> = { blocks: [], used: [], skipped: [] };
+      let blocks: Awaited<ReturnType<typeof documentBlocks>> = { blocks: [], used: [], skipped: [], integrityFailures: [] };
       if (input.documentIds.length > 0) {
         if (!process.env.ANTHROPIC_API_KEY) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reading documents needs the AI configured (ANTHROPIC_API_KEY) — paste the text as notes instead.' });
         }
         blocks = await documentBlocks(ctx.prisma, ctx.principal.orgId, input.documentIds);
+        // Verification is read-only; persist failures here in the mutation, including
+        // entirely refused selections, without attributing a model action that never ran.
+        for (const doc of blocks.integrityFailures) {
+          await ctx.prisma.activityEvent.create({ data: {
+            orgId: ctx.principal.orgId, dealId: doc.dealId, actor: ctx.principal.name,
+            action: 'refused extraction from mismatched source', target: `${doc.name} (${doc.id})`,
+          } });
+        }
         if (blocks.blocks.length === 0) {
           /**
            * Naming each one and why. This said "None of the selected documents

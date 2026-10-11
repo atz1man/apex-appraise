@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import Fastify from 'fastify';
 import jwt from 'jsonwebtoken';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { documentBlocks } from '../src/routers/appraisal.js';
 import { JWT_SECRET } from '../src/context.js';
 import { registerUploads } from '../src/uploads.js';
 import { makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
@@ -74,6 +75,9 @@ describe('workfile storage under competing and failed writes', () => {
     expect(a.statusCode).toBe(200); expect(b.statusCode).toBe(200);
     const one = await prisma.document.findUniqueOrThrow({ where: { id: a.json().id } });
     const two = await prisma.document.findUniqueOrThrow({ where: { id: b.json().id } });
+    const prepared = await documentBlocks(prisma, A.orgId, [one.id]);
+    expect(prepared.skipped).toEqual([]);
+    expect(prepared.blocks).toEqual([{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: Buffer.from(body).toString('base64') } }]);
     expect(one.sha256).toBe(expected); expect(two.sha256).toBe(createHash('sha256').update(body + '!').digest('hex'));
     expect(createHash('sha256').update((await app.inject({ url: a.json().url, headers: auth(A) })).rawPayload).digest('hex')).toBe(expected);
   });

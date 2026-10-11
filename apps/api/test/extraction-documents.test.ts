@@ -105,9 +105,12 @@ describe('a spreadsheet is read', () => {
 
   it('reports a file that is not really a workbook rather than failing the run', async () => {
     const d = await doc('Not really.xlsx', 'xlsx', Buffer.from('this is not a zip archive'));
+    await prisma.document.update({ where: { id: d.id }, data: { sha256: null } });
     const { blocks, skipped } = await read([d.id]);
     expect(blocks).toEqual([]);
     expect(skipped[0]!.reason).toMatch(/could not be opened/);
+    expect(skipped).toHaveLength(1); // no false claim that this legacy workbook was read
+
   });
 });
 
@@ -255,10 +258,12 @@ describe('extraction verifies the exact bytes it consumes', () => {
     const result = await read([d.id]);
     expect(result.used).toHaveLength(1); expect(result.blocks).toHaveLength(1);
     expect(result.skipped[0].reason).toContain('No upload fingerprint was recorded');
+    expect(result.skipped[0].reason).toContain('file was read for extraction');
   });
   it('parses spreadsheet cells from the checked buffer without reopening the path', async () => {
     const ExcelJS = (await import('exceljs')).default;
     const d = await doc('Single read.xlsx', 'xlsx', await workbook([['Verified source', 12345]]));
+    // Pins the previous second-read path; the routed test also checks prepared model bytes.
     const reader = vi.spyOn(Object.getPrototypeOf(new ExcelJS.Workbook().xlsx), 'readFile').mockRejectedValue(new Error('A second path read is forbidden'));
     const result = await read([d.id]);
     expect(reader).not.toHaveBeenCalled();
@@ -276,6 +281,7 @@ describe('the guarded extraction procedure', () => {
     await writeFile(path.join(UPLOADS, d.url.split('/').at(-1)!), 'tampered');
     await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [d.id] })).rejects.toThrow(/does not match its upload fingerprint/);
     expect(request).not.toHaveBeenCalled();
+    expect(await prisma.activityEvent.findFirst({ where: { dealId: d.dealId, action: 'refused extraction from mismatched source', target: `${d.name} (${d.id})` } })).toMatchObject({ orgId: T.orgId, actor: T.principal.name });
     expect((await prisma.document.findUniqueOrThrow({ where: { id: d.id } })).extraction).toBe('STORED');
   });
   it('sends only checked sources and returns the named integrity omission for a mixed selection', async () => {

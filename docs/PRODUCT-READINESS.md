@@ -274,7 +274,8 @@ the stacked PRs and the external SaaS acceptance checks remain release work.
 
 Document extraction now hashes the bytes read from storage and compares them to
 an available upload fingerprint before constructing model content. A mismatch is
-excluded and named in the existing omission/error flow; an entirely mismatched
+excluded and named in the existing omission/error flow and recorded in the
+mutation audit trail; an entirely mismatched
 selection never calls the model or marks a document extracted. A mixed selection
 sends only usable sources. Legacy files without upload fingerprints remain
 readable with an explicit warning that their original upload cannot be verified.
