@@ -1,7 +1,8 @@
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { withModelDeadline } from '../src/model-deadline.js';
+import { withModelDeadline, MODEL_NETWORK_TIMEOUT_MS } from '../src/model-deadline.js';
 const realTimeout = AbortSignal.timeout.bind(AbortSignal);
 afterEach(() => vi.restoreAllMocks());
 
@@ -39,4 +40,12 @@ describe('the model network deadline', () => {
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
     await expect(withModelDeadline(async () => { controller.abort(); return 'late'; })).rejects.toMatchObject({ code: 'TIMEOUT' });
   });
+});
+
+
+it('keeps the tRPC proxy response window longer than the model deadline', () => {
+  const config = readFileSync(new URL('../../../infra/nginx.conf.template', import.meta.url), 'utf8');
+  const block = config.match(/location \/trpc\/ \{([\s\S]*?)\n  \}/)?.[1];
+  const seconds = Number(block?.match(/proxy_read_timeout (\d+)s;/)?.[1]);
+  expect(seconds * 1000).toBeGreaterThan(MODEL_NETWORK_TIMEOUT_MS);
 });

@@ -456,7 +456,9 @@ it.each(['extraction', 'question'] as const)('a timed-out %s records no successf
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => timeout(20));
   const request = vi.fn((_url: unknown, init: RequestInit) => new Promise((_resolve, reject) => {
-    init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+    if (!init.signal) return reject(new Error('Model request omitted its deadline signal'));
+    if (init.signal.aborted) return reject(init.signal.reason);
+    init.signal.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
   }));
   vi.stubGlobal('fetch', request);
   const caller = callerFor(T.principal);

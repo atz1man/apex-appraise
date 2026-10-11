@@ -28,7 +28,8 @@ test('workfile questions explain coverage and allow retry after a timeout', asyn
   await expect(page.getByText('No answer was generated because no source files could be read.', { exact: false })).toBeVisible();
 
   // Rendering a provider-backed response is deterministic here; the guarded API
-  // tests exercise actual file selection and a stubbed model transport separately.
+  // tests exercise actual file selection and the network deadline separately.
+  // This mutation has no automatic retry; the timeout response tests UI recovery.
   let attempts = 0;
   await page.route('**/trpc/documents.ask**', async route => {
     if (attempts++ === 0) {

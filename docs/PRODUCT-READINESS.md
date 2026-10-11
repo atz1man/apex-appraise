@@ -389,7 +389,8 @@ Durable extraction receipts and release/customer acceptance remain outstanding.
 ### Source-model request deadlines — 11 October 2026
 
 Document extraction and workfile questions now share a 90-second provider network
-deadline, covering response headers and body consumption. A timeout returns an
+deadline, covering response headers and body consumption. The tRPC proxy response
+window is explicitly 120 seconds so it can relay this error. A timeout returns an
 explicit retry error and does not mark files extracted or record a successful
 AI answer. There is no automatic retry, so a timeout cannot trigger a second
 billable request without the user's action. Provider usage may already have

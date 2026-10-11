@@ -1109,8 +1109,8 @@ async function answerFromWorkfile(
   return withModelDeadline(async signal => {
     const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
 
-  QUESTION:
-  ${question}`;
+QUESTION:
+${question}`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal,
       headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
@@ -1121,22 +1121,22 @@ async function answerFromWorkfile(
         tool_choice: { type: 'tool', name: 'record_answer' },
         messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
       }),
-  });
-  if (res.ok) {
-    const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
-    const toolUse = body.content.find((c) => c.type === 'tool_use');
-    const parsed = zWorkfileAnswer.safeParse(toolUse?.input);
-    if (parsed.success) {
-      return { answer: parsed.data.answer, sources: parsed.data.sources.filter((s) => docNames.includes(s)) };
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
+      const toolUse = body.content.find((c) => c.type === 'tool_use');
+      const parsed = zWorkfileAnswer.safeParse(toolUse?.input);
+      if (parsed.success) {
+        return { answer: parsed.data.answer, sources: parsed.data.sources.filter((s) => docNames.includes(s)) };
+      }
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'The AI returned an unusable answer — try again.' });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'The AI returned an unusable answer — try again.' });
-  }
-  // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
-  const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-  throw new TRPCError({
-    code: 'BAD_REQUEST',
-    message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
-  });
+    // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
+    const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+    });
   });
 }
 
