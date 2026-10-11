@@ -209,7 +209,6 @@ export default function DevelopmentAppraisal() {
   const [period, setPeriod] = useState<Periodicity>('month');
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [versionNote, setVersionNote] = useState('');
-  const [reviewNote, setReviewNote] = useState('');
   const [compareId, setCompareId] = useState<string | null>(null);
   const [versionLabel, setVersionLabel] = useState('');
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
@@ -1876,7 +1875,7 @@ export default function DevelopmentAppraisal() {
                   </div>
                 )}
                 {v.note && <div className="mt-2 text-[11.5px] text-ink-2 italic">“{v.note}”</div>}
-                <ReviewRow version={v} dealId={dealId} note={reviewNote} setNote={setReviewNote} />
+                <ReviewRow version={v} dealId={dealId} />
                 {!v.isCurrent && (
                   <div className="mt-2.5 flex gap-2">
                     <Button
@@ -1917,14 +1916,13 @@ export default function DevelopmentAppraisal() {
 function ReviewRow({
   version,
   dealId,
-  note,
-  setNote,
 }: {
-  version: { id: string; review: { status: string; submittedBy: string | null; reviewedBy: string | null; note: string | null; selfApproved: boolean } };
+  version: { id: string; label: string; review: { status: string; submittedBy: string | null; reviewedBy: string | null; note: string | null; selfApproved: boolean } };
   dealId: string;
-  note: string;
-  setNote: (v: string) => void;
 }) {
+  // Each keyed version owns its draft: deciding on another row must not copy
+  // or clear this reviewer note.
+  const [note, setNote] = useState('');
   const utils = trpc.useUtils();
   const principal = getPrincipal();
   const isAdmin = principal?.role === 'ADMIN';
@@ -1977,6 +1975,7 @@ function ReviewRow({
         <div className="flex flex-col gap-2">
           <input
             className="w-full"
+            aria-label={`Review note for ${version.label}`}
             placeholder="Note — required when sending it back"
             value={note}
             onChange={(e) => setNote(e.target.value)}
