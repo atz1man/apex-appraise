@@ -626,10 +626,21 @@ export const tasksRouter = router({
    * for unique current members; old stored assignments are never guessed.
    */
   create: internalProcedure
-    .input(z.object({ dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), assigneeId: z.string().min(1).optional(), inspectionSource: z.object({ inspectionId: z.string(), updatedAt: z.string().datetime(), roomIndex: z.number().int().min(0) }).optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
+    .input(z.object({ createRequestId: z.string().uuid().optional(), dealId: z.string(), title: z.string().min(1), aspect: z.string(), assignee: z.string().optional(), assigneeId: z.string().min(1).optional(), inspectionSource: z.object({ inspectionId: z.string(), updatedAt: z.string().datetime(), roomIndex: z.number().int().min(0) }).optional(), due: z.union([z.string().date('Choose a valid due date in YYYY-MM-DD format.'), z.literal('')]).optional() }))
     .mutation(async ({ ctx, input }) => {
       const deal = await ctx.prisma.deal.findFirst({ where: { id: input.dealId, orgId: ctx.principal.orgId } });
       if (!deal) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Replays precede mutable member/source validation: the original write may
+      // have succeeded before the response was lost and those records changed.
+      const createRequest = input.createRequestId ? JSON.stringify({ userId: ctx.principal.userId, input }) : null;
+      const replay = async () => {
+        if (!input.createRequestId) return null;
+        const existing = await ctx.prisma.task.findUnique({ where: { orgId_createRequestId: { orgId: ctx.principal.orgId, createRequestId: input.createRequestId } } });
+        if (existing && existing.createRequest !== createRequest) throw new TRPCError({ code: 'CONFLICT', message: 'This submission identity was already used for another request. Check the saved task before starting a new follow-up.' });
+        return existing;
+      };
+      const existing = await replay();
+      if (existing) return existing;
       const assignee = input.assignee ?? ctx.principal.initials;
       const assigneeId = input.assigneeId ?? (input.assignee === undefined ? ctx.principal.userId : undefined);
       const members = await ctx.prisma.user.findMany({
@@ -650,8 +661,9 @@ export const tasksRouter = router({
         if (!parsed.success || (!parsed.data.notes.trim() && !parsed.data.condition)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Select a saved note or condition rating.' });
         inspectionEvidence = JSON.stringify(zInspectionEvidence.parse({ version: 1, inspectionId: inspection.id, sourceUpdatedAt: inspection.updatedAt.toISOString(), capturedAt: new Date().toISOString(), roomIndex: source.roomIndex, room: parsed.data }));
       }
-      return ctx.prisma.task.create({
+      try { return await ctx.prisma.task.create({
         data: {
+          createRequestId: input.createRequestId, createRequest,
           orgId: ctx.principal.orgId,
           dealId: input.dealId,
           title: input.title,
@@ -661,7 +673,14 @@ export const tasksRouter = router({
           inspectionEvidence,
           due: input.due ? new Date(input.due) : new Date(Date.now() + 7 * 86400e3),
         },
-      });
+      }); } catch (error) {
+        // A database uniqueness constraint resolves simultaneous identical writes.
+        if ((error as { code?: string }).code === 'P2002') {
+          const winner = await replay();
+          if (winner) return winner;
+        }
+        throw error;
+      }
     }),
 
   update: internalProcedure.input(z.object({

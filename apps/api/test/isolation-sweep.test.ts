@@ -44,6 +44,9 @@ const EXEMPT_ID_FIELDS: string[] = [
   // the OIDC client id an admin pastes from their own identity provider — a
   // credential this app stores, not a row this app owns
   'clientId',
+  // Caller-generated retry UUID, not an existing row ID. Lookup is scoped by
+  // orgId; task-create-retry tests reuse across firms and reject foreign deals.
+  'createRequestId',
   // Xero's id for a tracking option, chosen from Xero's list. It names a row in
   // the customer's accounting package, and the guard that matters there is that
   // the deal is the caller's, which `dealId` in the same input already sweeps.

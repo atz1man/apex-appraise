@@ -76,8 +76,26 @@ test('saved field observations become reviewed project tasks and calendar comple
     await panel.getByLabel('Follow-up title').fill(title);
     await panel.getByLabel('Assign follow-up to').selectOption(colleague.id);
     await panel.getByLabel('Follow-up due date').fill('2030-03-31');
+    // Commit the real write, then lose its response. The retry must resolve the
+    // original task even though list invalidation has already exposed it.
+    await page.route('**/trpc/tasks.create*', async route => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+    });
+    await panel.getByRole('button', { name: 'Create project follow-up', exact: true }).click();
+    await expect(panel.getByRole('alert')).toContainText('Retry this unchanged submission safely');
+    await expect(panel.getByLabel('Follow-up title')).toBeDisabled();
+    await expect(panel.getByLabel('Assign follow-up to')).toBeDisabled();
+    await expect(panel.getByLabel('Follow-up due date')).toBeDisabled();
+    const committed = await query('tasks.list', { dealId: deal.id, aspect: 'Field inspection' });
+    expect(committed).toHaveLength(1);
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(panel.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+    await page.unroute('**/trpc/tasks.create*');
     await panel.getByRole('button', { name: 'Create project follow-up', exact: true }).click();
     await expect(panel.getByRole('status')).toContainText('Follow-up created');
+    expect((await query('tasks.list', { dealId: deal.id }))[0].id).toBe(committed[0].id);
     const taskRow = panel.getByRole('listitem').filter({ hasText: title });
     await expect(taskRow).toContainText('Open');
     const saved = await query('tasks.list', { dealId: deal.id, aspect: 'Field inspection' });
