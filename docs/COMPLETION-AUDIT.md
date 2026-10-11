@@ -55,8 +55,9 @@ recorded on PR #49; previous-head results are not evidence for subsequent edits.
 
 ## Ordered remaining work
 
-1. Finish review/delivery of PR #49 and retain its precise boundary: local AI
-   evaluations plus browser replay, not customer-facing subscription integration.
+1. PR #49 merged at `50edabf8e8a1ea17d100087cc3c7c47638f65708`. Retain its
+   boundary: local AI evaluations plus browser replay, not customer-facing
+   subscription integration. Exact-main CI evidence is tracked separately.
 2. Exercise multi-user review/issued versions and a representative migration
    fixture, addressing evidenced defects rather than adding disconnected modules.
 3. Establish a repeatable load/cost baseline and close document lifecycle/support
@@ -70,3 +71,24 @@ For each item, record the commit, environment, input/data provenance, test resul
 limits, owner and next action. An unresolved external acceptance item stays open;
 adding a checklist or a mocked test does not close it. No overall percentage or
 launch date is justified until the scope and external commitments are confirmed.
+
+
+## Team review note isolation — 11 October 2026
+
+The team-workflow audit found that all version rows shared a single review-note
+state. A browser regression reproduced text entered for one version appearing in
+another version's field. A reviewer could attach the wrong explanation to an
+approval or return; completing one decision also cleared the other draft.
+
+Each keyed version row now owns its note and has an accessible field name. A
+two-session browser journey has the seeded analyst submit two newly created
+synthetic versions, then an administrator enter distinct notes, approve one and
+return the other. It verifies the unfinished note survives the other decision,
+both saved notes survive reload, the analyst sees the returned explanation and
+the approved current report verifies its pinned figures. The analyst cannot see
+approval controls. Existing API tests separately enforce those permissions.
+
+The regression failed before the fix and the new journey plus both report-pin
+journeys passed after it. This does not establish complete concurrent-edit,
+issued-report retention or real-team usability acceptance; those remain in the
+matrix. No financial computation, schema or provider configuration changed.
