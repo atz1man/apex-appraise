@@ -1521,6 +1521,7 @@ async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: st
     if (sheet.columnCount > 40) warnings.push(`${sheet.name}: only the first 40 columns were read`);
     let exhausted = false;
     let missingFormula = false;
+    let cachedFormula = false;
     for (let n = 1; n <= Math.min(sheet.rowCount, 400) && !exhausted; n++) {
       const row = sheet.getRow(n);
       const cells: string[] = [];
@@ -1530,13 +1531,19 @@ async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: st
         if (v == null) continue;
         let text: string;
         if (typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) {
-          if (v.result == null) {
+          // ExcelJS's value copy drops falsy cached results (including zero).
+          // The result accessor preserves those values without evaluating formulas.
+          const result = cell.result;
+          if (result == null) {
             missingFormula = true;
             text = '[formula has no cached result; recalculate in Excel]';
-          } else if (typeof v.result === 'object' && 'error' in v.result) {
-            text = `[formula error: ${v.result.error}]`;
+          } else if (typeof result === 'object' && 'error' in result) {
+            text = `[formula error: ${result.error}]`;
             missingFormula = true;
-          } else text = String(v.result);
+          } else {
+            cachedFormula = true;
+            text = `${String(result)} [cached formula result; not recalculated]`;
+          }
         } else if (typeof v === 'object' && 'richText' in v) {
           text = v.richText.map(part => part.text).join('');
         } else if (typeof v === 'object' && 'text' in v) text = String(v.text);
@@ -1557,6 +1564,7 @@ async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: st
       readableRows++;
     }
     if (missingFormula) warnings.push(`${sheet.name}: formulas without cached results or with errors need recalculation in Excel`);
+    if (cachedFormula) warnings.push(`${sheet.name}: formula results are cached workbook values, not recalculated or verified by Apex; recalculate and save the workbook in its authoring application before relying on them`);
   }
   for (const sheet of wb.worksheets.slice(10)) warnings.push(`${sheet.name}: omitted by the 10-worksheet limit`);
   return { text: readableRows ? lines.join('\n') : '', warnings };

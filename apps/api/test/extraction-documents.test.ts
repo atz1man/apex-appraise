@@ -187,6 +187,34 @@ describe('isolation', () => {
 });
 
 describe('multi-sheet workbooks retain source coordinates and limits', () => {
+  it('labels cached formula values without recalculating them or relabelling literal inputs', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const costs = wb.addWorksheet('Costs');
+    costs.getCell('A1').value = 100;
+    // Deliberately stale: evaluating the formula would produce a different value.
+    costs.getCell('B1').value = { formula: 'A1*2', result: 150 };
+    costs.getCell('B2').value = { formula: 'A1-A1', result: 0 };
+    costs.getCell('B3').value = { formula: 'A1<0', result: false };
+    costs.getCell('B4').value = { formula: 'A1/0', result: { error: '#DIV/0!' } };
+    const d = await doc('Cached cost plan.xlsx', 'xlsx', Buffer.from(await wb.xlsx.writeBuffer()));
+    const result = await read([d.id]);
+    const text = (result.blocks[0] as { text: string }).text;
+    expect(text).toContain('A1: 100 | B1: 150 [cached formula result; not recalculated]');
+    expect(text).toContain('B2: 0 [cached formula result; not recalculated]');
+    expect(text).toContain('B3: false [cached formula result; not recalculated]');
+    expect(text).toContain('B4: [formula error: #DIV/0!]');
+    expect(text).not.toContain('B1: 200');
+    expect(result.used.map(item => item.id)).toEqual([d.id]);
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const request = vi.fn(async () => modelReply());
+    vi.stubGlobal('fetch', request);
+    const extracted = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [d.id] });
+    expect(extracted.documentsSkipped).toEqual(result.skipped);
+    expect(extracted.sourceDocuments.map(item => item.id)).toEqual([d.id]);
+    expect(JSON.stringify(request.mock.calls)).toContain('150 [cached formula result; not recalculated]');
+    expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs: formula results are cached workbook values, not recalculated or verified by Apex; recalculate and save the workbook in its authoring application before relying on them');
+  });
   it('reads a cost plan beyond the cover sheet with cell references', async () => {
     const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
