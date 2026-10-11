@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { documentBlocks } from '../src/routers/appraisal.js';
-import { makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
+import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
  * Which documents an extraction can read, and what it says about the rest.
@@ -43,6 +44,7 @@ async function doc(name: string, ext: string, bytes: Buffer | null) {
     data: {
       orgId: T.orgId, dealId: T.dealId, name, category: 'Planning', ext,
       sizeBytes: BigInt(bytes?.length ?? 0), url, addedById: T.userId,
+      sha256: bytes ? createHash('sha256').update(bytes).digest('hex') : null,
     },
   });
 }
@@ -62,6 +64,8 @@ beforeAll(async () => {
   resetDatabase();
   T = await makeTenant('ExtractDocs');
 }, 120_000);
+
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 afterAll(async () => {
   await Promise.all(made.map((f) => rm(f, { force: true })));
@@ -232,4 +236,64 @@ it('retains limits even when all populated worksheets fall outside them', async 
   const result = await read([d.id]);
   expect(result.used).toHaveLength(0);
   expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs omitted: omitted by the 10-worksheet limit');
+});
+
+
+describe('extraction verifies the exact bytes it consumes', () => {
+  it.each(['pdf', 'png', 'xlsx'])('refuses changed %s bytes even when size and metadata still match', async ext => {
+    const bytes = ext === 'xlsx' ? await workbook([['Original cost', 100]]) : Buffer.from('original bytes');
+    const d = await doc(`Changed.${ext}`, ext, bytes);
+    const changed = Buffer.from(bytes); changed[changed.length - 1] ^= 1;
+    await writeFile(path.join(UPLOADS, d.url.split('/').at(-1)!), changed);
+    const result = await read([d.id]);
+    expect(result.blocks).toEqual([]); expect(result.used).toEqual([]);
+    expect(result.skipped).toEqual([{ name: d.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+  });
+  it('keeps legacy sources usable while exposing their unverified upload identity', async () => {
+    const d = await doc('Legacy.pdf', 'pdf', Buffer.from('%PDF-1.4 legacy'));
+    await prisma.document.update({ where: { id: d.id }, data: { sha256: null } });
+    const result = await read([d.id]);
+    expect(result.used).toHaveLength(1); expect(result.blocks).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('No upload fingerprint was recorded');
+  });
+  it('parses spreadsheet cells from the checked buffer without reopening the path', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const d = await doc('Single read.xlsx', 'xlsx', await workbook([['Verified source', 12345]]));
+    const reader = vi.spyOn(Object.getPrototypeOf(new ExcelJS.Workbook().xlsx), 'readFile').mockRejectedValue(new Error('A second path read is forbidden'));
+    const result = await read([d.id]);
+    expect(reader).not.toHaveBeenCalled();
+    expect(result.skipped).toEqual([]);
+    expect(result.blocks).toEqual([{ type: 'text', text: expect.stringContaining('12345') }]);
+  });
+});
+
+
+describe('the guarded extraction procedure', () => {
+  it('refuses an entirely changed selection before calling the model or marking files extracted', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const request = vi.fn(); vi.stubGlobal('fetch', request);
+    const d = await doc('Corrupt source.pdf', 'pdf', Buffer.from('original'));
+    await writeFile(path.join(UPLOADS, d.url.split('/').at(-1)!), 'tampered');
+    await expect(callerFor(T.principal).autoAppraisal.extract({ documentIds: [d.id] })).rejects.toThrow(/does not match its upload fingerprint/);
+    expect(request).not.toHaveBeenCalled();
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: d.id } })).extraction).toBe('STORED');
+  });
+  it('sends only checked sources and returns the named integrity omission for a mixed selection', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+    const goodBytes = Buffer.from('%PDF-1.4 checked source');
+    const good = await doc('Checked.pdf', 'pdf', goodBytes);
+    const bad = await doc('Changed.pdf', 'pdf', Buffer.from('original'));
+    await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'tampered');
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [good.id, bad.id] });
+    const sent = JSON.parse(request.mock.calls[0][1].body);
+    const documents = sent.messages[0].content.filter((block: { type: string }) => block.type === 'document');
+    expect(documents).toHaveLength(1);
+    expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
+    expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name }]);
+    expect(result.documentsSkipped).toEqual([{ name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');
+  });
 });

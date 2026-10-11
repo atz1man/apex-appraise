@@ -268,3 +268,26 @@ is required. No financial calculation changed.
 Next priority: close the extraction-time integrity gap and measure the complete
 source-to-appraisal workflow on representative customer packs. Integration of
 the stacked PRs and the external SaaS acceptance checks remain release work.
+
+
+### Extraction file integrity — 11 October 2026
+
+Document extraction now hashes the bytes read from storage and compares them to
+an available upload fingerprint before constructing model content. A mismatch is
+excluded and named in the existing omission/error flow; an entirely mismatched
+selection never calls the model or marks a document extracted. A mixed selection
+sends only usable sources. Legacy files without upload fingerprints remain
+readable with an explicit warning that their original upload cannot be verified.
+Spreadsheets parse the same checked buffer rather than reopening the path after
+verification; PDF and image blocks use that buffer too.
+
+Regression evidence includes same-size alterations of PDF, image and workbook
+files, a real workbook parsed without a second path read, legacy warnings, and
+guarded extraction calls with a stubbed model transport. No live model call or
+claim of extraction accuracy is involved. No engine arithmetic or schema changed.
+
+This verifies source bytes at model-input preparation, not model interpretation,
+page locations or exported storage. It does not yet persist an extraction receipt
+binding the accepted inputs to that particular model request. Next priority:
+carry a durable extraction receipt into review, then integrate the stacked PRs
+and validate real customer packs against the SaaS release acceptance checklist.

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Appraisal } from '@prisma/client';
 import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
 import { signFileUrl } from '../uploads.js';
@@ -1490,10 +1491,10 @@ type ContentBlock =
  * budget. Every truncated sheet is named. Cell addresses remain in the text
  * so a reviewer can locate an extracted figure in the original workbook.
  */
-async function spreadsheetText(filePath: string, budget: number): Promise<{ text: string; warnings: string[] }> {
+async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: string; warnings: string[] }> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  await wb.xlsx.load(Uint8Array.from(data).buffer);
   const lines: string[] = [];
   const warnings: string[] = [];
   let chars = 0;
@@ -1617,11 +1618,18 @@ export async function documentBlocks(
       skipped.push({ name: doc.name, reason: 'the 20 MB limit for one extraction was already used by the documents before it' });
       continue;
     }
+    const sha256 = createHash('sha256').update(data).digest('hex');
+    if (doc.sha256 != null && doc.sha256 !== sha256) {
+      skipped.push({ name: doc.name, reason: 'Stored file does not match its upload fingerprint. It was not read for extraction; upload the correct source as a new document.' });
+      continue;
+    }
+    // Legacy bytes can be read, but cannot be vouched for against an upload record.
+    if (doc.sha256 == null) skipped.push({ name: doc.name, reason: 'No upload fingerprint was recorded; these file bytes cannot be verified against the original upload.' });
     totalBytes += data.length;
     if (spreadsheet) {
       try {
         const prefix = `--- ${doc.name} ---\n`;
-        const { text, warnings } = await spreadsheetText(filePath, Math.max(0, textBudget - prefix.length));
+        const { text, warnings } = await spreadsheetText(data, Math.max(0, textBudget - prefix.length));
         if (warnings.length) skipped.push({ name: doc.name, reason: warnings.join('; ') });
         if (!text.trim()) {
           skipped.push({ name: doc.name, reason: 'no readable cells were found within the extraction limits' });
