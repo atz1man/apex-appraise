@@ -37,6 +37,7 @@ describe('a task’s assignee', () => {
     const colleague = await prisma.user.create({
       data: { orgId: T.orgId, email: 'zq@tasks.test', password: 'x', name: 'Zed Quill', initials: 'ZQ', role: 'ANALYST', principalType: 'internal' },
     });
+    await prisma.user.create({ data: { orgId: other.orgId, email: 'zq@elsewhere.test', password: 'x', name: 'Other Zed', initials: 'ZQ', role: 'ANALYST', principalType: 'internal' } });
     const t = (await callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Check the title', aspect: 'Legal', assignee: 'ZQ' } as never)) as { assignee: string };
     expect(t.assignee).toBe('ZQ');
     await prisma.user.delete({ where: { id: colleague.id } });
@@ -62,4 +63,14 @@ describe('a task’s assignee', () => {
       callerFor(T.principal).tasks.create({ dealId: T.dealId, title: 'Not theirs', aspect: 'Costs', assignee: 'LP' } as never),
     ).rejects.toThrow(/not a member/i);
   });
+});
+
+it('refuses an ambiguous pair of internal members without creating a task', async () => {
+  const tenant = await makeTenant('Ambiguous');
+  for (const [index, name] of ['Alex Baker', 'Amelia Brown'].entries()) {
+    await prisma.user.create({ data: { orgId: tenant.orgId, email: `ab-${index}@ambiguous.test`, password: 'x', name, initials: 'AB', principalType: 'internal', role: 'ANALYST' } });
+  }
+  const before = await prisma.task.count({ where: { orgId: tenant.orgId } });
+  await expect(callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'Inspect roof', aspect: 'Field inspection', assignee: 'AB' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  expect(await prisma.task.count({ where: { orgId: tenant.orgId } })).toBe(before);
 });

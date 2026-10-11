@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+// Due days must survive a browser west of the firm's timezone.
+test.use({ timezoneId: 'America/Los_Angeles' });
+
 test('saved field observations become reviewed project tasks and calendar completion returns to the field', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const orgName = `Field follow-ups ${Date.now()}`;
@@ -38,6 +41,7 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(panel.getByLabel('Follow-up title')).toHaveValue(/Crack beside/);
     const title = 'Arrange structural review of entrance crack';
     await panel.getByLabel('Follow-up title').fill(title);
+    await panel.getByLabel('Follow-up due date').fill('2030-03-31');
     page.once('dialog', dialog => dialog.dismiss());
     await page.getByRole('button', { name: 'Continue inspection', exact: true }).click();
     await expect(panel.getByLabel('Follow-up title')).toHaveValue(title);
@@ -56,6 +60,8 @@ test('saved field observations become reviewed project tasks and calendar comple
     expect(saved).toHaveLength(1);
     expect(saved[0].title).toBe(title);
     expect(saved[0].assignee).toBe('FO');
+    expect(saved[0].due).toBe('2030-03-31T00:00:00.000Z');
+    await expect(taskRow).toContainText('Field Owner');
     expect(await query('tasks.list', { dealId: other.id })).toEqual([]);
     expect(await query('appraisal.getCurrent', deal.id)).toBeNull();
     // An exact duplicate open title is flagged before another submit.
@@ -84,4 +90,65 @@ test('saved field observations become reviewed project tasks and calendar comple
     await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
     await expect(panel).toContainText('No field follow-ups for this project yet');
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
+});
+
+test('a field follow-up can be handed to a real colleague with a chosen due date', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+  const session = await page.evaluate(() => ({ token: localStorage.getItem('apex_token'), principal: JSON.parse(localStorage.getItem('apex_principal')!) }));
+  const query = async (route: string, input?: unknown) => {
+    const response = await request.get(`/trpc/${route}`, { headers: { authorization: `Bearer ${session.token}` }, params: input === undefined ? {} : { input: JSON.stringify({ json: input }) } });
+    expect(response.status()).toBe(200);
+    return (await response.json()).result.data.json;
+  };
+  const members = await query('org.members');
+  const colleague = members.find((member: { id: string; initials: string }) => member.id !== session.principal.userId && members.filter((other: { initials: string }) => other.initials === member.initials).length === 1);
+  expect(colleague, 'seed must contain a real second internal member').toBeTruthy();
+  const deals = (await query('deals.list', {})).deals;
+  let dealId = '';
+  // Read an existing saved observation; do not overwrite any seeded inspection.
+  for (const deal of deals.slice(0, 30)) {
+    const inspection = await query('inspections.get', deal.id);
+    if (inspection?.rooms.some((room: { notes: string; condition: number }) => room.notes.trim() || room.condition > 0)) { dealId = deal.id; break; }
+  }
+  expect(dealId, 'seed must contain a saved inspection observation').not.toBe('');
+  const title = `Colleague field follow-up ${Date.now()}`;
+  try {
+    await page.goto(`/field?dealId=${dealId}`);
+    const panel = page.getByRole('region', { name: 'Field follow-ups', exact: true });
+    await panel.getByRole('button', { name: /^Review follow-up for/ }).first().click();
+    await panel.getByLabel('Follow-up title').fill(title);
+    await panel.getByLabel('Assign follow-up to').selectOption(colleague.initials);
+    await panel.getByLabel('Follow-up due date').fill('2030-10-27');
+    // Member lookup failure must block assignment without discarding the form.
+    await page.route('**/trpc/**', route => route.request().url().includes('org.members') ? route.abort() : route.continue());
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(panel).toContainText('Workspace members could not be loaded');
+    await expect(panel.getByRole('button', { name: 'Create project follow-up', exact: true })).toBeDisabled();
+    await expect(panel.getByLabel('Follow-up title')).toHaveValue(title);
+    await expect(panel.getByLabel('Follow-up due date')).toHaveValue('2030-10-27');
+    await page.unroute('**/trpc/**');
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Create project follow-up', exact: true })).toBeEnabled();
+    await panel.locator('form').screenshot({ path: test.info().outputPath('field-assignment-review.png') });
+    await panel.getByRole('button', { name: 'Create project follow-up', exact: true }).click();
+    const row = panel.getByRole('listitem').filter({ hasText: title });
+    await expect(row).toContainText(colleague.name);
+    const tasks = await query('tasks.list', { dealId, aspect: 'Field inspection' });
+    const task = tasks.find((task: { title: string }) => task.title === title);
+    expect(task.assignee).toBe(colleague.initials);
+    expect(task.due).toBe('2030-10-27T00:00:00.000Z');
+    await page.reload();
+    await expect(row).toContainText(colleague.name);
+    await expect(row).toContainText('27 Oct');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    const tasks = await query('tasks.list', { dealId });
+    for (const task of tasks.filter((task: { title: string }) => task.title === title)) {
+      const response = await request.post('/trpc/tasks.remove', { headers: { authorization: `Bearer ${session.token}` }, data: { json: task.id } });
+      expect(response.status()).toBe(200);
+    }
+  }
 });

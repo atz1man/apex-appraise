@@ -273,3 +273,30 @@ field follow-ups, followed by explicit reviewed observation-to-appraisal proposa
 Duplicate-title prevention here is a UI safeguard, not server-side idempotency;
 offline task submission and automatic appraisal updates are not implemented.
 The erasure, provider and professional-acceptance limitations above remain open.
+
+## Field follow-up assignment and dates — 11 October 2026
+
+PR #58 was green and merged at `bd73dc2fe88437614b811bffe46aa4f60dbdc74c`
+before this increment. Follow-up review now offers the actual workspace members
+and an optional due date. Blank dates preserve the existing seven-day default.
+Saved tasks show the resolved colleague name and due date; unavailable or ambiguous
+member details are identified rather than silently mapped to the wrong person.
+A member-read failure blocks creation, retains the draft and exposes retry.
+
+Because the current task schema stores initials, duplicate initials inside a
+workspace cannot identify one colleague. The UI disables those choices and the
+API now refuses the ambiguous assignment without creating a task. Another firm's
+matching initials do not cause a refusal. Existing tasks are not rewritten.
+A future move to stable member IDs remains the complete identity solution.
+
+Nine focused field journeys passed locally. A real seeded colleague was selected,
+the task's assignee/date were verified through the API and after reload, and only
+the synthetic task was removed afterwards; no invitation or external email was
+sent. Both follow-up journeys also passed in America/Los_Angeles, including UK
+clock-change dates. Member-read failure/retry preserves inputs. Assignment,
+tenant-isolation and viewer checks passed (22 tests), as did 388 web checks,
+API/web typechecks, build and bundle budget. Exact-head CI belongs to the PR.
+
+Remaining: stable member-ID assignment and editing existing follow-ups,
+version-linked observation evidence, then explicit reviewed appraisal proposals.
+No automatic financial changes, provider activation or deployment occurred.
