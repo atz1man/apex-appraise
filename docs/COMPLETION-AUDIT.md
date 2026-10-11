@@ -329,3 +329,39 @@ This date correction has not been deployed.
 Next: editing existing follow-ups with conflict protection, stable member-ID
 assignment, then version-linked observation evidence and reviewed appraisal
 proposals. External provider, professional and customer-launch gates remain.
+
+## Editing field follow-ups — 12 October 2026
+
+PR #60 was green and merged at `3e6925aa9514795c7c78149156dc3e5d604708d7`
+before this increment. The deployed release remains `818ed258`; subsequent
+changes require their own release evidence and deployment.
+
+Existing field follow-ups now have an edit action for the reviewed title,
+workspace colleague and due day. Clearing the date explicitly removes the
+deadline; leaving it unchanged preserves its original stored timestamp.
+Completion status, project and inspection/appraisal records are not edited.
+The calendar and field panel read the same saved task.
+
+The editor captures title, assignee, deadline and completion state when opened.
+An atomic conditional write compares that snapshot with the stored fields, so
+refreshing a list beneath an unsaved draft does not authorize overwriting a
+changed task. A conflict keeps the draft and directs the user to review the
+latest task, cancel and reopen. This is comparison of current field values,
+not a monotonically versioned task history or automatic conflict merging.
+Edits and before/after audit evidence commit together; a failed audit rolls
+back the edit. Tenant, viewer and unique internal-assignee checks apply.
+
+Ten focused API cases cover updates, date preservation/removal, conflicts for
+each compared field, competing saves, foreign/read-only refusals, invalid inputs
+and audit rollback. Removing the conditional snapshot caused five cases to fail;
+restoring it passed. Isolation/provenance/reachability/viewer sweeps passed (39
+combined cases), as did 388 web checks, API/web typechecks and build/bundle guards.
+The mobile browser flow in America/Los_Angeles exercises failed-save retry,
+reassignment, a competing saved revision, refresh with retained draft, refused
+stale overwrite, cancel/reopen, clearing the date and calendar/reload persistence.
+Both follow-up browser journeys pass and the mobile conflict form was inspected.
+Exact-head CI evidence belongs to this increment's PR. No deployment occurred.
+
+Next: stable member-ID assignment and version-linked observation evidence,
+then explicit reviewed observation-to-appraisal proposals. Offline task submission,
+server-side create idempotency and external launch acceptance remain outstanding.

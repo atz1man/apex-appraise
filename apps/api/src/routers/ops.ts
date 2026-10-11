@@ -640,6 +640,36 @@ export const tasksRouter = router({
       });
     }),
 
+  update: internalProcedure.input(z.object({
+    id: z.string(),
+    title: z.string().trim().min(1).max(240),
+    assignee: z.string().min(1),
+    due: z.string().date('Choose a valid due date in YYYY-MM-DD format.').nullable().optional(),
+    expected: z.object({ title: z.string(), assignee: z.string(), due: z.string().datetime().nullable(), done: z.boolean() }),
+  })).mutation(async ({ ctx, input }) => {
+    return ctx.prisma.$transaction(async tx => {
+      const task = await tx.task.findFirst({ where: { id: input.id, orgId: ctx.principal.orgId } });
+      if (!task) throw new TRPCError({ code: 'NOT_FOUND' });
+      const members = await tx.user.findMany({
+        where: { orgId: ctx.principal.orgId, principalType: 'internal', initials: input.assignee },
+        select: { id: true }, orderBy: { id: 'asc' }, take: 2,
+      });
+      if (members.length !== 1) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a current workspace member with unique initials.' });
+      // Compare the snapshot the editor opened, in the write itself. Refreshing
+      // the list must never silently advance that snapshot beneath a draft.
+      const changed = await tx.task.updateMany({
+        where: { id: task.id, orgId: ctx.principal.orgId, ...input.expected, due: input.expected.due ? new Date(input.expected.due) : null },
+        data: { title: input.title, assignee: input.assignee, ...(input.due !== undefined ? { due: input.due ? new Date(input.due) : null } : {}) },
+      });
+      if (changed.count !== 1) throw new TRPCError({ code: 'CONFLICT', message: 'This follow-up changed since you opened it. Keep your draft, review the latest task, then reopen the editor.' });
+      await tx.activityEvent.create({ data: {
+        orgId: ctx.principal.orgId, dealId: task.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+        action: 'updated a task', target: JSON.stringify({ before: input.expected, after: { title: input.title, assignee: input.assignee, due: input.due === undefined ? input.expected.due : input.due, done: input.expected.done } }),
+      } });
+      return { ok: true };
+    });
+  }),
+
   toggle: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
     const t = await ctx.prisma.task.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
     if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
