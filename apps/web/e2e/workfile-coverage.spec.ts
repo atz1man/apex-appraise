@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('workfile questions explain empty and partial source coverage', async ({ page }) => {
+test('workfile questions explain coverage and allow retry after a timeout', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -29,7 +29,13 @@ test('workfile questions explain empty and partial source coverage', async ({ pa
 
   // Rendering a provider-backed response is deterministic here; the guarded API
   // tests exercise actual file selection and a stubbed model transport separately.
+  let attempts = 0;
   await page.route('**/trpc/documents.ask**', async route => {
+    if (attempts++ === 0) {
+      const error = { error: { json: { message: 'The AI request timed out. Try again; no successful result was recorded.', code: -32008, data: { code: 'TIMEOUT', httpStatus: 408, path: 'documents.ask' } } } };
+      await route.fulfill({ status: 408, contentType: 'application/json', body: JSON.stringify(route.request().url().includes('batch=1') ? [error] : error) });
+      return;
+    }
     const data = { result: { data: { json: {
       status: 'ok', answer: 'The supplied plan describes the scheme.',
       sources: ['Current.pdf'], documentsRead: ['Current.pdf'],
@@ -38,6 +44,9 @@ test('workfile questions explain empty and partial source coverage', async ({ pa
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(route.request().url().includes('batch=1') ? [data] : data) });
   });
   await question.fill('Which plan describes the scheme?');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.getByText('The AI request timed out. Try again; no successful result was recorded.', { exact: true })).toBeVisible();
+  await expect(question).toHaveValue('Which plan describes the scheme?');
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
   await expect(page.getByText('Files read: Current.pdf. This answer covers only these files.', { exact: true })).toBeVisible();
   await expect(page.getByText('Old.pdf: Superseded by a later revision.', { exact: true })).toBeVisible();

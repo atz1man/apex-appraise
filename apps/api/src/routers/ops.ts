@@ -1,3 +1,4 @@
+import { withModelDeadline } from '../model-deadline.js';
 import { TRPCError } from '@trpc/server';
 import { currentAppraisal } from '../current-appraisal.js';
 import { z } from 'zod';
@@ -1105,20 +1106,21 @@ async function answerFromWorkfile(
   docBlocks: Awaited<ReturnType<typeof documentBlocks>>['blocks'],
   docNames: string[],
 ): Promise<{ answer: string; sources: string[] }> {
-  const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
+  return withModelDeadline(async signal => {
+    const instruction = `Answer the question below via record_answer, using ONLY the attached documents (${docNames.join('; ')}). If the documents do not contain the answer, say so plainly — never guess or draw on outside knowledge. UK property-professional register; at most 200 words of plain prose. sources lists only the attached document names the answer actually draws on.
 
-QUESTION:
-${question}`;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      max_tokens: 1500,
-      tools: [ANSWER_TOOL],
-      tool_choice: { type: 'tool', name: 'record_answer' },
-      messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
-    }),
+  QUESTION:
+  ${question}`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal,
+      headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 1500,
+        tools: [ANSWER_TOOL],
+        tool_choice: { type: 'tool', name: 'record_answer' },
+        messages: [{ role: 'user', content: [...docBlocks, { type: 'text', text: instruction }] }],
+      }),
   });
   if (res.ok) {
     const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
@@ -1134,6 +1136,7 @@ ${question}`;
   throw new TRPCError({
     code: 'BAD_REQUEST',
     message: `Ask the workfile unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Fix the API key/credits and try again.`,
+  });
   });
 }
 

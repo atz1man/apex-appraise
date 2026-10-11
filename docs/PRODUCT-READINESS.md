@@ -384,3 +384,21 @@ exclusions, missing storage and unconfigured AI. The browser journey verifies a
 real empty-workfile response and the rendering of a controlled partial-answer
 response. No live provider call, financial calculation or schema change.
 Durable extraction receipts and release/customer acceptance remain outstanding.
+
+
+### Source-model request deadlines — 11 October 2026
+
+Document extraction and workfile questions now share a 90-second provider network
+deadline, covering response headers and body consumption. A timeout returns an
+explicit retry error and does not mark files extracted or record a successful
+AI answer. There is no automatic retry, so a timeout cannot trigger a second
+billable request without the user's action. Provider usage may already have
+occurred even though no successful result was recorded.
+
+Regression checks use real local HTTP connections stalled before headers and
+mid-body, plus both guarded procedures with abort-aware model stubs. The browser
+question flow retains the question after a controlled timeout response and permits
+an explicit retry. No live provider call, financial arithmetic or schema change.
+This bounds these two provider requests, not file preparation, synchronous parsing,
+all AI features or per-workspace concurrency. Durable extraction receipts and
+release/customer acceptance remain outstanding.

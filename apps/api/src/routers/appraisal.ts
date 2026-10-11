@@ -1,3 +1,4 @@
+import { withModelDeadline } from '../model-deadline.js';
 import { readBoundedFile } from '../bounded-file.js';
 import { createHash } from 'node:crypto';
 import type { Appraisal } from '@prisma/client';
@@ -1675,10 +1676,10 @@ export async function documentBlocks(
  */
 async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], docNames: string[] = []): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (key) {
+  if (key) return withModelDeadline(async signal => {
     const instruction = `Extract the development-appraisal INPUTS via record_extraction from the attached documents${docNames.length ? ` (${docNames.join('; ')})` : ''}${notes.trim() ? ' and the notes below' : ''}. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated; source cites the document/page or note it came from). Anything the documents do not state: null.${notes.trim() ? `\n\nNOTES:\n${notes}` : ''}`;
     const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+      method: 'POST', signal,
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
@@ -1706,7 +1707,7 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
       code: 'BAD_REQUEST',
       message: `AI extraction unavailable: ${err?.error?.message ?? `Anthropic API returned ${res.status}`}. Use manual entry, or fix the API key/credits.`,
     });
-  }
+  });
   /**
    * No key. What follows is the built-in worked example, not a reading of the
    * user's documents — right for a demo, dangerous in production, and the

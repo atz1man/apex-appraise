@@ -448,3 +448,22 @@ describe('workfile answers disclose their coverage', () => {
     expect(await prisma.activityEvent.count({ where: { dealId: T.dealId, action: 'asked the workfile about' } })).toBe(0);
   });
 });
+
+it.each(['extraction', 'question'] as const)('a timed-out %s records no successful result and does not retry', async kind => {
+  T = await makeTenant(`Timeout ${kind}`);
+  const d = await doc('Slow.pdf', 'pdf', Buffer.from('source'));
+  vi.stubEnv('ANTHROPIC_API_KEY', 'test-only-no-network');
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => timeout(20));
+  const request = vi.fn((_url: unknown, init: RequestInit) => new Promise((_resolve, reject) => {
+    init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+  }));
+  vi.stubGlobal('fetch', request);
+  const caller = callerFor(T.principal);
+  const result = kind === 'extraction' ? caller.autoAppraisal.extract({ documentIds: [d.id] }) :
+    caller.documents.ask({ dealId: T.dealId, question: 'What does the source say?' });
+  await expect(result).rejects.toMatchObject({ code: 'TIMEOUT', message: expect.stringContaining('no successful result') });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect((await prisma.document.findUniqueOrThrow({ where: { id: d.id } })).extraction).toBe('STORED');
+  expect(await prisma.activityEvent.count({ where: { dealId: T.dealId, action: { in: ['extracted scheme from', 'asked the workfile about'] } } })).toBe(0);
+});
