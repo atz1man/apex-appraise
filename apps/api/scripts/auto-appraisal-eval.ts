@@ -35,12 +35,12 @@ function propertyType(label: string) {
   return types.size === 1 ? [...types][0] : null;
 }
 const zEnvelope = z.object({ cases: z.array(z.unknown()) }).strict();
-export function grade(raw: unknown) {
+export function grade(raw: unknown, fixtures = cases) {
   const rows = zEnvelope.parse(raw).cases;
-  if (!Array.isArray(rows) || rows.length !== cases.length) throw new Error('Expected exactly the complete fixture set');
+  if (!Array.isArray(rows) || rows.length !== fixtures.length) throw new Error('Expected exactly the complete fixture set');
   const ids = rows.map(r => (r as { id?: string })?.id);
-  if (new Set(ids).size !== cases.length || cases.some(c => !ids.includes(c.id))) throw new Error('Missing, duplicate or unexpected fixture identity');
-  return cases.map(c => {
+  if (new Set(ids).size !== fixtures.length || fixtures.some(c => !ids.includes(c.id))) throw new Error('Missing, duplicate or unexpected fixture identity');
+  return fixtures.map(c => {
     const row = rows.find(r => (r as { id: string }).id === c.id) as Record<string, unknown>;
     const parsed = zExtraction.safeParse(row);
     // Judge raw missing values, before production defaults could conceal invention.

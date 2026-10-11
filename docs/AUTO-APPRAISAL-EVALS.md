@@ -35,7 +35,28 @@ Run `pnpm --filter @apex/api exec vitest run test/auto-appraisal-eval.test.ts`
 for deterministic scorer regressions without using the subscription. Those tests
 prove corrupted counts, stale revisions, fabricated prices, missing source
 citations, unexpected financial outputs and duplicate cases cannot pass silently.
-Only the scorer tests run in ordinary CI; the live model run is opt-in locally.
+Only the scorer tests and saved-response replay run in ordinary CI; the live model run is opt-in locally.
+
+## Annotated drawing mode
+
+Run `pnpm --filter @apex/api eval:codex --drawings` to submit the checked-in
+synthetic PNG sheet through the CLI's image attachment option. Only the pixels,
+case IDs and generic extraction instructions reach the model; the SVG source,
+gold numbers and transcript are not sent. No customer documents are used.
+
+Three panels exercise stated per-unit areas/sales values, current versus
+superseded revisions and build costs with missing sales values. This tests
+reading annotations from a raster, not deriving measurements from geometry.
+The sheet is deliberately labelled not to scale. The same strict scorer checks
+both modes. Each image report includes the SHA-256 of the submitted PNG.
+
+The editable sheet is `apps/api/test/fixtures/auto-appraisal/drawing-sheet.svg`.
+Regenerate it from the repository root with
+`pnpm --filter @apex/api exec tsx scripts/render-auto-appraisal-fixture.ts`
+(requires the repository's Playwright Chromium installation), then visually review
+the PNG and its independently transcribed gold answers before another live run.
+The saved-run regression pins the exact raster hash: changing it requires a new
+recorded evaluation, not reusing an old success claim. The renderer calls no model.
 
 ## Evidence and limits
 
@@ -54,10 +75,17 @@ eight fixtures under the stricter scorer, without another provider request.
 The prompt now states the label/source formatting contract explicitly; the
 replay is evidence about the stored response, not a new run of that prompt.
 
-This is an initial, repeatable text-evaluation harness, not exhaustive AI testing
+11 October 2026: a real ChatGPT-authenticated image run passed 3/3 drawing
+panels. Its exact synthetic response and image hash are committed in
+`apps/api/test/fixtures/auto-appraisal/drawing-run-2026-10-11.json`; CI replays it
+without a model call. Six drawing regressions cover the recorded response,
+correct transcription, stale revisions, cost/value confusion, total/per-unit
+area confusion and wrong suite identity. The text suite still has 17 tests.
+
+This is an initial, repeatable text/annotated-image evaluation harness, not exhaustive AI testing
 or activation of the website's Extract button through Codex. It does not test
-PDF/image/drawing interpretation, real customer documents, citation page accuracy,
+PDF parsing, unannotated/scaled drawing measurement, real customer documents, citation page accuracy,
 professional acceptance or production load. Next: add independently labelled
-synthetic drawing/PDF fixtures and approved anonymised real packs, then test their
+multi-page PDF fixtures and approved anonymised real packs, then test their
 review/save/report journey with honest source provenance. Website provider
 integration remains a separate explicit development change.
