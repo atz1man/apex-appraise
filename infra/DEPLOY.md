@@ -17,8 +17,19 @@ ships main to Fly on `workflow_dispatch`, from the Actions tab or a phone.
 Run it from **Actions → Deploy → Run workflow**, choosing `both`, `api` or `web`. It deploys
 the API before the web app (nginx proxies `/trpc`, so the reverse order breaks every data
 screen for the length of the second deploy), then proves the site is actually serving by
-asking the public host for `/login` and `/ready` — the second is proxied to the API and
-checks the database, which a front-end-only smoke test would miss.
+checking the public `/login` HTML, its same-origin JavaScript/CSS entry assets,
+and the explicit API/database JSON at `/ready`. HTTP 200 alone is insufficient:
+a fallback HTML page or a missing JavaScript bundle can still leave the app broken.
+The check uses bounded responses/timeouts, rejects redirects, and retries the
+complete check up to five times, with 2, 5, 10 and 15 second delays. It does not
+exercise authenticated workflows or attest which release is running. Verify the
+serving image against the intended commit separately.
+
+For a hand deployment, run the same check after both apps are serving:
+
+```bash
+node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
+```
 
 Before deploying, the workflow requires a successful CI push run on `main` for
 the exact commit selected by the workflow. A missing, running, failed or cancelled

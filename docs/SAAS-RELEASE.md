@@ -179,6 +179,26 @@ superseded by this inspection. This code release does not complete customer-laun
 acceptance or commercial provider activation.
 
 
+## Release serving checks — 11 October 2026
+
+The HTTPS correction was deployed as web Fly release 74 from main `95589d8`;
+API release 57 runs `9eefc0e` (the correction did not change API application code).
+Both public login/readiness checks and authenticated live login, appraisal screens
+and a real PDF download passed. The release evidence is recorded in #44/#45.
+
+The deployment workflow now uses a shared read-only serving check: verify the
+login application HTML, fetch and validate its same-origin module and stylesheet entry assets,
+and require explicit `apex-api` and database readiness in JSON. It refuses redirects,
+HTML fallbacks, wrong/empty asset bodies, unhealthy readiness and responses beyond
+its byte/time limits. Twelve local HTTP regression cases plus the eleven existing
+exact-commit release-gate checks pass. CI also runs the shared checker against
+the built application stack. The same checker passed against the live
+site without signing in or invoking any provider. This improves rollout detection;
+it does not prove release identity, authenticated journeys, asset execution, rollback automation,
+mail, billing, professional acceptance or customer readiness. GitHub deployment
+credentials and the existing customer-launch acceptance gates remain outstanding.
+
+
 ## Backup completeness — 11 October 2026
 
 The compose backup script previously continued to retention pruning after an
@@ -195,8 +215,8 @@ failure, database/configuration failures, managed database partial runs and unsa
 retention inputs. Retention now preserves matching archive pairs instead of letting
 newer partial dumps displace older complete recovery material. These checks use synthetic files and do
 not establish production backup contents or restorability. No live backups,
-credentials or databases were changed. PR #46 remains the separate deployment
-serving-check increment. Next operational priority is an isolated restore drill
+credentials or databases were changed. The deployment serving checks originated
+in PR #46. Next operational priority is an isolated restore drill
 covering both database and uploaded documents; customer-launch owner/provider
 acceptance gates remain open.
 
@@ -220,5 +240,22 @@ This covers the operator command path beyond mocked command regressions. It
 does not verify a real production backup, offsite retrieval, all document
 references, recovery duration at production scale or concurrent-write snapshot
 consistency. The next recovery acceptance remains an isolated production
-restore drill with those checks and an identified operator; #46 deployment
-verification and #47 backup completeness remain separately reviewable.
+restore drill with those checks and an identified operator.
+
+
+## Consolidated verification and recovery candidate — 11 October 2026
+
+PR #48 now combines the serving checks from #46, backup completeness from #47
+and the real CI recovery exercise, preserving their commit histories. Integration
+resolved competing insertions in the browser workflow and release record: both
+the serving check and recovery drill run after browser journeys, followed by the
+renderer signal checks. The serving-check unit tests remain in the release-test
+glob. No application, schema, financial calculation or live configuration changed
+in this integration.
+
+The separate prior CI runs remain evidence for their individual commits. The
+combined head requires its own full CI result, recorded on #48; individual green
+runs are not substituted for it. Production restore acceptance, deployment
+credentials and the customer-launch gates remain open. The next delivery step is
+review of this combined candidate, followed by exact-main CI before any authorized
+release. No production deployment is included in this consolidation.
