@@ -160,6 +160,8 @@ jobs:
         env:
           E2E_BASE_URL: http://localhost:8080
         run: pnpm --filter @apex/web exec playwright test
+      - name: Report renderer process signals
+        run: docker compose exec -T api node --test test/report-signals.smoke.mjs
       - name: API logs on failure
         if: failure()
         # the errors first — the last 120 lines are the seed's welcome emails

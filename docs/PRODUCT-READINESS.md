@@ -325,3 +325,21 @@ Regression evidence covers tenant non-disclosure, duplicate IDs, mixed valid/
 unavailable selections and the guarded extraction procedure. No live model call,
 financial arithmetic or schema change is involved. Durable extraction receipts,
 release integration and customer-pack acceptance remain the next priorities.
+
+
+### Report renderer termination — 11 October 2026
+
+Rendering a PDF installed Playwright signal handlers in the API process. Its
+SIGTERM/SIGHUP handlers closed Chromium but left the HTTP listener running,
+turning a normal deployment stop into a forced kill. Renderer launches now leave
+TERM, HUP and INT handling to the host process. Playwright retains its process
+exit cleanup for the browser.
+
+A real-process smoke check opens an HTTP listener, renders an actual PDF with
+the production renderer module and sends each signal. The old implementation
+failed TERM/HUP by timing out and replaced INT with exit code 130; the change
+preserves native signal exits. CI runs this check inside the built API image
+with its system Chromium after the browser journeys. This establishes signal
+behaviour, not graceful draining of active requests or operational rollback
+acceptance. No financial arithmetic, credentials or schema changed. Durable
+extraction receipts and integration/customer acceptance remain next priorities.
