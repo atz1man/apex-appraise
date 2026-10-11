@@ -175,3 +175,25 @@ The prior contention profile PR #53 passed CI and merged at
 foreign-read refusals, four busy PDF responses, two successful burst reports and
 two successful subsequent reports. The physical-upload erasure defect remains
 open and must not be obscured by the Field Companion work.
+
+## Inspection snapshot conflict protection — 11 October 2026
+
+Following PR #54's project-context flow, browser regressions reproduced a silent
+lost-update defect in both Field Companion and Workbench. Query refresh advanced
+`expectedUpdatedAt` while the editable notes/weights remained on the older
+snapshot. A subsequent field save overwrote newer desk notes; a workbench save
+overwrote newer approach weights. The existing server conflict check received the
+wrong (newer) stamp and therefore could not detect either stale draft.
+
+Each surface now captures the stamp when it hydrates its editable snapshot and
+advances it only after its own successful save. Query refresh does not rebase an
+unsaved draft. Two real browser/API regressions failed before their respective
+fixes and passed afterwards: the stale save returns CONFLICT, persisted notes,
+weights and timestamp remain unchanged, and the local draft stays visible.
+Seven focused field/project/photo/offline journeys passed. Exact-head CI belongs
+to the PR; this does not prove arbitrary concurrent-edit merging or native/offline
+acceptance. No engine arithmetic, schema or provider configuration changed.
+
+PR #54 was merged before this increment. Next retain explicit conflict recovery
+and reviewable observation-to-task/appraisal handoffs in the field roadmap; the
+physical-upload erasure defect remains open and is still a release concern.

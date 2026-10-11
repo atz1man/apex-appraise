@@ -173,6 +173,8 @@ export default function FieldApp() {
   const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
   const [value, setValue] = useState<number | null>(null);
   const [hydratedFor, setHydratedFor] = useState('');
+  // Keep the concurrency stamp with the editable snapshot, not live query data.
+  const [held, setHeld] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!dealId || inspection === undefined || hydratedFor === dealId) return;
@@ -185,6 +187,7 @@ export default function FieldApp() {
       setWeights(DEFAULT_WEIGHTS);
       setValue(null);
     }
+    setHeld(inspection?.updatedAt ?? null);
     setCurrent(0);
     setHydratedFor(dealId);
   }, [dealId, inspection, hydratedFor]);
@@ -216,10 +219,6 @@ export default function FieldApp() {
    * second save does not depend on a refetch landing in between — which offline
    * it will not.
    */
-  const [held, setHeld] = useState<Date | null>(null);
-  useEffect(() => {
-    if (inspection?.updatedAt) setHeld(inspection.updatedAt);
-  }, [inspection?.updatedAt]);
   const save = trpc.inspections.save.useMutation({
     onSuccess: (res) => {
       setHeld(res.updatedAt);
