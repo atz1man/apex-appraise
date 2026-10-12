@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { computeAppraisal, dcfSensitivity, jvWaterfall, cilCharge, type AppraisalInput } from '@apex/appraisal-engine';
-import { buildAppraisalWorkbook } from './exportXlsx';
+import { buildAppraisalWorkbook, exportAppraisalXlsx } from './exportXlsx';
 
 /**
  * Workbook regression — built from the engine's Bournemouth golden fixture so
@@ -91,6 +91,26 @@ describe('buildAppraisalWorkbook', async () => {
     const absent: string[] = [];
     wb.getWorksheet('Field evidence')!.eachRow(row => absent.push(String(row.getCell(1).value ?? '')));
     expect(absent.join('')).toContain('does not mean the project has no field observations');
+  });
+
+  it('does not start a download after its caller cancels', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const create = vi.spyOn(URL, 'createObjectURL');
+    try {
+      await exportAppraisalXlsx({ dealName: 'Cancelled', address: '', input: referenceCase, R, jv, monthLabel }, controller.signal);
+      expect(create).not.toHaveBeenCalled();
+    } finally { vi.restoreAllMocks(); }
+  });
+
+  it('releases the workbook URL when the browser refuses the download', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:workbook-test');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.stubGlobal('document', { createElement: () => ({ click: () => { throw new Error('Download refused'); } }) });
+    try {
+      await expect(exportAppraisalXlsx({ dealName: 'Refused', address: '', input: referenceCase, R, jv, monthLabel })).rejects.toThrow('Download refused');
+      expect(revoke).toHaveBeenCalledWith('blob:workbook-test');
+    } finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
   });
 
   it('summary GDV matches the golden figure with the £ format', () => {

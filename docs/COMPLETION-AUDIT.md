@@ -821,3 +821,24 @@ the PR. No API/schema change and no deployment; live remains `456dea9`.
 Next: explicit observation-to-input proposals with review before financial changes.
 Professional acceptance, provider activation and production recovery proof remain
 separate release requirements.
+
+## Recoverable Excel exports — 12 October 2026
+
+PR #76 passed exact-head CI 38253871097 and merged at `0837bc5`. Before moving
+from evidence exports to financial proposals, review found that Excel failures
+had no visible recovery and repeated clicks could start duplicate builds. The
+appraisal export now shows preparation state, suppresses concurrent starts and
+shows an inline failure with retry while retaining editor inputs. Navigation
+cancels a late download; generated object URLs are released even if the browser
+refuses the click. Workbook code remains lazy-loaded. No financial/API/schema change.
+
+Six real editor/field browser journeys passed, including an injected browser
+object-URL failure followed by a successful downloaded workbook and unchanged
+editor input. Unit coverage checks cancelled downloads and URL cleanup when the
+browser refuses the download, alongside the full workbook evidence suite. Local
+web suite: 393 tests; typecheck, build and bundle guard passed. Exact-head CI is
+recorded on the PR. No deployment; live remains `456dea9`.
+
+Next remains explicit observation-to-input proposals with review before financial
+changes. External professional acceptance, provider activation and production
+recovery evidence are not implied by these checks.

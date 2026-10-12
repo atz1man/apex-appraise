@@ -276,7 +276,19 @@ test('spreadsheet source claims follow the editor snapshot and recover after fai
       workbook.getWorksheet('Field evidence')!.eachRow(row => { text.push(String(row.getCell(1).value ?? '')); });
       return text.join(' ');
     };
+    // A browser download failure must remain actionable without losing the editor.
+    await page.evaluate(() => {
+      const original = URL.createObjectURL;
+      URL.createObjectURL = function (blob) {
+        URL.createObjectURL = original;
+        throw new Error('Injected browser download failure');
+      };
+    });
+    await page.getByRole('button', { name: 'Export .xlsx', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Excel export failed. Your inputs are unchanged.');
+    await expect(label).toHaveValue('Reviewed source unit');
     expect(await exportEvidence()).toContain('Exported inputs match the recorded input review.');
+    await expect(page.getByRole('alert')).toHaveCount(0);
     await page.route('**/trpc/**appraisal.getCurrent*', route => route.abort());
     await label.fill('Edited exported unit');
     await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
