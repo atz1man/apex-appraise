@@ -1,3 +1,4 @@
+import { WorkbookDownloadButton } from '../components/WorkbookDownloadButton';
 import { AppraisalFieldEvidence } from '../components/AppraisalFieldEvidence';
 import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -520,15 +521,15 @@ export default function DevelopmentAppraisal() {
             <Button variant="secondary" onClick={() => setVersionsOpen(true)}>
               Versions{versions && versions.length > 1 ? ` · ${versions.length}` : ''}
             </Button>
-            <Button
-              variant="secondary"
-              className="hidden sm:inline-flex"
-              onClick={() =>
-                import('../lib/exportXlsx').then(({ exportAppraisalXlsx }) => exportAppraisalXlsx({ fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot, fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState, appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined, evidence: sourceReviewUnverified ? undefined : saved?.sourceReview, evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U }))
-              }
-            >
-              Export .xlsx
-            </Button>
+            <WorkbookDownloadButton key={dealId} options={{
+              fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
+              fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
+              appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
+              evidence: sourceReviewUnverified ? undefined : saved?.sourceReview,
+              evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState,
+              unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '',
+              firm, input, R, jv, monthLabel, units: U,
+            }} />
             <Button
               writes
               onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}

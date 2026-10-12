@@ -769,14 +769,16 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
 }
 
 /** Browser wrapper: build + trigger download. */
-export async function exportAppraisalXlsx(opts: ExportOpts) {
+export async function exportAppraisalXlsx(opts: ExportOpts, signal?: AbortSignal) {
   const wb = await buildAppraisalWorkbook(opts);
   const buf = await wb.xlsx.writeBuffer();
+  if (signal?.aborted) return;
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
-  const aTag = document.createElement('a');
-  aTag.href = url;
-  aTag.download = `${opts.dealName.replace(/[^\w ]/g, '').trim()} - Appraisal.xlsx`;
-  aTag.click();
-  URL.revokeObjectURL(url);
+  try {
+    const aTag = document.createElement('a');
+    aTag.href = url;
+    aTag.download = `${opts.dealName.replace(/[^\w ]/g, '').trim()} - Appraisal.xlsx`;
+    aTag.click();
+  } finally { URL.revokeObjectURL(url); }
 }
