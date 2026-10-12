@@ -22,7 +22,7 @@ export function AppraisalFieldEvidence({ dealId }: { dealId: string }) {
           </> : <p className="mt-2 text-ink-2">No inspection snapshot was captured for this task. Check the source with the colleague responsible.</p>}
         </li>)}
       </ul>
-      <p className="mt-3 text-ink-2">This live list is not pinned to this appraisal version. Use Versions to save a separate field snapshot. Snapshots appear in Excel exports, but not PDF reports or the source input acknowledgement. Record any resulting assumptions through the appraisal review workflow.</p>
+      <p className="mt-3 text-ink-2">This live list is not pinned to this appraisal version. Use Versions to save a separate field snapshot. Snapshots appear in Excel exports, and appraisal PDFs, but not Red Book reports or the source input acknowledgement. Record any resulting assumptions through the appraisal review workflow.</p>
     </details>}
     <div className="mt-3 flex flex-wrap gap-2">
       <Button size="sm" variant="secondary" className="min-h-11" to={`/field?dealId=${encodeURIComponent(dealId)}`}>Open project field companion</Button>

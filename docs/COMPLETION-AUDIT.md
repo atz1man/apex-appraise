@@ -797,3 +797,27 @@ Next: deliberate PDF field-evidence inclusion and explicit observation-to-input
 proposals. Provider activation, professional acceptance and production recovery
 proof remain external release requirements. The CLAUDE.md memory loop-log path
 was absent; this repository audit remains the available delivery record.
+
+## Historical field appendix in appraisal PDFs — 12 October 2026
+
+PR #75 passed exact-head CI 38247470881 and merged at `0d68499`. Captured field
+context now follows source evidence in the appraisal report/PDF with correct page
+numbering. It uses the same immutable snapshot and warnings as Excel; no live task
+lookup or financial changes. Absent snapshots add no appendix; unreadable snapshots
+print an explicit warning. Long content wraps and paginates, capped at 12 field
+pages with an explicit omitted-line count and direction to the complete Excel
+Field evidence sheet. Red Book reports and photos remain outside this increment.
+
+391 web tests, web typecheck, build and bundle guard passed. Three real browser
+journeys passed, including both existing source-evidence exports and the new field
+PDF download after live task changes. Browser coverage also checks long-note
+pagination, no overflow, unreadable and absent states. The downloaded 10-page PDF
+was text-checked for historical evidence and visually rendered/inspected: appendix
+and Page 10 of 10 were legible without clipping. Initial local downloads failed
+because the API renderer targeted unused port 5273; correcting only the local
+WEB_URL process setting to 5276 made both PDF journeys pass. Exact-head CI is on
+the PR. No API/schema change and no deployment; live remains `456dea9`.
+
+Next: explicit observation-to-input proposals with review before financial changes.
+Professional acceptance, provider activation and production recovery proof remain
+separate release requirements.
