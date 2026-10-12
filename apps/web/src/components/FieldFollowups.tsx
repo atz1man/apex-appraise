@@ -109,7 +109,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
                 setNotice(''); update.reset(); create.reset();
                 setDraft({ observation: '', title: task.title, assignee: task.assigneeId ?? '', due: task.due ? firmDayKey(task.due) : '', edit: { id: task.id, title: task.title, assignee: task.assignee, assigneeId: task.assigneeId, due: task.due ? new Date(task.due).toISOString() : null, done: task.done } });
               }}>Edit follow-up</Button>
-              <Button writes size="sm" variant="secondary" className="mt-2 min-h-11" disabled={!!draft || pending || toggle.isPending} onClick={() => toggle.mutate(task.id)}>{task.done ? 'Reopen follow-up' : 'Complete follow-up'}</Button>
+              <Button writes size="sm" variant="secondary" className="mt-2 min-h-11" disabled={!!draft || pending || toggle.isPending} onClick={() => toggle.mutate({ id: task.id, done: !task.done })}>{task.done ? 'Reopen follow-up' : 'Complete follow-up'}</Button>
             </li>)}
           </ul>
         )}
