@@ -1,7 +1,7 @@
 import superjson from 'superjson';
 import { test, expect } from '@playwright/test';
 
-test('background refresh cannot authorize an old appraisal draft to overwrite a newer save', async ({ page, request }) => {
+test('appraisal saves preserve draft ownership across refreshes and in-flight edits', async ({ page, request }) => {
   test.setTimeout(60_000);
   const orgName = `Appraisal editor ${Date.now()}`;
   await page.goto('/register');
@@ -61,6 +61,47 @@ test('background refresh cannot authorize an old appraisal draft to overwrite a 
       await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
       expect((await current(deal.id)).input.units[0]).toMatchObject({ label: name, count: 3 });
+    }
+    for (const asVersion of [false, true]) {
+      const submitted = asVersion ? 'Submitted version unit' : 'Submitted ordinary unit';
+      const continued = asVersion ? 'New edits after version submission' : 'New edits after ordinary submission';
+      await label.fill(submitted);
+      let release!: () => void;
+      let committed!: () => void;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      const wrote = new Promise<void>(resolve => { committed = resolve; });
+      await page.route('**/trpc/appraisal.save*', async route => {
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        committed();
+        await held;
+        await route.fulfill({ response });
+      });
+      if (asVersion) {
+        await page.getByRole('button', { name: /^Versions/ }).click();
+        await page.getByPlaceholder('Label this version', { exact: false }).fill('In-flight review version');
+        await page.getByRole('button', { name: 'Save as version', exact: true }).click();
+        await page.getByRole('button', { name: 'Close Appraisal versions', exact: true }).click();
+      } else await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+      await wrote;
+      await label.fill(continued);
+      release();
+      if (asVersion) await expect(page.getByText('Saved version “In-flight review version”', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save appraisal', exact: true })).toBeEnabled();
+      await expect(label).toHaveValue(continued);
+      expect((await current(deal.id)).input.units[0].label).toBe(submitted);
+      // The unsaved warning must survive the older save's success response.
+      const warning = page.waitForEvent('dialog');
+      const navigate = page.getByRole('link', { name: 'Open project field companion' }).click();
+      const dialog = await warning;
+      expect(dialog.message()).toContain('have not been saved');
+      await dialog.dismiss();
+      await navigate;
+      await expect(label).toHaveValue(continued);
+      await page.unroute('**/trpc/appraisal.save*');
+      await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+      expect((await current(deal.id)).input.units[0].label).toBe(continued);
     }
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });

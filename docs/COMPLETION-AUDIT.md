@@ -597,3 +597,30 @@ Next: explicit observation-to-input proposals and version-pinned field evidence.
 Version-restore hydration and edits made during an in-flight save merit separate
 review; this increment proves background-refetch snapshot integrity, not every
 possible editor race. Professional and production release gates remain open.
+
+## Appraisal edits during pending saves — 12 October 2026
+
+PR #68 merged and deployed at `842c8d77291dce4184705e7337f79fb623e136a4`;
+main CI run 38218410459 passed. Its PR contains the release, backup, migration,
+read-only live browser and real PDF evidence. This increment is not deployed.
+
+A real browser regression reproduced a second editor data-loss risk: after a
+request was submitted, further typing stayed on screen but the older request's
+success cleared the dirty flag. The button said Saved and navigation protection
+was removed even though those later edits had never reached the database.
+Both ordinary and named-version saves now compare their submitted input object
+with the current immutable input object before clearing the dirty state. The
+successful response still advances the concurrency stamp for the next save.
+
+The regression holds the actual server response after its write, types more,
+then releases it. Both save paths retain the newer draft and enabled save button,
+warn on navigation, preserve edits when navigation is cancelled, and persist
+them on the next save. The test failed on the original implementation. The
+existing background-refresh conflict and sequential-save checks remain covered.
+Three related browser journeys, 388 web checks, strict web typechecking, build
+and bundle guards passed locally. Exact-head CI evidence is recorded on the PR.
+No API, schema or financial engine changes.
+
+Next: audit restore hydration and overlapping editor actions before expanding
+version-linked field evidence. This fix does not add offline draft persistence
+or establish professional acceptance, provider activation or production readiness.

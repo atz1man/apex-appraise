@@ -1,6 +1,6 @@
 import { AppraisalFieldEvidence } from '../components/AppraisalFieldEvidence';
 import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   computeAppraisal,
@@ -185,11 +185,11 @@ export default function DevelopmentAppraisal() {
    */
   const [heldVersion, setHeldVersion] = useState<Date | null>(null);
   const save = trpc.appraisal.save.useMutation({
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       setHeldVersion(res.updatedAt);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.deals.list.invalidate();
-      setDirty(false);
+      setDirty(currentInput.current !== vars.input);
     },
   });
 
@@ -228,13 +228,17 @@ export default function DevelopmentAppraisal() {
       setHeldVersion(res.updatedAt);
       toast.success(`Saved version “${vars.label || 'new version'}”`);
       setVersionLabel('');
-      setDirty(false);
+      setDirty(currentInput.current !== vars.input);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.appraisal.versions.invalidate(dealId);
       utils.deals.list.invalidate();
     },
   });
   const [input, setInput] = useState<AppraisalInput>(DEFAULT_INPUT);
+  // Inputs are replaced immutably. A successful request only saved its own
+  // submitted object; edits made while it was pending still need saving.
+  const currentInput = useRef(input);
+  currentInput.current = input;
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
   // the tab must not close on unsaved work without a word — see lib/unsaved.ts
