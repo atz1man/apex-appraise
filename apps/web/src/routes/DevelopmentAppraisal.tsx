@@ -215,6 +215,10 @@ export default function DevelopmentAppraisal() {
   const [versionNote, setVersionNote] = useState('');
   const [compareId, setCompareId] = useState<string | null>(null);
   const [versionLabel, setVersionLabel] = useState('');
+  const [includeFieldSnapshot, setIncludeFieldSnapshot] = useState(false);
+  const fieldTasksForVersion = trpc.tasks.list.useQuery({ dealId, aspect: 'Field inspection' }, { enabled: versionsOpen });
+  const fieldSnapshotBlocked = includeFieldSnapshot && (fieldTasksForVersion.isError || fieldTasksForVersion.isFetching || !fieldTasksForVersion.data?.length || fieldTasksForVersion.data.length > 100 || fieldTasksForVersion.data.some(task => task.inspectionEvidenceState === 'unreadable'));
+  const fieldTasksToCapture = includeFieldSnapshot ? fieldTasksForVersion.data?.map(task => ({ id: task.id, version: task.evidenceVersion })) : undefined;
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
   const restore = trpc.appraisal.restore.useMutation({
     onMutate: () => ({ submittedInput: currentInput.current }),
@@ -241,6 +245,7 @@ export default function DevelopmentAppraisal() {
       setHeldVersion(res.updatedAt);
       toast.success(`Saved version “${vars.label || 'new version'}”`);
       setVersionLabel('');
+      setIncludeFieldSnapshot(false);
       setDirty(currentInput.current !== vars.input);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.appraisal.versions.invalidate(dealId);
@@ -551,6 +556,16 @@ export default function DevelopmentAppraisal() {
         </div>
 
         <AppraisalFieldEvidence key={dealId} dealId={dealId} />
+        {!sourceReviewUnverified && saved?.fieldSnapshot && <section aria-label="Version field snapshot" className="mt-5 rounded-card border border-border-std bg-surface p-4">
+          <h2 className="text-[15px] font-semibold">Field snapshot · {saved.label}</h2>
+          <p className="mt-2 text-[12px] text-ink-2">Captured by {saved.fieldSnapshot.capturedBy} on {new Date(saved.fieldSnapshot.capturedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Historical context only: later task changes do not update this snapshot. It is not approval, an input adjustment, or part of report exports.</p>
+          <ul className="mt-3 space-y-3 text-[12px]">{saved.fieldSnapshot.tasks.map(task => <li key={task.id}>
+            <p className="font-semibold">{task.title} · {task.done ? 'completed at capture' : 'open at capture'}</p>
+            {task.inspectionEvidence ? <p className="whitespace-pre-wrap">{task.inspectionEvidence.room.name}: {task.inspectionEvidence.room.notes || 'No recorded note'} · condition {task.inspectionEvidence.room.condition || 'not rated'}</p> : <p>No inspection observation was captured for this task.</p>}
+          </li>)}</ul>
+        </section>}
+        {!sourceReviewUnverified && saved?.fieldSnapshotState === 'unreadable' && <p role="status" className="mt-3 text-sm">This version's field snapshot could not be read. Its evidence status cannot be confirmed.</p>}
+
 
         {saved && (
           <div className="mt-5">
@@ -1876,18 +1891,30 @@ export default function DevelopmentAppraisal() {
             value={versionLabel}
             onChange={(e) => setVersionLabel(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending && !save.isPending && !restore.isPending) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
+              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending && !save.isPending && !restore.isPending && !fieldSnapshotBlocked) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), fieldTasks: fieldTasksToCapture });
             }}
           />
           <Button writes
             loading={saveVersion.isPending}
-            disabled={!versionLabel.trim() || save.isPending || restore.isPending}
+            disabled={!versionLabel.trim() || save.isPending || restore.isPending || fieldSnapshotBlocked}
             onClick={() =>
-              saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), note: versionNote.trim() || undefined })
+              saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), note: versionNote.trim() || undefined, fieldTasks: fieldTasksToCapture })
             }
           >
             Save as version
           </Button>
+        </div>
+        <div className="mb-4 space-y-2 text-[12px]">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" {...writeAttrs()} checked={includeFieldSnapshot} disabled={saveVersion.isPending} onChange={e => setIncludeFieldSnapshot(e.target.checked)} />
+            Include field follow-ups in this version
+          </label>
+          <p className="text-ink-2">Captures task status and recorded observations at this point. It does not approve evidence, adjust financial inputs, or include photos or report exports.</p>
+          {includeFieldSnapshot && <>
+            {fieldSnapshotBlocked && <p role="status">Field follow-ups must load successfully, contain readable evidence, and number between 1 and 100 before capture.</p>}
+            <Button size="sm" variant="secondary" loading={fieldTasksForVersion.isFetching} onClick={() => { void fieldTasksForVersion.refetch(); }}>Refresh capture preview</Button>
+            <ul className="space-y-2">{fieldTasksForVersion.data?.map(task => <li key={task.id}>{task.title} — {task.done ? 'completed' : 'open'}<p className="text-ink-2">{task.inspectionEvidence?.room.notes || (task.inspectionEvidenceState === 'unreadable' ? 'Unreadable evidence' : 'No captured observation')}</p></li>)}</ul>
+          </>}
         </div>
         {/* the diff can show what moved; only the author can say why */}
         <input
