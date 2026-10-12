@@ -238,6 +238,22 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(snapshot).not.toContainText('New desk note after follow-up.');
     await snapshot.screenshot({ path: test.info().outputPath('version-field-snapshot-mobile.png') });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // Review a manual cost allowance from the field workflow on the same phone.
+    await page.getByRole('button', { name: 'Other Costs', exact: true }).click();
+    await page.getByLabel('Cost 1 label', { exact: true }).fill('Structural survey allowance after entrance observation');
+    await page.getByLabel('Structural survey allowance after entrance observation amount', { exact: true }).fill('1250');
+    await page.getByLabel('Start month', { exact: true }).fill('2');
+    await page.getByLabel('Months', { exact: true }).fill('1');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole('button', { name: 'Other Costs', exact: true }).click();
+    await expect(page.getByLabel('Structural survey allowance after entrance observation amount', { exact: true })).toHaveValue('1250');
+    await expect(page.getByLabel('Start month', { exact: true })).toHaveValue('2');
+    await expect(page.getByLabel('Months', { exact: true })).toHaveValue('1');
+    await page.getByLabel('Cost 1 label', { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath('mobile-cost-review.png') });
     const mobileExport = page.getByRole('button', { name: 'Export .xlsx', exact: true });
     await expect(mobileExport).toBeVisible();
     expect((await mobileExport.boundingBox())!.height).toBeGreaterThanOrEqual(44);

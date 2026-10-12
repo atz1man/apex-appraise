@@ -862,3 +862,29 @@ live remains `456dea9`.
 
 Next: reviewed observation-to-input proposals. Professional acceptance, activated
 providers and production recovery remain external release evidence requirements.
+
+## Mobile manual cost review — 12 October 2026
+
+Live release is now `8199465`, deployed after exact-main CI 38275120337 passed;
+PR #78 records running image revisions, snapshots, migration/count checks and
+live read-only mobile export/PDF evidence. PRs #73–78 are live. No open competing
+PR or dirty checkout was present before this increment.
+
+Before adding financial proposals, a real field-to-appraisal test found that
+Other Costs widened the phone page beyond 390px when entering an allowance and
+its spending timing. Cost rows now wrap, give the label a full mobile row, and
+provide 44px input/button heights at phone widths. Desktop inputs retain their
+existing compact sizing. No calculation, validation, persistence or source
+acceptance semantics changed.
+
+The regression failed on the original layout, then passed after the fix. It
+enters a manually reviewed allowance, sets start month 2/duration 1, saves,
+reloads and checks all values while retaining the captured field snapshot. The
+same phone then downloads the evidence workbook. Six editor/field journeys and
+393 web tests passed, plus typecheck, build and bundle guard. The 390px cost
+layout was visually checked. Exact-head CI is on the PR. This change is not yet
+deployed; live remains `8199465`.
+
+Next: reviewed observation-to-input proposals with durable source links. The
+manual allowance tested here is not an automatically extracted or professionally
+accepted adjustment. External release acceptance requirements remain open.
