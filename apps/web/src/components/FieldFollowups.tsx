@@ -117,6 +117,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
         {toggle.isError && <TaskStatusRecovery pending={toggle.isPending} onRetry={() => { if (toggle.variables) toggle.mutate(toggle.variables); }} onRefresh={() => { void utils.tasks.list.invalidate(); }} onDismiss={() => toggle.reset()} />}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" className="min-h-11" onClick={() => { void tasks.refetch(); void inspection.refetch(); void members.refetch(); }}>Refresh follow-ups</Button>
+          <Button to={`/deal/${dealId}/appraisal`} size="sm" variant="secondary" className="min-h-11">Review evidence in appraisal</Button>
           <Button to="/calendar" size="sm" variant="secondary" className="min-h-11">Open task calendar</Button>
           <Button to={`/deal/${dealId}/workbench`} size="sm" variant="secondary" className="min-h-11">Review current inspection</Button>
         </div>

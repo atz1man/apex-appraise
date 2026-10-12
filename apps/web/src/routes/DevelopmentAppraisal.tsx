@@ -1,3 +1,4 @@
+import { AppraisalFieldEvidence } from '../components/AppraisalFieldEvidence';
 import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -508,6 +509,8 @@ export default function DevelopmentAppraisal() {
           <StatCard label="Peak debt" value={fM(R.facility)} />
           <StatCard label="GDV" value={fM(R.gdv)} />
         </div>
+
+        <AppraisalFieldEvidence key={dealId} dealId={dealId} />
 
         {saved && (
           <div className="mt-5">
