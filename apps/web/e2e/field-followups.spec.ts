@@ -192,6 +192,32 @@ test('saved field observations become reviewed project tasks and calendar comple
     await evidence.getByRole('link', { name: 'Open project field companion', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/field\\?dealId=${deal.id}`));
     await expect(taskRow).toContainText('Completed');
+    // The API corruption regression covers stored malformed bytes. Here inject
+    // its normalized unreadable state to exercise both real presentation paths.
+    await page.route('**/trpc/**', async route => {
+      if (!route.request().url().includes('tasks.list')) return route.continue();
+      const response = await route.fetch();
+      const body = await response.json();
+      for (const item of Array.isArray(body) ? body : [body]) {
+        const rows = item.result?.data?.json;
+        if (Array.isArray(rows)) for (const row of rows) if (row.id === saved[0].id) {
+          row.inspectionEvidence = null;
+          row.inspectionEvidenceState = 'unreadable';
+        }
+      }
+      await route.fulfill({ response, json: body });
+    });
+    await panel.getByRole('button', { name: 'Refresh follow-ups', exact: true }).click();
+    await expect(taskRow).toContainText('captured inspection evidence could not be read');
+    await expect(taskRow).not.toContainText('No inspection snapshot');
+    await expect(taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true })).toBeEnabled();
+    await panel.getByRole('link', { name: 'Review evidence in appraisal', exact: true }).click();
+    await evidence.getByText('0 open · 1 field follow-ups — review observations', { exact: true }).click();
+    await expect(evidence).toContainText('captured inspection evidence could not be read');
+    await expect(evidence).not.toContainText('No inspection snapshot');
+    await page.unroute('**/trpc/**');
+    await evidence.getByRole('button', { name: 'Refresh field evidence', exact: true }).click();
+    await expect(evidence).toContainText('Desk-reviewed entrance crack.');
     await page.goto(`/deal/${other.id}/appraisal`);
     await expect(evidence).toContainText('No field follow-ups are recorded for this project');
     await expect(evidence).not.toContainText(title);

@@ -98,7 +98,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
             {tasks.data.map(task => <li key={task.id} className="rounded-lg border border-border-std p-3">
               <p className="text-[12px] break-words">{task.title}</p>
               <p className="mt-1 text-[11px] text-ink-2">{task.done ? 'Completed' : 'Open'} · {availableMembers.find(member => member.id === task.assigneeId)?.name ?? (members.isLoading ? task.assignee : `${task.assignee} (${task.assigneeId ? 'member unavailable' : 'legacy assignment; select a colleague when editing'})`)}{task.due ? ` · due ${firmDayLabel(task.due)}` : ''}</p>
-              {task.inspectionEvidence ? <details className="mt-2 text-[12px]">
+              {task.inspectionEvidenceState === 'unreadable' ? <p className="mt-2 text-[12px] text-ink-2">The captured inspection evidence could not be read. Verify the source before relying on this follow-up.</p> : task.inspectionEvidence ? <details className="mt-2 text-[12px]">
                 <summary className="cursor-pointer">Captured inspection evidence</summary>
                 <p className="mt-2 break-words">{task.inspectionEvidence.room.name} · {task.inspectionEvidence.room.condition ? `condition ${task.inspectionEvidence.room.condition}/5` : 'not rated'}</p>
                 <p className="mt-1 whitespace-pre-wrap break-words">{task.inspectionEvidence.room.notes || 'No note recorded.'}</p>

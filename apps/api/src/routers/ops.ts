@@ -591,6 +591,16 @@ const zInspectionEvidence = z.object({
   room: z.object({ name: z.string(), notes: z.string().default(''), condition: z.number().min(0).max(5) }),
 });
 
+/** A damaged historical snapshot must not hide otherwise usable project tasks. */
+function readInspectionEvidence(raw: string | null) {
+  if (raw === null) return { inspectionEvidence: null, inspectionEvidenceState: 'absent' as const };
+  try {
+    const parsed = zInspectionEvidence.safeParse(JSON.parse(raw));
+    if (parsed.success) return { inspectionEvidence: parsed.data, inspectionEvidenceState: 'recorded' as const };
+  } catch { /* Retain stored bytes; report the unreadable snapshot separately. */ }
+  return { inspectionEvidence: null, inspectionEvidenceState: 'unreadable' as const };
+}
+
 export const tasksRouter = router({
   list: internalProcedure
     .input(z.object({ dealId: z.string().optional(), aspect: z.string().optional() }))
@@ -607,7 +617,7 @@ export const tasksRouter = router({
         orderBy: [{ done: 'asc' }, { due: 'asc' }],
         include: { deal: { select: { name: true } } },
       });
-      return rows.map(row => ({ ...row, inspectionEvidence: row.inspectionEvidence ? zInspectionEvidence.parse(JSON.parse(row.inspectionEvidence)) : null }));
+      return rows.map(row => ({ ...row, ...readInspectionEvidence(row.inspectionEvidence) }));
     }),
 
   /**

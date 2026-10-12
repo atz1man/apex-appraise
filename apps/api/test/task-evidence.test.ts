@@ -45,5 +45,18 @@ it.each([0, 999])('refuses an empty or absent observation at index %s', async ro
 it('leaves ordinary and legacy tasks without fabricated inspection evidence', async () => {
   const task = await callerFor(tenant.principal).tasks.create({ dealId: tenant.dealId, title: 'General task', aspect: 'General' });
   expect(task.inspectionEvidence).toBeNull();
-  expect((await callerFor(tenant.principal).tasks.list({ dealId: tenant.dealId })).find(row => row.id === task.id)?.inspectionEvidence).toBeNull();
+  expect((await callerFor(tenant.principal).tasks.list({ dealId: tenant.dealId })).find(row => row.id === task.id)?.inspectionEvidenceState).toBe('absent');
+});
+it.each(['{broken', '', '{}', JSON.stringify({ version: 2 }), JSON.stringify({ version: 1, inspectionId: 'bad', sourceUpdatedAt: 'not-a-date' })])('keeps task lists usable while identifying unreadable evidence: %s', async broken => {
+  const { input } = await fixture();
+  const good = await callerFor(tenant.principal).tasks.create(input);
+  const bad = await prisma.task.create({ data: { orgId: tenant.orgId, dealId: tenant.dealId, title: 'Unreadable captured evidence', aspect: 'Field inspection', assignee: '', inspectionEvidence: broken } });
+  const list = await callerFor(tenant.principal).tasks.list({ dealId: tenant.dealId });
+  expect(list.find(row => row.id === good.id)).toMatchObject({ inspectionEvidenceState: 'recorded', inspectionEvidence: { room: { name: 'Roof' } } });
+  expect(list.find(row => row.id === bad.id)).toMatchObject({ inspectionEvidence: null, inspectionEvidenceState: 'unreadable' });
+  expect((await prisma.task.findUniqueOrThrow({ where: { id: bad.id } })).inspectionEvidence).toBe(broken);
+  await callerFor(tenant.principal).tasks.toggle({ id: bad.id, done: true });
+  expect((await callerFor(tenant.principal).tasks.list({})).find(row => row.id === bad.id)?.done).toBe(true);
+  const foreign = await makeTenant('Foreign unreadable evidence');
+  expect((await callerFor(foreign.principal).tasks.list({})).some(row => row.id === bad.id)).toBe(false);
 });

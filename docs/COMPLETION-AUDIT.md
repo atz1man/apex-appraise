@@ -711,3 +711,31 @@ Limit: this guards known read failure and snapshot mismatch; it does not recheck
 source-file bytes or force a fresh network read for every export. Next: reconcile
 these editor fixes into a verified release, then version-linked field evidence.
 Professional acceptance and provider activation remain separate release gates.
+
+## Isolate unreadable field snapshots — 12 October 2026
+
+Reconciled the deployed release `456dea96a0faa350636ff18a7bca560d05f34448`,
+exact-main CI 38237141145 and the live verification/rollback record on PR #72.
+No open PR or competing local edits were present. No release is deployed here.
+
+Before adding version-linked field review, inspection of tasks.list exposed a
+prerequisite reliability defect: parsing any malformed historical inspection
+snapshot threw and failed the complete project or workspace/calendar task list.
+Five corrupted snapshot cases reproduced failures against the original code.
+The read path now isolates parsing per row, returns absent/recorded/unreadable
+state, and preserves the stored bytes. Healthy tasks and the affected task remain
+usable. Field and appraisal evidence panels explicitly warn when captured evidence
+could not be read, rather than calling it absent or silently inventing a source.
+
+25 targeted API checks passed: malformed JSON, empty and invalid shape/version
+records, healthy neighbouring evidence, unchanged stored bytes, task completion,
+workspace-wide reads and tenant isolation. Both field browser journeys passed;
+the API suite creates real malformed records, while the browser injects the API's
+normalized unreadable state to verify warnings in both panels, working controls,
+and recovery after refresh. 389 web checks, API/web typechecks, production build
+and bundle guards passed locally. Exact-head CI evidence is recorded on the PR.
+No schema, financial engine or live-data changes.
+
+Next remains explicit field-evidence review pinned to appraisal versions. This
+increment hardens that input path; it does not implement version pinning, financial
+adjustment proposals, professional acceptance or provider activation.
