@@ -6,6 +6,7 @@ export interface SourceEvidence {
   references?: Array<{ unitIndex: number; unitLabel: string; documentId: string; page: number | null; locator: string }>;
 }
 export function sourceEvidenceLines(review: SourceEvidence | null | undefined, state?: string, dirty = false): string[] {
+  if (state === 'unverified') return ['SOURCE REVIEW UNVERIFIED: matching source review data could not be confirmed for these exported inputs. Refresh the source review before relying on its status.'];
   if (!review) return [state === 'unreadable' ? 'The stored source input review could not be read. Its status cannot be confirmed.' : 'No source input review is recorded for this version.'];
   const lines = [
     review.inputsUnchanged && !dirty ? 'Exported inputs match the recorded input review.' : 'INPUTS CHANGED: the recorded review does not cover these inputs.',

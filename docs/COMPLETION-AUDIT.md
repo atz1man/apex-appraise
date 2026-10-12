@@ -681,3 +681,33 @@ CI evidence is recorded on the PR. No API, schema or engine changes.
 Next: export source context after failed background refreshes, then version-linked
 field evidence. These checks do not establish professional acceptance or activate
 external data/AI providers.
+
+## Bind exported source claims to the editor snapshot — 12 October 2026
+
+PR #71 passed exact-head CI 38232910970 and merged at `74cbfbf` before this
+increment. Live remains `842c8d7`; no deployment is performed here.
+
+A downloaded-workbook regression proved a false claim: after editing and saving
+reviewed inputs while the current-appraisal refetch was blocked, the workbook
+still said its exported inputs matched the recorded input review. The export
+combined the editor's new figures with the query cache's previous source review.
+
+The editor now tracks both the held appraisal ID and update stamp through load,
+save, named-version save and restore. Failed reads or a mismatch with cached
+source-review data produce an explicit unverified state on screen and in the
+workbook. Cached matching-input claims and source metadata are withheld in that
+state; it never asserts that no review exists. Refresh source review retries the
+read without hydrating over the draft. Matching data restores the existing review
+and changed-input warnings. Financial inputs and calculations are unchanged.
+
+The browser regression reads real downloaded XLSX Source evidence cells: matching
+review before edits, unverified after a save with failed refetch, and INPUTS CHANGED
+after recovery. Against the original implementation it failed on the false
+matching-input claim. Four editor browser journeys, 389 web checks, strict
+web typechecking, build and bundle guards passed locally. Exact-head CI evidence
+is recorded on the PR. No API, schema or engine changes.
+
+Limit: this guards known read failure and snapshot mismatch; it does not recheck
+source-file bytes or force a fresh network read for every export. Next: reconcile
+these editor fixes into a verified release, then version-linked field evidence.
+Professional acceptance and provider activation remain separate release gates.

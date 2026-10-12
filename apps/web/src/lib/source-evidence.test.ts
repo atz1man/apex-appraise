@@ -22,6 +22,13 @@ describe('portable source evidence', () => {
     const text = sourceEvidenceLines({ ...review, sample: true }, 'recorded', true).join('\n');
     expect(text).toContain('INPUTS CHANGED'); expect(text).toContain('WORKED EXAMPLE'); expect(text).not.toContain('Exported inputs match');
   });
+  it('withholds cached claims when the editor snapshot cannot be verified', () => {
+    const text = sourceEvidenceLines(review, 'unverified').join(' ');
+    expect(text).toContain('SOURCE REVIEW UNVERIFIED');
+    expect(text).not.toContain('Exported inputs match');
+    expect(text).not.toContain('Reviewed by');
+    expect(sourceEvidenceLines(null, 'unverified')[0]).not.toContain('No source input review');
+  });
   it('distinguishes unreadable records from absent ones', () => {
     expect(sourceEvidenceLines(null, 'unreadable')[0]).toContain('could not be read');
     expect(sourceEvidenceLines(null, 'absent')[0]).toContain('No source input review');
