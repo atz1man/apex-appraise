@@ -24,7 +24,6 @@ import {
 import { getPrincipal, trpc } from '../lib/trpc';
 import { useUnsavedWarning } from '../lib/unsaved';
 import { fM, n0 } from '../lib/format';
-import { exportAppraisalXlsx } from '../lib/exportXlsx';
 import { startingIncome, startingIncomeLine } from '../lib/starting-income';
 import { useUnits } from '../lib/region';
 import { useToast } from '../components/Toast';
@@ -525,7 +524,7 @@ export default function DevelopmentAppraisal() {
               variant="secondary"
               className="hidden sm:inline-flex"
               onClick={() =>
-                exportAppraisalXlsx({ evidence: sourceReviewUnverified ? undefined : saved?.sourceReview, evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
+                import('../lib/exportXlsx').then(({ exportAppraisalXlsx }) => exportAppraisalXlsx({ fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot, fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState, appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined, evidence: sourceReviewUnverified ? undefined : saved?.sourceReview, evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U }))
               }
             >
               Export .xlsx
@@ -558,7 +557,7 @@ export default function DevelopmentAppraisal() {
         <AppraisalFieldEvidence key={dealId} dealId={dealId} />
         {!sourceReviewUnverified && saved?.fieldSnapshot && <section aria-label="Version field snapshot" className="mt-5 rounded-card border border-border-std bg-surface p-4">
           <h2 className="text-[15px] font-semibold">Field snapshot · {saved.label}</h2>
-          <p className="mt-2 text-[12px] text-ink-2">Captured by {saved.fieldSnapshot.capturedBy} on {new Date(saved.fieldSnapshot.capturedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Historical context only: later task changes do not update this snapshot. It is not approval, an input adjustment, or part of report exports.</p>
+          <p className="mt-2 text-[12px] text-ink-2">Captured by {saved.fieldSnapshot.capturedBy} on {new Date(saved.fieldSnapshot.capturedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Historical context only: later task changes do not update this snapshot. It is included in the Excel Field evidence sheet, but not PDF reports. It is not approval or an input adjustment.</p>
           <ul className="mt-3 space-y-3 text-[12px]">{saved.fieldSnapshot.tasks.map(task => <li key={task.id}>
             <p className="font-semibold">{task.title} · {task.done ? 'completed at capture' : 'open at capture'}</p>
             {task.inspectionEvidence ? <p className="whitespace-pre-wrap">{task.inspectionEvidence.room.name}: {task.inspectionEvidence.room.notes || 'No recorded note'} · condition {task.inspectionEvidence.room.condition || 'not rated'}</p> : <p>No inspection observation was captured for this task.</p>}
@@ -1909,7 +1908,7 @@ export default function DevelopmentAppraisal() {
             <input type="checkbox" {...writeAttrs()} checked={includeFieldSnapshot} disabled={saveVersion.isPending} onChange={e => setIncludeFieldSnapshot(e.target.checked)} />
             Include field follow-ups in this version
           </label>
-          <p className="text-ink-2">Captures task status and recorded observations at this point. It does not approve evidence, adjust financial inputs, or include photos or report exports.</p>
+          <p className="text-ink-2">Captures task status and recorded observations at this point. It does not approve evidence, adjust financial inputs, or include photos. Captured snapshots are included in Excel exports, but not PDF reports.</p>
           {includeFieldSnapshot && <>
             {fieldSnapshotBlocked && <p role="status">Field follow-ups must load successfully, contain readable evidence, and number between 1 and 100 before capture.</p>}
             <Button size="sm" variant="secondary" loading={fieldTasksForVersion.isFetching} onClick={() => { void fieldTasksForVersion.refetch(); }}>Refresh capture preview</Button>

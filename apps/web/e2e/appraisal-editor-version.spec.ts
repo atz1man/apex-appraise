@@ -273,6 +273,7 @@ test('spreadsheet source claims follow the editor snapshot and recover after fai
       await workbook.xlsx.readFile((await file.path())!);
       const text: string[] = [];
       workbook.getWorksheet('Source evidence')!.eachRow(row => { text.push(String(row.getCell(1).value ?? '')); });
+      workbook.getWorksheet('Field evidence')!.eachRow(row => { text.push(String(row.getCell(1).value ?? '')); });
       return text.join(' ');
     };
     expect(await exportEvidence()).toContain('Exported inputs match the recorded input review.');
@@ -282,6 +283,8 @@ test('spreadsheet source claims follow the editor snapshot and recover after fai
     await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
     const unknown = await exportEvidence();
     expect(unknown).toContain('SOURCE REVIEW UNVERIFIED');
+    expect(unknown).toContain('FIELD SNAPSHOT UNVERIFIED');
+    expect(unknown).not.toContain('No field snapshot is attached');
     expect(unknown).not.toContain('Exported inputs match');
     expect(unknown).not.toContain('No source input review');
     await expect(page.getByText('The source input review cannot be confirmed for this editor snapshot. Exports will mark its review status as unverified.', { exact: true })).toBeVisible();

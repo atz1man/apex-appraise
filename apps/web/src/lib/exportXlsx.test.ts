@@ -42,7 +42,7 @@ describe('buildAppraisalWorkbook', async () => {
     monthLabel,
   });
 
-  it('carries all eight sheets in order', () => {
+  it('carries all nine sheets in order', () => {
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       'Summary',
       'Unit schedule',
@@ -52,7 +52,45 @@ describe('buildAppraisalWorkbook', async () => {
       'Risk & sensitivity',
       'Assumptions',
       'Source evidence',
+      'Field evidence',
     ]);
+  });
+
+  it('round-trips historical field evidence without truncation or executable formulas', async () => {
+    const note = '=HYPERLINK("https://example.invalid")\n' + '界'.repeat(300) + ' END OF OBSERVATION';
+    const opts = { dealName: 'Field case', address: '', input: referenceCase, R, jv, monthLabel,
+      unsavedInputs: true, appraisalVersion: { id: 'version-1', label: 'Inspection basis' },
+      fieldSnapshot: { capturedAt: '2026-10-12T01:00:00.000Z', capturedBy: 'Surveyor', capturedById: 'member-1', tasks: [
+        { id: 'task-1', title: 'Entrance', done: true, inspectionEvidence: { inspectionId: 'inspection-1',
+          sourceUpdatedAt: '2026-10-11T23:00:00.000Z', capturedAt: '2026-10-12T00:00:00.000Z', roomIndex: 0,
+          room: { name: 'Entrance', condition: 0, notes: note } } },
+        { id: 'task-2', title: 'Check roof', done: false, inspectionEvidence: null },
+      ] } };
+    const built = await buildAppraisalWorkbook(opts);
+    const ExcelJS = (await import('exceljs')).default;
+    const reopened = new ExcelJS.Workbook();
+    await reopened.xlsx.load(await built.xlsx.writeBuffer());
+    const lines: string[] = [];
+    reopened.getWorksheet('Field evidence')!.eachRow(row => {
+      expect(row.getCell(1).formula).toBeUndefined();
+      lines.push(String(row.getCell(1).value ?? ''));
+    });
+    const text = lines.join('');
+    for (const value of ['UNSAVED INPUTS', 'not approval', 'version-1', 'Inspection basis', 'member-1',
+      '2026-10-12T01:00:00.000Z', '2026-10-11T23:00:00.000Z', '2026-10-12T00:00:00.000Z',
+      'inspection-1', 'task-1', 'Completed at capture', 'Open at capture', 'Recorded condition: not rated',
+      'No inspection observation', note.replace('\n', '')]) expect(text).toContain(value);
+    for (const state of ['unverified', 'unreadable']) {
+      const unknown = await buildAppraisalWorkbook({ ...opts, fieldSnapshotState: state });
+      const values: string[] = [];
+      unknown.getWorksheet('Field evidence')!.eachRow(row => values.push(String(row.getCell(1).value ?? '')));
+      expect(values.join('')).toContain(state.toUpperCase());
+      expect(values.join('')).not.toContain('member-1');
+      expect(values.join('')).not.toContain('No field snapshot is attached');
+    }
+    const absent: string[] = [];
+    wb.getWorksheet('Field evidence')!.eachRow(row => absent.push(String(row.getCell(1).value ?? '')));
+    expect(absent.join('')).toContain('does not mean the project has no field observations');
   });
 
   it('summary GDV matches the golden figure with the £ format', () => {
@@ -147,6 +185,7 @@ describe('buildAppraisalWorkbook — with a held element', async () => {
       'Risk & sensitivity',
       'Assumptions',
       'Source evidence',
+      'Field evidence',
     ]);
   });
 

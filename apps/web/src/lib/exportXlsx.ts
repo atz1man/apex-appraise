@@ -1,3 +1,4 @@
+import { fieldSnapshotLines, type FieldSnapshotExport } from './field-snapshot-export';
 import { sourceEvidenceLines, wrapEvidence, type SourceEvidence } from './source-evidence';
 import {
   capitaliseIncome,
@@ -22,6 +23,9 @@ import type ExcelJSNS from 'exceljs';
  */
 
 export interface ExportOpts {
+  fieldSnapshot?: FieldSnapshotExport | null;
+  fieldSnapshotState?: string;
+  appraisalVersion?: { id: string; label: string };
   evidence?: SourceEvidence | null;
   evidenceState?: string;
   unsavedInputs?: boolean;
@@ -744,6 +748,17 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   for (const line of wrapEvidence(sourceEvidenceLines(opts.evidence, opts.evidenceState, opts.unsavedInputs), 90)) {
     const row = evidence.addRow([line]);
     evidence.mergeCells(row.number, 1, row.number, 4);
+    row.height = 32;
+    row.getCell(1).font = { name: 'Arial', size: 11 };
+    row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+  }
+  const field = wb.addWorksheet('Field evidence');
+  field.columns = Array.from({ length: 4 }, () => ({ width: 30 }));
+  titleBlock(field, dealName, address, 'Historical field snapshot', 4, firmName);
+  headerRow(field, ['HISTORICAL FIELD CONTEXT']);
+  for (const line of wrapEvidence(fieldSnapshotLines(opts.fieldSnapshot, opts.fieldSnapshotState, opts.appraisalVersion, opts.unsavedInputs), 90)) {
+    const row = field.addRow([line]);
+    field.mergeCells(row.number, 1, row.number, 4);
     row.height = 32;
     row.getCell(1).font = { name: 'Arial', size: 11 };
     row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
