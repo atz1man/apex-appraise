@@ -1,3 +1,4 @@
+import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../field-evidence.js';
 import { sourceVersion } from '../source-version.js';
 import { withModelDeadline } from '../model-deadline.js';
 import { readBoundedFile } from '../bounded-file.js';
@@ -198,7 +199,10 @@ export const appraisalRouter = router({
           url: unchanged && !current?.supersededById ? signFileUrl(current!.url, ctx.principal.userId) : null };
       }),
     } : null;
+    const fieldSnapshot = readFieldSnapshot(row.fieldSnapshot);
     return {
+      fieldSnapshot,
+      fieldSnapshotState: row.fieldSnapshot === null ? 'absent' as const : fieldSnapshot ? 'recorded' as const : 'unreadable' as const,
       sourceReview,
       sourceReviewState: review ? 'recorded' as const : row.sourceReview !== null ? 'unreadable' as const : 'absent' as const,
       id: row.id,
@@ -254,6 +258,7 @@ export const appraisalRouter = router({
         input: zAppraisalInput,
         source: z.string().default('manual'),
         sourceReview: zSourceReviewRequest.optional(),
+        fieldTasks: z.array(z.object({ id: z.string(), version: z.string().regex(/^[a-f0-9]{64}$/) })).min(1).max(100).optional(),
         // versioning: asNewVersion snapshots the current row into history and
         // creates a fresh current version under the given label
         asNewVersion: z.boolean().default(false),
@@ -284,8 +289,20 @@ export const appraisalRouter = router({
         source: input.source,
         resultCache: JSON.stringify({ result, jv }),
         // An ordinary save retains the historical record; its hash exposes any changed inputs.
+        fieldSnapshot: input.asNewVersion ? null : existing?.fieldSnapshot ?? null,
         sourceReview: input.asNewVersion ? null : existing?.sourceReview ?? null,
       };
+      if (input.fieldTasks) {
+        if (!input.asNewVersion) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Capture field follow-ups when saving a new named version.' });
+        const ids = [...new Set(input.fieldTasks.map(task => task.id))];
+        const tasks = await ctx.prisma.task.findMany({ where: { orgId: ctx.principal.orgId, dealId: input.dealId, aspect: 'Field inspection', id: { in: ids } }, orderBy: { id: 'asc' } });
+        if (ids.length !== input.fieldTasks.length || tasks.length !== ids.length || tasks.some(task => fieldTaskVersion(task) !== input.fieldTasks!.find(expected => expected.id === task.id)!.version)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Field follow-ups changed or are unavailable. Refresh and review them before capturing this version.' });
+        }
+        const snapshots = tasks.map(task => ({ id: task.id, title: task.title, done: task.done, ...readInspectionEvidence(task.inspectionEvidence) }));
+        if (snapshots.some(task => task.inspectionEvidenceState === 'unreadable')) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Unreadable field evidence cannot be captured. Resolve the source before saving this snapshot.' });
+        data.fieldSnapshot = JSON.stringify({ version: 1, capturedAt: new Date().toISOString(), capturedBy: ctx.principal.name, capturedById: ctx.principal.userId, tasks: snapshots });
+      }
       if (input.sourceReview) {
         const ids = [...new Set(input.sourceReview.documentIds)];
         const documents = await ctx.prisma.document.findMany({

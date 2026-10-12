@@ -739,3 +739,34 @@ No schema, financial engine or live-data changes.
 Next remains explicit field-evidence review pinned to appraisal versions. This
 increment hardens that input path; it does not implement version pinning, financial
 adjustment proposals, professional acceptance or provider activation.
+
+## Field snapshots attached to named appraisal versions — 12 October 2026
+
+PR #73 passed exact-head CI 38240749870 and merged at `4300279` before this
+increment. Live remains `456dea9`; no release is deployed here.
+
+Versions now offers an opt-in to capture the project's displayed field follow-ups
+with a named appraisal version. The server reads tenant/project-scoped tasks and
+checks per-task fingerprints against the preview, rejects duplicates, changed or
+unavailable tasks and unreadable evidence, and stores its own task titles/status
+and captured inspection observations. The client cannot supply observation text.
+A nullable Appraisal.fieldSnapshot JSON column and additive migration preserve
+existing appraisals without fabricated history. API/migration must deploy before web.
+
+The fixed snapshot shows separately from the live follow-up list, with capturing
+member identity/time and task state at capture. Ordinary appraisal edits retain it;
+a new branch starts without it unless explicitly captured; restoring a historical
+version retains its historical snapshot/date. Invalid stored snapshots show an
+unreadable state. This is historical context, not approval, source input acceptance
+or a financial adjustment. Photos and PDF/XLSX report exports are not included.
+
+20 targeted API checks and six editor/field browser journeys passed locally. New
+coverage verifies immutable capture through task changes, save/branch/restore,
+server-owned observations, stale/foreign/other-project/duplicate/unreadable task
+refusal without a new version, and honest corrupt-snapshot reads. The mobile
+snapshot was visually inspected and has no horizontal overflow. 389 web checks,
+API/web typechecks, build and bundle guards passed. Exact-head CI is on the PR.
+
+Next: explicit observation-to-input proposals and deliberate report inclusion.
+Version snapshots are now captured; professional acceptance, provider activation
+and production release evidence remain separate requirements.
