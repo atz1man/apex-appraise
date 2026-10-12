@@ -105,3 +105,85 @@ test('appraisal saves preserve draft ownership across refreshes and in-flight ed
     }
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });
+
+test('restoring an appraisal loads the restored inputs instead of the cached current version', async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const orgName = `Appraisal editor ${Date.now()}`;
+  await page.goto('/register');
+  await page.getByLabel('Organisation name').fill(orgName);
+  await page.getByLabel('Your name').fill('Appraisal Editor');
+  await page.getByLabel('Email', { exact: true }).fill(`editor-${Date.now()}@example.test`);
+  await page.getByLabel('Password', { exact: true }).fill('long-test-password');
+  await page.getByLabel('Confirm password').fill('long-test-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+  const rpc = async (route: string, input: unknown) => {
+    const res = await request.post(`/trpc/${route}`, { headers: { authorization: `Bearer ${token}` }, data: superjson.serialize(input) });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  const current = async (dealId: string) => {
+    const res = await request.get('/trpc/appraisal.getCurrent', { headers: { authorization: `Bearer ${token}` }, params: { input: JSON.stringify({ json: dealId }) } });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  try {
+    const deal = await rpc('deals.create', { name: 'Restore project', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
+    await page.goto(`/deal/${deal.id}/appraisal`);
+    const label = page.getByLabel('Unit type 1 label', { exact: true });
+    await label.fill('Original unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    const original = await current(deal.id);
+    await rpc('appraisal.save', { dealId: deal.id, input: { ...original.input, units: original.input.units.map((unit: object) => ({ ...unit, label: 'Replacement unit' })) }, asNewVersion: true, label: 'Replacement version' });
+    await page.reload();
+    await expect(label).toHaveValue('Replacement unit');
+    await page.getByRole('button', { name: /^Versions/ }).click();
+    // Hold the background query on the pre-restore snapshot. The mutation must
+    // supply the exact restored inputs, regardless of cache/refetch timing.
+    await page.route('**/trpc/appraisal.getCurrent*', route => route.abort());
+    await page.getByRole('button', { name: 'Restore as current', exact: true }).click();
+    await expect(page.getByText('Version restored as the new current appraisal', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close Appraisal versions', exact: true }).click();
+    await expect(label).toHaveValue('Original unit');
+    await page.unroute('**/trpc/appraisal.getCurrent*');
+    await label.fill('Reviewed restored unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    expect((await current(deal.id)).input.units[0].label).toBe('Reviewed restored unit');
+    await label.fill('Unsaved draft before restore');
+    await page.getByRole('button', { name: /^Versions/ }).click();
+    const beforeCancel = await current(deal.id);
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', { name: 'Restore as current', exact: true }).first().click();
+    expect((await current(deal.id)).id).toBe(beforeCancel.id);
+    let release!: () => void;
+    let committed!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const wrote = new Promise<void>(resolve => { committed = resolve; });
+    await page.route('**/trpc/appraisal.restore*', async route => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      committed();
+      await held;
+      await route.fulfill({ response });
+    });
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: 'Restore as current', exact: true }).first().click();
+    await wrote;
+    await page.getByPlaceholder('Label this version', { exact: false }).fill('Cannot overlap restore');
+    await expect(page.getByRole('button', { name: 'Save as version', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save appraisal', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Close Appraisal versions', exact: true }).click();
+    await label.fill('Typed while restoring');
+    release();
+    await expect(page.getByText('Version restored. Your newer edits remain unsaved in this editor.', { exact: true })).toBeVisible();
+    await expect(label).toHaveValue('Typed while restoring');
+    await expect(page.getByRole('button', { name: 'Save appraisal', exact: true })).toBeEnabled();
+    expect((await current(deal.id)).input.units[0].label).not.toBe('Typed while restoring');
+    await page.unroute('**/trpc/appraisal.restore*');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    expect((await current(deal.id)).input.units[0].label).toBe('Typed while restoring');
+
+  } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
+});

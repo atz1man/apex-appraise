@@ -624,3 +624,34 @@ No API, schema or financial engine changes.
 Next: audit restore hydration and overlapping editor actions before expanding
 version-linked field evidence. This fix does not add offline draft persistence
 or establish professional acceptance, provider activation or production readiness.
+
+## Restore the exact appraisal snapshot — 12 October 2026
+
+PR #69 passed exact-head CI 38221034105 and merged at `86fc322` before this
+increment. Live remains `842c8d7`; this increment is not deployed.
+
+The next browser regression proved that restoring a version could report success
+while leaving the replaced version's inputs in the editor. Setting loaded=false
+let the hydration effect consume the old cached current query before its refetch
+arrived. The restore API now additionally returns the restored row's converted
+inputs and updatedAt stamp. The editor hydrates from that exact mutation response,
+not the query cache. Deploy the API before the web bundle for this contract change.
+
+Restoring over unsaved edits asks the user first. Cancelling does not write. If
+they continue typing while restoration is pending, those newer edits remain dirty
+with an explicit message; a subsequent save uses the restored stamp. Ordinary
+save, named-version save and restore controls block overlapping pending mutations,
+including the named-version Enter shortcut. Restored approval status and financial
+calculations retain their existing behavior.
+
+The stale-cache browser regression failed before the fix. Four browser journeys
+passed locally, covering cache/refetch failure, restore cancellation, edits during
+a delayed real restore, blocked overlapping saves and successful subsequent saves,
+plus existing editor and field workflows. Six restore API tests verify the response
+matches the stored row and retain draft/approval/headline/concurrency coverage.
+388 web checks, API/web typechecks, build and bundle guards passed. Exact-head CI
+results are recorded on the PR.
+
+Next: first-load typing/hydration and honest export source context when background
+reads fail; then version-linked field evidence. No schema changes or live writes.
+Professional acceptance, provider activation and production release gates remain.

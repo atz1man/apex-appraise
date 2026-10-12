@@ -215,9 +215,18 @@ export default function DevelopmentAppraisal() {
   const [versionLabel, setVersionLabel] = useState('');
   const { data: versions } = trpc.appraisal.versions.useQuery(dealId, { enabled: !!dealId });
   const restore = trpc.appraisal.restore.useMutation({
-    onSuccess: () => {
-      toast.success('Version restored as the new current appraisal');
-      setLoaded(false); // re-hydrate the form from the restored version
+    onMutate: () => ({ submittedInput: currentInput.current }),
+    onSuccess: (res, _vars, context) => {
+      setHeldVersion(res.updatedAt);
+      setLoaded(true);
+      if (currentInput.current === context?.submittedInput) {
+        setInput({ ...res.input, jv: res.input.jv ?? DEFAULT_INPUT.jv });
+        setDirty(false);
+        toast.success('Version restored as the new current appraisal');
+      } else {
+        setDirty(true);
+        toast.success('Version restored. Your newer edits remain unsaved in this editor.');
+      }
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.appraisal.versions.invalidate(dealId);
       utils.deals.list.invalidate();
@@ -495,7 +504,7 @@ export default function DevelopmentAppraisal() {
               writes
               onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
               loading={save.isPending}
-              disabled={!dirty}
+              disabled={!dirty || restore.isPending || saveVersion.isPending}
             >
               {dirty ? 'Save appraisal' : 'Saved'}
             </Button>
@@ -1839,12 +1848,12 @@ export default function DevelopmentAppraisal() {
             value={versionLabel}
             onChange={(e) => setVersionLabel(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
+              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending && !save.isPending && !restore.isPending) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim() });
             }}
           />
           <Button writes
             loading={saveVersion.isPending}
-            disabled={!versionLabel.trim()}
+            disabled={!versionLabel.trim() || save.isPending || restore.isPending}
             onClick={() =>
               saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), note: versionNote.trim() || undefined })
             }
@@ -1893,8 +1902,11 @@ export default function DevelopmentAppraisal() {
                       writes
                       variant="secondary"
                       size="sm"
-                      disabled={restore.isPending}
-                      onClick={() => restore.mutate({ dealId, versionId: v.id })}
+                      disabled={restore.isPending || save.isPending || saveVersion.isPending}
+                      onClick={() => {
+                        if (dirty && !window.confirm('Restore this version and replace your unsaved appraisal edits?')) return;
+                        restore.mutate({ dealId, versionId: v.id });
+                      }}
                     >
                       Restore as current
                     </Button>

@@ -48,7 +48,11 @@ describe('the deal card follows the current version', () => {
     const optimistic = await dealCard();
     expect(Number(optimistic.gdv) / 100, 'the fixture should start on the optimistic figure').toBe(4_500_000);
 
-    await caller().appraisal.restore({ dealId: T.dealId, versionId: (await versionNamed('Prudent')).id } as never);
+    const response = await caller().appraisal.restore({ dealId: T.dealId, versionId: (await versionNamed('Prudent')).id } as never);
+    const stored = await current();
+    expect(response.id).toBe(stored.id);
+    expect(response.updatedAt).toEqual(stored.updatedAt);
+    expect(response.input.units).toEqual(input(420).units);
 
     const after = await dealCard();
     expect(
