@@ -231,3 +231,65 @@ test('a failed initial appraisal read can be retried without exposing default in
     expect((await current(deal.id)).input.units[0].label).toBe('Recovered and reviewed unit');
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });
+
+test('spreadsheet source claims follow the editor snapshot and recover after failed refresh', async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const orgName = `Appraisal editor ${Date.now()}`;
+  await page.goto('/register');
+  await page.getByLabel('Organisation name').fill(orgName);
+  await page.getByLabel('Your name').fill('Appraisal Editor');
+  await page.getByLabel('Email', { exact: true }).fill(`editor-${Date.now()}@example.test`);
+  await page.getByLabel('Password', { exact: true }).fill('long-test-password');
+  await page.getByLabel('Confirm password').fill('long-test-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+  const rpc = async (route: string, input: unknown) => {
+    const res = await request.post(`/trpc/${route}`, { headers: { authorization: `Bearer ${token}` }, data: superjson.serialize(input) });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  const current = async (dealId: string) => {
+    const res = await request.get('/trpc/appraisal.getCurrent', { headers: { authorization: `Bearer ${token}` }, params: { input: JSON.stringify({ json: dealId }) } });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  try {
+    const deal = await rpc('deals.create', { name: 'Export evidence project', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
+    await page.goto(`/deal/${deal.id}/appraisal`);
+    const label = page.getByLabel('Unit type 1 label', { exact: true });
+    await label.fill('Reviewed source unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    const first = await current(deal.id);
+    await rpc('appraisal.save', { dealId: deal.id, input: first.input, expectedUpdatedAt: first.updatedAt,
+      sourceReview: { accepted: true, documentIds: [], sample: true, omissions: [] } });
+    await page.reload();
+    await expect(page.getByText('Saved inputs match the recorded review.', { exact: true })).toBeVisible();
+    const exportEvidence = async () => {
+      const downloaded = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export .xlsx', exact: true }).click();
+      const file = await downloaded;
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile((await file.path())!);
+      const text: string[] = [];
+      workbook.getWorksheet('Source evidence')!.eachRow(row => { text.push(String(row.getCell(1).value ?? '')); });
+      return text.join(' ');
+    };
+    expect(await exportEvidence()).toContain('Exported inputs match the recorded input review.');
+    await page.route('**/trpc/**appraisal.getCurrent*', route => route.abort());
+    await label.fill('Edited exported unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    const unknown = await exportEvidence();
+    expect(unknown).toContain('SOURCE REVIEW UNVERIFIED');
+    expect(unknown).not.toContain('Exported inputs match');
+    expect(unknown).not.toContain('No source input review');
+    await expect(page.getByText('The source input review cannot be confirmed for this editor snapshot. Exports will mark its review status as unverified.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh source review', exact: true })).toBeEnabled();
+    await page.unroute('**/trpc/**appraisal.getCurrent*');
+    await page.getByRole('button', { name: 'Refresh source review', exact: true }).click();
+    await expect(page.getByText('Inputs have changed. The recorded review does not cover these inputs.', { exact: true })).toBeVisible();
+    await expect(label).toHaveValue('Edited exported unit');
+    expect(await exportEvidence()).toContain('INPUTS CHANGED');
+  } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
+});

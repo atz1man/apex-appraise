@@ -183,9 +183,11 @@ export default function DevelopmentAppraisal() {
    * as well as from the query, so two saves in a row do not depend on a refetch
    * landing in between.
    */
+  const [heldAppraisalId, setHeldAppraisalId] = useState<string | null>(null);
   const [heldVersion, setHeldVersion] = useState<Date | null>(null);
   const save = trpc.appraisal.save.useMutation({
     onSuccess: (res, vars) => {
+      setHeldAppraisalId(res.id);
       setHeldVersion(res.updatedAt);
       utils.appraisal.getCurrent.invalidate(dealId);
       utils.deals.list.invalidate();
@@ -217,6 +219,7 @@ export default function DevelopmentAppraisal() {
   const restore = trpc.appraisal.restore.useMutation({
     onMutate: () => ({ submittedInput: currentInput.current }),
     onSuccess: (res, _vars, context) => {
+      setHeldAppraisalId(res.id);
       setHeldVersion(res.updatedAt);
       setLoaded(true);
       if (currentInput.current === context?.submittedInput) {
@@ -234,6 +237,7 @@ export default function DevelopmentAppraisal() {
   });
   const saveVersion = trpc.appraisal.save.useMutation({
     onSuccess: (res, vars) => {
+      setHeldAppraisalId(res.id);
       setHeldVersion(res.updatedAt);
       toast.success(`Saved version “${vars.label || 'new version'}”`);
       setVersionLabel('');
@@ -257,6 +261,7 @@ export default function DevelopmentAppraisal() {
     if (saved && !loaded) {
       // The concurrency stamp belongs to the inputs actually loaded into this
       // editor. A background refetch must not authorize our older local draft.
+      setHeldAppraisalId(saved.id);
       setHeldVersion(saved.updatedAt);
       setInput({ ...saved.input, jv: saved.input.jv ?? DEFAULT_INPUT.jv });
       setLoaded(true);
@@ -434,6 +439,10 @@ export default function DevelopmentAppraisal() {
     [cash.rows, period, startY, startM],
   );
 
+  const sourceReviewUnverified = isError || (heldAppraisalId !== null && (!saved ||
+    saved.id !== heldAppraisalId || saved.updatedAt.getTime() !== heldVersion?.getTime()
+  ));
+
   if (isError && !loaded) {
     return (
       <div className="min-h-screen">
@@ -511,7 +520,7 @@ export default function DevelopmentAppraisal() {
               variant="secondary"
               className="hidden sm:inline-flex"
               onClick={() =>
-                exportAppraisalXlsx({ evidence: saved?.sourceReview, evidenceState: saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
+                exportAppraisalXlsx({ evidence: sourceReviewUnverified ? undefined : saved?.sourceReview, evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState, unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '', firm, input, R, jv, monthLabel, units: U })
               }
             >
               Export .xlsx
@@ -546,7 +555,10 @@ export default function DevelopmentAppraisal() {
         {saved && (
           <div className="mt-5">
             <Panel level={2} title="Source input review">
-              {saved.sourceReview ? <div className="space-y-2 text-[12px] text-ink-2">
+              {sourceReviewUnverified ? <div role="status" className="space-y-2 text-[12px] text-ink-2">
+                <p>The source input review cannot be confirmed for this editor snapshot. Exports will mark its review status as unverified.</p>
+                <Button size="sm" variant="secondary" loading={isFetching} onClick={() => { void refetch(); }}>Refresh source review</Button>
+              </div> : saved.sourceReview ? <div className="space-y-2 text-[12px] text-ink-2">
                 <p>{saved.sourceReview.inputsUnchanged && !dirty ? 'Saved inputs match the recorded review.' : 'Inputs have changed. The recorded review does not cover these inputs.'}</p>
                 <p>Reviewed by {saved.sourceReview.reviewerName} on {new Date(saved.sourceReview.reviewedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time).</p>
                 <p>This records an input acknowledgement, not professional approval or independently verified evidence.</p>
