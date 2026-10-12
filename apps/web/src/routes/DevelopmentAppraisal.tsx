@@ -1,3 +1,4 @@
+import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -1769,6 +1770,7 @@ export default function DevelopmentAppraisal() {
             </Panel>
 
             <Panel level={2} title={`Tasks — ${aspect}`} right={<span className="fig text-[11px] text-ink-3">{tasks?.filter((t) => !t.done).length ?? 0} open</span>}>
+              {toggleTask.isError && <TaskStatusRecovery pending={toggleTask.isPending} onRetry={() => { if (toggleTask.variables) toggleTask.mutate(toggleTask.variables); }} onRefresh={() => { void utils.tasks.list.invalidate(); }} onDismiss={() => toggleTask.reset()} />}
               <div className="flex flex-col gap-1.5">
                 {(tasks ?? []).map((t) => (
                   <button

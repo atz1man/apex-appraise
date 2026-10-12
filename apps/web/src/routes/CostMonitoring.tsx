@@ -1,3 +1,4 @@
+import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { accent, brand, neutral, onFill, personGradientNone, personGradients, placeholderGradients, status as statusTokens, type StatusKey } from '@apex/ui-tokens';
@@ -738,6 +739,7 @@ export default function CostMonitoring() {
 
             {/* Actions — cost monitoring tasks */}
             <Panel title="Actions — Cost monitoring" right={<span className="fig text-[11px] text-ink-3">{openTasks} open</span>}>
+              {toggleTask.isError && <TaskStatusRecovery pending={toggleTask.isPending} onRetry={() => { if (toggleTask.variables) toggleTask.mutate(toggleTask.variables); }} onRefresh={() => { void utils.tasks.list.invalidate(); }} onDismiss={() => toggleTask.reset()} />}
               <div className="flex flex-col gap-1.5">
                 {(tasks ?? []).map((t) => (
                   <button

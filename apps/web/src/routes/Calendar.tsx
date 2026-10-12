@@ -1,3 +1,4 @@
+import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
 import { useMemo, useRef, useState } from 'react';
 import { brand, brandInk, neutral, onFill, status as statusTokens } from '@apex/ui-tokens';
 import { getPrincipal, trpc } from '../lib/trpc';
@@ -202,6 +203,7 @@ export default function Calendar() {
     <div className="min-h-screen">
       <TopBar crumb="Calendar & tasks" />
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        {toggleTask.isError && <TaskStatusRecovery pending={toggleTask.isPending} onRetry={() => { if (toggleTask.variables) toggleTask.mutate(toggleTask.variables); }} onRefresh={() => { void utils.tasks.list.invalidate(); }} onDismiss={() => toggleTask.reset()} />}
         <div className="mt-8">
           <EyebrowTitle
             eyebrow="Team operations"

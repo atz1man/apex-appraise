@@ -1,3 +1,4 @@
+import { TaskStatusRecovery } from './TaskStatusRecovery';
 import { useState } from 'react';
 import { getPrincipal, trpc } from '../lib/trpc';
 import { firmDayKey, firmDayLabel } from '../lib/firm-day';
@@ -113,7 +114,7 @@ export function FieldFollowups({ dealId }: { dealId: string }) {
             </li>)}
           </ul>
         )}
-        {toggle.isError && <p role="alert" className="mt-2 text-[12px]">The status change could not be confirmed. Refresh follow-ups to check the saved status.</p>}
+        {toggle.isError && <TaskStatusRecovery pending={toggle.isPending} onRetry={() => { if (toggle.variables) toggle.mutate(toggle.variables); }} onRefresh={() => { void utils.tasks.list.invalidate(); }} onDismiss={() => toggle.reset()} />}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" className="min-h-11" onClick={() => { void tasks.refetch(); void inspection.refetch(); void members.refetch(); }}>Refresh follow-ups</Button>
           <Button to="/calendar" size="sm" variant="secondary" className="min-h-11">Open task calendar</Button>
