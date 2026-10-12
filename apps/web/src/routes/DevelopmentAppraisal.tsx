@@ -1777,7 +1777,7 @@ export default function DevelopmentAppraisal() {
                     aria-pressed={t.done}
                     disabled={toggleTask.isPending}
                     {...writeAttrs()}
-                    onClick={() => toggleTask.mutate(t.id)}
+                    onClick={() => toggleTask.mutate({ id: t.id, done: !t.done })}
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"

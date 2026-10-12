@@ -485,3 +485,31 @@ provider activation, live configuration or production deployment changed.
 Next: reviewed observation-to-appraisal proposals, keeping source context and
 explicit human-selected financial inputs; extend safe retries to other task
 entry points and offline recovery as separate bounded increments.
+
+## Stable completion retries across task screens — 12 October 2026
+
+PR #64 passed exact-head CI and was merged at `f56a823` before this increment.
+Live remains `818ed258`; no deployment is included.
+
+A successful Complete response could be lost. Retrying the old toggle request
+would then reopen the task; the same defect reversed a retried Reopen. Every
+current task control now sends the intended boolean status: both calendar
+presentations, the field companion, development appraisal and cost monitoring.
+The server assigns that target rather than negating the current value. The
+existing tenant and internal-writer gates apply before either write form.
+Bare-ID requests retain their legacy toggle behavior for older clients.
+
+Four API cases cover repeated and concurrent Complete/Reopen requests, unchanged
+other task fields, foreign/missing task refusal, viewer/portal refusal and legacy
+compatibility. All 51 focused status/create/evidence/edit/isolation/provenance/
+viewer checks passed. Both browser journeys passed; the calendar completion and
+field reopening each commit the real HTTP write, replace its response with 503,
+then retry the unchanged visible action and assert the intended persisted state.
+388 web checks, API/web typechecks, build and bundle guards passed. Exact-head CI
+is recorded on the PR. No schema, source evidence or financial arithmetic changed.
+
+This is stable target assignment, not an ordered status-command ledger: an old
+Complete request arriving after a separate Reopen can still win the later write.
+Legacy bare-ID callers also retain their prior retry risk. Offline command
+ordering and durable recovery remain separate work. Next: reviewed
+observation-to-appraisal proposals with explicit human-selected input changes.

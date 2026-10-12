@@ -307,7 +307,7 @@ export default function Calendar() {
                           {...writeAttrs()}
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleTask.mutate(t.id);
+                            toggleTask.mutate({ id: t.id, done: !t.done });
                           }}
                           className="flex items-center gap-[5px] w-full min-w-0 min-h-6 px-1.5 py-[3px] rounded-[6px] text-left cursor-pointer transition-colors disabled:opacity-60"
                           style={{ background: bg }}
@@ -405,7 +405,7 @@ export default function Calendar() {
                             aria-label={t.done ? 'Reopen task' : 'Complete task'}
                             disabled={toggleTask.isPending}
                             {...writeAttrs()}
-                            onClick={() => toggleTask.mutate(t.id)}
+                            onClick={() => toggleTask.mutate({ id: t.id, done: !t.done })}
                             className="shrink-0 mt-[1px] w-5 h-5 rounded-[6px] border-2 inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60"
                             style={{ borderColor: t.done ? brand[700] : 'rgb(var(--checkbox-border, 210 209 202))', background: t.done ? brand[700] : neutral.surface }}
                           >

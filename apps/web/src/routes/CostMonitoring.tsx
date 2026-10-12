@@ -745,7 +745,7 @@ export default function CostMonitoring() {
                     className="flex items-center gap-2.5 py-1 px-1 -mx-1 rounded-[8px] text-left cursor-pointer hover:bg-sunken transition-colors disabled:opacity-50"
                     disabled={toggleTask.isPending}
                     {...writeAttrs()}
-                    onClick={() => toggleTask.mutate(t.id)}
+                    onClick={() => toggleTask.mutate({ id: t.id, done: !t.done })}
                   >
                     <span
                       className="w-[16px] h-[16px] rounded-[5px] border inline-flex items-center justify-center shrink-0"

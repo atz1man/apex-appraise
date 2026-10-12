@@ -714,10 +714,13 @@ export const tasksRouter = router({
     });
   }),
 
-  toggle: internalProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
-    const t = await ctx.prisma.task.findFirst({ where: { id: input, orgId: ctx.principal.orgId } });
+  // Explicit targets make a repeated Complete/Reopen request stable. Keep bare
+  // IDs for older clients; only that legacy form still flips the current value.
+  toggle: internalProcedure.input(z.union([z.object({ id: z.string(), done: z.boolean() }), z.string()])).mutation(async ({ ctx, input }) => {
+    const id = typeof input === 'string' ? input : input.id;
+    const t = await ctx.prisma.task.findFirst({ where: { id, orgId: ctx.principal.orgId } });
     if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
-    return ctx.prisma.task.update({ where: { id: t.id }, data: { done: !t.done } });
+    return ctx.prisma.task.update({ where: { id: t.id }, data: { done: typeof input === 'string' ? !t.done : input.done } });
   }),
 
   /**

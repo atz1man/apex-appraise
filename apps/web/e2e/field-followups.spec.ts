@@ -127,11 +127,35 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(page.getByText(title, { exact: true })).not.toBeVisible();
     await page.getByRole('button', { name: 'Filter tasks for Field Observer', exact: true }).click();
     await expect(page.getByText(title, { exact: true })).toBeVisible();
+    // Commit the write and replace its response with a transport failure.
+    await page.route('**/trpc/tasks.toggle*', async route => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+    });
     await page.getByRole('button', { name: 'Complete task', exact: true }).click();
+    await expect.poll(async () => (await query('tasks.list', { dealId: deal.id }))[0].done).toBe(true);
+    await expect(page.getByRole('button', { name: 'Complete task', exact: true })).toBeEnabled();
+    await page.unroute('**/trpc/tasks.toggle*');
+    await page.getByRole('button', { name: 'Complete task', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
+    expect((await query('tasks.list', { dealId: deal.id }))[0].done).toBe(true);
     await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
     await page.goto(`/field?dealId=${deal.id}`);
     await expect(taskRow).toContainText('Completed');
+    // Commit the write and replace its response with a transport failure.
+    await page.route('**/trpc/tasks.toggle*', async route => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+    });
     await taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true }).click();
+    await expect.poll(async () => (await query('tasks.list', { dealId: deal.id }))[0].done).toBe(false);
+    await expect(taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true })).toBeEnabled();
+    await page.unroute('**/trpc/tasks.toggle*');
+    await taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true }).click();
+    await expect(taskRow.getByRole('button', { name: 'Complete follow-up', exact: true })).toBeVisible();
+    expect((await query('tasks.list', { dealId: deal.id }))[0].done).toBe(false);
     await expect(taskRow).toContainText('Open');
     await panel.screenshot({ path: test.info().outputPath('field-followups-mobile.png') });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
