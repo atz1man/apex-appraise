@@ -1479,8 +1479,8 @@ export default function DevelopmentAppraisal() {
                   right={<Button variant="secondary" size="sm" onClick={() => set({ otherCosts: [...input.otherCosts, { label: 'New cost', amount: 0 }] })}>+ Add cost</Button>}
                 >
                   {input.otherCosts.map((o, i) => (
-                    <div key={i} className="flex items-center gap-3 py-1.5 border-t border-border-faint first:border-t-0">
-                      <input className="flex-1" aria-label={`Cost ${i + 1} label`} value={o.label} onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                    <div key={i} className="flex flex-wrap items-center gap-3 py-3 [&_input]:min-h-11 [&_button]:min-h-11 sm:[&_input]:min-h-0 sm:[&_button]:min-h-0 border-t border-border-faint first:border-t-0">
+                      <input className="min-w-0 w-full sm:w-auto sm:flex-1" aria-label={`Cost ${i + 1} label`} value={o.label} onChange={(e) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                       <input
                         type="number"
                         className="w-32 text-right fig"
@@ -1493,7 +1493,7 @@ export default function DevelopmentAppraisal() {
                         buildMonths={R.period}
                         onChange={(timing) => set({ otherCosts: input.otherCosts.map((x, j) => (j === i ? { ...x, timing } : x)) })}
                       />
-                      <button aria-label={`Remove ${o.label}`} className="text-ink-3 hover:text-status-red px-1" onClick={() => set({ otherCosts: input.otherCosts.filter((_, j) => j !== i) })}>×</button>
+                      <button aria-label={`Remove ${o.label}`} className="text-ink-3 hover:text-status-red px-3 ml-auto" onClick={() => set({ otherCosts: input.otherCosts.filter((_, j) => j !== i) })}>×</button>
                     </div>
                   ))}
                   <div className="mt-2 text-[11px] text-ink-3 leading-snug">
