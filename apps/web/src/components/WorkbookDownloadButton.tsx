@@ -24,8 +24,8 @@ export function WorkbookDownloadButton({ options }: { options: ExportOpts }) {
       if (!controller.signal.aborted) setPending(false);
     }
   };
-  return <div className="hidden sm:block">
-    <Button variant="secondary" loading={pending} onClick={() => void download()}>
+  return <div className="min-w-0 max-w-full">
+    <Button variant="secondary" className="min-h-11 sm:min-h-0" loading={pending} onClick={() => void download()}>
       {pending ? 'Preparing Excel…' : 'Export .xlsx'}
     </Button>
     {error && <p role="alert" className="mt-2 max-w-xs text-[12px] text-status-red">Excel export failed. Your inputs are unchanged. Select Export .xlsx to try again.</p>}
