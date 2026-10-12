@@ -513,3 +513,27 @@ Complete request arriving after a separate Reopen can still win the later write.
 Legacy bare-ID callers also retain their prior retry risk. Offline command
 ordering and durable recovery remain separate work. Next: reviewed
 observation-to-appraisal proposals with explicit human-selected input changes.
+
+## Visible recovery for uncertain task status — 12 October 2026
+
+PR #65 passed exact-head CI and merged at
+`99e6ee84c1858ddf51f6b3b4daa10365514ec021`. Live remains `818ed258`.
+
+Calendar, development appraisal and cost-monitoring task status failures had no
+inline feedback; the field companion only advised refreshing. All four now show
+a shared alert with refresh, explicit retry and dismissal controls. Retry uses
+the failed mutation's original variables. It never derives the opposite of a
+newly refreshed checkbox, which would undo a successful write whose response was
+lost. Dismissal clears the warning without writing or claiming success.
+
+Both mobile journeys passed. The calendar Complete and field Reopen cases each
+commit the actual write and substitute a 503, assert the alert, refresh until the
+new saved state is visible, then retry through the recovery control and verify
+that the persisted target remains unchanged and the warning clears. 388 web
+checks, strict typechecking, build and bundle guards passed. No API or schema
+change; full exact-head CI evidence belongs to the PR.
+
+This completes the visible recovery path for the previous status-retry increment.
+It does not provide offline persistence, ordered conflicting commands or live
+release acceptance. Next: reviewed observation-to-appraisal proposals with
+explicit source context and human-selected input changes. No deployment.

@@ -136,8 +136,12 @@ test('saved field observations become reviewed project tasks and calendar comple
     await page.getByRole('button', { name: 'Complete task', exact: true }).click();
     await expect.poll(async () => (await query('tasks.list', { dealId: deal.id }))[0].done).toBe(true);
     await expect(page.getByRole('button', { name: 'Complete task', exact: true })).toBeEnabled();
+    await expect(page.getByRole('alert')).toContainText('task status change could not be confirmed');
     await page.unroute('**/trpc/tasks.toggle*');
-    await page.getByRole('button', { name: 'Complete task', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh task status', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry status change', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Retry status change', exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
     expect((await query('tasks.list', { dealId: deal.id }))[0].done).toBe(true);
     await expect(page.getByRole('button', { name: 'Reopen task', exact: true })).toBeVisible();
@@ -152,8 +156,12 @@ test('saved field observations become reviewed project tasks and calendar comple
     await taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true }).click();
     await expect.poll(async () => (await query('tasks.list', { dealId: deal.id }))[0].done).toBe(false);
     await expect(taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true })).toBeEnabled();
+    await expect(page.getByRole('alert')).toContainText('task status change could not be confirmed');
     await page.unroute('**/trpc/tasks.toggle*');
-    await taskRow.getByRole('button', { name: 'Reopen follow-up', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh task status', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Complete follow-up', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry status change', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Retry status change', exact: true })).not.toBeVisible();
     await expect(taskRow.getByRole('button', { name: 'Complete follow-up', exact: true })).toBeVisible();
     expect((await query('tasks.list', { dealId: deal.id }))[0].done).toBe(false);
     await expect(taskRow).toContainText('Open');
