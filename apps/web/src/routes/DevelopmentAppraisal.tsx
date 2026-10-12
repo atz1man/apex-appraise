@@ -241,8 +241,10 @@ export default function DevelopmentAppraisal() {
   useUnsavedWarning(dirty, 'this appraisal');
 
   useEffect(() => {
-    if (saved) setHeldVersion(saved.updatedAt);
     if (saved && !loaded) {
+      // The concurrency stamp belongs to the inputs actually loaded into this
+      // editor. A background refetch must not authorize our older local draft.
+      setHeldVersion(saved.updatedAt);
       setInput({ ...saved.input, jv: saved.input.jv ?? DEFAULT_INPUT.jv });
       setLoaded(true);
     }
