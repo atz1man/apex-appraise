@@ -537,3 +537,33 @@ This completes the visible recovery path for the previous status-retry increment
 It does not provide offline persistence, ordered conflicting commands or live
 release acceptance. Next: reviewed observation-to-appraisal proposals with
 explicit source context and human-selected input changes. No deployment.
+
+## Field evidence visible during appraisal — 12 October 2026
+
+PR #66 passed exact-head CI and was merged at `a0bea3e` before this increment.
+Live remains `818ed258`; this increment is not deployed.
+
+The development appraisal now has a project-scoped field-evidence review panel,
+linked directly from field follow-ups. It shows open/total follow-up counts,
+captured room notes and condition, the source save time, and whether the current
+inspection differs or cannot be checked. Completed follow-ups stay visible with
+an explicit reminder that their appraisal impact still needs review. Tasks with
+no captured source remain labelled as such. A link returns to the same project's
+field companion; refresh reads both tasks and the current inspection.
+
+Failed task reads report unknown review status and do not show an empty or zero
+result. An empty project explicitly does not imply a completed inspection. The
+panel is read-only: observations do not change financial inputs or acknowledge
+an appraisal. It states that this evidence is not yet pinned to an appraisal
+version, its source input acknowledgement or its report.
+
+Both real browser journeys passed, including field → appraisal → same field
+project, immutable captured notes after source changes, completed-task context,
+failed read/retry, a second project with no leaked evidence, and no appraisal
+created by reading. The mobile evidence card was visually inspected; no horizontal
+overflow. 388 web checks, strict typechecking, build and bundle guards passed.
+No API, schema or engine change. Exact-head CI evidence belongs to the PR.
+
+Next: explicit observation-to-input proposals and appraisal-version source
+pinning; the current panel supplies review context only. Professional acceptance,
+provider activation, offline recovery and the release gates remain outstanding.
