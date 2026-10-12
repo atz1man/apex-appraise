@@ -818,10 +818,13 @@ model Task {
   assignee String // display snapshot; legacy rows retain their original initials
   assigneeId String? // stable member identity; null means unresolved legacy assignment
   inspectionEvidence String? // immutable JSON snapshot captured by the server at task creation
+  createRequestId String? // optional client retry identity, scoped to the workspace
+  createRequest String? // original parsed request and actor; never rewritten by task edits
   due     DateTime?
   done    Boolean @default(false)
   createdAt DateTime @default(now())
 
+  @@unique([orgId, createRequestId])
   @@index([orgId, dealId, done])
 }
 

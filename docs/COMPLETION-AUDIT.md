@@ -443,3 +443,45 @@ Next: explicit reviewed observation-to-appraisal proposals, with source context,
 human-selected input changes and deterministic recalculation. Photo retention,
 general-task legacy reassignment, offline task submission, create idempotency
 and external launch acceptance remain separate work.
+
+## Safe field-follow-up creation retries — 12 October 2026
+
+PR #63 passed exact-head CI and was merged at
+`bb6d39c955a2a70e0339c600dcf957b0e60e45fa` before this increment. Live remains
+`818ed258`; this work does not deploy a release.
+
+A successful task write can lose its HTTP response. Previously a retry could
+create a second task, particularly before a refreshed list exposed the first.
+Field follow-ups now generate an optional request UUID at first submission and
+retain the exact submitted payload for explicit retries. Inputs stay fixed until
+confirmation or cancellation. A refreshed list containing that same submission
+no longer blocks its retry as a duplicate title.
+
+The server stores the parsed request and actor on the task, and a unique
+workspace/request constraint arbitrates simultaneous creates. Replays return
+the original task, including subsequent edits, without resetting its deadline or
+captured inspection evidence. Changed payloads or another actor using the same
+workspace identity are refused. Project ownership is checked before replay;
+separate workspaces can independently use the same UUID. Mutable source/member
+validation occurs only when there is no committed task to replay.
+
+Seven API regressions cover simultaneous requests, default deadline stability,
+changed evidence and task edits, changed payloads, workspace isolation, actor
+identity, refused requests and legacy callers. The focused API/evidence/edit/
+tenant/viewer/provenance run passed 47 tests. Both mobile journeys passed; the
+lost-response case actually commits via HTTP before substituting a 503, refreshes
+the task list and retries, asserting the same single task. 388 web checks,
+API/web typechecks, build and bundle guards passed. Exact-head CI belongs to the
+PR. The isolation sweep documents why a client retry UUID is not a foreign row
+identifier; dedicated tests prove its workspace scoping.
+
+This is retry protection for an existing task, not a permanent receipt ledger.
+Deleting the task deletes its retry record; cancelling, reloading or leaving the
+field editor discards its in-memory submission. Other task creation screens and
+legacy callers do not yet send retry identities. Offline durable submission and
+idempotent completion toggles remain separate work. No financial arithmetic,
+provider activation, live configuration or production deployment changed.
+
+Next: reviewed observation-to-appraisal proposals, keeping source context and
+explicit human-selected financial inputs; extend safe retries to other task
+entry points and offline recovery as separate bounded increments.
