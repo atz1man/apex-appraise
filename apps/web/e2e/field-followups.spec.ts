@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 test.use({ timezoneId: 'America/Los_Angeles' });
 
 test('saved field observations become reviewed project tasks and calendar completion returns to the field', async ({ page, request }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 390, height: 844 });
   const orgName = `Field follow-ups ${Date.now()}`;
   await page.goto('/register');
@@ -252,6 +253,49 @@ test('saved field observations become reviewed project tasks and calendar comple
     expect(fieldText).toContain('Completed at capture');
     expect(fieldText).not.toContain('New desk note after follow-up.');
     expect(fieldText).toContain('not approval');
+    await page.goto(`/deal/${deal.id}/report`);
+    const printedField = page.getByTestId('field-evidence-page');
+    await expect(printedField.first()).toContainText('Inspection basis');
+    const printedText = (await printedField.allTextContents()).join('');
+    expect(printedText).toContain('Desk-reviewed entrance crack.');
+    expect(printedText).toContain('Completed at capture');
+    expect(printedText).not.toContain('New desk note after follow-up.');
+    expect(printedText).toContain('not approval');
+    expect(await page.locator('.a4-page').evaluateAll(pages => pages.some(p => p.scrollHeight > p.clientHeight + 2))).toBe(false);
+    await printedField.first().screenshot({ path: test.info().outputPath('field-report-evidence.png') });
+    const pdfDownloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download PDF', exact: true }).click();
+    const pdfDownload = await pdfDownloadPromise;
+    await pdfDownload.saveAs(test.info().outputPath('field-evidence.pdf'));
+    const { readFile } = await import('node:fs/promises');
+    expect((await readFile((await pdfDownload.path())!)).subarray(0, 5).toString()).toBe('%PDF-');
+    // Exercise normalized API edge states without corrupting stored evidence.
+    let fieldState = 'long';
+    await page.route('**/trpc/**appraisal.getCurrent*', async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      for (const item of Array.isArray(body) ? body : [body]) {
+        const value = item.result?.data?.json;
+        if (value?.fieldSnapshot) {
+          if (fieldState === 'long') value.fieldSnapshot.tasks[0].inspectionEvidence.room.notes = 'Long field observation. '.repeat(400) + 'END FIELD OBSERVATION';
+          else { value.fieldSnapshot = null; value.fieldSnapshotState = fieldState; }
+        }
+      }
+      await route.fulfill({ response, json: body });
+    });
+    await page.reload();
+    await expect(printedField.nth(1)).toBeVisible();
+    expect((await printedField.allTextContents()).join('')).toContain('END FIELD OBSERVATION');
+    expect(await page.locator('.a4-page').evaluateAll(pages => pages.some(p => p.scrollHeight > p.clientHeight + 2))).toBe(false);
+    fieldState = 'unreadable';
+    await page.reload();
+    await expect(printedField.first()).toContainText('FIELD SNAPSHOT UNREADABLE');
+    await expect(printedField.first()).not.toContainText('Desk-reviewed entrance crack.');
+    fieldState = 'absent';
+    await page.reload();
+    await expect(page.getByTestId('source-evidence-page').first()).toBeVisible();
+    await expect(printedField).toHaveCount(0);
+    await page.unroute('**/trpc/**appraisal.getCurrent*');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/deal/${other.id}/appraisal`);
     await expect(evidence).toContainText('No field follow-ups are recorded for this project');

@@ -1,3 +1,4 @@
+import { fieldSnapshotLines } from '../lib/field-snapshot-export';
 import { sourceEvidenceLines, sourceEvidencePages } from '../lib/source-evidence';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -629,7 +630,10 @@ export default function AppraisalReport() {
   const monitoringPageNo = assumptionsPageNo + 1;
   const evidenceStartPage = (monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo) + 1;
   const evidencePages = sourceEvidencePages(sourceEvidenceLines(appr.sourceReview, appr.sourceReviewState));
-  const pageTotal = evidenceStartPage + evidencePages.length - 1;
+  const fieldPages = appr.fieldSnapshot || appr.fieldSnapshotState === 'unreadable'
+    ? sourceEvidencePages(fieldSnapshotLines(appr.fieldSnapshot, appr.fieldSnapshotState, { id: appr.id, label: appr.label }), 'Field evidence') : [];
+  const fieldStartPage = evidenceStartPage + evidencePages.length;
+  const pageTotal = fieldStartPage + fieldPages.length - 1;
 
   /**
    * The phasing table, wherever it lands. `first` prints the heading (a
@@ -1473,6 +1477,16 @@ export default function AppraisalReport() {
               {lines.map((line, i) => <div key={i} style={{ minHeight: 18, fontWeight: /^(SOURCE REGISTER|INPUT REFERENCES|REPORTED OMISSIONS|SOURCE WARNING|INPUTS CHANGED|WORKED EXAMPLE)/.test(line) ? 700 : 400 }}>{line || ' '}</div>)}
             </div>
             <PageFoot no={evidenceStartPage + index} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
+          </A4Page>
+        ))}
+
+        {fieldPages.map((lines, index) => (
+          <A4Page key={`field-evidence-${index}`}>
+            <PageHead title={`Historical field context${index ? ' (continued)' : ''}`} scheme={scheme} />
+            <div data-testid="field-evidence-page" style={{ marginTop: 18, fontFamily: 'monospace', fontSize: 11, lineHeight: '18px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+              {lines.map((line, i) => <div key={i} style={{ minHeight: 18 }}>{line || ' '}</div>)}
+            </div>
+            <PageFoot no={fieldStartPage + index} total={pageTotal} refCode={refCode} firmName={firmName} date={dates.report} />
           </A4Page>
         ))}
 

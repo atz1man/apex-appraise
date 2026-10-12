@@ -50,4 +50,13 @@ describe('portable source evidence', () => {
     expect(wrapEvidence(lines)).toEqual(lines);
   });
 
+  it('directs capped field evidence to the correct complete workbook sheet', () => {
+    const pages = sourceEvidencePages(Array.from({ length: 1000 }, (_, i) => `Field note ${i}`), 'Field evidence');
+    expect(pages).toHaveLength(12);
+    expect(pages.flat()[0]).toContain('Excel Field evidence sheet');
+    expect(pages.flat().at(-1)).toContain('complete Field evidence sheet');
+    expect(pages.flat()).toContain('500 additional evidence lines are not printed in this PDF.');
+    expect(pages.flat().join('')).not.toContain('Source evidence sheet');
+  });
+
 });

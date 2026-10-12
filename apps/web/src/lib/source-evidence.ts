@@ -52,7 +52,7 @@ export function wrapEvidence(lines: string[], width = 90): string[] {
     return result;
   });
 }
-export function sourceEvidencePages(lines: string[]): string[][] {
+export function sourceEvidencePages(lines: string[], sheetName: 'Source evidence' | 'Field evidence' = 'Source evidence'): string[][] {
   let wrapped = wrapEvidence(lines);
   // Bound the shared PDF renderer, while making omitted print content explicit.
   // The workbook uses wrapEvidence directly and retains the complete record.
@@ -60,9 +60,9 @@ export function sourceEvidencePages(lines: string[]): string[][] {
   if (wrapped.length > capacity) {
     const retained = capacity - 4;
     const omitted = wrapped.length - retained;
-    wrapped = ['EVIDENCE PRINT LIMIT: full text is in the Excel Source evidence sheet.',
+    wrapped = [`EVIDENCE PRINT LIMIT: full text is in the Excel ${sheetName} sheet.`,
       ...wrapped.slice(0, retained), '', `${omitted} additional evidence lines are not printed in this PDF.`,
-      'Read the complete Source evidence sheet in the Excel workbook.'];
+      `Read the complete ${sheetName} sheet in the Excel workbook.`];
   }
   const pages: string[][] = [];
   for (let i = 0; i < wrapped.length; i += 42) pages.push(wrapped.slice(i, i + 42));
