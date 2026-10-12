@@ -770,3 +770,30 @@ API/web typechecks, build and bundle guards passed. Exact-head CI is on the PR.
 Next: explicit observation-to-input proposals and deliberate report inclusion.
 Version snapshots are now captured; professional acceptance, provider activation
 and production release evidence remain separate requirements.
+
+## Historical field evidence in Excel — 12 October 2026
+
+PR #74 passed exact-head CI 38242816962 and merged at `356c5a5`. This increment
+carries its immutable field snapshot into a dedicated Excel Field evidence sheet:
+appraisal identity, capturing member/time, task identity/status at capture, and
+inspection identity/source date/room/observation. Later live task edits do not
+rewrite exported historical evidence. Unknown and unreadable reads are explicit;
+unsaved inputs carry a warning. Missing snapshots do not imply no observations.
+Zero condition remains “not rated”. Text is wrapped without truncation and stays
+literal spreadsheet content. Photos and PDF field evidence are still excluded;
+this is not professional acceptance or input approval. No finance/API/schema change.
+
+The workbook module now loads on export: the bundle guard caught page growth and
+the lazy boundary reduced the appraisal route closure to 114K without raising its
+baseline. Local workbook tests cover actual serialized Excel bytes, long Unicode
+notes, formula-like text, capture metadata, unknown/unreadable/absent states and
+dirty inputs. Browser tests download the real workbook after changing the live
+follow-up and verify the older captured observation/status survives; failed editor
+refresh exports unverified field evidence. Full local web suite: 390 tests; six
+focused browser journeys, typecheck, build and bundle guard. Exact-head CI is
+recorded on the PR. Live remains `456dea9`; this increment is not deployed.
+
+Next: deliberate PDF field-evidence inclusion and explicit observation-to-input
+proposals. Provider activation, professional acceptance and production recovery
+proof remain external release requirements. The CLAUDE.md memory loop-log path
+was absent; this repository audit remains the available delivery record.
