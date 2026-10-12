@@ -470,6 +470,17 @@ export default function DevelopmentAppraisal() {
         <TopBar crumb="Development appraisal" />
         <DealNav dealId={dealId} active="appraisal" />
         <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        <div className="mt-4 flex justify-end">
+            <WorkbookDownloadButton key={dealId} options={{
+              fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
+              fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
+              appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
+              evidence: sourceReviewUnverified ? undefined : saved?.sourceReview,
+              evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState,
+              unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '',
+              firm, input, R, jv, monthLabel, units: U,
+            }} />
+        </div>
           {/* metrics-rail skeleton */}
           <div className="mt-5 flex gap-3 flex-wrap">
             {Array.from({ length: 7 }, (_, i) => (
@@ -521,15 +532,7 @@ export default function DevelopmentAppraisal() {
             <Button variant="secondary" onClick={() => setVersionsOpen(true)}>
               Versions{versions && versions.length > 1 ? ` · ${versions.length}` : ''}
             </Button>
-            <WorkbookDownloadButton key={dealId} options={{
-              fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
-              fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
-              appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
-              evidence: sourceReviewUnverified ? undefined : saved?.sourceReview,
-              evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState,
-              unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '',
-              firm, input, R, jv, monthLabel, units: U,
-            }} />
+
             <Button
               writes
               onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
@@ -544,6 +547,17 @@ export default function DevelopmentAppraisal() {
 
       <DealNav dealId={dealId} active="appraisal" />
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
+        <div className="mt-4 flex justify-end">
+            <WorkbookDownloadButton key={dealId} options={{
+              fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
+              fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
+              appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
+              evidence: sourceReviewUnverified ? undefined : saved?.sourceReview,
+              evidenceState: sourceReviewUnverified ? 'unverified' : saved?.sourceReviewState,
+              unsavedInputs: dirty, dealName: deal?.name ?? 'Appraisal', address: deal?.address ?? '',
+              firm, input, R, jv, monthLabel, units: U,
+            }} />
+        </div>
         {/* metrics rail */}
         <div className="mt-5 flex gap-3 flex-wrap">
           <StatCard label="Project IRR" value={cash.projIrr == null ? 'N/A' : formatPct(cash.projIrr)} tone="rgb(var(--brand-ink, 20 80 59))" />

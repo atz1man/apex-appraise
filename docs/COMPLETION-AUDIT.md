@@ -842,3 +842,23 @@ recorded on the PR. No deployment; live remains `456dea9`.
 Next remains explicit observation-to-input proposals with review before financial
 changes. External professional acceptance, provider activation and production
 recovery evidence are not implied by these checks.
+
+## Phone-accessible evidence exports — 12 October 2026
+
+PR #77 passed exact-head CI 38260864586 and merged at `40250ea`. The workbook
+control was still hidden below tablet width, excluding field users from the
+completed evidence-export workflow. It is now available at phone widths with a
+44px touch target, placed in the appraisal content area so the action and retry
+message have room. Simply revealing it in the header reproduced an overlapping
+Saved button that intercepted taps; the final layout removes that obstruction.
+
+The real 390px field journey now injects a download failure, sees readable recovery,
+checks no page overflow and downloads the evidence workbook on retry without
+switching to desktop. Capture identity/content/status assertions remain intact.
+Six editor/field browser journeys and 393 web tests passed; typecheck, production
+build and bundle guard passed. The mobile recovery screenshot was visually checked.
+Exact-head CI is recorded on the PR. No finance/API/schema changes and no deployment;
+live remains `456dea9`.
+
+Next: reviewed observation-to-input proposals. Professional acceptance, activated
+providers and production recovery remain external release evidence requirements.

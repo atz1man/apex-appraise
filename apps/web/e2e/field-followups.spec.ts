@@ -238,7 +238,17 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(snapshot).not.toContainText('New desk note after follow-up.');
     await snapshot.screenshot({ path: test.info().outputPath('version-field-snapshot-mobile.png') });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.setViewportSize({ width: 1280, height: 900 });
+    const mobileExport = page.getByRole('button', { name: 'Export .xlsx', exact: true });
+    await expect(mobileExport).toBeVisible();
+    expect((await mobileExport.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.evaluate(() => {
+      const original = URL.createObjectURL;
+      URL.createObjectURL = function () { URL.createObjectURL = original; throw new Error('Mobile download failure'); };
+    });
+    await mobileExport.click();
+    await expect(page.getByRole('alert')).toContainText('Excel export failed');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath('mobile-export-recovery.png') });
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export .xlsx', exact: true }).click();
     const download = await downloadPromise;
@@ -253,6 +263,8 @@ test('saved field observations become reviewed project tasks and calendar comple
     expect(fieldText).toContain('Completed at capture');
     expect(fieldText).not.toContain('New desk note after follow-up.');
     expect(fieldText).toContain('not approval');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/deal/${deal.id}/report`);
     const printedField = page.getByTestId('field-evidence-page');
     await expect(printedField.first()).toContainText('Inspection basis');
