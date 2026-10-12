@@ -14,7 +14,7 @@ export function AppraisalFieldEvidence({ dealId }: { dealId: string }) {
         {tasks.data.map(task => <li key={task.id} className="rounded-lg bg-sunken p-3">
           <p className="font-semibold break-words">{task.title}</p>
           <p className="mt-1">{task.done ? 'Follow-up completed — appraisal impact still requires review.' : 'Open follow-up — consider whether it affects this appraisal.'}</p>
-          {task.inspectionEvidence ? <>
+          {task.inspectionEvidenceState === 'unreadable' ? <p className="mt-2 text-ink-2">The captured inspection evidence could not be read. Verify the source before relying on this follow-up.</p> : task.inspectionEvidence ? <>
             <p className="mt-2 break-words">{task.inspectionEvidence.room.name} · {task.inspectionEvidence.room.condition ? `condition ${task.inspectionEvidence.room.condition}/5` : 'not rated'}</p>
             <p className="mt-1 whitespace-pre-wrap break-words">{task.inspectionEvidence.room.notes || 'No note recorded.'}</p>
             <p className="mt-1 text-ink-2">Captured from the inspection saved {new Date(task.inspectionEvidence.sourceUpdatedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Photos are not included.</p>
