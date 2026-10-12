@@ -567,3 +567,33 @@ No API, schema or engine change. Exact-head CI evidence belongs to the PR.
 Next: explicit observation-to-input proposals and appraisal-version source
 pinning; the current panel supplies review context only. Professional acceptance,
 provider activation, offline recovery and the release gates remain outstanding.
+
+## Appraisal editor snapshot integrity — 12 October 2026
+
+PR #67 passed exact-head CI and merged at `139c54b` before this increment.
+Live remains `818ed258`; no release is deployed here.
+
+Tracing field evidence into appraisal edits exposed a higher-priority data-loss
+risk: every background getCurrent refresh advanced the editor's expectedUpdatedAt
+without loading the corresponding inputs. An older local draft could therefore
+pass the server concurrency check and overwrite a colleague's newer appraisal.
+The editor now takes the query stamp only when it hydrates those inputs. Its own
+successful save/new-version responses still advance the stamp directly.
+
+A real browser regression creates a fresh workspace/appraisal, loads a local
+draft, writes different labels and unit counts through another API caller, then
+triggers an actual stale-query focus refresh. The old behavior returned HTTP 200
+for the stale save. The fix returns 409, preserves the colleague's stored values
+and retains the local draft. Explicit reload loads the current snapshot and two
+successive saves succeed. Reintroducing the original stamp update makes the
+same final regression fail (expected 409, received 200); the fix was restored.
+
+The new journey and both field journeys passed locally. 388 web checks,
+strict typechecking, build and bundle guards passed. Exact-head CI belongs to
+the PR. No engine, API or schema change; this restores the protection already
+provided by the server rather than adding a second calculation path.
+
+Next: explicit observation-to-input proposals and version-pinned field evidence.
+Version-restore hydration and edits made during an in-flight save merit separate
+review; this increment proves background-refetch snapshot integrity, not every
+possible editor race. Professional and production release gates remain open.
