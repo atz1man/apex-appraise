@@ -1041,7 +1041,7 @@ export const appraisalRouter = router({
         target: version.label,
       },
     });
-    return { id: restored.id };
+    return { id: restored.id, updatedAt: restored.updatedAt, input: appraisalRowToEngineInput(restored) };
   }),
 
   sensitivity: internalProcedure
