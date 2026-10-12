@@ -187,3 +187,47 @@ test('restoring an appraisal loads the restored inputs instead of the cached cur
 
   } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
 });
+
+test('a failed initial appraisal read can be retried without exposing default inputs', async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const orgName = `Appraisal editor ${Date.now()}`;
+  await page.goto('/register');
+  await page.getByLabel('Organisation name').fill(orgName);
+  await page.getByLabel('Your name').fill('Appraisal Editor');
+  await page.getByLabel('Email', { exact: true }).fill(`editor-${Date.now()}@example.test`);
+  await page.getByLabel('Password', { exact: true }).fill('long-test-password');
+  await page.getByLabel('Confirm password').fill('long-test-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByText('Add your first deal')).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem('apex_token'));
+  const rpc = async (route: string, input: unknown) => {
+    const res = await request.post(`/trpc/${route}`, { headers: { authorization: `Bearer ${token}` }, data: superjson.serialize(input) });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  const current = async (dealId: string) => {
+    const res = await request.get('/trpc/appraisal.getCurrent', { headers: { authorization: `Bearer ${token}` }, params: { input: JSON.stringify({ json: dealId }) } });
+    expect(res.status(), await res.text()).toBe(200); return superjson.deserialize<any>((await res.json()).result.data);
+  };
+  try {
+    const deal = await rpc('deals.create', { name: 'Load recovery project', address: 'Synthetic site', assetType: 'RESIDENTIAL' });
+    await page.goto(`/deal/${deal.id}/appraisal`);
+    const label = page.getByLabel('Unit type 1 label', { exact: true });
+    await label.fill('Persisted appraisal unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    const before = await current(deal.id);
+    await page.route('**/trpc/**appraisal.getCurrent*', route => route.abort());
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Appraisal could not be loaded', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(label).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save appraisal', exact: true })).toHaveCount(0);
+    await page.unroute('**/trpc/**appraisal.getCurrent*');
+    await page.getByRole('button', { name: 'Retry loading appraisal', exact: true }).click();
+    await expect(label).toHaveValue('Persisted appraisal unit');
+    expect((await current(deal.id)).updatedAt).toEqual(before.updatedAt);
+    await label.fill('Recovered and reviewed unit');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    expect((await current(deal.id)).input.units[0].label).toBe('Recovered and reviewed unit');
+  } finally { await rpc('org.deleteWorkspace', { confirmName: orgName }); }
+});

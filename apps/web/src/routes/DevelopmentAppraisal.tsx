@@ -174,7 +174,7 @@ export default function DevelopmentAppraisal() {
    * engine computes the same thing wherever the firm is.
    */
   const U = useUnits();
-  const { data: saved, isLoading } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
+  const { data: saved, isLoading, isError, isFetching, refetch } = trpc.appraisal.getCurrent.useQuery(dealId, { enabled: !!dealId });
   /**
    * The version this page is holding.
    *
@@ -433,6 +433,22 @@ export default function DevelopmentAppraisal() {
     () => rollUpCashflow(cash.rows, period, { startYear: startY, startMonth: startM }),
     [cash.rows, period, startY, startM],
   );
+
+  if (isError && !loaded) {
+    return (
+      <div className="min-h-screen">
+        <TopBar crumb="Development appraisal" />
+        <DealNav dealId={dealId} active="appraisal" />
+        <main className="max-w-[1640px] mx-auto px-4 sm:px-6 py-8">
+          <section role="alert" className="rounded-card border border-border-std bg-surface p-5">
+            <h2 className="text-lg font-semibold">Appraisal could not be loaded</h2>
+            <p className="mt-2 text-sm text-ink-2">We could not check this project's saved appraisal. Retry to load your figures and continue editing.</p>
+            <Button className="mt-4" variant="secondary" loading={isFetching} onClick={() => { void refetch(); }}>Retry loading appraisal</Button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   if (isLoading || !loaded) {
     return (

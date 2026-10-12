@@ -655,3 +655,29 @@ results are recorded on the PR.
 Next: first-load typing/hydration and honest export source context when background
 reads fail; then version-linked field evidence. No schema changes or live writes.
 Professional acceptance, provider activation and production release gates remain.
+
+## Recover an initial appraisal read failure — 12 October 2026
+
+PR #70 passed exact-head CI 38226862324 and merged at `2668483` before this
+increment. Live remains `842c8d7`; no deployment is performed here.
+
+The editor already hides inputs until hydration completes. The evidenced gap was
+initial read failure: after retries were exhausted, loaded remained false and the
+loading skeleton stayed indefinitely. A global transient toast did not provide a
+local recovery action. The screen now announces that the appraisal could not be
+loaded and offers Retry loading appraisal. Inputs and save controls remain absent
+until a successful read hydrates the saved figures. Already-loaded dirty drafts
+are unaffected by this initial-load-only branch.
+
+The browser regression blocks the actual batched appraisal request, verifies the
+failure state without editable defaults, restores network access, retries, checks
+that the persisted timestamp did not change, and successfully saves a later edit.
+It failed against the original implementation. All three editor browser journeys,
+388 web checks, strict typecheck, build and bundle guards passed locally. A local
+run immediately after swapping the implementation for red/green verification
+failed the existing draft test; a stable rerun passed all three. Full exact-head
+CI evidence is recorded on the PR. No API, schema or engine changes.
+
+Next: export source context after failed background refreshes, then version-linked
+field evidence. These checks do not establish professional acceptance or activate
+external data/AI providers.
