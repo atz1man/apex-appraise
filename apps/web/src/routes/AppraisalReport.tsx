@@ -290,7 +290,7 @@ export default function AppraisalReport() {
    * with its own name on it.
    */
 
-  const firmName = org?.name ?? 'Apex Appraise';
+  const firmName = org?.name ?? 'PlotMerit';
   const refCode = `AP-${dealId.slice(0, 4).toUpperCase()}`;
   const dates = reportDates({ appraisal: appr, terms: toe });
   const scheme = deal?.name ?? 'Development appraisal';
@@ -696,7 +696,7 @@ export default function AppraisalReport() {
             <div className="absolute rounded-full" style={{ top: -60, right: -60, width: 280, height: 280, background: 'rgba(127,227,180,0.08)' }} />
             <div className="relative flex items-center gap-3">
               <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
-              <span className="text-[19px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
+              <span className="text-[19px] font-bold tracking-[-0.3px]">{org?.name ?? 'PlotMerit'}</span>
             </div>
             <div className="relative mt-20 fig text-[13px] font-medium uppercase" style={{ letterSpacing: '2.5px', color: accent.muted2 }}>
               Development appraisal &amp; investment summary
@@ -763,7 +763,7 @@ export default function AppraisalReport() {
           </div>
           <div className="flex justify-between text-[11px] text-ink-3 border-t border-border-std" style={{ padding: '22px 60px' }}>
             <span>Strictly private &amp; confidential</span>
-            <span>{org?.name ?? 'Apex Appraise'} · {dates.report}</span>
+            <span>{org?.name ?? 'PlotMerit'} · {dates.report}</span>
           </div>
         </A4Page>
 
@@ -1413,7 +1413,7 @@ export default function AppraisalReport() {
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />
               <div className="text-[12px] font-medium">{preparedBy ?? 'Not named'}</div>
-              <div className="text-[11px] text-ink-3">For and on behalf of {org?.name ?? 'Apex Appraise'}</div>
+              <div className="text-[11px] text-ink-3">For and on behalf of {org?.name ?? 'PlotMerit'}</div>
             </div>
             <div className="flex-1">
               <div className="h-px mb-2" style={{ background: neutral.crumb }} />

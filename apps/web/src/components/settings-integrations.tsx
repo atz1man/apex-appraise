@@ -7,7 +7,7 @@ import { featureName, featurePlanName, usePlanFeatures } from '../lib/plan';
 import { codeCount, recoveryStatus } from '../lib/sso-recovery';
 
 /**
- * The three surfaces that make Apex something other systems talk to: API keys,
+ * The three surfaces that make PlotMerit something other systems talk to: API keys,
  * Xero and single sign-on.
  *
  * A shared idea runs through all of them. Each has a SERVER-side prerequisite the
@@ -441,7 +441,7 @@ export function XeroPanel({ isAdmin }: { isAdmin: boolean }) {
     >
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         Pulls supplier bills into cost monitoring, so drawdown, covenants and the funding pack rest on your ledger rather
-        than on figures somebody typed. Read-only — Apex never writes to your accounts.
+        than on figures somebody typed. Read-only — PlotMerit never writes to your accounts.
       </div>
 
       {!status?.configured && (
@@ -943,7 +943,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
     >
       <div className="text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
         Reads the statement of your development account, so the funding pack can show what actually left the account and
-        what the lender actually advanced — rather than inferring both from supplier invoices. Read-only: Apex cannot move
+        what the lender actually advanced — rather than inferring both from supplier invoices. Read-only: PlotMerit cannot move
         money.
       </div>
 
@@ -1023,7 +1023,7 @@ export function BankPanel({ isAdmin }: { isAdmin: boolean }) {
             <div className="mt-4 border-t border-border-std pt-3" data-unclassified>
               <div className="text-[12px] font-semibold">Money in — what is it?</div>
               <div className="mt-1 text-[11.5px] text-ink-2">
-                A credit could be the facility, an equity injection or a sale receipt. Apex does not guess: only what you
+                A credit could be the facility, an equity injection or a sale receipt. PlotMerit does not guess: only what you
                 classify as a drawdown counts as drawn in the funding pack.
               </div>
               <div className="mt-2 flex flex-col gap-1.5">

@@ -23,7 +23,7 @@ import { appraisalShape, quickShape, zDcf, zIncome } from './schemas.js';
 import { NO_WORKSPACE, WorkspaceError, apiGet, workspaceFromEnv, type WorkspaceConfig } from './workspace-client.js';
 
 /**
- * Apex Appraise over MCP: the deterministic engine, as tools.
+ * PlotMerit over MCP: the deterministic engine, as tools.
  *
  * The product's first non-negotiable is that the LLM never computes a financial
  * figure — it extracts inputs, and the engine computes. Handing an assistant an
@@ -44,7 +44,7 @@ import { NO_WORKSPACE, WorkspaceError, apiGet, workspaceFromEnv, type WorkspaceC
  * every route they call is a GET.
  */
 
-const INSTRUCTIONS = `Apex Appraise — UK property development appraisal, over the same deterministic engine
+const INSTRUCTIONS = `PlotMerit — UK property development appraisal, over the same deterministic engine
 that produces the figures on a signed valuation.
 
 DO NOT COMPUTE FINANCIAL FIGURES YOURSELF. Do not multiply areas by rates, sum a cost plan,
@@ -150,7 +150,7 @@ export function createServer(deps: ServerDeps = { workspace: workspaceFromEnv() 
     {
       title: 'Appraise a development scheme',
       description:
-        'The full residual appraisal, from the same function every screen and report in Apex Appraise calls. Give it ' +
+        'The full residual appraisal, from the same function every screen and report in PlotMerit calls. Give it ' +
         'the accommodation, the cost plan, the finance and the disposal assumptions and it returns GDV, total cost, ' +
         'the residual land value (or the profit, if the land price is fixed), returns, peak debt and the monthly ' +
         'cashflow. Use `site.mode: "residual"` to solve what the site is worth at a target profit, or "profit" to ' +

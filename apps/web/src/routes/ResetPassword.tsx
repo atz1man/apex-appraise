@@ -32,7 +32,7 @@ export default function ResetPassword() {
         <div className="flex items-center gap-3 justify-center mb-7">
           <BrandMark size={36} />
           <span className="text-[22px] font-bold text-white tracking-[-0.5px]">
-            Apex <span className="text-accent-300">Appraise</span>
+            Plot<span className="text-accent-300">Merit</span>
           </span>
         </div>
         <div className="bg-surface rounded-panel shadow-dark-card p-5 sm:p-6">

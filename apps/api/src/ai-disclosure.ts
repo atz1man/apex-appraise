@@ -70,7 +70,7 @@ export const AI_TOUCHPOINTS: AiTouchpoint[] = [
 
 /** The standing statement — true of every Apex valuation, AI used or not. */
 export const AI_STANDING_STATEMENT =
-  'No artificial intelligence system computed, adjusted or approved any figure in this valuation. All monetary outputs are produced by the deterministic Apex Appraise engine from inputs accepted by the valuer, who retains full professional responsibility for the valuation and its conclusions.';
+  'No artificial intelligence system computed, adjusted or approved any figure in this valuation. All monetary outputs are produced by the deterministic PlotMerit engine from inputs accepted by the valuer, who retains full professional responsibility for the valuation and its conclusions.';
 
 export const AI_NONE_STATEMENT =
   'No artificial intelligence was used in the preparation of this valuation.';

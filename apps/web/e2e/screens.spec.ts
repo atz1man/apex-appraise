@@ -644,6 +644,13 @@ test('buyer portal signs a document (persisted)', async ({ page }) => {
 test('public surface: SEO meta, share image, robots and branded 404', async ({ page }) => {
   await page.goto('/welcome');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /development appraisals/i);
+  await expect(page).toHaveTitle(/PlotMerit/);
+  await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute('content', 'PlotMerit');
+  const manifest = await (await page.request.get('/manifest.webmanifest')).json();
+  expect(manifest.name).toBe('PlotMerit');
+  expect(manifest.short_name).toBe('PlotMerit');
+  await expect(page.getByText('© 2026 PlotMerit', { exact: true })).toBeVisible();
+  await expect(page.getByText('PlotMerit Ltd', { exact: true })).toHaveCount(0);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', '/og.png');
   const og = await page.request.get('/og.png');
   expect(og.status()).toBe(200);
@@ -653,7 +660,7 @@ test('public surface: SEO meta, share image, robots and branded 404', async ({ p
   // branded 404 for signed-out visitors — no silent redirect
   await page.goto('/this-page-does-not-exist');
   await expect(page.getByText('404')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Apex Appraise home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'PlotMerit home' })).toBeVisible();
 });
 
 test('landing product tour opens, steps through slides and closes', async ({ page }) => {
@@ -1154,7 +1161,7 @@ test('firm policy sets the AI note and the terms house style', async ({ page }) 
   await expect(page.getByLabel('Purpose of the valuation')).toHaveValue('Internal investment appraisal, as instructed.');
   await expect(page.getByLabel('Basis of fees')).toHaveValue('A fixed fee of £4,750 plus VAT, payable on delivery.');
   await expect(page.getByLabel('Registration')).toHaveValue('MRICS · RICS Registered Valuer no. 1148207');
-  // …while a field left blank still gets Apex's own wording
+  // …while a field left blank still gets PlotMerit's own wording
   await expect(page.getByLabel('Other intended users')).toContainText('addressee client only');
 
   // and the report carries the note after the standing statement, not instead of it
@@ -1171,7 +1178,7 @@ test('firm policy sets the AI note and the terms house style', async ({ page }) 
 
 /**
  * Firm logo — client-facing documents carry the firm's mark and name, not the
- * product's. The app chrome stays Apex.
+ * product's. The app chrome stays PlotMerit.
  */
 test('firm logo brands the client-facing documents', async ({ page, request }) => {
   await page.goto('/login');
@@ -1314,9 +1321,9 @@ test('firm branding reaches the workbook and the portals', async ({ page, reques
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Harbour Reach').first()).toBeVisible();
   await expect(page.getByAltText(/logo/i).first()).toBeVisible();
-  await expect(page.getByText('Apex Appraise')).toHaveCount(0);
+  await expect(page.getByText('PlotMerit')).toHaveCount(0);
 
-  // an investor sees the firm's name in the lockup where an internal user sees Apex
+  // an investor sees the firm's name in the lockup where an internal user sees PlotMerit
   await page.goto('/login');
   await page.evaluate(() => localStorage.clear());
   await page.goto('/login');
@@ -1325,7 +1332,7 @@ test('firm branding reaches the workbook and the portals', async ({ page, reques
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByText('Investor portal').first()).toBeVisible();
   await expect(page.getByText('Brookfield Developments').first()).toBeVisible();
-  await expect(page.getByText('Apex Appraise')).toHaveCount(0);
+  await expect(page.getByText('PlotMerit')).toHaveCount(0);
 });
 
 /**
@@ -2731,7 +2738,7 @@ test('settings offers API keys, Xero and SSO, and is honest about what is missin
   await expect(page.getByText(/Open banking is not configured on this server/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Connect a bank account' })).toHaveCount(0);
   // read-only is a promise worth making on the screen, not only in the scopes
-  await expect(page.getByText(/Read-only: Apex cannot move money/)).toBeVisible();
+  await expect(page.getByText(/Read-only: PlotMerit cannot move money/)).toBeVisible();
 
   // SSO: nothing can be saved until the fields that make it work are present
   await expect(page.getByRole('button', { name: 'Save' }).last()).toBeDisabled();

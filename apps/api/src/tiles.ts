@@ -44,7 +44,7 @@ export const TILE_ATTRIBUTION =
  * configurable and the default names the repository rather than inventing an
  * address nobody reads.
  */
-const TILE_USER_AGENT = process.env.TILE_USER_AGENT || 'ApexAppraise/0.1 (+https://github.com/atz1man/apex-appraise)';
+const TILE_USER_AGENT = process.env.TILE_USER_AGENT || 'PlotMerit/0.1 (+https://github.com/atz1man/apex-appraise)';
 
 const MAX_ZOOM = 19;
 

@@ -224,7 +224,7 @@ export const orgRouter = router({
       select: { name: true, logoUrl: true, ricsFirmNumber: true },
     });
     return {
-      name: org?.name ?? 'Apex Appraise',
+      name: org?.name ?? 'PlotMerit',
       logoUrl: signFileUrl(org?.logoUrl, ctx.principal.userId),
       ricsFirmNumber: org?.ricsFirmNumber ?? '',
     };

@@ -22,14 +22,14 @@ export default function NotFound() {
             </>
           ) : (
             <>
-              <Button to="/welcome">Apex Appraise home</Button>
+              <Button to="/welcome">PlotMerit home</Button>
               <Button to="/login" variant="secondary">Sign in</Button>
             </>
           )}
         </div>
         <div className="mt-8">
           <Link to="/welcome" className="font-mono text-[11px] tracking-[1px] uppercase text-ink-3 hover:text-ink">
-            apexappraise.co.uk
+            Property appraisal & development intelligence
           </Link>
         </div>
       </div>

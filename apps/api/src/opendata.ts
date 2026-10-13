@@ -324,7 +324,7 @@ export async function fetchAmenities(lat: number, lng: number): Promise<Amenity[
   try {
     const res = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'ApexAppraise/1.0 (site pack)' },
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'PlotMerit/1.0 (site pack)' },
       body: new URLSearchParams({ data: q }),
       signal: ctrl.signal,
     });

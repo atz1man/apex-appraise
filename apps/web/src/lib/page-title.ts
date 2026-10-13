@@ -18,7 +18,7 @@
  * somebody notices its tab is wrong.
  */
 
-const PRODUCT = 'Apex Appraise';
+const PRODUCT = 'PlotMerit';
 
 /**
  * The screens a CLIENT reads, which carry no product suffix.

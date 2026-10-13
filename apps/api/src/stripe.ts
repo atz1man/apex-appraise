@@ -60,7 +60,7 @@ export async function ensurePrice(plan: PlanDef): Promise<string> {
     return price.id;
   }
   const product = await stripeFetch<{ id: string }>('/products', {
-    name: `Apex Appraise ${plan.name}`,
+    name: `PlotMerit ${plan.name}`,
     description: plan.blurb,
   }, 'POST', `apex-product-${lookupKey}`);
   const created = await stripeFetch<{ id: string }>('/prices', {

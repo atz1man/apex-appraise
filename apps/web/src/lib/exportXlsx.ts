@@ -34,7 +34,7 @@ export interface ExportOpts {
   unsavedInputs?: boolean;
   dealName: string;
   address: string;
-  /** whose workbook this is — falls back to Apex when a firm has no branding */
+  /** whose workbook this is — falls back to PlotMerit when a firm has no branding */
   firm?: { name: string; logoUrl?: string | null };
   input: AppraisalInput;
   R: AppraisalResult;
@@ -99,7 +99,7 @@ type Ws = ExcelJSNS.Worksheet;
 
 const thin = { style: 'thin' as const, color: { argb: BORDER } };
 
-function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string, span: number, firmName = 'Apex Appraise') {
+function titleBlock(ws: Ws, dealName: string, address: string, subtitle: string, span: number, firmName = 'PlotMerit') {
   ws.mergeCells(1, 1, 1, span);
   const t = ws.getCell(1, 1);
   t.value = dealName;
@@ -207,7 +207,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   const AU_ = U.unit as AreaUnit;
   const cellArea = (sqft: number) => areaIn(sqft, AU_);
   const cellRate = (perSqft: number) => ratePerAreaIn(perSqft, AU_);
-  const firmName = opts.firm?.name ?? 'Apex Appraise';
+  const firmName = opts.firm?.name ?? 'PlotMerit';
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = firmName;

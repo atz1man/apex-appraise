@@ -243,7 +243,7 @@ export default function RedBookReport() {
   };
   const pageTotal = pageNo.declaration;
 
-  const firmName = org?.name ?? 'Apex Appraise';
+  const firmName = org?.name ?? 'PlotMerit';
   /**
    * The firm's RICS Regulated Firm number, or empty. "RICS Regulated" was a
    * literal on the cover and on the signature seal, printed for every firm on
@@ -507,7 +507,7 @@ export default function RedBookReport() {
             <div className="absolute rounded-full" style={{ bottom: -90, left: -40, width: 200, height: 200, background: 'rgba(255,255,255,0.05)' }} />
             <div className="relative flex items-center gap-3">
               <FirmMark logoUrl={org?.logoUrl} size={38} alt={`${org?.name ?? 'Firm'} logo`} />
-              <span className="text-[20px] font-bold tracking-[-0.3px]">{org?.name ?? 'Apex Appraise'}</span>
+              <span className="text-[20px] font-bold tracking-[-0.3px]">{org?.name ?? 'PlotMerit'}</span>
               {ricsFirmNumber ? (
                 <span className="ml-auto fig text-[11px] font-medium uppercase" style={{ letterSpacing: '1px', color: 'rgba(255,255,255,0.7)' }}>
                   RICS Regulated · {ricsFirmNumber}

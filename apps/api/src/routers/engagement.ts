@@ -149,7 +149,7 @@ export const engagementRouter = router({
     if (row)
       return {
         saved: true,
-        ...shape(row, org?.name ?? 'Apex Appraise'),
+        ...shape(row, org?.name ?? 'PlotMerit'),
         orgLogoUrl: org?.logoUrl ?? '',
         orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
         signTokenExpiresAt: row.signTokenExpiresAt,
@@ -159,7 +159,7 @@ export const engagementRouter = router({
       saved: false,
       id: null,
       dealId: input,
-      ...draftFor(deal, org?.name ?? 'Apex Appraise', { name: ctx.principal.name }, policy),
+      ...draftFor(deal, org?.name ?? 'PlotMerit', { name: ctx.principal.name }, policy),
       orgLogoUrl: org?.logoUrl ?? '',
         orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       issuedAt: null,
@@ -395,7 +395,7 @@ export const engagementRouter = router({
     ]);
     const { id: _id, orgId: _o, dealId: _d, signToken: _t, signedIp: _ip, signedUserAgent: _ua, ...terms } = row;
     return {
-      ...shape(terms, org?.name ?? 'Apex Appraise'),
+      ...shape(terms, org?.name ?? 'PlotMerit'),
       orgLogoUrl: org?.logoUrl ?? '',
         orgRicsFirmNumber: org?.ricsFirmNumber ?? '',
       dealName: deal?.name ?? 'the property',

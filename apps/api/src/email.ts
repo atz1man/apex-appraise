@@ -23,7 +23,7 @@ function getTransporter(): Transporter | null {
  * address went out with an empty From header, and this default, which reads
  * like the safety net, could never fire where it was needed.
  */
-const FROM = () => process.env.EMAIL_FROM || 'Apex Appraise <no-reply@apexappraise.co.uk>';
+const FROM = () => process.env.EMAIL_FROM || 'PlotMerit <no-reply@apexappraise.co.uk>';
 
 /**
  * Demo mailbox — the last few messages, in memory, on a demo instance only.
@@ -101,10 +101,10 @@ export async function sendMail(orgId: string, to: string, subject: string, text:
 
 export function inviteEmail(inviteeName: string, orgName: string, email: string, tempPassword: string, appUrl: string) {
   return {
-    subject: `You've been invited to ${orgName} on Apex Appraise`,
+    subject: `You've been invited to ${orgName} on PlotMerit`,
     text: `Hi ${inviteeName},
 
-You've been invited to join ${orgName} on Apex Appraise — one connected workfile for UK property development.
+You've been invited to join ${orgName} on PlotMerit — one connected workfile for UK property development.
 
 Sign in at ${appUrl}/login
 Email: ${email}
@@ -112,7 +112,7 @@ Temporary password: ${tempPassword}
 
 Please change your password straight away in Settings → Security.
 
-— Apex Appraise`,
+— PlotMerit`,
   };
 }
 
@@ -121,7 +121,7 @@ Please change your password straight away in Settings → Security.
  *
  * Deliberately not inviteEmail(): a portal login is not a colleague joining the
  * firm's workspace, and telling an LP they have been "invited to join Brookfield
- * Developments on Apex Appraise" invites a phone call. It says who is sharing,
+ * Developments on PlotMerit" invites a phone call. It says who is sharing,
  * what they will see, and nothing about the firm's own pipeline.
  */
 export function portalInviteEmail(
@@ -136,7 +136,7 @@ export function portalInviteEmail(
     subject: `${orgName} has shared ${what} with you`,
     text: `Hi ${name},
 
-${orgName} uses Apex Appraise, and has given you access to ${what}.
+${orgName} uses PlotMerit, and has given you access to ${what}.
 
 Sign in at ${appUrl}/login
 Email: ${email}
@@ -146,20 +146,20 @@ Please change your password straight away once you are in.
 
 You will only ever see ${what} — nothing else from ${orgName}.
 
-— Apex Appraise, on behalf of ${orgName}`,
+— PlotMerit, on behalf of ${orgName}`,
   };
 }
 
 export function welcomeEmail(name: string, orgName: string, appUrl: string) {
   return {
-    subject: `Welcome to Apex Appraise, ${name.split(' ')[0]}`,
+    subject: `Welcome to PlotMerit, ${name.split(' ')[0]}`,
     text: `Hi ${name},
 
 Your workspace “${orgName}” is ready at ${appUrl}.
 
 Start with a deal: Pipeline → New deal from documents, or run the Auto-Appraisal on your first scheme.
 
-— Apex Appraise`,
+— PlotMerit`,
   };
 }
 
@@ -175,11 +175,11 @@ export const APP_URL = () => process.env.APP_URL ?? 'http://localhost:5273';
  */
 export function ssoResetEmail(name: string, appUrl: string) {
   return {
-    subject: 'Signing in to Apex Appraise',
+    subject: 'Signing in to PlotMerit',
     text: [
       `Hi ${name},`,
       '',
-      'Someone asked to reset the password on your Apex Appraise account. Your organisation signs in with single sign-on, so there is no password to reset — use the single sign-on button on the sign-in page instead:',
+      'Someone asked to reset the password on your PlotMerit account. Your organisation signs in with single sign-on, so there is no password to reset — use the single sign-on button on the sign-in page instead:',
       '',
       `${appUrl}/login`,
       '',
@@ -200,7 +200,7 @@ export function recoveryUsedEmail(name: string, codesLeft: number, appUrl: strin
   return {
     subject: 'A single sign-on recovery code was used',
     text:
-      `${name} signed in to your Apex Appraise workspace using a single sign-on recovery code.\n\n`
+      `${name} signed in to your PlotMerit workspace using a single sign-on recovery code.\n\n`
       + 'Recovery codes exist for when your identity provider will not let anyone in. A code can be '
       + 'used once, and this one has now been spent.\n\n'
       + `${codesLeft} ${codesLeft === 1 ? 'code remains' : 'codes remain'}.\n\n`
@@ -214,11 +214,11 @@ export function recoveryUsedEmail(name: string, codesLeft: number, appUrl: strin
 export function resetEmail(name: string, appUrl: string, token: string) {
   const link = `${appUrl}/reset?token=${token}`;
   return {
-    subject: 'Reset your Apex Appraise password',
+    subject: 'Reset your PlotMerit password',
     text: [
       `Hi ${name},`,
       '',
-      'Someone asked to reset the password on your Apex Appraise account. If that was you, use the link below within the hour:',
+      'Someone asked to reset the password on your PlotMerit account. If that was you, use the link below within the hour:',
       '',
       link,
       '',

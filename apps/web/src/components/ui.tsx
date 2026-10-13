@@ -16,8 +16,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
       style={{ width: size, height: size, background: brandMarkGradient }}
     >
       <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke={onFill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 11 12 4l8 7" />
-        <path d="M6 10v9h12v-9" />
+        <path d="M6 20V4h7a5 5 0 0 1 0 10H6" />
       </svg>
     </span>
   );
@@ -28,7 +27,7 @@ export function BrandLockup() {
     <Link to="/" className="flex items-center gap-2.5">
       <BrandMark />
       <span className="text-[15.5px] font-bold tracking-[-0.3px]">
-        Apex <span className="text-brand-ink">Appraise</span>
+        Plot<span className="text-brand-ink">Merit</span>
       </span>
     </Link>
   );
@@ -36,7 +35,7 @@ export function BrandLockup() {
 
 /**
  * Portals are client-facing, so a buyer or investor sees the FIRM's mark and
- * name where an internal user sees Apex's. Same rule as the documents: the
+ * name where an internal user sees PlotMerit's. Same rule as the documents: the
  * product is ours, what the client looks at is theirs.
  */
 function PortalLockup() {
@@ -44,7 +43,7 @@ function PortalLockup() {
   return (
     <span className="flex items-center gap-2.5">
       <FirmMark logoUrl={firm?.logoUrl} size={28} alt={`${firm?.name ?? 'Firm'} logo`} />
-      <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate max-w-[260px]">{firm?.name ?? 'Apex Appraise'}</span>
+      <span className="text-[15.5px] font-bold tracking-[-0.3px] truncate max-w-[260px]">{firm?.name ?? 'PlotMerit'}</span>
     </span>
   );
 }
@@ -187,8 +186,8 @@ export function StatCard({ label, value, tone, sub }: { label: string; value: Re
 
 /**
  * The mark on client-facing documents: the firm's own logo when they have
- * uploaded one, otherwise Apex's. Documents belong to the firm; the app chrome
- * stays Apex.
+ * uploaded one, otherwise PlotMerit's. Documents belong to the firm; the app chrome
+ * stays PlotMerit.
  */
 export function FirmMark({ logoUrl, size = 32, alt }: { logoUrl?: string | null; size?: number; alt?: string }) {
   if (logoUrl) {

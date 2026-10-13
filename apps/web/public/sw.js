@@ -1,10 +1,10 @@
-/* Apex Appraise service worker — installable PWA with sane caching.
+/* PlotMerit service worker — installable PWA with sane caching.
    Static hashed assets: cache-first (immutable). Navigations: network-first
    with cached-shell fallback so the app opens offline. API/uploads/reports:
    never cached — money data must always be live. */
 // Bumped when the precached set changes — activate deletes every other cache,
 // which is what makes an old client pick up the new shell.
-const VERSION = 'apex-v3';
+const VERSION = 'apex-v4-plotmerit';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 // The typefaces are precached, not merely cacheable. The field app is used on
 // sites with no signal, and a font fetched lazily is a font that is missing the

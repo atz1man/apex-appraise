@@ -213,7 +213,7 @@ describe('multi-sheet workbooks retain source coordinates and limits', () => {
     expect(extracted.documentsSkipped).toEqual(result.skipped);
     expect(extracted.sourceDocuments.map(item => item.id)).toEqual([d.id]);
     expect(JSON.stringify(request.mock.calls)).toContain('150 [cached formula result; not recalculated]');
-    expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs: formula results are cached workbook values, not recalculated or verified by Apex; recalculate and save the workbook in its authoring application before relying on them');
+    expect(result.skipped.map(item => item.reason).join(' ')).toContain('Costs: formula results are cached workbook values, not recalculated or verified by PlotMerit; recalculate and save the workbook in its authoring application before relying on them');
   });
   it('reads a cost plan beyond the cover sheet with cell references', async () => {
     const ExcelJS = (await import('exceljs')).default;

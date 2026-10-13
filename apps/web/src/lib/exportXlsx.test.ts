@@ -340,14 +340,14 @@ describe('buildAppraisalWorkbook — firm branding', async () => {
     for (const ws of wb.worksheets) {
       const strap = String(ws.getCell(3, 1).value ?? '');
       expect(strap.startsWith('Marchmont & Co ·')).toBe(true);
-      expect(strap).not.toContain('Apex Appraise');
+      expect(strap).not.toContain('PlotMerit');
     }
   });
 
-  it('falls back to Apex when the firm has no branding', async () => {
+  it('falls back to PlotMerit when the firm has no branding', async () => {
     const wb = await buildAppraisalWorkbook(opts);
-    expect(wb.creator).toBe('Apex Appraise');
-    expect(String(wb.getWorksheet('Summary')!.getCell(3, 1).value)).toContain('Apex Appraise');
+    expect(wb.creator).toBe('PlotMerit');
+    expect(String(wb.getWorksheet('Summary')!.getCell(3, 1).value)).toContain('PlotMerit');
   });
 
   it('skips an unembeddable logo rather than corrupting the workbook', async () => {
