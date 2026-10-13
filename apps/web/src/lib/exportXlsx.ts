@@ -1,3 +1,4 @@
+import { fieldCostReviewLines, type FieldCostReviewExport } from './field-cost-review-export';
 import { fieldSnapshotLines, type FieldSnapshotExport } from './field-snapshot-export';
 import { sourceEvidenceLines, wrapEvidence, type SourceEvidence } from './source-evidence';
 import {
@@ -23,6 +24,8 @@ import type ExcelJSNS from 'exceljs';
  */
 
 export interface ExportOpts {
+  fieldCostReviews?: FieldCostReviewExport[] | null;
+  fieldCostReviewsState?: string;
   fieldSnapshot?: FieldSnapshotExport | null;
   fieldSnapshotState?: string;
   appraisalVersion?: { id: string; label: string };
@@ -756,7 +759,7 @@ export async function buildAppraisalWorkbook(opts: ExportOpts): Promise<ExcelJSN
   field.columns = Array.from({ length: 4 }, () => ({ width: 30 }));
   titleBlock(field, dealName, address, 'Historical field snapshot', 4, firmName);
   headerRow(field, ['HISTORICAL FIELD CONTEXT']);
-  for (const line of wrapEvidence(fieldSnapshotLines(opts.fieldSnapshot, opts.fieldSnapshotState, opts.appraisalVersion, opts.unsavedInputs), 90)) {
+  for (const line of wrapEvidence([...fieldSnapshotLines(opts.fieldSnapshot, opts.fieldSnapshotState, opts.appraisalVersion, opts.unsavedInputs), ...fieldCostReviewLines(opts.fieldCostReviews, opts.fieldCostReviewsState, opts.unsavedInputs)], 90)) {
     const row = field.addRow([line]);
     field.mergeCells(row.number, 1, row.number, 4);
     row.height = 32;
