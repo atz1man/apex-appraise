@@ -77,7 +77,7 @@ function CountUp({ text }: { text: string }) {
   return <span ref={ref}>{display}</span>;
 }
 
-const DEMO_MAILTO = 'mailto:hello@apexappraise.co.uk?subject=Apex%20Appraise%20%E2%80%94%20book%20a%20demo';
+const DEMO_MAILTO = 'mailto:hello@apexappraise.co.uk?subject=PlotMerit%20%E2%80%94%20book%20a%20demo';
 const ARROW = 'M5 12h14|M13 6l6 6-6 6';
 const CHECK = 'm5 12 5 5 9-10';
 
@@ -366,7 +366,7 @@ function TourModal({ onClose, initial = 0 }: { onClose: () => void; initial?: nu
             <span className="w-[10px] h-[10px] rounded-full bg-status-red" />
             <span className="w-[10px] h-[10px] rounded-full bg-status-amber" />
             <span className="w-[10px] h-[10px] rounded-full bg-status-green" />
-            <span className="ml-2 font-mono text-[11px] text-accent-muted-1">app.apexappraise.co.uk</span>
+            <span className="ml-2 font-mono text-[11px] text-accent-muted-1">PlotMerit workspace</span>
             <button className="ml-auto text-white/60 hover:text-white text-[13px] font-semibold px-2" onClick={onClose} aria-label="Close tour">
               ✕
             </button>
@@ -639,7 +639,7 @@ function HeroAppMock() {
             <span className="w-[11px] h-[11px] rounded-full bg-status-red" />
             <span className="w-[11px] h-[11px] rounded-full bg-status-amber" />
             <span className="w-[11px] h-[11px] rounded-full bg-status-green" />
-            <span className="ml-2.5 font-mono text-[11px] font-medium text-accent-muted-1">app.apexappraise.co.uk</span>
+            <span className="ml-2.5 font-mono text-[11px] font-medium text-accent-muted-1">PlotMerit workspace</span>
           </div>
           {/* the real product, not a sketch */}
           <div className="rounded-t-[10px] overflow-hidden max-h-[380px]">
@@ -717,7 +717,7 @@ export default function Landing() {
         <div className="max-w-[1200px] mx-auto h-16 px-4 sm:px-7 flex items-center gap-3.5">
           <Link to="/welcome" className="flex items-center gap-2.5">
             <BrandMark size={30} />
-            <span className="text-[16px] font-bold tracking-[-0.3px]">Apex Appraise</span>
+            <span className="text-[16px] font-bold tracking-[-0.3px]">PlotMerit</span>
           </Link>
           <nav className="ml-8 hidden lg:flex gap-[26px]">
             {NAV_LINKS.map(([label, href]) => (
@@ -764,7 +764,7 @@ export default function Landing() {
             From the front door to the signed report — one workfile.
           </h1>
           <p className="mt-6 max-w-[620px] text-[18px] md:text-[20px] leading-[1.5] text-accent-muted-3">
-            Apex Appraise runs the whole deal: AI-assisted appraisals, live development modelling, comparables, construction monitoring and
+            PlotMerit runs the whole deal: AI-assisted appraisals, live development modelling, comparables, construction monitoring and
             investor reporting — with every figure traceable.
           </p>
           <div className="mt-[34px] flex items-center gap-3.5 flex-wrap">
@@ -829,7 +829,7 @@ export default function Landing() {
         <Split
           eyebrow="AI Development Director"
           title="Documents in. Investment-grade appraisal out."
-          body="Drop in drawings, a cost plan and the planning decision. Apex extracts the areas and assumptions, runs the residual appraisal, and hands you a defensible result — or do it all by hand. Your call."
+          body="Drop in drawings, a cost plan and the planning decision. PlotMerit extracts the areas and assumptions, runs the residual appraisal, and hands you a defensible result — or do it all by hand. Your call."
           checks={[
             'GIA take-off, unit mix & values extracted',
             /*
@@ -1032,7 +1032,7 @@ export default function Landing() {
           style={{ background: `linear-gradient(155deg,${brand[600]},${brand[900]})` }}
         >
           <div className="absolute -top-20 -right-16 w-[300px] h-[300px] rounded-full" style={{ background: 'rgba(63,216,148,0.08)' }} />
-          <h2 className="relative text-[34px] md:text-[42px] font-bold tracking-[-1.6px] text-white">Run your next deal on Apex.</h2>
+          <h2 className="relative text-[34px] md:text-[42px] font-bold tracking-[-1.6px] text-white">Run your next deal on PlotMerit.</h2>
           <p className="relative mt-4 mx-auto max-w-[520px] text-[17px] leading-[1.5] text-accent-muted-3">
             Start with a single appraisal — no card required. Bring your whole pipeline across when you&rsquo;re ready.
           </p>
@@ -1054,7 +1054,7 @@ export default function Landing() {
             <div>
               <div className="flex items-center gap-2.5">
                 <BrandMark size={26} />
-                <span className="text-[14px] font-bold">Apex Appraise</span>
+                <span className="text-[14px] font-bold">PlotMerit</span>
               </div>
               <p className="mt-3 max-w-[260px] text-[12.5px] text-ink-2b leading-[1.5]">
                 UK development &amp; valuation, end to end — every figure traceable to its evidence.
@@ -1080,8 +1080,8 @@ export default function Landing() {
             ))}
           </div>
           <div className="mt-9 pt-5 border-t border-border-std flex items-center justify-between gap-4 flex-wrap">
-            <span className="font-mono text-[11.5px] text-ink-2b">© 2026 Apex Appraise Ltd</span>
-            <span className="font-mono text-[11.5px] text-ink-2b">Registered in England &amp; Wales</span>
+            <span className="font-mono text-[11.5px] text-ink-2b">© 2026 PlotMerit</span>
+            <span className="font-mono text-[11.5px] text-ink-2b">Built for UK property development</span>
           </div>
         </div>
       </footer>

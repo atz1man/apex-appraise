@@ -54,7 +54,7 @@ const Block = ({ children }: { children: string }) => (
 export default function ApiDocs() {
   return (
     <div className="min-h-screen bg-frame">
-      <TopBar crumb={<Link to="/welcome" className="text-[13px] font-medium text-ink-2 hover:text-ink">Apex Appraise</Link>} />
+      <TopBar crumb={<Link to="/welcome" className="text-[13px] font-medium text-ink-2 hover:text-ink">PlotMerit</Link>} />
       <div className="mx-auto max-w-[760px] px-6 py-10">
         <EyebrowTitle
           eyebrow="Developers"

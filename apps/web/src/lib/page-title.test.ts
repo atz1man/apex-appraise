@@ -85,7 +85,7 @@ describe('matchesPattern', () => {
 
 describe('titleFor', () => {
   it('names the screen first, so a truncated tab still says which one', () => {
-    expect(titleFor('/deal/d1/redbook')).toBe('Red Book valuation · Apex Appraise');
+    expect(titleFor('/deal/d1/redbook')).toBe('Red Book valuation · PlotMerit');
   });
 
   /**
@@ -101,11 +101,11 @@ describe('titleFor', () => {
   });
 
   it('keeps the product on what the firm reads', () => {
-    expect(titleFor('/terms')).toBe('Terms of service · Apex Appraise');
-    expect(titleFor('/board')).toBe('Pipeline board · Apex Appraise');
+    expect(titleFor('/terms')).toBe('Terms of service · PlotMerit');
+    expect(titleFor('/board')).toBe('Pipeline board · PlotMerit');
   });
 
   it('says not found rather than nothing', () => {
-    expect(titleFor('/nowhere')).toBe('Page not found · Apex Appraise');
+    expect(titleFor('/nowhere')).toBe('Page not found · PlotMerit');
   });
 });

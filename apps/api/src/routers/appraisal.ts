@@ -1611,7 +1611,7 @@ async function spreadsheetText(data: Buffer, budget: number): Promise<{ text: st
       readableRows++;
     }
     if (missingFormula) warnings.push(`${sheet.name}: formulas without cached results or with errors need recalculation in Excel`);
-    if (cachedFormula) warnings.push(`${sheet.name}: formula results are cached workbook values, not recalculated or verified by Apex; recalculate and save the workbook in its authoring application before relying on them`);
+    if (cachedFormula) warnings.push(`${sheet.name}: formula results are cached workbook values, not recalculated or verified by PlotMerit; recalculate and save the workbook in its authoring application before relying on them`);
   }
   for (const sheet of wb.worksheets.slice(10)) warnings.push(`${sheet.name}: omitted by the 10-worksheet limit`);
   return { text: readableRows ? lines.join('\n') : '', warnings };

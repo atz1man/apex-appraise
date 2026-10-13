@@ -30,18 +30,18 @@ async function northgateId(page: Page): Promise<string> {
 
 test('every screen names itself in the tab, the history menu and the bookmark', async ({ page }) => {
   await loginInternal(page);
-  await expect(page).toHaveTitle('Home · Apex Appraise');
+  await expect(page).toHaveTitle('Home · PlotMerit');
 
   await page.getByRole('link', { name: /Pipeline board/ }).first().click();
-  await expect(page).toHaveTitle('Pipeline board · Apex Appraise');
+  await expect(page).toHaveTitle('Pipeline board · PlotMerit');
 
   await page.goto('/settings');
-  await expect(page).toHaveTitle('Settings · Apex Appraise');
+  await expect(page).toHaveTitle('Settings · PlotMerit');
 
   // and back is back — the history entry carries its own name, which is the
   // thing 37 identical titles took away
   await page.goBack();
-  await expect(page).toHaveTitle('Pipeline board · Apex Appraise');
+  await expect(page).toHaveTitle('Pipeline board · PlotMerit');
 });
 
 test('a client-facing tab does not advertise the software', async ({ page }) => {
@@ -53,7 +53,7 @@ test('a client-facing tab does not advertise the software', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/portal\/buyer$/);
   await expect(page).toHaveTitle('Your home');
-  expect(await page.title()).not.toContain('Apex');
+  expect(await page.title()).not.toContain('PlotMerit');
 });
 
 test('arriving at a page puts you at the top of it', async ({ page }) => {
@@ -108,9 +108,9 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
    * frame with nothing for the browser to clamp.
    */
   await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Settings' }).click();
-  await expect(page).toHaveTitle('Settings · Apex Appraise');
+  await expect(page).toHaveTitle('Settings · PlotMerit');
   await page.goBack();
-  await expect(page).toHaveTitle('Development appraisal · Apex Appraise');
+  await expect(page).toHaveTitle('Development appraisal · PlotMerit');
   await expect
     .poll(() => page.evaluate(() => document.body.scrollHeight), { timeout: 15_000 })
     .toBeGreaterThan(1400);
@@ -123,7 +123,7 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
   // a link in the body of the page moves the very offset being measured. The
   // global nav is why the viewport is 1440 — below 1400 the header hides it.
   await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Settings' }).click();
-  await expect(page).toHaveTitle('Settings · Apex Appraise');
+  await expect(page).toHaveTitle('Settings · PlotMerit');
 
   const arrival = await page.evaluate(() => ({ y: window.scrollY, height: document.body.scrollHeight }));
   expect(
@@ -136,7 +136,7 @@ test('arriving at a page puts you at the top of it', async ({ page }) => {
 test('and puts keyboard focus there too', async ({ page }) => {
   await loginInternal(page);
   await page.getByRole('link', { name: /Comparables/ }).first().click();
-  await expect(page).toHaveTitle('Comparables · Apex Appraise');
+  await expect(page).toHaveTitle('Comparables · PlotMerit');
   /**
    * Focus follows the person to the new screen; without this the next Tab
    * resumes from a link that no longer exists and a screen reader says nothing.

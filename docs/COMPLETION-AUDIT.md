@@ -922,3 +922,28 @@ followed by the acceptance findings. The broader completion register remains
 open: real accounts/domain/operator identity, production restore and intended
 professional-user acceptance cannot be closed with synthetic tests. The hourly
 automation remains paused at the owner's request.
+
+
+## PlotMerit product rebrand — 13 October 2026
+
+Renamed customer-facing app chrome, authentication, titles, public/legal product
+copy, install metadata, email templates and default report/workbook branding to
+PlotMerit. Added a P monogram, reproducible social/touch assets and a public
+change notice. Custom firm branding remains authoritative on client documents.
+The service-worker cache version changes to refresh the shell; account/storage
+keys, offline photo queues, saved records, package names and deployment URLs
+remain compatible. No schema, engine arithmetic or historical-data migration.
+
+This is a product name, not a newly incorporated entity. Unconfirmed operator
+information stays explicitly unconfirmed; no PlotMerit Ltd assertion or domain
+ownership claim. Existing email addresses/configured senders are retained.
+The proposed domain has not been purchased or configured; the existing Fly URL
+continues to serve the product. The improvement automation remains paused.
+
+Local evidence: 1,434 API, 394 web and 17 MCP tests passed, web typecheck/build
+and bundle limits passed, eight navigation/customer lifecycle browser journeys
+and five public branding, firm-document, workbook/portal, contrast and legal
+journeys and four offline recovery regressions passed. Exact-head CI/release
+evidence is recorded on the PR before release. Public assets were visually inspected.
+The commercial/operator/provider and professional acceptance blockers remain
+open; a rebrand does not establish production readiness.

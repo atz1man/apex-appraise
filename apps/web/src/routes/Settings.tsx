@@ -51,11 +51,11 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
   const clearLogo = trpc.org.clearLogo.useMutation({
     onSuccess: () => {
       utils.org.get.invalidate();
-      toast.success('Firm logo removed — documents fall back to the Apex mark');
+      toast.success('Firm logo removed — documents fall back to the PlotMerit mark');
     },
   });
 
-  /** Documents carry the firm's mark; the app chrome stays Apex. */
+  /** Documents carry the firm's mark; the app chrome stays PlotMerit. */
   const uploadLogo = async (file: File) => {
     setUploading(true);
     try {
@@ -145,7 +145,7 @@ function OrganisationPanel({ isAdmin }: { isAdmin: boolean }) {
       <div className="text-[13.5px] font-semibold">Firm logo</div>
       <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[520px]">
         Appears on the appraisal report, the Red Book valuation and the terms of engagement — the documents your clients
-        see. PNG, JPEG or WebP, up to 2MB. Without one, those documents carry the Apex mark.
+        see. PNG, JPEG or WebP, up to 2MB. Without one, those documents carry the PlotMerit mark.
       </div>
       <div className="mt-3 flex items-center gap-4 flex-wrap">
         <div
@@ -1154,7 +1154,7 @@ function PolicyPanel({ isAdmin }: { isAdmin: boolean }) {
           <span className="text-ink-3">{open ? '▾' : '▸'}</span> Terms of engagement — house style
         </button>
         <div className="mt-1 text-[12px] text-ink-2b leading-relaxed max-w-[620px]">
-          New terms draft from these. Leave a field blank and Apex&rsquo;s own wording is used; a valuer can still edit any
+          New terms draft from these. Leave a field blank and PlotMerit&rsquo;s own wording is used; a valuer can still edit any
           clause on the deal itself.
         </div>
         {open && (

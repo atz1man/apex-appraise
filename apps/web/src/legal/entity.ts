@@ -56,7 +56,7 @@ export const ENTITY: LegalEntity = {
 export const entityLine = () =>
   ENTITY.confirmed
     ? `${ENTITY.name}, company number ${ENTITY.companyNumber}, registered office ${ENTITY.registeredOffice}.`
-    : `${ENTITY.name}. Company registration and VAT details are being finalised and will be published here before any paid subscription is sold.`;
+    : `Operator company registration and VAT details are being finalised and will be published here before any paid subscription is sold.`;
 
 /**
  * Every third party that touches customer data, and what for. A privacy notice

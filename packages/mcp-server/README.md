@@ -1,4 +1,4 @@
-# Apex Appraise over MCP
+# PlotMerit over MCP
 
 The deterministic appraisal engine, as tools an AI assistant can call.
 

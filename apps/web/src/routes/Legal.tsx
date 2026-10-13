@@ -17,7 +17,7 @@ import { DATA_SOURCES, ENTITY, SUBPROCESSORS, TRIAL_DAYS, entityLine } from '../
 function LegalShell({ eyebrow, title, sub, children }: { eyebrow: string; title: string; sub: string; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-frame">
-      <TopBar crumb={<Link to="/welcome" className="text-[13px] font-medium text-ink-2 hover:text-ink">Apex Appraise</Link>} />
+      <TopBar crumb={<Link to="/welcome" className="text-[13px] font-medium text-ink-2 hover:text-ink">PlotMerit</Link>} />
       <div className="mx-auto max-w-[760px] px-6 py-10">
         <EyebrowTitle eyebrow={eyebrow} title={title} sub={sub} />
         {!ENTITY.confirmed && (
@@ -183,11 +183,11 @@ export function Terms() {
     <LegalShell
       eyebrow="Legal"
       title="Terms of service"
-      sub="The agreement for using Apex Appraise, in the plainest language it can be written in."
+      sub="The agreement for using PlotMerit, in the plainest language it can be written in."
     >
       <Section heading="What this product is, and what it is not">
         <p>
-          Apex Appraise is software for preparing development appraisals and valuation reports. It is not a valuer, and
+          PlotMerit is software for preparing development appraisals and valuation reports. It is not a valuer, and
           it does not give valuation advice. Every figure it produces is calculated from inputs you provide or accept,
           and every opinion of value in a report it prints is <em>yours</em>: your professional judgement, your
           signature, your registration, and your firm's responsibility under the RICS Red Book and to your client.

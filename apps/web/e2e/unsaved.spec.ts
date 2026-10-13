@@ -73,7 +73,7 @@ test('saying yes still lets you leave', async ({ page }) => {
   await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Pipeline' }).click();
 
   await expect(page).toHaveURL(/\/board$/);
-  await expect(page).toHaveTitle('Pipeline board · Apex Appraise');
+  await expect(page).toHaveTitle('Pipeline board · PlotMerit');
 });
 
 test('a clean appraisal is never interrupted', async ({ page }) => {

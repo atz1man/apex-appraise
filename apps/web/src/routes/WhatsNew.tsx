@@ -16,6 +16,12 @@ type Entry = { date: string; title: string; body: string; tag: Tag };
 
 const ENTRIES: Entry[] = [
   {
+    date: '2026-10-13',
+    title: 'Apex Appraise is now PlotMerit',
+    body: 'A new name and mark for the same workspace. Your sign-in, projects, saved appraisals and firm branding carry on unchanged. Continue using the existing website address.',
+    tag: 'Design',
+  },
+  {
     date: '2026-07-14',
     title: 'Live on the web',
     body: 'Apex Appraise is now hosted: sign in from anywhere, nothing to install.',
@@ -64,7 +70,7 @@ export default function WhatsNew() {
         crumb="What's new"
         right={
           <Button to="/welcome" variant="secondary">
-            Apex Appraise home
+            PlotMerit home
           </Button>
         }
       />

@@ -44,7 +44,7 @@ describe('the tile proxy', () => {
     // the upstream sees US: one identified caller, which is what the policy asks
     // for and what a browser could never send
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(String((init.headers as Record<string, string>)['user-agent'])).toMatch(/ApexAppraise/);
+    expect(String((init.headers as Record<string, string>)['user-agent'])).toMatch(/PlotMerit/);
   });
 
   it('refuses an unauthenticated caller, so it is not an open relay', async () => {

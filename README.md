@@ -1,4 +1,4 @@
-# Apex Appraise
+# PlotMerit
 
 A connected operating system for UK residential & mixed-use property development —
 sourcing → AI/manual appraisal → comparables → scenarios → development modelling →

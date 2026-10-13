@@ -62,7 +62,7 @@ export default function FundingPack() {
   const { data: exposure, isLoading, error, refetch } = trpc.deals.exposure.useQuery();
   const { data: org } = trpc.org.get.useQuery(undefined, { staleTime: 300_000 });
 
-  const firmName = org?.name ?? 'Apex Appraise';
+  const firmName = org?.name ?? 'PlotMerit';
   const today = new Date();
   const refCode = `FP-${today.toISOString().slice(0, 10).replace(/-/g, '')}`;
 

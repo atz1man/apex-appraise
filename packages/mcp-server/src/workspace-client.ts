@@ -37,7 +37,7 @@ export function workspaceFromEnv(env: NodeJS.ProcessEnv = process.env): Workspac
 }
 
 export const NO_WORKSPACE =
-  'This tool reads your Apex Appraise workspace and no API key is configured. Set APEX_API_KEY to a key from ' +
+  'This tool reads your PlotMerit workspace and no API key is configured. Set APEX_API_KEY to a key from ' +
   'Settings → API keys, and APEX_API_URL to your instance (default http://localhost:4100). The calculation tools ' +
   'need neither and work as they are.';
 
@@ -61,7 +61,7 @@ export async function apiGet<T>(cfg: WorkspaceConfig, path: string, query: Recor
     res = await fetch(url, { headers: { authorization: `Bearer ${cfg.apiKey}`, accept: 'application/json' } });
   } catch (e) {
     throw new WorkspaceError(
-      `Could not reach Apex Appraise at ${cfg.baseUrl} (${(e as Error).message}). Check APEX_API_URL, and that the instance is running.`,
+      `Could not reach PlotMerit at ${cfg.baseUrl} (${(e as Error).message}). Check APEX_API_URL, and that the instance is running.`,
     );
   }
 
