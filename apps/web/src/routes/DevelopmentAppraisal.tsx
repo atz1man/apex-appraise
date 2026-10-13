@@ -1,3 +1,5 @@
+import { FieldCostReview } from '../components/FieldCostReview';
+import { fieldCostReviewLines } from '../lib/field-cost-review-export';
 import { WorkbookDownloadButton } from '../components/WorkbookDownloadButton';
 import { AppraisalFieldEvidence } from '../components/AppraisalFieldEvidence';
 import { TaskStatusRecovery } from '../components/TaskStatusRecovery';
@@ -252,6 +254,22 @@ export default function DevelopmentAppraisal() {
       utils.deals.list.invalidate();
     },
   });
+  const [fieldReviewDirty, setFieldReviewDirty] = useState(false);
+  const saveFieldCost = trpc.appraisal.save.useMutation({
+    onMutate: () => ({ submittedInput: currentInput.current }),
+    onSuccess: (res, vars, context) => {
+      setHeldAppraisalId(res.id);
+      setHeldVersion(res.updatedAt);
+      if (currentInput.current === context?.submittedInput) {
+        setInput({ ...currentInput.current, otherCosts: vars.input.otherCosts });
+        setDirty(false);
+      } else setDirty(true);
+      toast.success('Reviewed allowance saved as a new version. Any newer editor changes remain unsaved.');
+      void utils.appraisal.getCurrent.invalidate(dealId);
+      void utils.appraisal.versions.invalidate(dealId);
+      void utils.deals.list.invalidate();
+    },
+  });
   const [input, setInput] = useState<AppraisalInput>(DEFAULT_INPUT);
   // Inputs are replaced immutably. A successful request only saved its own
   // submitted object; edits made while it was pending still need saving.
@@ -472,6 +490,8 @@ export default function DevelopmentAppraisal() {
         <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-4 flex justify-end">
             <WorkbookDownloadButton key={dealId} options={{
+              fieldCostReviews: sourceReviewUnverified ? undefined : saved?.fieldCostReviews,
+              fieldCostReviewsState: sourceReviewUnverified ? 'unverified' : saved?.fieldCostReviewsState,
               fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
               fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
               appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
@@ -537,7 +557,7 @@ export default function DevelopmentAppraisal() {
               writes
               onClick={() => save.mutate({ dealId, input, expectedUpdatedAt: heldVersion ?? undefined })}
               loading={save.isPending}
-              disabled={!dirty || restore.isPending || saveVersion.isPending}
+              disabled={!dirty || fieldReviewDirty || restore.isPending || saveVersion.isPending || saveFieldCost.isPending}
             >
               {dirty ? 'Save appraisal' : 'Saved'}
             </Button>
@@ -549,6 +569,8 @@ export default function DevelopmentAppraisal() {
       <main className="max-w-[1640px] mx-auto px-4 sm:px-6 pb-14">
         <div className="mt-4 flex justify-end">
             <WorkbookDownloadButton key={dealId} options={{
+              fieldCostReviews: sourceReviewUnverified ? undefined : saved?.fieldCostReviews,
+              fieldCostReviewsState: sourceReviewUnverified ? 'unverified' : saved?.fieldCostReviewsState,
               fieldSnapshot: sourceReviewUnverified ? undefined : saved?.fieldSnapshot,
               fieldSnapshotState: sourceReviewUnverified ? 'unverified' : saved?.fieldSnapshotState,
               appraisalVersion: !sourceReviewUnverified && saved ? { id: saved.id, label: saved.label } : undefined,
@@ -570,6 +592,15 @@ export default function DevelopmentAppraisal() {
         </div>
 
         <AppraisalFieldEvidence key={dealId} dealId={dealId} />
+        {saved?.fieldSnapshot && <FieldCostReview key={saved.id} input={saved.input} snapshot={saved.fieldSnapshot}
+          blocked={sourceReviewUnverified || dirty || save.isPending || restore.isPending || saveVersion.isPending || saveFieldCost.isPending}
+          onDraftChange={setFieldReviewDirty} pending={saveFieldCost.isPending} error={saveFieldCost.error?.message}
+          onSave={(proposed, fieldCost) => saveFieldCost.mutate({ dealId, input: proposed, fieldCost, asNewVersion: true, label: 'Reviewed field allowance', expectedUpdatedAt: heldVersion ?? undefined })} />}
+        {saved && (saved.fieldCostReviews?.length || saved.fieldCostReviewsState === 'unreadable') ? <section aria-label="Field allowance review history" className="mt-5 rounded-card border border-border-std bg-surface p-4">
+          <h2 className="text-[15px] font-semibold">Field allowance review history</h2>
+          {fieldCostReviewLines(saved.fieldCostReviews, sourceReviewUnverified ? 'unverified' : saved.fieldCostReviewsState, dirty).map((line, index) => <p key={index} className="mt-2 whitespace-pre-wrap break-words text-sm">{line}</p>)}
+        </section> : null}
+
         {!sourceReviewUnverified && saved?.fieldSnapshot && <section aria-label="Version field snapshot" className="mt-5 rounded-card border border-border-std bg-surface p-4">
           <h2 className="text-[15px] font-semibold">Field snapshot · {saved.label}</h2>
           <p className="mt-2 text-[12px] text-ink-2">Captured by {saved.fieldSnapshot.capturedBy} on {new Date(saved.fieldSnapshot.capturedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} (London time). Historical context only: later task changes do not update this snapshot. It is included in the Excel Field evidence sheet, and appraisal PDFs, but not Red Book reports. It is not approval or an input adjustment.</p>
@@ -1905,12 +1936,12 @@ export default function DevelopmentAppraisal() {
             value={versionLabel}
             onChange={(e) => setVersionLabel(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending && !save.isPending && !restore.isPending && !fieldSnapshotBlocked) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), fieldTasks: fieldTasksToCapture });
+              if (e.key === 'Enter' && versionLabel.trim() && !saveVersion.isPending && !saveFieldCost.isPending && !fieldReviewDirty && !save.isPending && !restore.isPending && !fieldSnapshotBlocked) saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), fieldTasks: fieldTasksToCapture });
             }}
           />
           <Button writes
             loading={saveVersion.isPending}
-            disabled={!versionLabel.trim() || save.isPending || restore.isPending || fieldSnapshotBlocked}
+            disabled={fieldReviewDirty || saveFieldCost.isPending || !versionLabel.trim() || save.isPending || restore.isPending || fieldSnapshotBlocked}
             onClick={() =>
               saveVersion.mutate({ dealId, input, asNewVersion: true, label: versionLabel.trim(), note: versionNote.trim() || undefined, fieldTasks: fieldTasksToCapture })
             }
@@ -1971,7 +2002,7 @@ export default function DevelopmentAppraisal() {
                       writes
                       variant="secondary"
                       size="sm"
-                      disabled={restore.isPending || save.isPending || saveVersion.isPending}
+                      disabled={fieldReviewDirty || restore.isPending || save.isPending || saveVersion.isPending || saveFieldCost.isPending}
                       onClick={() => {
                         if (dirty && !window.confirm('Restore this version and replace your unsaved appraisal edits?')) return;
                         restore.mutate({ dealId, versionId: v.id });

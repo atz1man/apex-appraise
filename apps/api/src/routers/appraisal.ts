@@ -1,3 +1,4 @@
+import { zFieldCostRequest, readFieldCostReviews, costMatches } from '../field-cost-review.js';
 import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../field-evidence.js';
 import { sourceVersion } from '../source-version.js';
 import { withModelDeadline } from '../model-deadline.js';
@@ -200,7 +201,11 @@ export const appraisalRouter = router({
       }),
     } : null;
     const fieldSnapshot = readFieldSnapshot(row.fieldSnapshot);
+    const fieldCostReviews = readFieldCostReviews(row.fieldCostReviews);
+    const savedCosts = appraisalRowToEngineInput(row).otherCosts;
     return {
+      fieldCostReviews: fieldCostReviews?.map(review => ({ ...review, costUnchanged: costMatches(savedCosts[review.costIndex], review.cost) })) ?? null,
+      fieldCostReviewsState: row.fieldCostReviews === null ? 'absent' as const : fieldCostReviews ? 'recorded' as const : 'unreadable' as const,
       fieldSnapshot,
       fieldSnapshotState: row.fieldSnapshot === null ? 'absent' as const : fieldSnapshot ? 'recorded' as const : 'unreadable' as const,
       sourceReview,
@@ -258,6 +263,7 @@ export const appraisalRouter = router({
         input: zAppraisalInput,
         source: z.string().default('manual'),
         sourceReview: zSourceReviewRequest.optional(),
+        fieldCost: zFieldCostRequest.optional(),
         fieldTasks: z.array(z.object({ id: z.string(), version: z.string().regex(/^[a-f0-9]{64}$/) })).min(1).max(100).optional(),
         // versioning: asNewVersion snapshots the current row into history and
         // creates a fresh current version under the given label
@@ -289,9 +295,33 @@ export const appraisalRouter = router({
         source: input.source,
         resultCache: JSON.stringify({ result, jv }),
         // An ordinary save retains the historical record; its hash exposes any changed inputs.
+        fieldCostReviews: existing?.fieldCostReviews ?? null,
         fieldSnapshot: input.asNewVersion ? null : existing?.fieldSnapshot ?? null,
         sourceReview: input.asNewVersion ? null : existing?.sourceReview ?? null,
       };
+      if (input.fieldCost) {
+        if (!existing || !input.asNewVersion || input.fieldTasks || input.sourceReview || !input.expectedUpdatedAt || existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Save or reload the current appraisal before reviewing a field allowance into a new version.' });
+        }
+        const snapshot = readFieldSnapshot(existing.fieldSnapshot);
+        const task = snapshot?.tasks.find(task => task.id === input.fieldCost!.taskId);
+        const reviews = readFieldCostReviews(existing.fieldCostReviews);
+        if (!snapshot || !task || (existing.fieldCostReviews !== null && !reviews)) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'The captured source or existing allowance reviews cannot be verified.' });
+        if ((reviews?.length ?? 0) >= 100) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This appraisal has reached the field allowance review limit.' });
+        const costs = input.input.otherCosts;
+        const prior = { ...input.input, otherCosts: costs.slice(0, -1) };
+        if (!costMatches(costs.at(-1), input.fieldCost.cost) || inputHashOf(inputToRow(prior) as unknown as Appraisal) !== inputHashOf(existing)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'A field allowance version must add only the reviewed cost to the saved inputs. Save other edits first.' });
+        }
+        // A manual allowance does not rewrite the origin of the saved appraisal.
+        data.source = existing.source;
+        data.fieldSnapshot = existing.fieldSnapshot;
+        data.fieldCostReviews = JSON.stringify([...(reviews ?? []), {
+          version: 1, sourceVersionId: existing.id, snapshotCapturedAt: snapshot.capturedAt, task,
+          cost: input.fieldCost.cost, costIndex: costs.length - 1, reason: input.fieldCost.reason,
+          reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name, reviewedAt: new Date().toISOString(),
+        }]);
+      }
       if (input.fieldTasks) {
         if (!input.asNewVersion) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Capture field follow-ups when saving a new named version.' });
         const ids = [...new Set(input.fieldTasks.map(task => task.id))];
@@ -353,7 +383,7 @@ export const appraisalRouter = router({
          */
         row = await ctx.prisma.$transaction(async (tx) => {
           const { count } = await tx.appraisal.updateMany({
-            where: { id: existing.id, isCurrent: true },
+            where: { id: existing.id, isCurrent: true, ...(input.fieldCost ? { updatedAt: input.expectedUpdatedAt } : {}) },
             data: { isCurrent: false },
           });
           if (count !== 1) {

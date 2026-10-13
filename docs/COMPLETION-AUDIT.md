@@ -1,6 +1,6 @@
 # Product completion audit
 
-Updated 11 October 2026. Owner request: complete the product audit, tests and
+Updated 13 October 2026. Owner request: complete the product audit, tests and
 remaining implementation across the customer and operator lifecycle.
 
 **Overall state: incomplete for paying-customer launch.** Existing code and green
@@ -888,3 +888,37 @@ deployed; live remains `8199465`.
 Next: reviewed observation-to-input proposals with durable source links. The
 manual allowance tested here is not an automatically extracted or professionally
 accepted adjustment. External release acceptance requirements remain open.
+
+
+## Reviewed field allowances — 13 October 2026
+
+After reconciling main and finding no open competing PR, completed the next
+field-to-appraisal step. A saved field snapshot can now supply the source for a
+manually entered allowance, rationale and explicit acknowledgement. The engine
+previews the proposal and the server permits only the appended cost on an
+unchanged saved basis. Saving creates a new draft version, preserving appraisal
+origin, historical task content, source version and authenticated reviewer.
+An additive nullable migration retains existing appraisals unchanged.
+
+Ordinary edits and restores retain the historical record. Changed amount,
+label, cost position or custom timing no longer matches the recorded review;
+the screen and PDF/Excel exports say reassessment is required. Unsaved inputs
+cannot claim the saved cost still matches. Unreadable/unverified history stays
+unknown. It is not professional approval, current inspection verification,
+a supplier quotation or an automatically inferred cost.
+
+Local evidence: full API suite 1,433 passed before the additional race test;
+final targeted suite 3 passed including transaction-race rejection, committed
+request retry, foreign sources, missing consent and server-owned attribution.
+Six relevant browser journeys passed across editor ownership and the 390px
+field journey, including failed-save recovery, linked-version reload, changed
+cost status, Excel content, PDF report content and actual PDF download. Web
+suite, typechecks, build and bundle evidence and exact-commit CI are recorded
+on the PR. No production customer writes were used for verification.
+
+Next engineering priorities: representative import/reconciliation and richer
+reviewed field impact proposals (programme and quantity as well as allowances),
+followed by the acceptance findings. The broader completion register remains
+open: real accounts/domain/operator identity, production restore and intended
+professional-user acceptance cannot be closed with synthetic tests. The hourly
+automation remains paused at the owner's request.

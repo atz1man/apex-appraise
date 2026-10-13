@@ -238,22 +238,38 @@ test('saved field observations become reviewed project tasks and calendar comple
     await expect(snapshot).not.toContainText('New desk note after follow-up.');
     await snapshot.screenshot({ path: test.info().outputPath('version-field-snapshot-mobile.png') });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    // Review a manual cost allowance from the field workflow on the same phone.
-    await page.getByRole('button', { name: 'Other Costs', exact: true }).click();
-    await page.getByLabel('Cost 1 label', { exact: true }).fill('Structural survey allowance after entrance observation');
-    await page.getByLabel('Structural survey allowance after entrance observation amount', { exact: true }).fill('1250');
-    await page.getByLabel('Start month', { exact: true }).fill('2');
-    await page.getByLabel('Months', { exact: true }).fill('1');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    // Turn captured evidence into an explicitly reviewed, source-linked allowance.
+    const allowance = page.getByRole('region', { name: 'Review field allowance', exact: true });
+    await allowance.getByLabel('Captured field task').selectOption(saved[0].id);
+    await allowance.getByLabel('Allowance label').fill('Structural survey allowance');
+    await allowance.getByLabel('Allowance amount', { exact: true }).fill('1250');
+    await allowance.getByLabel('Review rationale').fill('Engineer investigation allowance pending quotation');
+    await expect(allowance.getByRole('button', { name: 'Save reviewed allowance version' })).toBeDisabled();
+    await page.getByRole('button', { name: /^Versions/ }).click();
+    await page.getByPlaceholder('Label this version', { exact: false }).fill('Must not discard allowance');
+    await expect(page.getByRole('button', { name: 'Save as version', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Close Appraisal versions', exact: true }).click();
+    await allowance.getByRole('checkbox').check();
+    await expect(allowance).toContainText('Engine preview with allowance');
+    await page.route('**/trpc/appraisal.save*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+    await allowance.getByRole('button', { name: 'Save reviewed allowance version' }).click();
+    await expect(allowance.getByRole('alert')).toBeVisible();
+    await expect(allowance.getByLabel('Allowance amount', { exact: true })).toHaveValue('1250');
+    await page.unroute('**/trpc/appraisal.save*');
+    await allowance.getByRole('button', { name: 'Save reviewed allowance version' }).click();
+    const history = page.getByRole('region', { name: 'Field allowance review history', exact: true });
+    await expect(history).toContainText('Saved cost matches review');
     await page.reload();
+    await expect(history).toContainText('Engineer investigation allowance pending quotation');
+    await expect(history).toContainText('Desk-reviewed entrance crack.');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Other Costs', exact: true }).click();
-    await expect(page.getByLabel('Structural survey allowance after entrance observation amount', { exact: true })).toHaveValue('1250');
-    await expect(page.getByLabel('Start month', { exact: true })).toHaveValue('2');
-    await expect(page.getByLabel('Months', { exact: true })).toHaveValue('1');
-    await page.getByLabel('Cost 1 label', { exact: true }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: test.info().outputPath('mobile-cost-review.png') });
+    await expect(page.getByLabel('Structural survey allowance amount', { exact: true })).toHaveValue('1250');
+    await page.getByLabel('Structural survey allowance amount', { exact: true }).fill('1500');
+    await expect(history).toContainText('Editor cost match unverified');
+    await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
+    await expect(history).toContainText('Saved cost differs from review');
+    await history.screenshot({ path: test.info().outputPath('field-allowance-review-mobile.png') });
     const mobileExport = page.getByRole('button', { name: 'Export .xlsx', exact: true });
     await expect(mobileExport).toBeVisible();
     expect((await mobileExport.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -274,7 +290,9 @@ test('saved field observations become reviewed project tasks and calendar comple
     const fieldLines: string[] = [];
     workbook.getWorksheet('Field evidence')!.eachRow(row => fieldLines.push(String(row.getCell(1).value ?? '')));
     const fieldText = fieldLines.join('');
-    expect(fieldText).toContain('Inspection basis');
+    expect(fieldText).toContain('Reviewed field allowance');
+    expect(fieldText).toContain('Engineer investigation allowance pending quotation');
+    expect(fieldText).toContain('Saved cost differs from review');
     expect(fieldText).toContain('Desk-reviewed entrance crack.');
     expect(fieldText).toContain('Completed at capture');
     expect(fieldText).not.toContain('New desk note after follow-up.');
@@ -283,12 +301,14 @@ test('saved field observations become reviewed project tasks and calendar comple
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/deal/${deal.id}/report`);
     const printedField = page.getByTestId('field-evidence-page');
-    await expect(printedField.first()).toContainText('Inspection basis');
+    await expect(printedField.first()).toContainText('Reviewed field allowance');
     const printedText = (await printedField.allTextContents()).join('');
     expect(printedText).toContain('Desk-reviewed entrance crack.');
     expect(printedText).toContain('Completed at capture');
     expect(printedText).not.toContain('New desk note after follow-up.');
     expect(printedText).toContain('not approval');
+    expect(printedText).toContain('Engineer investigation allowance pending quotation');
+    expect(printedText).toContain('Saved cost differs from review');
     expect(await page.locator('.a4-page').evaluateAll(pages => pages.some(p => p.scrollHeight > p.clientHeight + 2))).toBe(false);
     await printedField.first().screenshot({ path: test.info().outputPath('field-report-evidence.png') });
     const pdfDownloadPromise = page.waitForEvent('download');
@@ -305,6 +325,8 @@ test('saved field observations become reviewed project tasks and calendar comple
       for (const item of Array.isArray(body) ? body : [body]) {
         const value = item.result?.data?.json;
         if (value?.fieldSnapshot) {
+          value.fieldCostReviews = null;
+          value.fieldCostReviewsState = fieldState === 'unreadable' ? 'unreadable' : 'absent';
           if (fieldState === 'long') value.fieldSnapshot.tasks[0].inspectionEvidence.room.notes = 'Long field observation. '.repeat(400) + 'END FIELD OBSERVATION';
           else { value.fieldSnapshot = null; value.fieldSnapshotState = fieldState; }
         }
@@ -318,6 +340,7 @@ test('saved field observations become reviewed project tasks and calendar comple
     fieldState = 'unreadable';
     await page.reload();
     await expect(printedField.first()).toContainText('FIELD SNAPSHOT UNREADABLE');
+    await expect(printedField.first()).toContainText('FIELD ALLOWANCE REVIEWS UNREADABLE');
     await expect(printedField.first()).not.toContainText('Desk-reviewed entrance crack.');
     fieldState = 'absent';
     await page.reload();

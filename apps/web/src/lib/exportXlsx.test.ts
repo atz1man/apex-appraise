@@ -56,6 +56,32 @@ describe('buildAppraisalWorkbook', async () => {
     ]);
   });
 
+  it('exports independent allowance history, suppressing unverifiable saved-cost claims', async () => {
+    const review = { sourceVersionId: 'basis-id', snapshotCapturedAt: '2026-10-13T00:00:00.000Z',
+      task: { id: 'task-id', title: 'Check entrance', done: false, inspectionEvidence: null },
+      cost: { label: '=SUM(1,2)', amount: 1250 }, reason: 'Reviewed quote basis', reviewerId: 'member-id',
+      reviewerName: 'Reviewer', reviewedAt: '2026-10-13T01:00:00.000Z', costUnchanged: true };
+    for (const state of ['recorded', 'unverified', 'unreadable']) {
+      const built = await buildAppraisalWorkbook({ dealName: 'Reviewed costs', address: '', input: referenceCase, R, jv, monthLabel,
+        fieldCostReviews: [review], fieldCostReviewsState: state, unsavedInputs: true });
+      const lines: string[] = [];
+      built.getWorksheet('Field evidence')!.eachRow(row => {
+        expect(row.getCell(1).formula).toBeUndefined();
+        lines.push(String(row.getCell(1).value ?? ''));
+      });
+      const text = lines.join('');
+      if (state === 'recorded') {
+        expect(text).toContain('Editor cost match unverified');
+        expect(text).toContain('basis-id');
+        expect(text).toContain('Reviewed quote basis');
+        expect(text).not.toContain('Saved cost matches review');
+      } else {
+        expect(text).toContain(state.toUpperCase());
+        expect(text).not.toContain('Reviewed quote basis');
+      }
+    }
+  });
+
   it('round-trips historical field evidence without truncation or executable formulas', async () => {
     const note = '=HYPERLINK("https://example.invalid")\n' + '界'.repeat(300) + ' END OF OBSERVATION';
     const opts = { dealName: 'Field case', address: '', input: referenceCase, R, jv, monthLabel,

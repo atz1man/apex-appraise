@@ -1,3 +1,4 @@
+import { fieldCostReviewLines } from '../lib/field-cost-review-export';
 import { fieldSnapshotLines } from '../lib/field-snapshot-export';
 import { sourceEvidenceLines, sourceEvidencePages } from '../lib/source-evidence';
 import { Fragment, useMemo, type ReactNode } from 'react';
@@ -630,8 +631,8 @@ export default function AppraisalReport() {
   const monitoringPageNo = assumptionsPageNo + 1;
   const evidenceStartPage = (monitoring.length > 0 ? monitoringPageNo : assumptionsPageNo) + 1;
   const evidencePages = sourceEvidencePages(sourceEvidenceLines(appr.sourceReview, appr.sourceReviewState));
-  const fieldPages = appr.fieldSnapshot || appr.fieldSnapshotState === 'unreadable'
-    ? sourceEvidencePages(fieldSnapshotLines(appr.fieldSnapshot, appr.fieldSnapshotState, { id: appr.id, label: appr.label }), 'Field evidence') : [];
+  const fieldPages = appr.fieldSnapshot || appr.fieldSnapshotState === 'unreadable' || appr.fieldCostReviews?.length || appr.fieldCostReviewsState === 'unreadable'
+    ? sourceEvidencePages([...fieldSnapshotLines(appr.fieldSnapshot, appr.fieldSnapshotState, { id: appr.id, label: appr.label }), ...fieldCostReviewLines(appr.fieldCostReviews, appr.fieldCostReviewsState)], 'Field evidence') : [];
   const fieldStartPage = evidenceStartPage + evidencePages.length;
   const pageTotal = fieldStartPage + fieldPages.length - 1;
 

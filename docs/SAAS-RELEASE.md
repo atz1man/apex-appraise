@@ -61,10 +61,12 @@ incomplete; sample/test transactions are labelled as such.
 | Operations | External `/ready` monitoring, named incident owner, support response procedure and a tested rollback. | Operator configuration/evidence required. |
 | Enabled integrations | Each sold integration uses real credentials and passes a real transaction; mapping provider licensed for intended usage. | Test each enabled provider; do not advertise unconfigured ones as connected. |
 
-The existing Fly service is not changed or declared customer-ready by these code
-changes. As of 9 October 2026, the web machine reports its last update on 4
-September 2026. A fresh release and the acceptance above are needed; restarting a
-machine does not ship this branch.
+The last verified deployment is web `96f8043e1edb40c6f03418d18ba0ce37c2960dd5`
+and API `8199465192bb4e4ff4e9b0ba2e220fddae030bdf`, recorded on PR #79
+with exact-main CI and read-only serving checks. Those releases do not establish
+paying-customer readiness. The 13 October field allowance increment requires
+its own exact-commit CI and deployment evidence; the external acceptance above
+remains open.
 
 Mapping acceptance: configure `TILE_URL`, `TILE_ATTRIBUTION` and `TILE_USER_AGENT` for a production service with agreed capacity and appropriate proxy/cache/export rights. `release:check` rejects the best-effort public OSM tile default. See [product and source readiness](PRODUCT-READINESS.md) for the evidence coverage and commercial provider decisions.
 
