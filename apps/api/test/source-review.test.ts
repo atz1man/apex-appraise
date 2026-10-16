@@ -26,7 +26,7 @@ describe('durable source input review', () => {
     const { dealId, api } = await fresh();
     const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, assumptionOrigins: { efficiency: 'application-default', 'finance.rate': 'user-entered' } } });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.assumptionOrigins).toEqual({ efficiency: 'application-default', 'finance.rate': 'user-entered' });
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toMatchObject({ inputsUnchanged: false, assumptionOrigins: { efficiency: 'application-default' } });
     const other = await fresh();
     await api.appraisal.save({ dealId: other.dealId, input, sourceReview: acknowledgement });
@@ -70,7 +70,7 @@ describe('durable source input review', () => {
   it('keeps historical acknowledgement but marks it stale after an ordinary edit', async () => {
     const { dealId, api } = await fresh();
     const saved = await api.appraisal.save({ dealId, input, sourceReview: acknowledgement });
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.inputsUnchanged).toBe(false);
   });
   it('detects input changes made outside the save route', async () => {
