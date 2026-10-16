@@ -256,6 +256,7 @@ describe('server-issued extraction receipts', () => {
     await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...originalUnits].reverse().map((u, i) => ({ ...u, label: `Renamed current unit ${i + 1}`, area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
     const laterReview = (await api.appraisal.getCurrent(dealId))?.sourceReview;
     expect(laterReview?.originalExtractedUnits).toEqual(extracted.extraction.units);
+    expect(laterReview?.unitComparison?.rows[0]).toMatchObject({ originalRow: 1, savedRow: originalUnits.length, changed: true, saved: { area: 999 } });
     expect((await api.appraisal.getCurrent(dealId))?.input.units.map(u => u.extractionUnitId)).toEqual([...unitIds].reverse());
     expect(laterReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
     expect(laterReview?.extractionComparison).toContainEqual(expect.objectContaining({ field: 'efficiency', originalValue: extracted.extraction.efficiency, savedValue: 80, changed: true }));

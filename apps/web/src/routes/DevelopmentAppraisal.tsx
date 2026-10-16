@@ -1,3 +1,4 @@
+import { unitComparisonLines } from '../lib/source-evidence';
 import { FieldCostReview } from '../components/FieldCostReview';
 import { fieldCostReviewLines } from '../lib/field-cost-review-export';
 import { WorkbookDownloadButton } from '../components/WorkbookDownloadButton';
@@ -625,6 +626,12 @@ export default function DevelopmentAppraisal() {
                 {saved.sourceReview.sample && <p className="font-semibold">Worked example: these inputs were not extracted from project documents.</p>}
                 {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source is superseded, changed or missing. Check the source record before relying on this appraisal.</p>}
                 {saved.sourceReview.omissions.length > 0 && <p className="font-semibold">The review recorded incomplete source coverage. Read the reported omissions below.</p>}
+                <details>
+                  <summary className="cursor-pointer font-semibold">Original versus saved units</summary>
+                  <div className="mt-2 space-y-2 break-words">
+                    {unitComparisonLines(saved.sourceReview.unitComparison, dirty).map((line, index) => <p key={index}>{line}</p>)}
+                  </div>
+                </details>
                 <details>
                   <summary className="cursor-pointer font-semibold">Original extracted unit schedule</summary>
                   <div className="mt-2 space-y-2 break-words">
