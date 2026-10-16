@@ -228,7 +228,9 @@ describe('server-issued extraction receipts', () => {
     const pieces = token.split('.');
     pieces[1] = Buffer.from(JSON.stringify({ ...receipt, mode: 'model' })).toString('base64url');
     await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: pieces.join('.') } })).rejects.toThrow(/invalid or expired/);
-    const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, sample: false, extractionReceipt: token } });
+    expect(extracted.extraction.units.length).toBeGreaterThan(1);
+    const originalUnits = extracted.extraction.units.map(u => ({ label: u.label, count: u.count, area: u.area, cap: u.value, source: u.source }));
+    const saved = await api.appraisal.save({ dealId, input: { ...input, units: originalUnits }, sourceReview: { ...acknowledgement, sample: false, extractionReceipt: token } });
     const review = (await api.appraisal.getCurrent(dealId))!.sourceReview!;
     expect(review.originalExtractedUnits).toEqual(extracted.extraction.units);
     expect(review.extractionComparison).toHaveLength(13);
@@ -238,7 +240,7 @@ describe('server-issued extraction receipts', () => {
     const stored = JSON.parse((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).sourceReview!);
     expect(stored.extractionReceipt.extraction).toEqual(extracted.extraction);
     expect(stored.extractionReceipt.buildPerSqft).toBe(105);
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...originalUnits].reverse().map((u, i) => ({ ...u, label: `Renamed current unit ${i + 1}`, area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
     const laterReview = (await api.appraisal.getCurrent(dealId))?.sourceReview;
     expect(laterReview?.originalExtractedUnits).toEqual(extracted.extraction.units);
     expect(laterReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
