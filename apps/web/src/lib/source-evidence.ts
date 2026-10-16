@@ -23,6 +23,10 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
   ];
   if (review.sample) lines.push('WORKED EXAMPLE: these inputs were not extracted from project documents.');
   if (review.documents.some(d => d.status !== 'unchanged')) lines.push('SOURCE WARNING: a reviewed document is superseded, changed or missing.');
+  if (review.omissions.length) lines.push('SOURCE COVERAGE WARNING: reported omissions mean some source content was excluded. Read the omissions before relying on this appraisal.');
+  lines.push('REPORTED OMISSIONS');
+  if (!review.omissions.length) lines.push('No omissions were reported with the acknowledgement. This is not a completeness certification.');
+  for (const omission of review.omissions) lines.push(`${omission.name}: ${omission.reason}`);
   lines.push('ORIGINAL EXTRACTION RECEIPT');
   if (review.extractionReceipt) {
     const receipt = review.extractionReceipt;
@@ -59,9 +63,6 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
     const doc = review.documents.find(d => d.id === ref.documentId);
     lines.push(`Unit ${ref.unitIndex + 1}: ${ref.unitLabel} | ${doc?.name ?? 'Source unavailable'} | Document ID: ${ref.documentId} | Status: ${doc?.status ?? 'unavailable'} | ${ref.page !== null ? `PDF page ${ref.page}` : ''}${ref.locator ? ` | ${ref.locator}` : ''}`);
   }
-  lines.push('REPORTED OMISSIONS');
-  if (!review.omissions.length) lines.push('No omissions were reported with the acknowledgement. This is not a completeness certification.');
-  for (const omission of review.omissions) lines.push(`${omission.name}: ${omission.reason}`);
   return lines;
 }
 /** Bound printed line width without truncating evidence, including long filenames. */

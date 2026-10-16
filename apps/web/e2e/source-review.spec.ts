@@ -145,6 +145,34 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   await expect(page.getByText('ASSUMPTION ORIGINS AT REVIEW', { exact: true })).toBeVisible();
   await expect(page.getByText(new RegExp(saved.sourceReview.extractionReceipt.id))).toBeVisible();
   await expect(page.getByText(/Annual interest rate %: User-entered or corrected/)).toBeVisible();
+  // Synthetic oversized history exercises the real workbook and bounded report rendering.
+  // Only the response is changed; no fabricated receipt is saved.
+  await page.route('**/trpc/**', async route => {
+    if (!route.request().url().includes('appraisal.getCurrent')) return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const row of Array.isArray(body) ? body : [body]) {
+      const review = row.result?.data?.json?.sourceReview;
+      if (!review) continue;
+      review.omissions = [{ name: 'Excluded cost sheet', reason: 'Sheet exceeded extraction limit' }];
+      review.originalExtractedUnits = Array.from({ length: 300 }, (_, i) => ({ label: `History unit ${i + 1}`, count: 1, area: 500, value: 300, conf: 'low', source: 'Synthetic history' }));
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  await expect(page.getByText(/SOURCE COVERAGE WARNING/)).toBeVisible();
+  await expect(page.getByText('Excluded cost sheet: Sheet exceeded extraction limit', { exact: true })).toBeVisible();
+  await expect(page.getByText(/EVIDENCE PRINT LIMIT/)).toBeVisible();
+  await expect(page.getByText(/Original row 300:/)).toHaveCount(0);
+  await page.goto(`/deal/${dealId}/appraisal`);
+  const fullDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export .xlsx', exact: true }).click();
+  const fullWorkbook = new ExcelJS.Workbook(); await fullWorkbook.xlsx.readFile((await (await fullDownload).path())!);
+  const fullEvidence: string[] = []; fullWorkbook.getWorksheet('Source evidence')!.eachRow(row => fullEvidence.push(String(row.getCell(1).value ?? '')));
+  expect(fullEvidence.join(' ')).toContain('SOURCE COVERAGE WARNING');
+  expect(fullEvidence.join(' ')).toContain('Excluded cost sheet: Sheet exceeded extraction limit');
+  expect(fullEvidence.join(' ')).toContain('Original row 300: History unit 300');
+  await page.unroute('**/trpc/**');
   await page.goto(`/deal/${dealId}/appraisal`);
   await page.getByText('Original versus saved assumptions', { exact: true }).click();
   await page.getByText('Original versus saved units', { exact: true }).click();

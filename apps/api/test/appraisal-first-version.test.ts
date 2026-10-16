@@ -220,7 +220,7 @@ describe('a serialisation abort from the database', () => {
     try {
       await expect(
         callerFor(T.principal).appraisal.save({ dealId: deal.id, input: INPUT, label: 'Base' } as never),
-      ).rejects.toThrow(/saved the first version/i);
+      ).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining('database remained busy') });
       // every attempt was spent, not just the first
       expect(injected).toBeGreaterThan(1);
     } finally {

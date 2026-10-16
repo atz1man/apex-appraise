@@ -540,3 +540,68 @@ mobile, Excel/report and dirty-editor browser journey. Exact-head CI is recorded
 the PR. Next: release the comparison after its release gates pass, then validate it
 with a valuer using real project evidence. Provider and customer acceptance gates
 remain open; green checks do not establish valuation accuracy.
+
+### Source omission priority in exports — 16 October 2026
+
+Long original-unit histories could consume the bounded PDF evidence appendix
+before the reported-omissions section, leaving the reader with a generic print
+limit warning but no explicit incomplete-source warning. Source evidence now
+places a coverage warning and reported omissions before extraction history.
+The empty-omissions wording still says this is not a completeness certification.
+Unverified snapshots still withhold cached review content. The PDF remains
+bounded to twelve evidence pages; the workbook retains the full record.
+
+Validation: web typecheck, 422 web tests, and the real local correction/save/export
+browser journey. A synthetic 300-row response exceeds the PDF cap: the rendered
+report retains the specific omission and warning while Excel retains the final
+unit row. No synthetic receipt was saved, and no provider or financial behavior
+changed. Exact-head CI and release status are recorded on the PR. Next: release
+this export safeguard after its gates, then real-source customer/valuer acceptance.
+
+### Concurrent-save failure investigation — 16 October 2026
+
+PR #90's first CI attempt passed 239 browser tests but the subsequent workload
+returned HTTP 409 from appraisal.save at the start of the three-workspace phase.
+The single-worker phase and fixture cleanup passed; the unchanged rerun passed.
+The original assertion did not retain the refusal message, so the exact cause
+cannot be inferred from HTTP 409 alone. Release remains on hold for investigation.
+
+An isolated local PostgreSQL experiment exercised the real router with 20 rounds
+of three synthetic workspaces and 50 saves per worker. Nineteen serialization
+aborts recovered through the existing retry helper; no terminal save failed.
+This does not reproduce or fix the CI failure. No production data was used.
+
+The retry-exhaustion path previously reused the same message as a confirmed
+competing first save. It now reports database contention and asks the user to
+reload/retry, without claiming another person saved. A forced-abort API test
+verifies four attempts, no created version and successful recovery after the
+fault clears. Workload failures now include only the returned error code/message
+alongside the route, not request inputs, tokens or the full response. Retry
+limits, serialization, tenant guards and financial calculations are unchanged.
+Targeted tests/typecheck and HTTP workload evidence are recorded on the PR.
+Next: capture the exact refusal on recurrence before choosing a concurrency fix;
+a passing rerun or this diagnostic improvement does not close that finding.
+
+### Bounded first-save contention recovery — 16 October 2026
+
+Further isolated PostgreSQL testing reproduced retry exhaustion with 40 distinct
+synthetic workspaces. The old four-attempt, 5–24ms jitter policy produced eight
+terminal conflicts in its first round (77 serialization aborts). Eight attempts
+with exponential jitter capped at 254ms per wait recovered 855 aborts over ten
+rounds without terminal failure. Reverting only the policy on the same enlarged
+test database reproduced nine terminal conflicts (80 aborts), ruling out database
+growth alone as the explanation for that improvement. Each worker made 50 saves.
+
+The helper now allows eight fresh transactions with at most 1,078ms total added
+waiting. It retries only the database's P2034 abort, never an application conflict
+or ordinary error. Genuine competing first saves still re-read within the
+serializable transaction and refuse the loser. Attempts remain bounded; the
+contention refusal remains if exhausted. No financial or tenant logic changed.
+
+API typecheck and 23 targeted tests pass, including recovery on the eighth
+attempt, delay bounds, terminal exhaustion, genuine races and non-retryable
+errors. The heavy workload used only a disposable local database; it is not a
+production capacity claim. The original CI 409 had no message, so its precise
+cause remains unproven; this addresses a reproduced failure class rather than
+retroactively identifying that event. Full exact-head CI is recorded on PR #90.
+Next: review the combined candidate and its release evidence before deployment.

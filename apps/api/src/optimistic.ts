@@ -85,17 +85,16 @@ export const SERIALISATION_FAILURE = 'P2034';
  * to prevent — the invariant is held by the re-read, and the abort was only ever
  * the signal to take it again.
  *
- * Bounded, and short. This sits in front of a person waiting for a save, so the
- * budget is a few milliseconds of jitter rather than a real backoff — enough to
- * let the winner commit, not enough to be felt. When the attempts run out the
- * error is passed on unchanged, and the caller turns it into whatever refusal it
- * was already going to give.
+ * Bounded exponential backoff with jitter. Four attempts inside roughly 60ms
+ * can all collide with sustained writes on unrelated deals. Allow eight fresh
+ * transactions, spreading retries over at most 1.08 seconds of total waiting.
+ * Real application refusals still escape immediately; only P2034 is retried.
  */
 export async function retryOnSerialisationFailure<T>(
   run: () => Promise<T>,
   opts: { attempts?: number; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<T> {
-  const attempts = opts.attempts ?? 4;
+  const attempts = opts.attempts ?? 8;
   const nap = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   for (let attempt = 1; ; attempt++) {
     try {
@@ -109,8 +108,9 @@ export async function retryOnSerialisationFailure<T>(
        */
       const code = (e as { code?: unknown } | null)?.code;
       if (attempt >= attempts || code !== SERIALISATION_FAILURE) throw e;
-      // a little jitter, so two aborted callers do not line up and abort again
-      await nap(5 + Math.floor(Math.random() * 20));
+      // Spread contenders out; cap each wait so a save remains bounded.
+      const ceiling = Math.min(250, 20 * 2 ** (attempt - 1));
+      await nap(5 + Math.floor(Math.random() * ceiling));
     }
   }
 }

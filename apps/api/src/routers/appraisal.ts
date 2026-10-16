@@ -520,7 +520,7 @@ export const appraisalRouter = router({
           if ((e as { code?: string })?.code === SERIALISATION_FAILURE) {
             throw new TRPCError({
               code: 'CONFLICT',
-              message: 'Somebody else saved the first version of this appraisal a moment ago. Reload to see it, then edit from there.',
+              message: 'The database remained busy after retrying this save. Reload the appraisal and try again. No new version was saved by this request.',
             });
           }
           throw e;

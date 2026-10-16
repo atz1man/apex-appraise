@@ -22,8 +22,11 @@ test('concurrent workspaces preserve appraisals and tenant boundaries', async ({
         ...(mutation ? { data: { json: input } } : { params: { input: JSON.stringify({ json: input }) } }),
       });
       status = response.status();
-      expect(status, route).toBe(expectedStatus);
       const body = await response.json();
+      // Synthetic local fixtures only. Retain refusal code/message, never tokens,
+      // request inputs or the full response, so conflicts can be diagnosed.
+      const refusal = body.error?.json;
+      expect(status, `${route}: ${refusal?.data?.code ?? 'no error code'} — ${refusal?.message ?? 'no error message'}`).toBe(expectedStatus);
       if (expectedStatus === 200) {
         expect(body.error, route).toBeUndefined();
         expect(body.result?.data, route).toBeDefined();

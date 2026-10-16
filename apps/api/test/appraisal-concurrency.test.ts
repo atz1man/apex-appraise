@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
@@ -115,5 +115,21 @@ describe('two people saving a new version at once', () => {
 
     const current = await prisma.appraisal.count({ where: { dealId: T.dealId, isCurrent: true } });
     expect(current, 'more than one version is marked current').toBe(1);
+  });
+});
+
+
+describe('exhausted database retries', () => {
+  it('reports contention without claiming another user saved, and creates no version', async () => {
+    const tenant = await makeTenant('Contention');
+    const transaction = vi.spyOn(prisma, '$transaction').mockRejectedValue(Object.assign(new Error('Synthetic serialization abort'), { code: 'P2034' }));
+    try {
+      await expect(callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never))
+        .rejects.toMatchObject({ code: 'CONFLICT', message: 'The database remained busy after retrying this save. Reload the appraisal and try again. No new version was saved by this request.' });
+      expect(transaction).toHaveBeenCalledTimes(8);
+    } finally { transaction.mockRestore(); }
+    expect(await prisma.appraisal.count({ where: { dealId: tenant.dealId } })).toBe(0);
+    await expect(callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never)).resolves.toBeTruthy();
+    expect(await prisma.appraisal.count({ where: { dealId: tenant.dealId, isCurrent: true } })).toBe(1);
   });
 });
