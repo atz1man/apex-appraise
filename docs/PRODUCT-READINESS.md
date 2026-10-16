@@ -581,3 +581,27 @@ limits, serialization, tenant guards and financial calculations are unchanged.
 Targeted tests/typecheck and HTTP workload evidence are recorded on the PR.
 Next: capture the exact refusal on recurrence before choosing a concurrency fix;
 a passing rerun or this diagnostic improvement does not close that finding.
+
+### Bounded first-save contention recovery — 16 October 2026
+
+Further isolated PostgreSQL testing reproduced retry exhaustion with 40 distinct
+synthetic workspaces. The old four-attempt, 5–24ms jitter policy produced eight
+terminal conflicts in its first round (77 serialization aborts). Eight attempts
+with exponential jitter capped at 254ms per wait recovered 855 aborts over ten
+rounds without terminal failure. Reverting only the policy on the same enlarged
+test database reproduced nine terminal conflicts (80 aborts), ruling out database
+growth alone as the explanation for that improvement. Each worker made 50 saves.
+
+The helper now allows eight fresh transactions with at most 1,078ms total added
+waiting. It retries only the database's P2034 abort, never an application conflict
+or ordinary error. Genuine competing first saves still re-read within the
+serializable transaction and refuse the loser. Attempts remain bounded; the
+contention refusal remains if exhausted. No financial or tenant logic changed.
+
+API typecheck and 23 targeted tests pass, including recovery on the eighth
+attempt, delay bounds, terminal exhaustion, genuine races and non-retryable
+errors. The heavy workload used only a disposable local database; it is not a
+production capacity claim. The original CI 409 had no message, so its precise
+cause remains unproven; this addresses a reproduced failure class rather than
+retroactively identifying that event. Full exact-head CI is recorded on PR #90.
+Next: review the combined candidate and its release evidence before deployment.

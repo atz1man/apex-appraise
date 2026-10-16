@@ -126,7 +126,7 @@ describe('exhausted database retries', () => {
     try {
       await expect(callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never))
         .rejects.toMatchObject({ code: 'CONFLICT', message: 'The database remained busy after retrying this save. Reload the appraisal and try again. No new version was saved by this request.' });
-      expect(transaction).toHaveBeenCalledTimes(4);
+      expect(transaction).toHaveBeenCalledTimes(8);
     } finally { transaction.mockRestore(); }
     expect(await prisma.appraisal.count({ where: { dealId: tenant.dealId } })).toBe(0);
     await expect(callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never)).resolves.toBeTruthy();

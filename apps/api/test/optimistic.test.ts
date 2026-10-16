@@ -110,6 +110,26 @@ describe('a transaction the database aborted to stay serialisable', () => {
     expect(calls).toBe(3);
   });
 
+  it('spreads sustained database aborts across a bounded backoff before recovering', async () => {
+    let calls = 0;
+    const waits: number[] = [];
+    const result = await retryOnSerialisationFailure(async () => {
+      if (++calls < 8) throw p2034();
+      return 'saved';
+    }, { sleep: async ms => { waits.push(ms); } });
+    expect(result).toBe('saved');
+    expect(calls).toBe(8);
+    expect(waits).toHaveLength(7);
+    waits.forEach((ms, index) => {
+      expect(ms).toBeGreaterThanOrEqual(5);
+      expect(ms).toBeLessThan(5 + Math.min(250, 20 * 2 ** index));
+    });
+    expect(waits.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(1078);
+    let exhausted = 0;
+    await expect(retryOnSerialisationFailure(async () => { exhausted++; throw p2034(); }, { sleep: noSleep })).rejects.toMatchObject({ code: 'P2034' });
+    expect(exhausted).toBe(8);
+  });
+
   it('gives up eventually rather than retrying for ever', { timeout: 5_000 }, async () => {
     let calls = 0;
     await expect(
