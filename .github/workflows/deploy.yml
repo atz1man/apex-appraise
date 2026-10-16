@@ -24,7 +24,7 @@ name: Deploy
 #
 # SETUP (once):
 #   fly tokens create deploy -a apex-appraise-api    # copy the whole token
-#   fly tokens create deploy -a apex-appraise-web
+#   fly tokens create deploy -a plotmerit
 # store these as FLY_API_TOKEN and FLY_WEB_API_TOKEN respectively. An existing
 # FLY_API_TOKEN authorised for both apps remains supported as a fallback.
 
@@ -93,7 +93,7 @@ jobs:
           node-version: 22
       - name: Prove it is actually serving
         timeout-minutes: 3
-        run: node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
+        run: node .github/scripts/check-serving.cjs https://plotmerit.fly.dev
 
       - name: Say what is now live
         run: |
@@ -103,4 +103,4 @@ jobs:
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
           echo "| apps | \`${{ inputs.apps }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| site | https://apex-appraise-web.fly.dev |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| site | https://plotmerit.fly.dev |" >> "$GITHUB_STEP_SUMMARY"

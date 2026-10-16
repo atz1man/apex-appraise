@@ -599,7 +599,7 @@ function PortalAccessPanel({ isAdmin }: { isAdmin: boolean }) {
 function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string }) {
   const toast = useToast();
   const utils = trpc.useUtils();
-  const { data: members, isLoading } = trpc.org.members.useQuery();
+  const { data: members, isLoading, error: membersError, refetch: refreshMembers, isFetching } = trpc.org.members.useQuery();
   const [inviting, setInviting] = useState(false);
   const setRole = trpc.org.setRole.useMutation({
     onSuccess: () => {
@@ -655,6 +655,11 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
         isAdmin && !inviting ? <Button variant="secondary" onClick={() => setInviting(true)}>Invite teammate</Button> : undefined
       }
     >
+      {isAdmin && <div className="mb-4 flex items-start justify-between gap-3">
+        <p className="text-[12px] text-ink-2 max-w-[620px]">Recorded sign-ins identify accounts, not anonymous visitors or the person behind a shared demo login. Use individual accounts for testers. No record does not prove someone never visited. This is not a live online indicator.</p>
+        <Button variant="secondary" loading={isFetching} onClick={() => { void refreshMembers(); }}>Refresh activity</Button>
+      </div>}
+      {membersError && <FormError>Member activity could not be loaded. Refresh to try again.</FormError>}
       {inviting && <InviteForm onDone={() => setInviting(false)} />}
       {isLoading ? (
         <SkeletonRows rows={4} height={30} />
@@ -667,6 +672,7 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Member</th>
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Email</th>
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Joined</th>
+                {isAdmin && <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Recorded sign-ins</th>}
                 <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-left">Role</th>
                 {isAdmin && <th className="label-mono text-ink-3 font-semibold pb-2 px-2 text-right"><span className="sr-only">Remove</span></th>}
               </tr>
@@ -687,6 +693,9 @@ function MembersPanel({ isAdmin, selfId }: { isAdmin: boolean; selfId: string })
                     </td>
                     <td className="py-2.5 px-2 border-t border-border-faint text-[12.5px] text-ink-2 max-w-[240px] truncate">{m.email}</td>
                     <td className="py-2.5 px-2 border-t border-border-faint fig text-[12px] text-ink-2b">{dateGB(m.createdAt)}</td>
+                    {isAdmin && <td className="py-2.5 px-2 border-t border-border-faint text-[12px] text-ink-2">
+                      {m.signInHistory?.lastRecordedAt ? <><time dateTime={new Date(m.signInHistory.lastRecordedAt).toISOString()}>{new Date(m.signInHistory.lastRecordedAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })} UK</time><span className="block">{m.signInHistory.recordedCount} recorded</span></> : 'No successful sign-in recorded'}
+                    </td>}
                     <td className="py-2.5 px-2 border-t border-border-faint">
                       {isAdmin && !isSelf ? (
                         <select

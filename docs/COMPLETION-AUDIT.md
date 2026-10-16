@@ -974,3 +974,34 @@ Next: distinguish extracted versus defaulted assumptions at individual-field
 level and reconcile them against representative real project documents. This
 increment improves review control; it does not establish model extraction
 accuracy, measured drawing take-off, provider activation or professional acceptance.
+
+## PlotMerit address and account activity — 16 October 2026
+
+At the owner's request, the old apex-appraise-web host is stopped with autostart
+and restart disabled. The owner then requested the new product name as the
+address. https://plotmerit.fly.dev now serves the previously accepted image
+1598f45ff99b4239cb9d34ce8f88014e680efbfe, digest
+sha256:18bb1d44f19a9aa1773071bb0459017d02193671362a4ce23b854718fa145a61.
+That image passed main CI 38885987585; the new host passed serving/API/database
+checks. Existing backend and data are retained. APP_URL and WEB_URL now use the
+new host. Old-host access must stay disabled; a new public hostname is not an
+access ban on a specific person. No custom domain purchase or ownership claim.
+Deployment config, checks and operator instructions now target the new host.
+Existing app-scoped CI deploy credentials may require owner re-provisioning for
+the new app; no credentials were changed in this task.
+
+Workspace administrators can see members' last recorded successful sign-in and
+recorded count, with explicit refresh and visible load failures. Aggregation
+uses immutable user IDs and the current tenant, excludes failed sign-ins and
+is not returned to non-admin members. Existing audit records provide historical
+data; absence means no record, not proof of no visit. This is not real-time
+presence, anonymous visitor identification or a cross-customer owner dashboard.
+Shared demo credentials cannot identify Dan or any other individual. Named
+individual accounts are required for identifiable pilot activity. No new IP
+tracking, cookies, fingerprinting or tracking-provider calls were introduced.
+
+Local verification: audit regression covers same-ID events in another tenant,
+renamed actors, failed sign-ins, absent records and non-admin/anonymous access.
+The browser journey verifies real sign-in, displayed history, refresh and a
+visible failure state. Web unit suite and strict typechecks passed. Exact-commit
+CI and activity-feature delivery evidence will be recorded on the PR.
