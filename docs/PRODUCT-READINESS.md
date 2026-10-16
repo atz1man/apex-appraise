@@ -540,3 +540,20 @@ mobile, Excel/report and dirty-editor browser journey. Exact-head CI is recorded
 the PR. Next: release the comparison after its release gates pass, then validate it
 with a valuer using real project evidence. Provider and customer acceptance gates
 remain open; green checks do not establish valuation accuracy.
+
+### Source omission priority in exports — 16 October 2026
+
+Long original-unit histories could consume the bounded PDF evidence appendix
+before the reported-omissions section, leaving the reader with a generic print
+limit warning but no explicit incomplete-source warning. Source evidence now
+places a coverage warning and reported omissions before extraction history.
+The empty-omissions wording still says this is not a completeness certification.
+Unverified snapshots still withhold cached review content. The PDF remains
+bounded to twelve evidence pages; the workbook retains the full record.
+
+Validation: web typecheck, 422 web tests, and the real local correction/save/export
+browser journey. A synthetic 300-row response exceeds the PDF cap: the rendered
+report retains the specific omission and warning while Excel retains the final
+unit row. No synthetic receipt was saved, and no provider or financial behavior
+changed. Exact-head CI and release status are recorded on the PR. Next: release
+this export safeguard after its gates, then real-source customer/valuer acceptance.

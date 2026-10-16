@@ -6,6 +6,20 @@ const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('keeps coverage warnings and omissions ahead of a unit history that exceeds the PDF limit', () => {
+    const originalExtractedUnits = Array.from({ length: 300 }, (_, i) => ({ label: `Unit ${i}`, count: 1, area: 500, value: 300, conf: 'low' as const, source: 'Unverified notes' }));
+    const lines = sourceEvidenceLines({ ...review, originalExtractedUnits });
+    const pages = sourceEvidencePages(lines);
+    expect(pages).toHaveLength(12);
+    expect(pages[0].join(' ')).toContain('SOURCE COVERAGE WARNING');
+    expect(pages[0].join(' ')).toContain('Costs.xlsx: Sheet 11 omitted');
+    expect(pages.flat().join(' ')).not.toContain('Original row 300');
+    expect(wrapEvidence(lines).join(' ')).toContain('Original row 300');
+    expect(lines.indexOf('REPORTED OMISSIONS')).toBeLessThan(lines.indexOf('ORIGINAL EXTRACTION RECEIPT'));
+    expect(sourceEvidenceLines({ ...review, omissions: [] }).join(' ')).not.toContain('SOURCE COVERAGE WARNING');
+    expect(sourceEvidenceLines({ ...review, omissions: [] }).join(' ')).toContain('not a completeness certification');
+    expect(sourceEvidenceLines(review, 'unverified').join(' ')).not.toContain('Sheet 11 omitted');
+  });
   it('exports linked units with explicit scope and withholds stale editor comparisons', () => {
     const unitComparison: SourceEvidence['unitComparison'] = { state: 'available', rows: [{ originalRow: 2, savedRow: 1, original: { label: 'Old', count: 1, area: 500, value: 300 }, saved: { label: 'New', count: 1, area: 550, value: 310 }, changed: true }, { originalRow: 1, savedRow: null, original: { label: 'Unlinked', count: 1, area: 1, value: 1 }, saved: null, changed: null }] };
     const text = sourceEvidenceLines({ ...review, unitComparison }).join(' ');
