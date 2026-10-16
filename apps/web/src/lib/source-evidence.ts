@@ -2,6 +2,7 @@ import { ASSUMPTION_FIELDS, ORIGIN_LABELS, type AssumptionField, type Assumption
 /** Portable evidence text: never export expiring download credentials. */
 export interface SourceEvidence {
   assumptionOrigins?: AssumptionOrigins;
+  extractionComparison?: Array<{ field: string; label: string; originalValue: number; savedValue: number; changed: boolean; originalOrigin: string }>;
   extractionReceipt?: { id: string; createdAt: string; mode: 'model' | 'worked-example'; outputHash: string };
   reviewerName: string; reviewedAt: string; inputsUnchanged: boolean; sample: boolean;
   documents: Array<{ id: string; name: string; status: string; addedAt: string; supersededById?: string | null; sha256?: string | null }>;
@@ -26,6 +27,13 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
     lines.push(`Original extracted inputs SHA-256: ${receipt.outputHash}`);
     lines.push('Records the original server output before user corrections. It does not verify source accuracy, page citations or professional acceptance.');
   } else lines.push('No server-issued extraction receipt was recorded for this review.');
+  if (review.extractionComparison) {
+    lines.push('ORIGINAL VERSUS SAVED ASSUMPTIONS');
+    lines.push('Compares original server output with the last saved inputs, not unsaved edits. Differences do not establish who changed a value or whether it is correct.');
+    lines.push('Scope: directly mapped scheme assumptions only. Unit schedules, build cost lines, CIL, S106 and later-added inputs are not compared.');
+    if (dirty) lines.push('Comparison withheld because this export includes unsaved edits. Save and refresh before comparing.');
+    else for (const row of review.extractionComparison) lines.push(`${row.label}: original ${row.originalValue}; saved ${row.savedValue} — ${row.changed ? 'Changed' : 'Same'} | Original origin: ${row.originalOrigin}`);
+  }
   lines.push('ASSUMPTION ORIGINS AT REVIEW');
   lines.push('Origin labels were submitted with the input acknowledgement; they are not independently verified source citations. Changed inputs are not covered by this historical record.');
   if (!review.assumptionOrigins) lines.push('Assumption origins were not recorded for this review.');

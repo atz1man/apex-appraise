@@ -449,3 +449,25 @@ session-only version field; saved reviews retain the server-pinned document
 metadata as before. These remain optional client
 concurrency stamps, not authenticated extraction receipts. Durable receipts and
 the documented integration/customer release gates remain the next priority.
+
+### Original versus saved assumptions — 16 October 2026
+
+The saved appraisal source-review panel now compares thirteen directly mapped
+scheme assumptions against the server-issued extraction receipt. It shows original
+and saved values, change status and the original origin label. The same comparison
+travels with Excel and report evidence. Unsaved editor changes withhold comparison
+rows; stale input-review warnings remain visible after subsequent saves. Missing
+legacy receipts do not produce an invented baseline.
+
+This comparison does not identify the author of a correction or establish which
+value is correct. Unit schedules, build-cost lines, CIL, S106 and later-added inputs
+are explicitly outside its scope: their saved shapes cannot safely be matched by
+position or label. Financial calculations and persisted data are unchanged.
+
+Local evidence: both application typechecks; 23 source-review API tests (including
+all thirteen mappings, zero/equal values, unknown origins, tenant/signature/source
+checks and subsequent saves); 419 web tests; real local browser journey covering
+correction, save, reopen, mobile overflow, Excel export and unsaved-edit hiding.
+The PR records exact-commit CI evidence. No provider activation or production
+readiness claim. Next: preserve stable unit identity before adding unit-by-unit
+extraction comparisons. External provider and customer acceptance gates remain.

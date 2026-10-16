@@ -2,7 +2,8 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { zExtraction, zAssumptionOrigins } from '@apex/types';
+import { ASSUMPTION_FIELDS, ORIGIN_LABELS, type AssumptionField } from '@apex/types/assumption-origins';
+import { zExtraction, zAssumptionOrigins, type AppraisalInputDto } from '@apex/types';
 import { JWT_SECRET } from './context.js';
 
 const fingerprint = z.string().regex(/^[a-f0-9]{64}$/);
@@ -38,4 +39,29 @@ export function verifyExtractionReceipt(token: string, orgId: string): Extractio
 }
 export function receiptSummary(receipt: ExtractionReceipt) {
   return { id: receipt.id, createdAt: receipt.createdAt, mode: receipt.mode, outputHash: receipt.outputHash };
+}
+
+/** Compare only directly mapped scalar inputs. Never reverse-engineer cost lines or unit identities. */
+export function receiptComparison(receipt: ExtractionReceipt, saved: AppraisalInputDto) {
+  const original = receipt.extraction;
+  const pairs: Array<[AssumptionField, number, number]> = [
+    ['efficiency', original.efficiency, saved.efficiency],
+    ['asking', original.asking, saved.site.landFixed],
+    ['profFee', original.profFee, saved.profFeePct],
+    ['contingency', original.contingency, saved.contingencyPct],
+    ['targetProfit', original.targetProfit, saved.targetProfitOnGdvPct],
+    ['acq', original.acq, saved.site.acqPct],
+    ['agent', original.agent, saved.disposal.agentPct],
+    ['legal', original.legal, saved.disposal.legalPct],
+    ['finance.ltc', original.finance.ltc, saved.finance.ltcPct],
+    ['finance.rate', original.finance.rate, saved.finance.ratePct],
+    ['finance.period', original.finance.period, saved.finance.periodMonths],
+    ['finance.sales', original.finance.sales, saved.finance.salesMonths],
+    ['finance.arrFee', original.finance.arrFee, saved.finance.arrangementFeePct],
+  ];
+  return pairs.map(([field, originalValue, savedValue]) => ({
+    field, label: ASSUMPTION_FIELDS[field], originalValue, savedValue,
+    changed: originalValue !== savedValue,
+    originalOrigin: ORIGIN_LABELS[receipt.assumptionOrigins[field] ?? 'unknown'],
+  }));
 }
