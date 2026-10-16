@@ -6,6 +6,15 @@ const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('compares saved values and withholds them for dirty or unverifiable exports', () => {
+    const compared = { ...review, extractionComparison: [{ field: 'efficiency', label: 'NIA / GIA efficiency %', originalValue: 90, savedValue: 85, changed: true, originalOrigin: 'Worked example — not project evidence' }] };
+    expect(sourceEvidenceLines(compared).join(' ')).toContain('original 90; saved 85 — Changed');
+    expect(sourceEvidenceLines(compared).join(' ')).toContain('Unit schedules, build cost lines, CIL, S106');
+    expect(sourceEvidenceLines(compared, 'recorded', true).join(' ')).toContain('Comparison withheld');
+    expect(sourceEvidenceLines(compared, 'recorded', true).join(' ')).not.toContain('saved 85');
+    expect(sourceEvidenceLines(compared, 'unverified').join(' ')).not.toContain('saved 85');
+    expect(sourceEvidenceLines(review).join(' ')).not.toContain('ORIGINAL VERSUS SAVED');
+  });
   it('exports reported origins without inferring missing history or hiding stale inputs', () => {
     expect(sourceEvidenceLines(review).join(' ')).toContain('Assumption origins were not recorded');
     const text = sourceEvidenceLines({ ...review, inputsUnchanged: false, assumptionOrigins: { efficiency: 'application-default', 'finance.rate': 'user-entered', asking: 'model-supplied' } }).join(' ');

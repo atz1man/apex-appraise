@@ -626,6 +626,19 @@ export default function DevelopmentAppraisal() {
                 {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source is superseded, changed or missing. Check the source record before relying on this appraisal.</p>}
                 {saved.sourceReview.omissions.length > 0 && <p className="font-semibold">The review recorded incomplete source coverage. Read the reported omissions below.</p>}
                 <details>
+                  <summary className="cursor-pointer font-semibold">Original versus saved assumptions</summary>
+                  <div className="mt-2 space-y-2">
+                    <p>Compares original server output with the last saved inputs. Differences do not establish who changed a value or whether it is correct.</p>
+                    <p>Scope: directly mapped scheme assumptions only. Unit schedules, build cost lines, CIL, S106 and later-added inputs are not compared.</p>
+                    {dirty ? <p role="status">Save and refresh before comparing: this editor contains unsaved changes.</p> : saved.sourceReview.extractionComparison ? <ul className="space-y-2">
+                      {saved.sourceReview.extractionComparison.map(row => <li key={row.field}>
+                        <span className="font-semibold">{row.label}</span>: original {row.originalValue}; saved {row.savedValue} — {row.changed ? 'Changed' : 'Same'}
+                        <span className="block">Original origin: {row.originalOrigin}</span>
+                      </li>)}
+                    </ul> : <p>No original extraction comparison is available for this review.</p>}
+                  </div>
+                </details>
+                <details>
                   <summary className="cursor-pointer font-semibold">Reviewed sources and reported omissions</summary>
                   <div className="mt-2 space-y-2 break-words">
                     {!saved.sourceReview.documents.length && <p>No uploaded source documents were recorded with this review.</p>}

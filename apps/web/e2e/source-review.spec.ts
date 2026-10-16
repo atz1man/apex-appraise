@@ -112,6 +112,9 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   await page.reload();
   await expect(page.getByText('Saved inputs match the recorded review.', { exact: true })).toBeVisible();
   await expect(page.getByText('Worked example: these inputs were not extracted from project documents.', { exact: true })).toBeVisible();
+  await page.getByText('Original versus saved assumptions', { exact: true }).click();
+  await expect(page.getByText(/NIA \/ GIA efficiency %: original 90; saved 85 — Changed/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export .xlsx', exact: true }).click();
   const file = await download;
@@ -120,12 +123,16 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   expect(evidence.join(' ')).toContain('Annual interest rate %: User-entered or corrected');
   expect(evidence.join(' ')).toContain('Professional fees %: Worked example');
   expect(evidence.join(' ')).toContain(saved.sourceReview.extractionReceipt.id);
+  expect(evidence.join(' ')).toContain('original 90; saved 85 — Changed');
   await page.goto(`/deal/${dealId}/report`);
   await expect(page.getByText('ASSUMPTION ORIGINS AT REVIEW', { exact: true })).toBeVisible();
   await expect(page.getByText(new RegExp(saved.sourceReview.extractionReceipt.id))).toBeVisible();
   await expect(page.getByText(/Annual interest rate %: User-entered or corrected/)).toBeVisible();
   await page.goto(`/deal/${dealId}/appraisal`);
+  await page.getByText('Original versus saved assumptions', { exact: true }).click();
   await page.getByLabel('NIA / GIA efficiency (%)', { exact: true }).fill('82');
+  await expect(page.getByText('Save and refresh before comparing: this editor contains unsaved changes.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/original 90; saved 85/)).toHaveCount(0);
   await expect(page.getByText('Inputs have changed. The recorded review does not cover these inputs.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Save appraisal', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();

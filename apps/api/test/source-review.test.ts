@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../src/context.js';
-import { issueExtractionReceipt, verifyExtractionReceipt } from '../src/extraction-receipt.js';
+import { issueExtractionReceipt, verifyExtractionReceipt, receiptComparison } from '../src/extraction-receipt.js';
 import { sourceVersion } from '../src/source-version.js';
 import { documentBlocks } from '../src/routers/appraisal.js';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -202,6 +202,23 @@ describe('server-issued extraction receipts', () => {
     const receipt = verifyExtractionReceipt(token, T.orgId);
     expect(receipt.extraction).toEqual(extracted.extraction);
     expect(receipt.mode).toBe('worked-example');
+    const comparison = receiptComparison({ ...receipt, assumptionOrigins: {}, extraction: {
+      ...receipt.extraction, efficiency: 91, asking: 0, profFee: 3, contingency: 4, targetProfit: 5,
+      acq: 6, agent: 7, legal: 8, finance: { ltc: 9, rate: 10, period: 11, sales: 12, arrFee: 1 },
+    } }, { ...input, efficiency: 91, site: { ...input.site, landFixed: 0, acqPct: 16 },
+      profFeePct: 13, contingencyPct: 14, targetProfitOnGdvPct: 15,
+      disposal: { agentPct: 17, legalPct: 18 },
+      finance: { ltcPct: 19, ratePct: 20, periodMonths: 21, salesMonths: 22, arrangementFeePct: 2 },
+    });
+    expect(comparison.map(r => [r.field, r.originalValue, r.savedValue, r.changed])).toEqual([
+      ['efficiency', 91, 91, false], ['asking', 0, 0, false], ['profFee', 3, 13, true],
+      ['contingency', 4, 14, true], ['targetProfit', 5, 15, true], ['acq', 6, 16, true],
+      ['agent', 7, 17, true], ['legal', 8, 18, true], ['finance.ltc', 9, 19, true],
+      ['finance.rate', 10, 20, true], ['finance.period', 11, 21, true],
+      ['finance.sales', 12, 22, true], ['finance.arrFee', 1, 2, true],
+    ]);
+    expect(comparison.every(r => r.originalOrigin === 'Origin not recorded')).toBe(true);
+
     expect(JSON.stringify(jwt.decode(token))).not.toContain('Synthetic worked example for receipt test');
     expect(() => jwt.verify(token, JWT_SECRET)).toThrow();
     expect(() => verifyExtractionReceipt(jwt.sign(receipt, JWT_SECRET), T.orgId)).toThrow(/invalid or expired/);
@@ -213,12 +230,17 @@ describe('server-issued extraction receipts', () => {
     await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: pieces.join('.') } })).rejects.toThrow(/invalid or expired/);
     const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, sample: false, extractionReceipt: token } });
     const review = (await api.appraisal.getCurrent(dealId))!.sourceReview!;
+    expect(review.extractionComparison).toHaveLength(13);
+    expect(review.extractionComparison).toContainEqual(expect.objectContaining({ field: 'efficiency', originalValue: extracted.extraction.efficiency, savedValue: input.efficiency }));
+    expect(review.extractionComparison?.map(r => r.field)).not.toContain('cilPerSqm');
     expect(review).toMatchObject({ sample: true, omissions: [], extractionReceipt: { id: receipt.id, outputHash: receipt.outputHash } });
     const stored = JSON.parse((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).sourceReview!);
     expect(stored.extractionReceipt.extraction).toEqual(extracted.extraction);
     expect(stored.extractionReceipt.buildPerSqft).toBe(105);
     await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
-    expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
+    const laterReview = (await api.appraisal.getCurrent(dealId))?.sourceReview;
+    expect(laterReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
+    expect(laterReview?.extractionComparison).toContainEqual(expect.objectContaining({ field: 'efficiency', originalValue: extracted.extraction.efficiency, savedValue: 80, changed: true }));
     expect(() => verifyExtractionReceipt(jwt.sign(receipt, 'untrusted', { expiresIn: -1 }), T.orgId)).toThrow();
     vi.useFakeTimers();
     try { vi.setSystemTime(Date.now() + 8 * 86400000); expect(() => verifyExtractionReceipt(token, T.orgId)).toThrow(/expired/); }

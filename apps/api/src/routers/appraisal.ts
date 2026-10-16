@@ -1,4 +1,4 @@
-import { issueExtractionReceipt, verifyExtractionReceipt, receiptSummary } from '../extraction-receipt.js';
+import { issueExtractionReceipt, verifyExtractionReceipt, receiptSummary, receiptComparison } from '../extraction-receipt.js';
 import { extractedAssumptionOrigins, sampleAssumptionOrigins, type AssumptionOrigins } from '@apex/types/assumption-origins';
 import { zFieldCostRequest, readFieldCostReviews, costMatches } from '../field-cost-review.js';
 import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../field-evidence.js';
@@ -192,6 +192,7 @@ export const appraisalRouter = router({
     }) : [];
     const sourceReview = review ? {
       extractionReceipt: review.extractionReceipt ? receiptSummary(review.extractionReceipt) : undefined,
+      extractionComparison: review.extractionReceipt ? receiptComparison(review.extractionReceipt, engineInput) : undefined,
       reviewerName: review.reviewerName, reviewedAt: review.reviewedAt, assumptionOrigins: review.assumptionOrigins,
       inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,
       documents: review.documents.map(({ storagePath, ...snapshot }) => {
