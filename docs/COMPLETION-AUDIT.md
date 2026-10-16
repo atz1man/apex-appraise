@@ -1043,3 +1043,40 @@ journey passed. The former host remains stopped with autostart disabled.
 PR #83 is being reconciled onto that release; origin labels are not live until
 its own exact-commit release evidence is recorded. No competing increment was
 found; retain both the new-host controls and the assumption-origin work.
+
+## Original extraction receipts — 16 October 2026
+
+The extraction endpoint now issues a signed, workspace-scoped record containing
+its original normalized inputs, assumption origins, build-rate setting, source
+versions, omissions and a notes fingerprint (not raw notes). The input snapshot
+fingerprint covers the extraction, origins and build-rate setting. A separate
+signing domain prevents these receipts from authenticating as session tokens.
+The review screen explains that the receipt must be saved within seven days.
+It is issued to the browser first, not durably retained for abandoned runs.
+
+On save the server verifies signature, audience, expiry and workspace, rechecks
+every receipt source against the reviewed deal and persists the verified
+original record inside the existing source review. The signed token itself is
+not retained. Receipt-backed sample status and omissions come from the server
+record. Corrected current inputs and user-reported origin labels remain separate;
+a receipt does not claim they match the original extraction or verify citations.
+Later edits preserve the receipt and the existing changed-input warning. Excel
+and reports include its identity, time, mode and original-input fingerprint;
+the original snapshot is retained in the appraisal's portable review JSON.
+Legacy runs explicitly have no receipt. No schema migration, financial changes,
+raw-note duplication or provider activation is involved. Rotating the signing
+secret invalidates unsaved receipts, not already saved records.
+
+Local evidence: 1,438 API tests with provider keys removed; 418 web tests;
+API/web typechecks, production build and bundle limits; four browser journeys
+including receipt persistence into Excel/report, corrected inputs and legacy
+recorded-PDF extraction. Targeted checks reject tampered/wrong-key/expired and
+cross-workspace receipts, missing/changed source versions, and verify the
+mocked model path records the actual accepted sources and omissions. Exact-head
+CI and delivery state are recorded on the PR. No live customer appraisal was
+used for these tests.
+
+Next: representative project-pack reconciliation and a usable comparison of
+original versus corrected assumptions. Receipts attest application-issued
+output, not provider authenticity, source accuracy, professional acceptance or
+successful commercial launch. Wider owner/provider/operational gates remain.
