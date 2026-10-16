@@ -36,8 +36,9 @@ export const J = <T>(raw: string | null | undefined, fallback: T): T => {
 };
 
 /** DB appraisal row → engine input (£). otherCosts are stored in pence. */
-export function appraisalRowToEngineInput(a: Appraisal): AppraisalInput {
-  const units = J<Array<{ label: string; count: number; area: number; cap: number; conf?: 'high' | 'med' | 'low'; source?: string }>>(a.units, []);
+type LinkedAppraisalInput = AppraisalInput & { units: Array<AppraisalInput['units'][number] & { extractionUnitId?: string }> };
+export function appraisalRowToEngineInput(a: Appraisal): LinkedAppraisalInput {
+  const units = J<Array<{ extractionUnitId?: string; label: string; count: number; area: number; cap: number; conf?: 'high' | 'med' | 'low'; source?: string }>>(a.units, []);
   const trades = J<Array<{ label: string; rate: number; timing?: CostTiming }>>(a.trades, []);
   const otherCosts = J<Array<{ label: string; amount: number; timing?: CostTiming }>>(a.otherCosts, []).map((o) => ({
     label: o.label,

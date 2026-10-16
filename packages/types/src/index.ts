@@ -49,6 +49,7 @@ export const LETTING_MILESTONES = ['Enquiry', 'Viewing', 'Application', 'Referen
 
 // ---- Appraisal input (client → engine), money in POUNDS at this layer ----
 export const zAppraisalUnit = z.object({
+  extractionUnitId: z.string().uuid().optional(),
   label: z.string(),
   count: z.number().min(0),
   area: z.number().min(0),
@@ -95,7 +96,7 @@ export const zPhase = z.object({
   buildMonths: z.number().min(1).max(60),
   salesMonths: z.number().min(1).max(24),
   absorptionUnitsPerMonth: z.number().positive().max(500).optional(),
-  units: z.array(zAppraisalUnit),
+  units: z.array(zAppraisalUnit.omit({ extractionUnitId: true })),
   // cost overrides — omitted fields inherit the scheme
   trades: z.array(z.object({ label: z.string(), rate: z.number(), timing: zCostTiming.optional() })).optional(),
   profFeePct: z.number().min(0).max(50).optional(),
@@ -193,6 +194,8 @@ export const zExtraction = z.object({
   assetType: z.enum(['industrial', 'residential', 'commercial', 'mixed']).nullish().transform((v) => v ?? 'mixed'),
   units: z.array(
     z.object({
+      // Assigned by the application after extraction, never trusted from a model.
+      extractionUnitId: z.string().uuid().optional(),
       // the core extraction — the model must state these, no defaults
       label: z.string(),
       count: z.number(),

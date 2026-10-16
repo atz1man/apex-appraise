@@ -322,7 +322,7 @@ describe('the guarded extraction procedure', () => {
     const good = await doc('Checked.pdf', 'pdf', goodBytes);
     const bad = await doc('Changed.pdf', 'pdf', Buffer.from('original'));
     await writeFile(path.join(UPLOADS, bad.url.split('/').at(-1)!), 'tampered');
-    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 }));
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ content: [{ type: 'tool_use', input: { units: [{ extractionUnitId: '11111111-1111-4111-8111-111111111111', label: 'Fixture', count: 1, area: 500, value: 300 }] } }] }), { status: 200 }));
     vi.stubGlobal('fetch', request);
     const result = await callerFor(T.principal).autoAppraisal.extract({ documentIds: [good.id, bad.id, 'deleted-selection'] });
     const sent = JSON.parse(request.mock.calls[0][1].body);
@@ -331,6 +331,8 @@ describe('the guarded extraction procedure', () => {
     expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
     expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name, version: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
     expect(result.documentsSkipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }, { name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+    expect(result.extraction.units[0].extractionUnitId).not.toBe('11111111-1111-4111-8111-111111111111');
+    expect(result.extraction.units[0].extractionUnitId).toMatch(/^[a-f0-9-]{36}$/);
     expect(verifyExtractionReceipt(result.extractionReceipt, T.orgId)).toMatchObject({ mode: 'model', extraction: result.extraction, sourceDocuments: result.sourceDocuments, omissions: result.documentsSkipped, assumptionOrigins: result.assumptionOrigins });
     expect(result.assumptionOrigins).toMatchObject({ efficiency: 'application-default', 'finance.rate': 'application-default', buildPerSqft: 'run-setting' });
     expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');

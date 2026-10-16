@@ -110,6 +110,8 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   expect(saved.sourceReview).toMatchObject({ inputsUnchanged: true, sample: true, assumptionOrigins: { efficiency: 'user-entered', 'finance.rate': 'user-entered', profFee: 'worked-example', buildPerSqft: 'user-entered' } });
   expect(saved.sourceReview.originalExtractedUnits[0]).toMatchObject({ area: originalArea, source: 'Drawing A-102' });
   expect(saved.input.units[0].area).toBe(2600);
+  expect(saved.input.units[0].extractionUnitId).toMatch(/^[a-f0-9-]{36}$/);
+  expect(saved.input.units[0].extractionUnitId).toBe(saved.sourceReview.originalExtractedUnits[0].extractionUnitId);
   expect(saved.sourceReview.reviewerName).toBeTruthy();
   expect(saved.sourceReview.extractionReceipt).toMatchObject({ mode: 'worked-example', id: expect.any(String), outputHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
   await page.reload();
@@ -148,4 +150,9 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByText('Inputs have changed. The recorded review does not cover these inputs.', { exact: true })).toBeVisible();
+  const persistedLink = await page.evaluate(async id => {
+    const response = await fetch('/trpc/appraisal.getCurrent?input=' + encodeURIComponent(JSON.stringify({ json: id })), { headers: { authorization: `Bearer ${localStorage.getItem('apex_token')}` } });
+    return (await response.json()).result.data.json.input.units[0].extractionUnitId;
+  }, dealId);
+  expect(persistedLink).toBe(saved.input.units[0].extractionUnitId);
 });
