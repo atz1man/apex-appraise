@@ -6,7 +6,7 @@ import { sourceVersion } from '../source-version.js';
 import { withModelDeadline } from '../model-deadline.js';
 import { readBoundedFile } from '../bounded-file.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { assertExtractionUnitLinks } from '../extraction-unit-links.js';
+import { assertExtractionUnitLinks, compareExtractionUnits } from '../extraction-unit-links.js';
 import type { Appraisal } from '@prisma/client';
 import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
 import { signFileUrl } from '../uploads.js';
@@ -194,6 +194,7 @@ export const appraisalRouter = router({
     const sourceReview = review ? {
       extractionReceipt: review.extractionReceipt ? receiptSummary(review.extractionReceipt) : undefined,
       originalExtractedUnits: review.extractionReceipt?.extraction.units,
+      unitComparison: review.extractionReceipt ? compareExtractionUnits(review.extractionReceipt.extraction.units, engineInput) : undefined,
       extractionComparison: review.extractionReceipt ? receiptComparison(review.extractionReceipt, engineInput) : undefined,
       reviewerName: review.reviewerName, reviewedAt: review.reviewedAt, assumptionOrigins: review.assumptionOrigins,
       inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,

@@ -516,3 +516,27 @@ reordering and what-if changes. Full exact-commit CI is required before release.
 Next: use these links for explicit original/current comparisons with unmatched
 rows shown separately; never match legacy or phased rows by position. External
 provider and customer acceptance remain open.
+
+### Linked unit comparison — 16 October 2026
+
+Saved source reviews now compare original and last-saved flat-schedule rows by
+unique recorded extraction-unit IDs. The appraisal, workbook and report share
+comparison text for names, counts, areas and sales rates. Renaming/reordering does
+not break the link; row positions are displayed only for orientation. Rows without
+a unique link, including duplicate identities and legacy rows, are listed separately
+without claiming they were added or deleted. Phased appraisals explicitly withhold
+comparison because their retained flat schedule is not the active phase schedule.
+Unsaved edits and unverified editor snapshots withhold comparisons as before.
+
+This records continuity of user-editable inputs, not correctness, authorship or
+professional approval. Original source text/confidence remain in the historical
+schedule; they are not part of the displayed-input change classification. No new
+provider, schema migration, data rewrite or financial calculation.
+
+Local evidence: both typechecks; 28 API tests including actual receipt/save/reorder
+round-trip, duplicate IDs, identical labels, missing/unknown links, empty schedules,
+zero values and phased suppression; 421 web tests; real local correction/save/reopen,
+mobile, Excel/report and dirty-editor browser journey. Exact-head CI is recorded in
+the PR. Next: release the comparison after its release gates pass, then validate it
+with a valuer using real project evidence. Provider and customer acceptance gates
+remain open; green checks do not establish valuation accuracy.

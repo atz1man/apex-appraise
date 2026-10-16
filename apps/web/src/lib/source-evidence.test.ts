@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { sourceEvidenceLines, sourceEvidencePages, wrapEvidence, type SourceEvidence } from './source-evidence';
+import { unitComparisonLines, sourceEvidenceLines, sourceEvidencePages, wrapEvidence, type SourceEvidence } from './source-evidence';
 const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-10T12:00:00Z', inputsUnchanged: true, sample: false,
   documents: [{ id: 'doc-1', name: 'Drawing revision B.pdf', status: 'superseded', addedAt: '2026-10-01T12:00:00Z' }],
   omissions: [{ name: 'Costs.xlsx', reason: 'Sheet 11 omitted' }],
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('exports linked units with explicit scope and withholds stale editor comparisons', () => {
+    const unitComparison: SourceEvidence['unitComparison'] = { state: 'available', rows: [{ originalRow: 2, savedRow: 1, original: { label: 'Old', count: 1, area: 500, value: 300 }, saved: { label: 'New', count: 1, area: 550, value: 310 }, changed: true }, { originalRow: 1, savedRow: null, original: { label: 'Unlinked', count: 1, area: 1, value: 1 }, saved: null, changed: null }] };
+    const text = sourceEvidenceLines({ ...review, unitComparison }).join(' ');
+    expect(text).toContain('Original row 2 → saved row 1: Changed');
+    expect(text).toContain('Original row 1: no unique saved link');
+    expect(text).toContain('Original: Old | Count: 1');
+    expect(text).toContain('Saved: New | Count: 1');
+    expect(text).toContain('Unmatched rows are not assumed to be additions or deletions');
+    expect(unitComparisonLines(unitComparison, true).join(' ')).not.toContain('Saved: New');
+    expect(sourceEvidenceLines({ ...review, unitComparison }, 'unverified').join(' ')).not.toContain('Saved: New');
+    expect(unitComparisonLines(undefined).join(' ')).toContain('No original unit comparison');
+    expect(unitComparisonLines({ state: 'phased', rows: [] }).join(' ')).toContain('unavailable for phased');
+  });
   it('exports original units as history without implying current identity or verified citations', () => {
     const originalExtractedUnits = [{ label: 'Original flat', count: 2, area: 500, value: 300, conf: 'low' as const, source: '<script>untrusted source</script>' }];
     const text = sourceEvidenceLines({ ...review, originalExtractedUnits }, 'recorded', true).join(' ');
@@ -25,7 +38,7 @@ describe('portable source evidence', () => {
     expect(sourceEvidenceLines(compared, 'recorded', true).join(' ')).toContain('Comparison withheld');
     expect(sourceEvidenceLines(compared, 'recorded', true).join(' ')).not.toContain('saved 85');
     expect(sourceEvidenceLines(compared, 'unverified').join(' ')).not.toContain('saved 85');
-    expect(sourceEvidenceLines(review).join(' ')).not.toContain('ORIGINAL VERSUS SAVED');
+    expect(sourceEvidenceLines(review).join(' ')).not.toContain('ORIGINAL VERSUS SAVED ASSUMPTIONS');
   });
   it('exports reported origins without inferring missing history or hiding stale inputs', () => {
     expect(sourceEvidenceLines(review).join(' ')).toContain('Assumption origins were not recorded');

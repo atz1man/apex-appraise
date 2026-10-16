@@ -1,7 +1,9 @@
 import { ASSUMPTION_FIELDS, ORIGIN_LABELS, type AssumptionField, type AssumptionOrigins } from '@apex/types/assumption-origins';
+type UnitValues = { label: string; count: number; area: number; value: number };
 /** Portable evidence text: never export expiring download credentials. */
 export interface SourceEvidence {
   assumptionOrigins?: AssumptionOrigins;
+  unitComparison?: { state: 'phased' | 'available'; rows: Array<{ originalRow: number | null; savedRow: number | null; original: UnitValues | null; saved: UnitValues | null; changed: boolean | null }> };
   originalExtractedUnits?: Array<{ label: string; count: number; area: number; value: number; conf: 'high' | 'med' | 'low'; source: string }>;
   extractionComparison?: Array<{ field: string; label: string; originalValue: number; savedValue: number; changed: boolean; originalOrigin: string }>;
   extractionReceipt?: { id: string; createdAt: string; mode: 'model' | 'worked-example'; outputHash: string };
@@ -35,6 +37,7 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
     if (dirty) lines.push('Comparison withheld because this export includes unsaved edits. Save and refresh before comparing.');
     else for (const row of review.extractionComparison) lines.push(`${row.label}: original ${row.originalValue}; saved ${row.savedValue} — ${row.changed ? 'Changed' : 'Same'} | Original origin: ${row.originalOrigin}`);
   }
+  lines.push('ORIGINAL VERSUS SAVED UNITS', ...unitComparisonLines(review.unitComparison, dirty));
   lines.push('ORIGINAL EXTRACTED UNIT SCHEDULE');
   lines.push('Historical server output before corrections, not the current unit schedule. Row numbers refer only to this original extraction; no match to current units is inferred. Values, confidence and source text are not independently verified.');
   if (!review.originalExtractedUnits) lines.push('No original extracted unit schedule was recorded for this review.');
@@ -98,4 +101,20 @@ export function sourceEvidencePages(lines: string[], sheetName: 'Source evidence
   const pages: string[][] = [];
   for (let i = 0; i < wrapped.length; i += 42) pages.push(wrapped.slice(i, i + 42));
   return pages;
+}
+
+/** Shared screen/export wording keeps history distinct from the current editor. */
+export function unitComparisonLines(comparison: SourceEvidence['unitComparison'], dirty = false): string[] {
+  if (dirty) return ['Save and refresh before comparing units: this editor contains unsaved changes.'];
+  if (!comparison) return ['No original unit comparison is available for this review.'];
+  if (comparison.state === 'phased') return ['Unit comparison is unavailable for phased appraisals. The retained flat schedule is not the active phase schedule.'];
+  const lines = ['Compares names, counts, areas and sales rates from original output with last saved flat-schedule inputs using unique recorded links only. Links do not verify source accuracy, correction authorship or professional acceptance. Unmatched rows are not assumed to be additions or deletions.'];
+  const values = (unit: UnitValues) => `${unit.label} | Count: ${unit.count} | Area per unit (sq ft): ${unit.area} | Sales value (£ per sq ft): ${unit.value}`;
+  if (!comparison.rows.length) lines.push('Both original and saved unit schedules are empty.');
+  for (const row of comparison.rows) {
+    lines.push(row.original && row.saved ? `Original row ${row.originalRow} → saved row ${row.savedRow}: ${row.changed ? 'Changed' : 'Same displayed inputs'}` : row.original ? `Original row ${row.originalRow}: no unique saved link` : `Saved row ${row.savedRow}: no unique original link`);
+    if (row.original) lines.push(`Original: ${values(row.original)}`);
+    if (row.saved) lines.push(`Saved: ${values(row.saved)}`);
+  }
+  return lines;
 }
