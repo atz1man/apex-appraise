@@ -1,3 +1,4 @@
+import { issueExtractionReceipt, verifyExtractionReceipt, receiptSummary } from '../extraction-receipt.js';
 import { extractedAssumptionOrigins, sampleAssumptionOrigins, type AssumptionOrigins } from '@apex/types/assumption-origins';
 import { zFieldCostRequest, readFieldCostReviews, costMatches } from '../field-cost-review.js';
 import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../field-evidence.js';
@@ -190,6 +191,7 @@ export const appraisalRouter = router({
       orderBy: { id: 'asc' },
     }) : [];
     const sourceReview = review ? {
+      extractionReceipt: review.extractionReceipt ? receiptSummary(review.extractionReceipt) : undefined,
       reviewerName: review.reviewerName, reviewedAt: review.reviewedAt, assumptionOrigins: review.assumptionOrigins,
       inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,
       documents: review.documents.map(({ storagePath, ...snapshot }) => {
@@ -335,6 +337,7 @@ export const appraisalRouter = router({
         data.fieldSnapshot = JSON.stringify({ version: 1, capturedAt: new Date().toISOString(), capturedBy: ctx.principal.name, capturedById: ctx.principal.userId, tasks: snapshots });
       }
       if (input.sourceReview) {
+        const receipt = input.sourceReview.extractionReceipt ? verifyExtractionReceipt(input.sourceReview.extractionReceipt, ctx.principal.orgId) : undefined;
         const ids = [...new Set(input.sourceReview.documentIds)];
         const documents = await ctx.prisma.document.findMany({
           where: { orgId: ctx.principal.orgId, dealId: input.dealId, id: { in: ids } }, orderBy: { id: 'asc' },
@@ -345,7 +348,7 @@ export const appraisalRouter = router({
         if (documents.some(d => d.sha256 !== null && !zSourceFingerprint.safeParse(d.sha256).success)) {
           throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'A source has an invalid upload fingerprint. Contact your administrator before recording a review.' });
         }
-        for (const expected of input.sourceReview.expectedSources ?? []) {
+        for (const expected of [...(input.sourceReview.expectedSources ?? []), ...(receipt?.sourceDocuments ?? [])]) {
           const document = documents.find(d => d.id === expected.id);
           if (!document || sourceVersion(document) !== expected.version) {
             throw new TRPCError({ code: 'CONFLICT', message: 'A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.' });
@@ -361,7 +364,8 @@ export const appraisalRouter = router({
           references: input.sourceReview.references.map(ref => ({ ...ref, unitLabel: input.input.units[ref.unitIndex].label })),
           version: 1, reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name,
           reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
-          sample: input.sourceReview.sample, omissions: input.sourceReview.omissions, assumptionOrigins: input.sourceReview.assumptionOrigins,
+          extractionReceipt: receipt,
+          sample: receipt ? receipt.mode === 'worked-example' : input.sourceReview.sample, omissions: receipt?.omissions ?? input.sourceReview.omissions, assumptionOrigins: input.sourceReview.assumptionOrigins,
           documents: documents.map(d => ({ id: d.id, name: d.name, sizeBytes: d.sizeBytes.toString(),
             addedAt: d.addedAt.toISOString(), storagePath: d.url, sha256: d.sha256 })),
         });
@@ -1952,6 +1956,9 @@ export const autoAppraisalRouter = router({
       });
       return {
         extraction, assumptionOrigins,
+        extractionReceipt: issueExtractionReceipt({ orgId: ctx.principal.orgId, userId: ctx.principal.userId,
+          notes: input.notes, extraction, assumptionOrigins, buildPerSqft: input.buildPerSqft,
+          sourceDocuments: blocks.used.map(({ id, name, version }) => ({ id, name, version })), omissions: blocks.skipped }),
         indicative: indicative(extraction, input.buildPerSqft),
         documentsRead: blocks.used.map((d) => d.name),
         sourceDocuments: blocks.used.map(({ id, name, version }) => ({ id, name, version })),

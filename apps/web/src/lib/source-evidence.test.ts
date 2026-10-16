@@ -70,3 +70,12 @@ describe('portable source evidence', () => {
   });
 
 });
+
+it('exports original receipt identity without claiming current input verification', () => {
+  expect(sourceEvidenceLines(review).join(' ')).toContain('No server-issued extraction receipt');
+  const text = sourceEvidenceLines({ ...review, inputsUnchanged: false, extractionReceipt: { id: 'receipt-1', createdAt: '2026-10-16T12:00:00Z', mode: 'worked-example', outputHash: 'a'.repeat(64) } }).join(' ');
+  expect(text).toContain('Server-issued receipt: receipt-1');
+  expect(text).toContain('Original extracted inputs SHA-256: ' + 'a'.repeat(64));
+  expect(text).toContain('before user corrections');
+  expect(text).toContain('INPUTS CHANGED');
+});

@@ -108,6 +108,7 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   expect(saved.input.otherCosts.find((cost: { label: string }) => cost.label === 'CIL').amount).toBeCloseTo(correctedResult.cil, 2);
   expect(saved.sourceReview).toMatchObject({ inputsUnchanged: true, sample: true, assumptionOrigins: { efficiency: 'user-entered', 'finance.rate': 'user-entered', profFee: 'worked-example', buildPerSqft: 'user-entered' } });
   expect(saved.sourceReview.reviewerName).toBeTruthy();
+  expect(saved.sourceReview.extractionReceipt).toMatchObject({ mode: 'worked-example', id: expect.any(String), outputHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
   await page.reload();
   await expect(page.getByText('Saved inputs match the recorded review.', { exact: true })).toBeVisible();
   await expect(page.getByText('Worked example: these inputs were not extracted from project documents.', { exact: true })).toBeVisible();
@@ -118,8 +119,10 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   const evidence: string[] = []; exported.getWorksheet('Source evidence')!.eachRow(row => evidence.push(String(row.getCell(1).value ?? '')));
   expect(evidence.join(' ')).toContain('Annual interest rate %: User-entered or corrected');
   expect(evidence.join(' ')).toContain('Professional fees %: Worked example');
+  expect(evidence.join(' ')).toContain(saved.sourceReview.extractionReceipt.id);
   await page.goto(`/deal/${dealId}/report`);
   await expect(page.getByText('ASSUMPTION ORIGINS AT REVIEW', { exact: true })).toBeVisible();
+  await expect(page.getByText(new RegExp(saved.sourceReview.extractionReceipt.id))).toBeVisible();
   await expect(page.getByText(/Annual interest rate %: User-entered or corrected/)).toBeVisible();
   await page.goto(`/deal/${dealId}/appraisal`);
   await page.getByLabel('NIA / GIA efficiency (%)', { exact: true }).fill('82');

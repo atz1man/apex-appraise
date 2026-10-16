@@ -23,6 +23,7 @@ type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict }
 interface RunState {
   source: 'manual' | 'ai' | 'whatif';
   assumptionOrigins?: AssumptionOrigins;
+  extractionReceipt?: string;
   references?: Array<{ unitIndex: number; documentId: string; version?: string; page: number | null; locator: string }>;
   extraction: Extraction;
   buildPerSqft: number;
@@ -320,6 +321,7 @@ export default function AutoAppraisal() {
       setRun({
         sourceDocuments: res.sourceDocuments,
         assumptionOrigins: res.assumptionOrigins,
+        extractionReceipt: res.extractionReceipt,
         source: 'ai',
         extraction: res.extraction,
         buildPerSqft: buildRate,
@@ -431,6 +433,7 @@ export default function AutoAppraisal() {
         sourceReview: run.source !== 'manual' ? {
           accepted: true, references: (run.references ?? []).map(({ unitIndex, documentId, page, locator }) => ({ unitIndex, documentId, page, locator })), documentIds: reviewDocumentIds,
           expectedSources,
+          extractionReceipt: run.extractionReceipt,
           sample: !!run.extraction.sample, omissions: run.skipped, assumptionOrigins: run.assumptionOrigins,
         } : undefined,
         asNewVersion: !!existingAppraisal,
@@ -885,6 +888,7 @@ export default function AutoAppraisal() {
 
               {run.source !== 'manual' && (
                 <Panel title="Review extracted inputs">
+                  <p className="mb-2 text-[12px] text-ink-2">{run.extractionReceipt ? 'Saving this review within seven days will retain the original extraction record alongside your corrections. It does not verify the source information.' : 'No original server extraction record is available for this run. Source review and corrections can still be recorded.'}</p>
                   <p className="text-[12px] text-ink-2">Check the original drawings and schedules. Areas below are square feet; values are £ per square foot. A confidence label is not verification.</p>
                   <Button className="mt-2" variant="secondary" loading={sourcesRefreshing} onClick={() => { void refreshSources(); }}>Refresh source documents</Button>
                   <p role="alert" className="mt-2 text-[12px] text-status-red">{sourcesChanged ? sourceChangeHelp : sourcesFailed ? 'Source documents could not be refreshed. Try again before checking your references.' : ''}</p>

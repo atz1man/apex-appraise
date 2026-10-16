@@ -1,3 +1,4 @@
+import { zExtractionReceipt } from './extraction-receipt.js';
 import { zAssumptionOrigins } from '@apex/types';
 import { z } from 'zod';
 import type { Appraisal } from '@prisma/client';
@@ -13,6 +14,7 @@ export const zSourceReference = z.object({
 /** An acknowledgement of inputs, never professional approval or proof of model accuracy. */
 export const zSourceReviewRequest = z.object({
   accepted: z.literal(true),
+  extractionReceipt: z.string().max(200000).optional(),
   references: z.array(zSourceReference).max(200).default([]),
   documentIds: z.array(z.string()).max(12),
   expectedSources: z.array(z.object({ id: z.string(), version: zSourceFingerprint })).max(12).optional(),
@@ -22,6 +24,7 @@ export const zSourceReviewRequest = z.object({
 });
 export const zStoredSourceReview = z.object({
   version: z.literal(1),
+  extractionReceipt: zExtractionReceipt.optional(),
   references: z.array(zSourceReference.extend({ unitLabel: z.string() })).default([]),
   reviewerId: z.string(),
   reviewerName: z.string(),

@@ -1,3 +1,4 @@
+import { verifyExtractionReceipt } from '../src/extraction-receipt.js';
 import { createHash } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
@@ -330,6 +331,7 @@ describe('the guarded extraction procedure', () => {
     expect(Buffer.from(documents[0].source.data, 'base64')).toEqual(goodBytes);
     expect(result.sourceDocuments).toEqual([{ id: good.id, name: good.name, version: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
     expect(result.documentsSkipped).toEqual([{ name: 'Selected sources', reason: expect.stringContaining('1 selected document is unavailable') }, { name: bad.name, reason: expect.stringContaining('does not match its upload fingerprint') }]);
+    expect(verifyExtractionReceipt(result.extractionReceipt, T.orgId)).toMatchObject({ mode: 'model', extraction: result.extraction, sourceDocuments: result.sourceDocuments, omissions: result.documentsSkipped, assumptionOrigins: result.assumptionOrigins });
     expect(result.assumptionOrigins).toMatchObject({ efficiency: 'application-default', 'finance.rate': 'application-default', buildPerSqft: 'run-setting' });
     expect((await prisma.document.findUniqueOrThrow({ where: { id: bad.id } })).extraction).toBe('STORED');
     expect((await prisma.document.findUniqueOrThrow({ where: { id: good.id } })).extraction).toBe('EXTRACTED');

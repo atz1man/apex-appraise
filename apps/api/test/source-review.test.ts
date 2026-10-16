@@ -1,5 +1,9 @@
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../src/context.js';
+import { issueExtractionReceipt, verifyExtractionReceipt } from '../src/extraction-receipt.js';
+import { sourceVersion } from '../src/source-version.js';
 import { documentBlocks } from '../src/routers/appraisal.js';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 const input = {
   units: [{ label: 'Apartments', count: 4, area: 750, cap: 400, source: 'Schedule.xlsx, Units!B4' }],
@@ -10,6 +14,7 @@ const input = {
 };
 const acknowledgement = { accepted: true as const, documentIds: [] as string[], sample: false, omissions: [{ name: 'Schedule.xlsx', reason: 'Sheet 11 omitted' }] };
 let T: Tenant;
+afterEach(() => vi.unstubAllEnvs());
 beforeAll(async () => { resetDatabase(); T = await makeTenant('SourceReview'); }, 180_000);
 const fresh = async () => {
   const deal = await prisma.deal.create({ data: { orgId: T.orgId, name: 'Source review', address: 'Test', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' } });
@@ -185,4 +190,49 @@ it('refuses expected sources omitted from the reviewed deal without disclosing f
     ...acknowledgement, documentIds: [doc.id], expectedSources: [{ id: foreign.id, version: source.version }],
   } })).rejects.toMatchObject({ code: 'CONFLICT', message: 'A source changed since this review was prepared. Refresh source documents and check the affected references or extract again.' });
   expect(await api.appraisal.getCurrent(dealId)).toBeNull();
+});
+
+
+describe('server-issued extraction receipts', () => {
+  it('retains original outputs after corrections and rejects tampering, other tenants and session signatures', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    const { api, dealId } = await fresh();
+    const extracted = await api.autoAppraisal.extract({ notes: 'Synthetic worked example for receipt test', buildPerSqft: 105 });
+    const token = extracted.extractionReceipt;
+    const receipt = verifyExtractionReceipt(token, T.orgId);
+    expect(receipt.extraction).toEqual(extracted.extraction);
+    expect(receipt.mode).toBe('worked-example');
+    expect(JSON.stringify(jwt.decode(token))).not.toContain('Synthetic worked example for receipt test');
+    expect(() => jwt.verify(token, JWT_SECRET)).toThrow();
+    expect(() => verifyExtractionReceipt(jwt.sign(receipt, JWT_SECRET), T.orgId)).toThrow(/invalid or expired/);
+    const other = await makeTenant('Other receipt workspace');
+    expect(() => verifyExtractionReceipt(token, other.orgId)).toThrow(/invalid or expired/);
+    await expect(callerFor(other.principal).appraisal.save({ dealId: other.dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: token } })).rejects.toThrow(/invalid or expired/);
+    const pieces = token.split('.');
+    pieces[1] = Buffer.from(JSON.stringify({ ...receipt, mode: 'model' })).toString('base64url');
+    await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: pieces.join('.') } })).rejects.toThrow(/invalid or expired/);
+    const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, sample: false, extractionReceipt: token } });
+    const review = (await api.appraisal.getCurrent(dealId))!.sourceReview!;
+    expect(review).toMatchObject({ sample: true, omissions: [], extractionReceipt: { id: receipt.id, outputHash: receipt.outputHash } });
+    const stored = JSON.parse((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).sourceReview!);
+    expect(stored.extractionReceipt.extraction).toEqual(extracted.extraction);
+    expect(stored.extractionReceipt.buildPerSqft).toBe(105);
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
+    expect(() => verifyExtractionReceipt(jwt.sign(receipt, 'untrusted', { expiresIn: -1 }), T.orgId)).toThrow();
+    vi.useFakeTimers();
+    try { vi.setSystemTime(Date.now() + 8 * 86400000); expect(() => verifyExtractionReceipt(token, T.orgId)).toThrow(/expired/); }
+    finally { vi.useRealTimers(); }
+  });
+  it('requires every receipt source to remain in the reviewed deal at its issued version', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    const { api, dealId } = await fresh();
+    const extracted = await api.autoAppraisal.extract({ notes: 'Synthetic worked example for source receipt' });
+    const doc = await document(dealId);
+    const receipt = verifyExtractionReceipt(extracted.extractionReceipt, T.orgId);
+    const token = issueExtractionReceipt({ ...receipt, notes: '', sourceDocuments: [{ id: doc.id, name: doc.name, version: sourceVersion(doc) }] });
+    await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: token } })).rejects.toThrow(/source changed/i);
+    await prisma.document.update({ where: { id: doc.id }, data: { name: 'Replaced schedule' } });
+    await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, documentIds: [doc.id], extractionReceipt: token } })).rejects.toThrow(/source changed/i);
+  });
 });
