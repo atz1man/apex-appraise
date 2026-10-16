@@ -557,3 +557,27 @@ report retains the specific omission and warning while Excel retains the final
 unit row. No synthetic receipt was saved, and no provider or financial behavior
 changed. Exact-head CI and release status are recorded on the PR. Next: release
 this export safeguard after its gates, then real-source customer/valuer acceptance.
+
+### Concurrent-save failure investigation — 16 October 2026
+
+PR #90's first CI attempt passed 239 browser tests but the subsequent workload
+returned HTTP 409 from appraisal.save at the start of the three-workspace phase.
+The single-worker phase and fixture cleanup passed; the unchanged rerun passed.
+The original assertion did not retain the refusal message, so the exact cause
+cannot be inferred from HTTP 409 alone. Release remains on hold for investigation.
+
+An isolated local PostgreSQL experiment exercised the real router with 20 rounds
+of three synthetic workspaces and 50 saves per worker. Nineteen serialization
+aborts recovered through the existing retry helper; no terminal save failed.
+This does not reproduce or fix the CI failure. No production data was used.
+
+The retry-exhaustion path previously reused the same message as a confirmed
+competing first save. It now reports database contention and asks the user to
+reload/retry, without claiming another person saved. A forced-abort API test
+verifies four attempts, no created version and successful recovery after the
+fault clears. Workload failures now include only the returned error code/message
+alongside the route, not request inputs, tokens or the full response. Retry
+limits, serialization, tenant guards and financial calculations are unchanged.
+Targeted tests/typecheck and HTTP workload evidence are recorded on the PR.
+Next: capture the exact refusal on recurrence before choosing a concurrency fix;
+a passing rerun or this diagnostic improvement does not close that finding.
