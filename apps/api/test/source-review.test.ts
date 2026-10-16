@@ -26,7 +26,7 @@ describe('durable source input review', () => {
     const { dealId, api } = await fresh();
     const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, assumptionOrigins: { efficiency: 'application-default', 'finance.rate': 'user-entered' } } });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.assumptionOrigins).toEqual({ efficiency: 'application-default', 'finance.rate': 'user-entered' });
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toMatchObject({ inputsUnchanged: false, assumptionOrigins: { efficiency: 'application-default' } });
     const other = await fresh();
     await api.appraisal.save({ dealId: other.dealId, input, sourceReview: acknowledgement });
@@ -70,7 +70,7 @@ describe('durable source input review', () => {
   it('keeps historical acknowledgement but marks it stale after an ordinary edit', async () => {
     const { dealId, api } = await fresh();
     const saved = await api.appraisal.save({ dealId, input, sourceReview: acknowledgement });
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
     expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.inputsUnchanged).toBe(false);
   });
   it('detects input changes made outside the save route', async () => {
@@ -230,6 +230,7 @@ describe('server-issued extraction receipts', () => {
     await expect(api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, extractionReceipt: pieces.join('.') } })).rejects.toThrow(/invalid or expired/);
     const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, sample: false, extractionReceipt: token } });
     const review = (await api.appraisal.getCurrent(dealId))!.sourceReview!;
+    expect(review.originalExtractedUnits).toEqual(extracted.extraction.units);
     expect(review.extractionComparison).toHaveLength(13);
     expect(review.extractionComparison).toContainEqual(expect.objectContaining({ field: 'efficiency', originalValue: extracted.extraction.efficiency, savedValue: input.efficiency }));
     expect(review.extractionComparison?.map(r => r.field)).not.toContain('cilPerSqm');
@@ -237,8 +238,9 @@ describe('server-issued extraction receipts', () => {
     const stored = JSON.parse((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).sourceReview!);
     expect(stored.extractionReceipt.extraction).toEqual(extracted.extraction);
     expect(stored.extractionReceipt.buildPerSqft).toBe(105);
-    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80, units: [...input.units].reverse().map(u => ({ ...u, label: 'Renamed current unit', area: 999 })) }, expectedUpdatedAt: saved.updatedAt });
     const laterReview = (await api.appraisal.getCurrent(dealId))?.sourceReview;
+    expect(laterReview?.originalExtractedUnits).toEqual(extracted.extraction.units);
     expect(laterReview).toMatchObject({ inputsUnchanged: false, extractionReceipt: { id: receipt.id } });
     expect(laterReview?.extractionComparison).toContainEqual(expect.objectContaining({ field: 'efficiency', originalValue: extracted.extraction.efficiency, savedValue: 80, changed: true }));
     expect(() => verifyExtractionReceipt(jwt.sign(receipt, 'untrusted', { expiresIn: -1 }), T.orgId)).toThrow();

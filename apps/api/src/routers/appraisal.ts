@@ -192,6 +192,7 @@ export const appraisalRouter = router({
     }) : [];
     const sourceReview = review ? {
       extractionReceipt: review.extractionReceipt ? receiptSummary(review.extractionReceipt) : undefined,
+      originalExtractedUnits: review.extractionReceipt?.extraction.units,
       extractionComparison: review.extractionReceipt ? receiptComparison(review.extractionReceipt, engineInput) : undefined,
       reviewerName: review.reviewerName, reviewedAt: review.reviewedAt, assumptionOrigins: review.assumptionOrigins,
       inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,

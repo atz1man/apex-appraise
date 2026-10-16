@@ -48,6 +48,7 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   await expect(page.getByLabel('Review NIA / GIA efficiency %', { exact: true }).locator('..')).toContainText('Worked example — not project evidence');
   await expect(page.getByRole('button', { name: 'Open full appraisal', exact: true })).toBeDisabled();
   await expect(page.getByText('Source and review history: Drawing A-102', { exact: true })).toBeVisible();
+  const originalArea = Number(await page.getByLabel('Review unit 1 area sq ft', { exact: true }).inputValue());
   await page.getByLabel('Review unit 1 area sq ft', { exact: true }).fill('2600');
   const accept = page.getByLabel(
     'I have checked the inputs, source citations and omitted content. These assumptions are ready to save.',
@@ -107,11 +108,17 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   expect(saved.input.otherCosts).toContainEqual(expect.objectContaining({ label: 'S106', amount: 32000 }));
   expect(saved.input.otherCosts.find((cost: { label: string }) => cost.label === 'CIL').amount).toBeCloseTo(correctedResult.cil, 2);
   expect(saved.sourceReview).toMatchObject({ inputsUnchanged: true, sample: true, assumptionOrigins: { efficiency: 'user-entered', 'finance.rate': 'user-entered', profFee: 'worked-example', buildPerSqft: 'user-entered' } });
+  expect(saved.sourceReview.originalExtractedUnits[0]).toMatchObject({ area: originalArea, source: 'Drawing A-102' });
+  expect(saved.input.units[0].area).toBe(2600);
   expect(saved.sourceReview.reviewerName).toBeTruthy();
   expect(saved.sourceReview.extractionReceipt).toMatchObject({ mode: 'worked-example', id: expect.any(String), outputHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
   await page.reload();
   await expect(page.getByText('Saved inputs match the recorded review.', { exact: true })).toBeVisible();
   await expect(page.getByText('Worked example: these inputs were not extracted from project documents.', { exact: true })).toBeVisible();
+  await page.getByText('Original extracted unit schedule', { exact: true }).click();
+  const originalSchedule = page.locator('details').filter({ has: page.getByText('Original extracted unit schedule', { exact: true }) });
+  await expect(originalSchedule).toContainText(`Area per unit (sq ft): ${originalArea}`);
+  await expect(originalSchedule).toContainText('Original source text (unverified): Drawing A-102');
   await page.getByText('Original versus saved assumptions', { exact: true }).click();
   await expect(page.getByText(/NIA \/ GIA efficiency %: original 90; saved 85 — Changed/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -124,7 +131,10 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   expect(evidence.join(' ')).toContain('Professional fees %: Worked example');
   expect(evidence.join(' ')).toContain(saved.sourceReview.extractionReceipt.id);
   expect(evidence.join(' ')).toContain('original 90; saved 85 — Changed');
+  expect(evidence.join(' ')).toContain(`Area per unit (sq ft): ${originalArea}`);
+  expect(evidence.join(' ')).toContain('Original source text (unverified): Drawing A-102');
   await page.goto(`/deal/${dealId}/report`);
+  await expect(page.getByText('ORIGINAL EXTRACTED UNIT SCHEDULE', { exact: true })).toBeVisible();
   await expect(page.getByText('ASSUMPTION ORIGINS AT REVIEW', { exact: true })).toBeVisible();
   await expect(page.getByText(new RegExp(saved.sourceReview.extractionReceipt.id))).toBeVisible();
   await expect(page.getByText(/Annual interest rate %: User-entered or corrected/)).toBeVisible();

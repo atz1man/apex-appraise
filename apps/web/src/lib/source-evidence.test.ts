@@ -6,6 +6,18 @@ const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('exports original units as history without implying current identity or verified citations', () => {
+    const originalExtractedUnits = [{ label: 'Original flat', count: 2, area: 500, value: 300, conf: 'low' as const, source: '<script>untrusted source</script>' }];
+    const text = sourceEvidenceLines({ ...review, originalExtractedUnits }, 'recorded', true).join(' ');
+    expect(text).toContain('Original row 1: Original flat | Count: 2 | Area per unit (sq ft): 500 | Sales value (£ per sq ft): 300');
+    expect(text).toContain('Original confidence label: low');
+    expect(text).toContain('Original source text (unverified): <script>untrusted source</script>');
+    expect(text).toContain('no match to current units is inferred');
+    expect(text).toContain('INPUTS CHANGED');
+    expect(sourceEvidenceLines({ ...review, originalExtractedUnits }, 'unverified').join(' ')).not.toContain('Original flat');
+    expect(sourceEvidenceLines(review).join(' ')).toContain('No original extracted unit schedule was recorded');
+    expect(sourceEvidenceLines({ ...review, originalExtractedUnits: [] }).join(' ')).toContain('original extraction contained no unit rows');
+  });
   it('compares saved values and withholds them for dirty or unverifiable exports', () => {
     const compared = { ...review, extractionComparison: [{ field: 'efficiency', label: 'NIA / GIA efficiency %', originalValue: 90, savedValue: 85, changed: true, originalOrigin: 'Worked example — not project evidence' }] };
     expect(sourceEvidenceLines(compared).join(' ')).toContain('original 90; saved 85 — Changed');

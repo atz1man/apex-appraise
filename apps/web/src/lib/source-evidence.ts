@@ -2,6 +2,7 @@ import { ASSUMPTION_FIELDS, ORIGIN_LABELS, type AssumptionField, type Assumption
 /** Portable evidence text: never export expiring download credentials. */
 export interface SourceEvidence {
   assumptionOrigins?: AssumptionOrigins;
+  originalExtractedUnits?: Array<{ label: string; count: number; area: number; value: number; conf: 'high' | 'med' | 'low'; source: string }>;
   extractionComparison?: Array<{ field: string; label: string; originalValue: number; savedValue: number; changed: boolean; originalOrigin: string }>;
   extractionReceipt?: { id: string; createdAt: string; mode: 'model' | 'worked-example'; outputHash: string };
   reviewerName: string; reviewedAt: string; inputsUnchanged: boolean; sample: boolean;
@@ -34,6 +35,14 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
     if (dirty) lines.push('Comparison withheld because this export includes unsaved edits. Save and refresh before comparing.');
     else for (const row of review.extractionComparison) lines.push(`${row.label}: original ${row.originalValue}; saved ${row.savedValue} — ${row.changed ? 'Changed' : 'Same'} | Original origin: ${row.originalOrigin}`);
   }
+  lines.push('ORIGINAL EXTRACTED UNIT SCHEDULE');
+  lines.push('Historical server output before corrections, not the current unit schedule. Row numbers refer only to this original extraction; no match to current units is inferred. Values, confidence and source text are not independently verified.');
+  if (!review.originalExtractedUnits) lines.push('No original extracted unit schedule was recorded for this review.');
+  else if (!review.originalExtractedUnits.length) lines.push('The original extraction contained no unit rows.');
+  else review.originalExtractedUnits.forEach((unit, index) => {
+    lines.push(`Original row ${index + 1}: ${unit.label} | Count: ${unit.count} | Area per unit (sq ft): ${unit.area} | Sales value (£ per sq ft): ${unit.value}`);
+    lines.push(`Original confidence label: ${unit.conf} | Original source text (unverified): ${unit.source}`);
+  });
   lines.push('ASSUMPTION ORIGINS AT REVIEW');
   lines.push('Origin labels were submitted with the input acknowledgement; they are not independently verified source citations. Changed inputs are not covered by this historical record.');
   if (!review.assumptionOrigins) lines.push('Assumption origins were not recorded for this review.');

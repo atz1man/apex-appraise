@@ -471,3 +471,23 @@ correction, save, reopen, mobile overflow, Excel export and unsaved-edit hiding.
 The PR records exact-commit CI evidence. No provider activation or production
 readiness claim. Next: preserve stable unit identity before adding unit-by-unit
 extraction comparisons. External provider and customer acceptance gates remain.
+
+### Original extracted unit evidence — 16 October 2026
+
+The server-retained extraction receipt already contains the original unit schedule,
+but reviewers could only see its receipt identifier. The saved appraisal now exposes
+that historical schedule in a disclosure, and includes it in Excel/report evidence:
+original label, count, area per unit, sales rate, confidence label and source text.
+These are historical unverified outputs, not current appraisal inputs. Original row
+numbers do not identify current units. Worked examples retain their existing warning.
+Legacy absence and genuinely empty original schedules have separate messages.
+
+Local verification: API and web typechecks; 23 source-review API tests, including
+original preservation through renamed/reordered/current-unit edits; 420 web tests;
+real local correction/save/reopen/mobile/Excel/report journey. Source text is rendered
+as text. Existing evidence wrapping and PDF print limits remain in effect. No provider
+calls, financial changes or schema migration are required by this increment.
+Exact-head CI is recorded on the PR. This closes access to the retained original
+schedule; it does not deliver unit matching. Next: introduce and preserve stable unit
+identity through extraction, review, save and editing before comparing units. External
+provider configuration and customer acceptance remain separate release gates.
