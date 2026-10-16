@@ -11,7 +11,8 @@
     "./asset-classes": "./src/asset-classes.ts",
     "./regions": "./src/regions.ts",
     "./uk-regions": "./src/uk-regions.ts",
-    "./integrations": "./src/integrations.ts"
+    "./integrations": "./src/integrations.ts",
+    "./assumption-origins": "./src/assumption-origins.ts"
   },
   "dependencies": {
     "zod": "^3.23.8",

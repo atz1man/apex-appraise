@@ -1,3 +1,4 @@
+import { extractedAssumptionOrigins, sampleAssumptionOrigins, type AssumptionOrigins } from '@apex/types/assumption-origins';
 import { zFieldCostRequest, readFieldCostReviews, costMatches } from '../field-cost-review.js';
 import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../field-evidence.js';
 import { sourceVersion } from '../source-version.js';
@@ -189,7 +190,7 @@ export const appraisalRouter = router({
       orderBy: { id: 'asc' },
     }) : [];
     const sourceReview = review ? {
-      reviewerName: review.reviewerName, reviewedAt: review.reviewedAt,
+      reviewerName: review.reviewerName, reviewedAt: review.reviewedAt, assumptionOrigins: review.assumptionOrigins,
       inputsUnchanged: review.inputsUnchanged, sample: review.sample, omissions: review.omissions, references: review.references,
       documents: review.documents.map(({ storagePath, ...snapshot }) => {
         const current = sourceDocs.find(d => d.id === snapshot.id);
@@ -360,7 +361,7 @@ export const appraisalRouter = router({
           references: input.sourceReview.references.map(ref => ({ ...ref, unitLabel: input.input.units[ref.unitIndex].label })),
           version: 1, reviewerId: ctx.principal.userId, reviewerName: ctx.principal.name,
           reviewedAt: new Date().toISOString(), inputHash: inputHashOf(data as unknown as Appraisal),
-          sample: input.sourceReview.sample, omissions: input.sourceReview.omissions,
+          sample: input.sourceReview.sample, omissions: input.sourceReview.omissions, assumptionOrigins: input.sourceReview.assumptionOrigins,
           documents: documents.map(d => ({ id: d.id, name: d.name, sizeBytes: d.sizeBytes.toString(),
             addedAt: d.addedAt.toISOString(), storagePath: d.url, sha256: d.sha256 })),
         });
@@ -1736,7 +1737,7 @@ export async function documentBlocks(
  * schema-valid JSON by construction. Falls back to a deterministic parse of
  * the notes when no ANTHROPIC_API_KEY is configured (demo mode).
  */
-async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], docNames: string[] = []): Promise<Extraction> {
+async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], docNames: string[] = []): Promise<{ extraction: Extraction; assumptionOrigins: AssumptionOrigins }> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key) return withModelDeadline(async signal => {
     const instruction = `Extract the development-appraisal INPUTS via record_extraction from the attached documents${docNames.length ? ` (${docNames.join('; ')})` : ''}${notes.trim() ? ' and the notes below' : ''}. Extract inputs only — do NOT compute any financial outputs. Areas in sqft, values in £/ft², asking/s106 in absolute £. Every unit needs numeric count/area/value (midpoint of any range, conf reflecting how it was stated; source cites the document/page or note it came from). Anything the documents do not state: null.${notes.trim() ? `\n\nNOTES:\n${notes}` : ''}`;
@@ -1760,7 +1761,7 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
       const body = (await res.json()) as { content: Array<{ type: string; input?: unknown }> };
       const toolUse = body.content.find((c) => c.type === 'tool_use');
       const parsed = zExtraction.safeParse(toolUse?.input);
-      if (parsed.success && parsed.data.units.length > 0) return parsed.data;
+      if (parsed.success && parsed.data.units.length > 0) return { extraction: parsed.data, assumptionOrigins: extractedAssumptionOrigins(toolUse?.input) };
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'AI extraction found no usable unit schedule in the notes — add unit counts/areas/values or use manual entry.' });
     }
     // surface the real upstream reason (e.g. "credit balance too low") instead of a mystery failure
@@ -1796,7 +1797,7 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
   const cilMatch = notes.match(/CIL[^£]*£(\d+)\s*per\s*sqm/i);
   const askingMatch = notes.match(/asking[^£]*£([\d,]+)/i);
   const num = (m: RegExpMatchArray | null, dflt: number) => (m ? parseFloat(m[1].replace(/,/g, '')) : dflt);
-  return {
+  return { assumptionOrigins: sampleAssumptionOrigins(), extraction: {
     ...SAMPLE_EXTRACTION,
     // flagged, because everything except these three figures is the worked
     // example and NOT a reading of what the user pasted
@@ -1804,7 +1805,7 @@ async function extractFromNotes(notes: string, docBlocks: ContentBlock[] = [], d
     s106: num(s106Match, SAMPLE_EXTRACTION.s106),
     cilPerSqm: num(cilMatch, SAMPLE_EXTRACTION.cilPerSqm),
     asking: num(askingMatch, SAMPLE_EXTRACTION.asking),
-  };
+  } };
 }
 
 const zAutoInputs = z.object({
@@ -1929,7 +1930,7 @@ export const autoAppraisalRouter = router({
           });
         }
       }
-      const extraction = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
+      const { extraction, assumptionOrigins } = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
       // A model call can outlive a source revision or deletion. Compare the exact
       // prepared identity at the write, and commit every status + audit together.
       // A stale source must not leave earlier files marked as a successful run.
@@ -1950,7 +1951,7 @@ export const autoAppraisalRouter = router({
         }
       });
       return {
-        extraction,
+        extraction, assumptionOrigins,
         indicative: indicative(extraction, input.buildPerSqft),
         documentsRead: blocks.used.map((d) => d.name),
         sourceDocuments: blocks.used.map(({ id, name, version }) => ({ id, name, version })),

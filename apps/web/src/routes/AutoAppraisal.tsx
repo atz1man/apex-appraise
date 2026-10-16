@@ -1,5 +1,6 @@
+import { ORIGIN_LABELS, changedAssumptionFields, userChangedOrigins, type AssumptionField, type AssumptionOrigins } from '@apex/types/assumption-origins';
 import { expectedReviewSources, reviewSourcesChanged } from '../lib/review-source-versions';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { AutoAppraisalResult } from '@apex/appraisal-engine';
 import type { Extraction } from '@apex/types';
@@ -21,6 +22,7 @@ type Indicative = AutoAppraisalResult & { roc: number | null; verdict: Verdict }
 
 interface RunState {
   source: 'manual' | 'ai' | 'whatif';
+  assumptionOrigins?: AssumptionOrigins;
   references?: Array<{ unitIndex: number; documentId: string; version?: string; page: number | null; locator: string }>;
   extraction: Extraction;
   buildPerSqft: number;
@@ -121,17 +123,21 @@ function MicroLabel({ children }: { children: React.ReactNode }) {
   return <div className="label-mono text-ink-3">{children}</div>;
 }
 
-function NumBox({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function NumBox({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint?: string }) {
+  const hintId = useId();
   return (
     <label className="block">
       <span className="block text-[10px] text-ink-3">{label}</span>
       <input
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
         type="number"
         step="any"
         className="mt-1 w-full h-8 px-2 text-right fig text-[12px] font-medium"
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
       />
+      {hint && <span id={hintId} className="block mt-1 text-[11px] text-ink-2">{hint}</span>}
     </label>
   );
 }
@@ -249,6 +255,10 @@ export default function AutoAppraisal() {
   const [unitDraft, setUnitDraft] = useState<{ run: RunState; units: Extraction['units'] } | null>(null);
   const [schemeDraft, setSchemeDraft] = useState<{ run: RunState; values: SchemeAssumptions } | null>(null);
   const reviewScheme = run ? (schemeDraft?.run === run ? schemeDraft.values : schemeAssumptions(run.extraction, run.buildPerSqft)) : null;
+  const reviewOrigin = (key: AssumptionField) => {
+    if (run && reviewScheme && changedAssumptionFields(schemeAssumptions(run.extraction, run.buildPerSqft), reviewScheme).includes(key)) return 'Pending user correction — recalculate to apply';
+    return ORIGIN_LABELS[run?.assumptionOrigins?.[key] ?? 'unknown'];
+  };
   const updateScheme = (patch: Partial<SchemeAssumptions>) => {
     if (!run || !reviewScheme) return;
     setAcceptedRun(null);
@@ -309,6 +319,7 @@ export default function AutoAppraisal() {
       if (docIds.length) utils.documents.list.invalidate();
       setRun({
         sourceDocuments: res.sourceDocuments,
+        assumptionOrigins: res.assumptionOrigins,
         source: 'ai',
         extraction: res.extraction,
         buildPerSqft: buildRate,
@@ -382,7 +393,7 @@ export default function AutoAppraisal() {
     setChatInput('');
     try {
       const res = await whatIf.mutateAsync({ extraction: run.extraction, buildPerSqft: run.buildPerSqft, prompt: q });
-      setRun((r) => (r ? { ...r, source: 'whatif', references: [], extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
+      setRun((r) => (r ? { ...r, assumptionOrigins: userChangedOrigins(r.assumptionOrigins, [...Object.keys(res.changes), ...(res.buildPerSqft !== r.buildPerSqft ? ['buildPerSqft'] : [])]), source: 'whatif', references: [], extraction: res.extraction, buildPerSqft: res.buildPerSqft, indicative: res.indicative } : r));
       setChat((c) => [...c, { role: 'ai', text: res.reply }]);
     } catch {
       setChat((c) => [...c, { role: 'ai', text: 'Something went wrong — try again.' }]);
@@ -399,7 +410,7 @@ export default function AutoAppraisal() {
       const extraction = { ...corrected.extraction, units: reviewedUnits(current.extraction.units, reviewUnits) };
       const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: corrected.buildPerSqft });
       setAcceptedRun(null);
-      setRun(latest => latest === current ? { ...current, extraction, buildPerSqft: corrected.buildPerSqft, indicative } : latest);
+      setRun(latest => latest === current ? { ...current, assumptionOrigins: userChangedOrigins(current.assumptionOrigins, changedAssumptionFields(schemeAssumptions(current.extraction, current.buildPerSqft), reviewScheme!)), extraction, buildPerSqft: corrected.buildPerSqft, indicative } : latest);
       setChat([]);
     } catch (e) {
       setReviewError(e instanceof Error ? e.message : 'Could not apply corrections.');
@@ -420,7 +431,7 @@ export default function AutoAppraisal() {
         sourceReview: run.source !== 'manual' ? {
           accepted: true, references: (run.references ?? []).map(({ unitIndex, documentId, page, locator }) => ({ unitIndex, documentId, page, locator })), documentIds: reviewDocumentIds,
           expectedSources,
-          sample: !!run.extraction.sample, omissions: run.skipped,
+          sample: !!run.extraction.sample, omissions: run.skipped, assumptionOrigins: run.assumptionOrigins,
         } : undefined,
         asNewVersion: !!existingAppraisal,
         label: existingAppraisal ? run.source === 'manual' ? 'Manual appraisal' : run.source === 'whatif' ? 'What-if appraisal' : 'Auto-Appraisal' : undefined,
@@ -928,22 +939,22 @@ export default function AutoAppraisal() {
                     <legend className="text-[12px] font-semibold px-1">Review scheme assumptions</legend>
                     <p className="mb-3 text-[12px] text-ink-2">These values may include default assumptions where documents were silent. Check them against your sources; changing a value does not verify it. Build cost uses £ per square foot and CIL uses £ per square metre.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <NumBox label="Review Build cost £ per sq ft" value={reviewScheme.buildPerSqft} onChange={value => updateScheme({ buildPerSqft: value })} />
-                      <NumBox label="Review NIA / GIA efficiency %" value={reviewScheme.efficiency} onChange={value => updateScheme({ efficiency: value })} />
-                      <NumBox label="Review Asking land price £" value={reviewScheme.asking} onChange={value => updateScheme({ asking: value })} />
-                      <NumBox label="Review CIL £ per sq m" value={reviewScheme.cilPerSqm} onChange={value => updateScheme({ cilPerSqm: value })} />
-                      <NumBox label="Review S106 £" value={reviewScheme.s106} onChange={value => updateScheme({ s106: value })} />
-                      <NumBox label="Review Professional fees %" value={reviewScheme.profFee} onChange={value => updateScheme({ profFee: value })} />
-                      <NumBox label="Review Contingency %" value={reviewScheme.contingency} onChange={value => updateScheme({ contingency: value })} />
-                      <NumBox label="Review Target profit on GDV %" value={reviewScheme.targetProfit} onChange={value => updateScheme({ targetProfit: value })} />
-                      <NumBox label="Review Acquisition costs %" value={reviewScheme.acq} onChange={value => updateScheme({ acq: value })} />
-                      <NumBox label="Review Agent fees %" value={reviewScheme.agent} onChange={value => updateScheme({ agent: value })} />
-                      <NumBox label="Review Legal fees %" value={reviewScheme.legal} onChange={value => updateScheme({ legal: value })} />
-                      <NumBox label="Review Senior debt LTC %" value={reviewScheme.finance.ltc} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, ltc: value } })} />
-                      <NumBox label="Review Annual interest rate %" value={reviewScheme.finance.rate} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, rate: value } })} />
-                      <NumBox label="Review Build period months" value={reviewScheme.finance.period} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, period: value } })} />
-                      <NumBox label="Review Sales period months" value={reviewScheme.finance.sales} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, sales: value } })} />
-                      <NumBox label="Review Arrangement fee %" value={reviewScheme.finance.arrFee} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, arrFee: value } })} />
+                      <NumBox label="Review Build cost £ per sq ft" value={reviewScheme.buildPerSqft} hint={reviewOrigin('buildPerSqft')} onChange={value => updateScheme({ buildPerSqft: value })} />
+                      <NumBox label="Review NIA / GIA efficiency %" value={reviewScheme.efficiency} hint={reviewOrigin('efficiency')} onChange={value => updateScheme({ efficiency: value })} />
+                      <NumBox label="Review Asking land price £" value={reviewScheme.asking} hint={reviewOrigin('asking')} onChange={value => updateScheme({ asking: value })} />
+                      <NumBox label="Review CIL £ per sq m" value={reviewScheme.cilPerSqm} hint={reviewOrigin('cilPerSqm')} onChange={value => updateScheme({ cilPerSqm: value })} />
+                      <NumBox label="Review S106 £" value={reviewScheme.s106} hint={reviewOrigin('s106')} onChange={value => updateScheme({ s106: value })} />
+                      <NumBox label="Review Professional fees %" value={reviewScheme.profFee} hint={reviewOrigin('profFee')} onChange={value => updateScheme({ profFee: value })} />
+                      <NumBox label="Review Contingency %" value={reviewScheme.contingency} hint={reviewOrigin('contingency')} onChange={value => updateScheme({ contingency: value })} />
+                      <NumBox label="Review Target profit on GDV %" value={reviewScheme.targetProfit} hint={reviewOrigin('targetProfit')} onChange={value => updateScheme({ targetProfit: value })} />
+                      <NumBox label="Review Acquisition costs %" value={reviewScheme.acq} hint={reviewOrigin('acq')} onChange={value => updateScheme({ acq: value })} />
+                      <NumBox label="Review Agent fees %" value={reviewScheme.agent} hint={reviewOrigin('agent')} onChange={value => updateScheme({ agent: value })} />
+                      <NumBox label="Review Legal fees %" value={reviewScheme.legal} hint={reviewOrigin('legal')} onChange={value => updateScheme({ legal: value })} />
+                      <NumBox label="Review Senior debt LTC %" value={reviewScheme.finance.ltc} hint={reviewOrigin('finance.ltc')} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, ltc: value } })} />
+                      <NumBox label="Review Annual interest rate %" value={reviewScheme.finance.rate} hint={reviewOrigin('finance.rate')} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, rate: value } })} />
+                      <NumBox label="Review Build period months" value={reviewScheme.finance.period} hint={reviewOrigin('finance.period')} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, period: value } })} />
+                      <NumBox label="Review Sales period months" value={reviewScheme.finance.sales} hint={reviewOrigin('finance.sales')} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, sales: value } })} />
+                      <NumBox label="Review Arrangement fee %" value={reviewScheme.finance.arrFee} hint={reviewOrigin('finance.arrFee')} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, arrFee: value } })} />
                     </div>
                   </fieldset>}
                   {reviewError && <FormError className="mt-3">{reviewError}</FormError>}

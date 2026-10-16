@@ -6,6 +6,16 @@ const review: SourceEvidence = { reviewerName: 'Reviewer', reviewedAt: '2026-10-
   references: [{ unitIndex: 0, unitLabel: 'Apartments', documentId: 'doc-1', page: 2, locator: 'Drawing A102' }],
 };
 describe('portable source evidence', () => {
+  it('exports reported origins without inferring missing history or hiding stale inputs', () => {
+    expect(sourceEvidenceLines(review).join(' ')).toContain('Assumption origins were not recorded');
+    const text = sourceEvidenceLines({ ...review, inputsUnchanged: false, assumptionOrigins: { efficiency: 'application-default', 'finance.rate': 'user-entered', asking: 'model-supplied' } }).join(' ');
+    expect(text).toContain('INPUTS CHANGED');
+    expect(text).toContain('NIA / GIA efficiency %: Application default');
+    expect(text).toContain('Annual interest rate %: User-entered or corrected');
+    expect(text).toContain('Asking land price £: Model-supplied — not verified');
+    expect(text).toContain('CIL £ per sq m: Origin not recorded');
+    expect(text).toContain('not independently verified source citations');
+  });
   it('exports recorded upload fingerprints and explicitly marks legacy absence', () => {
     const hash = 'a'.repeat(64);
     const text = sourceEvidenceLines({ ...review, documents: [{ ...review.documents[0], sha256: hash }] }).join('\n');

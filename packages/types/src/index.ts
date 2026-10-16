@@ -1,3 +1,4 @@
+import { ASSUMPTION_FIELDS, ASSUMPTION_ORIGINS, type AssumptionField } from './assumption-origins.js';
 import { z } from 'zod';
 import { ASSET_TYPES } from './asset-classes.js';
 
@@ -256,3 +257,6 @@ export * from './regions.js';
  */
 export * from './integrations.js';
 
+
+/** Optional in old reviews: absence means unknown, never inferred from a matching value. */
+export const zAssumptionOrigins = z.record(z.enum(Object.keys(ASSUMPTION_FIELDS) as [AssumptionField, ...AssumptionField[]]), z.enum(ASSUMPTION_ORIGINS));
