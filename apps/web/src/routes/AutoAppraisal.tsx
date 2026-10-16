@@ -439,7 +439,7 @@ export default function AutoAppraisal() {
         asNewVersion: !!existingAppraisal,
         label: existingAppraisal ? run.source === 'manual' ? 'Manual appraisal' : run.source === 'whatif' ? 'What-if appraisal' : 'Auto-Appraisal' : undefined,
         input: {
-          units: x.units.map((u) => ({ label: u.label, count: u.count, area: u.area, cap: u.value, conf: u.conf, source: u.source })),
+          units: x.units.map((u) => ({ extractionUnitId: u.extractionUnitId, label: u.label, count: u.count, area: u.area, cap: u.value, conf: u.conf, source: u.source })),
           efficiency: x.efficiency,
           trades: [{ label: 'Build', rate: run.buildPerSqft }],
           profFeePct: x.profFee,

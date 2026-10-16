@@ -491,3 +491,28 @@ Exact-head CI is recorded on the PR. This closes access to the retained original
 schedule; it does not deliver unit matching. Next: introduce and preserve stable unit
 identity through extraction, review, save and editing before comparing units. External
 provider configuration and customer acceptance remain separate release gates.
+
+### Extraction unit identity continuity — 16 October 2026
+
+New extraction runs assign a fresh server UUID to every flat-schedule row before
+issuing the signed receipt. Model-supplied IDs are replaced. The review flow,
+what-if flow, save contract and current-appraisal response preserve these IDs
+through corrections, renaming and reordering. Save rejects duplicate IDs and IDs
+not present in the submitted receipt or that deal's existing current schedule.
+Manual/legacy rows remain unlinked; missing IDs are not reconstructed by name or
+position. Phased schedules deliberately omit this flat-schedule link.
+
+This is continuity metadata, not independently verified source identity: it does
+not prove a user corrected the right row, and no unit-by-unit comparison is yet
+presented. Financial arithmetic and the engine version are unchanged; paired runs
+with/without IDs produce identical results. Existing JSON storage carries the
+optional field without a schema migration or backfill.
+
+Validation is recorded on the PR: API/web typechecks, 66 targeted API tests,
+420 web tests and the real local correction/save/reopen/edit/resave browser
+journey. Tests cover server replacement of a model ID, different IDs across runs,
+unknown/duplicate link rejection and preservation through actual multi-row
+reordering and what-if changes. Full exact-commit CI is required before release.
+Next: use these links for explicit original/current comparisons with unmatched
+rows shown separately; never match legacy or phased rows by position. External
+provider and customer acceptance remain open.

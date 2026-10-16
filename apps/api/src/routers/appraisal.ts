@@ -5,7 +5,8 @@ import { fieldTaskVersion, readInspectionEvidence, readFieldSnapshot } from '../
 import { sourceVersion } from '../source-version.js';
 import { withModelDeadline } from '../model-deadline.js';
 import { readBoundedFile } from '../bounded-file.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { assertExtractionUnitLinks } from '../extraction-unit-links.js';
 import type { Appraisal } from '@prisma/client';
 import { readSourceReview, zSourceReviewRequest, zSourceFingerprint } from '../source-review.js';
 import { signFileUrl } from '../uploads.js';
@@ -295,6 +296,8 @@ export const appraisalRouter = router({
       await assertDeal(ctx, input.dealId);
       const { result, jv } = fullResult(input.input);
       const existing = await currentAppraisal(ctx.prisma.appraisal, input.dealId, ctx.principal.orgId);
+      const receipt = input.sourceReview?.extractionReceipt ? verifyExtractionReceipt(input.sourceReview.extractionReceipt, ctx.principal.orgId) : undefined;
+      assertExtractionUnitLinks(input.input, receipt?.extraction.units ?? (existing ? appraisalRowToEngineInput(existing).units : []));
       const data = {
         ...inputToRow(input.input),
         source: input.source,
@@ -339,7 +342,6 @@ export const appraisalRouter = router({
         data.fieldSnapshot = JSON.stringify({ version: 1, capturedAt: new Date().toISOString(), capturedBy: ctx.principal.name, capturedById: ctx.principal.userId, tasks: snapshots });
       }
       if (input.sourceReview) {
-        const receipt = input.sourceReview.extractionReceipt ? verifyExtractionReceipt(input.sourceReview.extractionReceipt, ctx.principal.orgId) : undefined;
         const ids = [...new Set(input.sourceReview.documentIds)];
         const documents = await ctx.prisma.document.findMany({
           where: { orgId: ctx.principal.orgId, dealId: input.dealId, id: { in: ids } }, orderBy: { id: 'asc' },
@@ -1936,7 +1938,9 @@ export const autoAppraisalRouter = router({
           });
         }
       }
-      const { extraction, assumptionOrigins } = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
+      const extracted = await extractFromNotes(input.notes, blocks.blocks, blocks.used.map((d) => d.name));
+      const assumptionOrigins = extracted.assumptionOrigins;
+      const extraction = { ...extracted.extraction, units: extracted.extraction.units.map(unit => ({ ...unit, extractionUnitId: randomUUID() })) };
       // A model call can outlive a source revision or deletion. Compare the exact
       // prepared identity at the write, and commit every status + audit together.
       // A stale source must not leave earlier files marked as a successful run.

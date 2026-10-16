@@ -47,6 +47,11 @@ const EXEMPT_ID_FIELDS: string[] = [
   // Caller-generated retry UUID, not an existing row ID. Lookup is scoped by
   // orgId; task-create-retry tests reuse across firms and reject foreign deals.
   'createRequestId',
+  // Receipt-row continuity metadata, never dereferenced as a database ID. Pure
+  // compute/what-if calls may echo it. Save checks the org-verified receipt or
+  // scoped current schedule; source-review tests reject another tenant's links
+  // both with its receipt and without a receipt.
+  'extractionUnitId',
   // Xero's id for a tracking option, chosen from Xero's list. It names a row in
   // the customer's accounting package, and the guard that matters there is that
   // the deal is the caller's, which `dealId` in the same input already sweeps.
