@@ -95,10 +95,10 @@ primary_region = "lhr"
   NODE_ENV = "production"
   PORT = "4100"
   # public URL used in email links; flip to the custom domain when one exists
-  APP_URL = "https://apex-appraise-web.fly.dev"
+  APP_URL = "https://plotmerit.fly.dev"
   # server-side PDF renderer loads the web app; the public host has a cert,
   # flycast does not (web's force_https would 301 flycast HTTP into a dead end)
-  WEB_URL = "https://apex-appraise-web.fly.dev"
+  WEB_URL = "https://plotmerit.fly.dev"
 
 [http_service]
   internal_port = 4100

@@ -23,7 +23,7 @@ import { TILE_ATTRIBUTION } from '../tiles.js';
 import { GOOGLE_ATTRIBUTION, staticMapsEnabled } from '../staticmap.js';
 import { signFileUrl } from '../uploads.js';
 import { mintApiKey } from '../api-keys.js';
-import { recordAudit } from '../audit.js';
+import { AUDIT, recordAudit } from '../audit.js';
 import { assertUnchanged } from '../optimistic.js';
 import { assertOwned } from '../auth/owned.js';
 import { WEBHOOK_EVENTS, isWebhookEvent, newWebhookSecret } from '../webhook-delivery.js';
@@ -406,13 +406,27 @@ export const orgRouter = router({
       return { ok: true, updatedAt: saved.updatedAt };
     }),
 
-  members: internalProcedure.query(({ ctx }) =>
-    ctx.prisma.user.findMany({
+  members: internalProcedure.query(async ({ ctx }) => {
+    const members = await ctx.prisma.user.findMany({
       where: { orgId: ctx.principal.orgId, principalType: 'internal' },
       select: { id: true, name: true, email: true, initials: true, role: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
-    }),
-  ),
+    });
+    // Identity comes from userId, never matching names or an IP address.
+    // Failed sign-ins are not evidence that the account holder used the app.
+    const signIns = ctx.principal.role === 'ADMIN' ? await ctx.prisma.activityEvent.groupBy({
+      by: ['userId'],
+      where: { orgId: ctx.principal.orgId, userId: { in: members.map(m => m.id) }, action: AUDIT.signIn },
+      _max: { at: true }, _count: { _all: true },
+    }) : [];
+    const byUser = new Map(signIns.map(event => [event.userId, event]));
+    return members.map(member => ({ ...member,
+      signInHistory: ctx.principal.role === 'ADMIN' ? {
+        lastRecordedAt: byUser.get(member.id)?._max.at ?? null,
+        recordedCount: byUser.get(member.id)?._count._all ?? 0,
+      } : null,
+    }));
+  }),
 
   /**
    * Invite a teammate: creates the account with a one-time temporary password,

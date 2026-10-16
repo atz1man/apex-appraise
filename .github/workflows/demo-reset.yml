@@ -1,7 +1,7 @@
 name: Demo reset
 
 # Wipe + reseed of the public demo org so the live demo at
-# apex-appraise-web.fly.dev always looks pristine. Goes through the web nginx
+# plotmerit.fly.dev always looks pristine. Goes through the web nginx
 # proxy (the api app is flycast-only). Requires the DEMO_RESET_TOKEN repo
 # secret to match the api app's RESET_TOKEN.
 # Manual only. It used to run nightly, which is right for a demo nobody is
@@ -18,5 +18,5 @@ jobs:
     steps:
       - name: Reset the demo org
         run: >-
-          curl -fsS -X POST https://apex-appraise-web.fly.dev/admin/reset-demo
+          curl -fsS -X POST https://plotmerit.fly.dev/admin/reset-demo
           -H "x-reset-token: ${{ secrets.DEMO_RESET_TOKEN }}"

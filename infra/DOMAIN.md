@@ -1,3 +1,8 @@
+> 16 October 2026: active host is https://plotmerit.fly.dev. The former
+> apex-appraise-web app is intentionally stopped with autostart disabled. Do not
+> redirect or restore that host without explicit owner authorization. No custom
+> domain has been purchased; custom-domain examples below remain unconfigured.
+
 # Custom domain — 5-minute wire-up
 
 **Apex Appraise runs on Fly.io.** That is the live production host, not a plan
@@ -5,10 +10,10 @@ or an option: two apps in `lhr` (London) —
 
 | app | role |
 |---|---|
-| `apex-appraise-web` | the front door, and the only one on the public internet — serves the built React app and proxies `/trpc`, `/uploads`, `/reports`, `/webhooks` |
+| `plotmerit` | the front door, and the only one on the public internet — serves the built React app and proxies `/trpc`, `/uploads`, `/reports`, `/webhooks` |
 | `apex-appraise-api` | Fastify + tRPC, **flycast-only**: reachable from the web app over Fly's private network and from nowhere else |
 
-It serves today at https://apex-appraise-web.fly.dev.
+It serves today at https://plotmerit.fly.dev.
 
 Both apps set `auto_stop_machines = "stop"` **and** `min_machines_running = 1`,
 so extra machines stop under low load but one stays up — they do **not** scale
@@ -43,9 +48,9 @@ takes one cert command and two DNS records.
 ## 1. Issue the certificate
 
 ```bash
-fly certs add app.apexappraise.co.uk -a apex-appraise-web
+fly certs add app.apexappraise.co.uk -a plotmerit
 # or the apex domain itself:
-fly certs add apexappraise.co.uk -a apex-appraise-web
+fly certs add apexappraise.co.uk -a plotmerit
 ```
 
 The command prints the DNS records Fly needs. Typically:
@@ -54,13 +59,13 @@ The command prints the DNS records Fly needs. Typically:
 
 | Type  | Name  | Value |
 |-------|-------|-------|
-| CNAME | `app` | `apex-appraise-web.fly.dev.` |
+| CNAME | `app` | `plotmerit.fly.dev.` |
 | — or for the apex domain — | | |
-| A     | `@`   | Fly's IPv4 (shown by `fly ips list -a apex-appraise-web`) |
+| A     | `@`   | Fly's IPv4 (shown by `fly ips list -a plotmerit`) |
 | AAAA  | `@`   | Fly's IPv6 (same command) |
 
 Plus the ACME challenge record `fly certs add` prints (one-time, for issuance).
-Check status with `fly certs show <domain> -a apex-appraise-web` — usually
+Check status with `fly certs show <domain> -a plotmerit` — usually
 verified within minutes.
 
 ## 3. Flip the app URLs

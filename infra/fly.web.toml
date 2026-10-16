@@ -4,7 +4,7 @@
 # nginx.conf.template is envsubst'd at container start; API_UPSTREAM points at
 # the API app's flycast address (private, load-balanced, wakes stopped machines).
 
-app = "apex-appraise-web"
+app = "plotmerit"
 primary_region = "lhr"
 
 # dockerfile resolves relative to THIS file; build context is the cwd flyctl

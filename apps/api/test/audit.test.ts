@@ -92,3 +92,20 @@ describe('the trail is evidence, not a feed', () => {
     expect(signIn!.dealName).toBeNull();
   });
 });
+
+describe('member sign-in visibility', () => {
+  it('aggregates successful identity-bound sign-ins only for workspace administrators', async () => {
+    const own = await makeTenant('Activity own');
+    const other = await makeTenant('Activity other');
+    const first = new Date('2026-01-01T10:00:00Z');
+    const latest = new Date('2026-01-02T10:00:00Z');
+    for (const at of [first, latest]) await prisma.activityEvent.create({ data: { orgId: own.orgId, userId: own.userId, actor: 'Old name', action: 'signed in', target: 'test', at } });
+    await prisma.activityEvent.create({ data: { orgId: own.orgId, userId: own.userId, actor: 'Old name', action: 'failed sign-in', target: 'test', at: new Date('2026-01-03') } });
+    await prisma.activityEvent.create({ data: { orgId: other.orgId, userId: own.userId, actor: 'Old name', action: 'signed in', target: 'test', at: new Date('2026-01-04') } });
+    const [member] = await callerFor(own.principal).org.members();
+    expect(member.signInHistory).toEqual({ lastRecordedAt: latest, recordedCount: 2 });
+    expect((await callerFor({ ...own.principal, role: 'ANALYST' }).org.members())[0].signInHistory).toBeNull();
+    expect((await callerFor(other.principal).org.members())[0].signInHistory).toEqual({ lastRecordedAt: null, recordedCount: 0 });
+    await expect(anonymous().org.members()).rejects.toThrow();
+  });
+});

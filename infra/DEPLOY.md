@@ -1,7 +1,7 @@
 # Deploying Apex Appraise
 
-**Production runs on Fly.io** — two apps in `lhr`, `apex-appraise-web` (public) and
-`apex-appraise-api` (flycast-only), serving at https://apex-appraise-web.fly.dev. See
+**Production runs on Fly.io** — two apps in `lhr`, `plotmerit` (public) and
+`apex-appraise-api` (flycast-only), serving at https://plotmerit.fly.dev. See
 [`DOMAIN.md`](DOMAIN.md) for the app layout and how to put a custom domain in front of it,
 and **Option B** below for the deploy commands.
 
@@ -29,7 +29,7 @@ serving image against the intended commit separately.
 For a hand deployment, run the same check after both apps are serving:
 
 ```bash
-node .github/scripts/check-serving.cjs https://apex-appraise-web.fly.dev
+node .github/scripts/check-serving.cjs https://plotmerit.fly.dev
 ```
 
 Before deploying, the workflow requires a successful CI push run on `main` for
@@ -43,7 +43,7 @@ Use two app-scoped repository secrets:
 
 ```bash
 fly tokens create deploy -a apex-appraise-api   # store as FLY_API_TOKEN
-fly tokens create deploy -a apex-appraise-web   # store as FLY_WEB_API_TOKEN
+fly tokens create deploy -a plotmerit   # store as FLY_WEB_API_TOKEN
 ```
 
 The web deployment falls back to `FLY_API_TOKEN` for existing setups where that
@@ -413,7 +413,7 @@ invites and password resets reach real inboxes before onboarding customers.
 fly secrets set -a apex-appraise-api \
   SMTP_URL='smtp://apikey:SG.xxxx@smtp.sendgrid.net:587' \
   EMAIL_FROM='Apex Appraise <no-reply@apexappraise.co.uk>' \
-  APP_URL='https://apex-appraise-web.fly.dev'
+  APP_URL='https://plotmerit.fly.dev'
 ```
 
 Then add SPF and DKIM records for the sending domain, or the mail will send and
