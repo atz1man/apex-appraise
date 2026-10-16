@@ -239,6 +239,7 @@ describe('server-issued extraction receipts', () => {
     const originalUnits = extracted.extraction.units.map(u => ({ extractionUnitId: u.extractionUnitId, label: u.label, count: u.count, area: u.area, cap: u.value, source: u.source }));
     await expect(api.appraisal.save({ dealId, input: { ...input, units: [originalUnits[0], originalUnits[0]] }, sourceReview: { ...acknowledgement, extractionReceipt: token } })).rejects.toThrow(/duplicated/);
     await expect(api.appraisal.save({ dealId, input: { ...input, units: originalUnits } })).rejects.toThrow(/unknown/);
+    await expect(callerFor(other.principal).appraisal.save({ dealId: other.dealId, input: { ...input, units: originalUnits } })).rejects.toThrow(/unknown/);
     const otherRun = await api.autoAppraisal.extract({ notes: 'Another synthetic run' });
     expect(otherRun.extraction.units.map(u => u.extractionUnitId).some(id => unitIds.includes(id))).toBe(false);
     await expect(api.appraisal.save({ dealId, input: { ...input, units: [{ ...originalUnits[0], extractionUnitId: otherRun.extraction.units[0].extractionUnitId }] }, sourceReview: { ...acknowledgement, extractionReceipt: token } })).rejects.toThrow(/unknown/);
