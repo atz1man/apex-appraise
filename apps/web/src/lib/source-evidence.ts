@@ -1,5 +1,7 @@
+import { ASSUMPTION_FIELDS, ORIGIN_LABELS, type AssumptionField, type AssumptionOrigins } from '@apex/types/assumption-origins';
 /** Portable evidence text: never export expiring download credentials. */
 export interface SourceEvidence {
+  assumptionOrigins?: AssumptionOrigins;
   reviewerName: string; reviewedAt: string; inputsUnchanged: boolean; sample: boolean;
   documents: Array<{ id: string; name: string; status: string; addedAt: string; supersededById?: string | null; sha256?: string | null }>;
   omissions: Array<{ name: string; reason: string }>;
@@ -16,6 +18,10 @@ export function sourceEvidenceLines(review: SourceEvidence | null | undefined, s
   ];
   if (review.sample) lines.push('WORKED EXAMPLE: these inputs were not extracted from project documents.');
   if (review.documents.some(d => d.status !== 'unchanged')) lines.push('SOURCE WARNING: a reviewed document is superseded, changed or missing.');
+  lines.push('ASSUMPTION ORIGINS AT REVIEW');
+  lines.push('Origin labels were submitted with the input acknowledgement; they are not independently verified source citations. Changed inputs are not covered by this historical record.');
+  if (!review.assumptionOrigins) lines.push('Assumption origins were not recorded for this review.');
+  else for (const key of Object.keys(ASSUMPTION_FIELDS) as AssumptionField[]) lines.push(`${ASSUMPTION_FIELDS[key]}: ${ORIGIN_LABELS[review.assumptionOrigins[key] ?? 'unknown']}`);
   lines.push('SOURCE REGISTER');
   if (!review.documents.length) lines.push('No uploaded source documents were recorded.');
   for (const d of review.documents) lines.push(`${d.name} | Document ID: ${d.id} | Uploaded: ${d.addedAt} | Status: ${d.status}${d.supersededById ? ` | Superseded by document ID: ${d.supersededById}` : ''} | Upload SHA-256: ${d.sha256 ?? 'Not recorded'}`);

@@ -17,6 +17,17 @@ const fresh = async () => {
 };
 const document = (dealId: string, orgId = T.orgId) => prisma.document.create({ data: { orgId, dealId, name: 'Schedule.xlsx', ext: 'xlsx', category: 'Cost plans', sizeBytes: 100n, url: '/uploads/files/test-source.xlsx' } });
 describe('durable source input review', () => {
+  it('retains bounded reported assumption origins and leaves legacy origins unknown', async () => {
+    const { dealId, api } = await fresh();
+    const saved = await api.appraisal.save({ dealId, input, sourceReview: { ...acknowledgement, assumptionOrigins: { efficiency: 'application-default', 'finance.rate': 'user-entered' } } });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview?.assumptionOrigins).toEqual({ efficiency: 'application-default', 'finance.rate': 'user-entered' });
+    await api.appraisal.save({ dealId, input: { ...input, efficiency: 80 }, expectedUpdatedAt: saved.updatedAt });
+    expect((await api.appraisal.getCurrent(dealId))?.sourceReview).toMatchObject({ inputsUnchanged: false, assumptionOrigins: { efficiency: 'application-default' } });
+    const other = await fresh();
+    await api.appraisal.save({ dealId: other.dealId, input, sourceReview: acknowledgement });
+    expect((await api.appraisal.getCurrent(other.dealId))?.sourceReview?.assumptionOrigins).toBeUndefined();
+    await expect(api.appraisal.save({ dealId: other.dealId, input, sourceReview: { ...acknowledgement, assumptionOrigins: { efficiency: 'verified' } } } as never)).rejects.toThrow();
+  });
   it('pins the server fingerprint and refuses a changed fingerprint despite identical metadata', async () => {
     const { dealId, api } = await fresh(); const doc = await document(dealId);
     const hash = 'a'.repeat(64);

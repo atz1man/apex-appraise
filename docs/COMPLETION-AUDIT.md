@@ -975,6 +975,36 @@ level and reconcile them against representative real project documents. This
 increment improves review control; it does not establish model extraction
 accuracy, measured drawing take-off, provider activation or professional acceptance.
 
+## Assumption origins through review and export — 16 October 2026
+
+Auto-Appraisal now labels each of the 16 scheme assumptions as model-supplied,
+application-default, run setting, worked example or user correction. Origins
+are captured before schema defaults replace missing/null inputs; supplied zero
+and a supplied value matching a default remain model-supplied. Build cost is a
+run setting, not a claim that the documents supplied it. Pending corrections
+are labelled until recalculation succeeds. Unchanged origins survive correction
+and what-if runs; missing legacy metadata stays unknown.
+
+The existing input-bound review stores the bounded origin labels and carries
+them into Excel and the report. These are client-submitted review metadata,
+not independently verified citations or proof of source accuracy. Later edits
+retain the historical record and its existing changed-input warning. No engine
+arithmetic, schema migration, live credential or customer record changes.
+
+Local evidence: 1,435 API tests passed with provider credentials removed; the
+64 affected extraction/source-review tests passed again after final changes.
+417 web tests, API/web typechecks, production build/bundle limits and three
+browser journeys passed. The journey verifies correction, persistence, Excel,
+report and stale-review invalidation; the 390px form was visually inspected.
+An earlier full API run inherited a provider key and was stopped; some tests
+may have contacted the provider. The clean rerun is the recorded full result.
+Exact-head CI and delivery state are recorded on the PR.
+
+Next: representative project-pack reconciliation and durable server-recorded
+extraction receipts. Current origin labels do not prove which document/page
+supports a model-supplied scheme assumption. Professional acceptance, provider
+activation and the wider commercial/operational release gates remain open.
+
 ## PlotMerit address and account activity — 16 October 2026
 
 At the owner's request, the old apex-appraise-web host is stopped with autostart
@@ -1005,3 +1035,11 @@ renamed actors, failed sign-ins, absent records and non-admin/anonymous access.
 The browser journey verifies real sign-in, displayed history, refresh and a
 visible failure state. Web unit suite and strict typechecks passed. Exact-commit
 CI and activity-feature delivery evidence will be recorded on the PR.
+
+Delivery reconciliation: PR #84 was subsequently merged and deployed at
+21809264703ccf2290c0ea1273395f70dd11ef8b after main CI 38892465776 passed.
+Both live images carry that revision; serving and the live member-activity
+journey passed. The former host remains stopped with autostart disabled.
+PR #83 is being reconciled onto that release; origin labels are not live until
+its own exact-commit release evidence is recorded. No competing increment was
+found; retain both the new-host controls and the assumption-origin work.

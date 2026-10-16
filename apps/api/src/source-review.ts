@@ -1,3 +1,4 @@
+import { zAssumptionOrigins } from '@apex/types';
 import { z } from 'zod';
 import type { Appraisal } from '@prisma/client';
 import { inputHashOf } from './approval-pin.js';
@@ -16,6 +17,7 @@ export const zSourceReviewRequest = z.object({
   documentIds: z.array(z.string()).max(12),
   expectedSources: z.array(z.object({ id: z.string(), version: zSourceFingerprint })).max(12).optional(),
   sample: z.boolean(),
+  assumptionOrigins: zAssumptionOrigins.optional(),
   omissions: z.array(z.object({ name: z.string().max(500), reason: z.string().max(8000) })).max(36),
 });
 export const zStoredSourceReview = z.object({
@@ -26,6 +28,7 @@ export const zStoredSourceReview = z.object({
   reviewedAt: z.string().datetime(),
   inputHash: z.string(),
   sample: z.boolean(),
+  assumptionOrigins: zAssumptionOrigins.optional(),
   omissions: zSourceReviewRequest.shape.omissions,
   documents: z.array(z.object({ id: z.string(), name: z.string(), sizeBytes: z.string(), addedAt: z.string(), storagePath: z.string(), sha256: zSourceFingerprint.nullable().default(null) })),
 });
