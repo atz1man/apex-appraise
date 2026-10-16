@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('source review corrects extracted inputs and preserves their origin in a saved appraisal', async ({ page }) => {
+test('source review corrects extracted inputs and preserves their origin in a saved appraisal', async ({ page }, testInfo) => {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByText('Deal tools')).toBeVisible();
@@ -58,6 +58,36 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   await expect(page.getByText(/Source and review history: User-corrected input/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true })).toBeDisabled();
   await accept.check();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel('Review Build cost £ per sq ft', { exact: true }).fill('125');
+  await page.getByLabel('Review NIA / GIA efficiency %', { exact: true }).fill('85');
+  await page.getByLabel('Review S106 £', { exact: true }).fill('32000');
+  await page.getByLabel('Review CIL £ per sq m', { exact: true }).fill('55');
+  await page.getByLabel('Review Annual interest rate %', { exact: true }).fill('9');
+  await page.getByLabel('Review Build period months', { exact: true }).fill('0');
+  await expect(accept).not.toBeChecked();
+  await expect(accept).toBeDisabled();
+  await page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true }).click();
+  await expect(page.getByText(/Build period months:/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open full appraisal', exact: true })).toBeDisabled();
+  await page.getByLabel('Review Build period months', { exact: true }).fill('24');
+  // A failed engine request cannot accept or silently lose the corrections.
+  await page.route('**/trpc/autoAppraisal.compute*', route => route.abort());
+  await page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true })).toBeEnabled();
+  await expect(accept).toBeDisabled();
+  await expect(page.getByLabel('Review Build cost £ per sq ft', { exact: true })).toHaveValue('125');
+  await page.unroute('**/trpc/autoAppraisal.compute*');
+  const recalculated = page.waitForResponse(r => r.url().includes('/trpc/autoAppraisal.compute') && r.ok());
+  await page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Apply corrections and recalculate', exact: true })).toBeDisabled();
+  const computedBody = await (await recalculated).json();
+  const correctedResult = (Array.isArray(computedBody) ? computedBody[0] : computedBody).result.data.json;
+  await expect(accept).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('group', { name: 'Review scheme assumptions', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('scheme-review-mobile.png') });
+  await accept.check();
   await page.getByRole('button', { name: 'Open full appraisal', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/deal/${dealId}/appraisal$`));
   const saved = await page.evaluate(async (id) => {
@@ -71,6 +101,9 @@ test('source review corrects extracted inputs and preserves their origin in a sa
   }, dealId);
   expect(JSON.stringify(saved)).toContain('User-corrected input. Previous source: Drawing A-102');
   expect(JSON.stringify(saved)).toContain('2600');
+  expect(saved.input).toMatchObject({ efficiency: 85, trades: [{ label: 'Build', rate: 125 }], finance: { ratePct: 9, periodMonths: 24 } });
+  expect(saved.input.otherCosts).toContainEqual(expect.objectContaining({ label: 'S106', amount: 32000 }));
+  expect(saved.input.otherCosts.find((cost: { label: string }) => cost.label === 'CIL').amount).toBeCloseTo(correctedResult.cil, 2);
   expect(saved.sourceReview).toMatchObject({ inputsUnchanged: true, sample: true });
   expect(saved.sourceReview.reviewerName).toBeTruthy();
   await page.reload();

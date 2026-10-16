@@ -10,7 +10,7 @@ import { Button, Dot, EmptyState, FormError, Panel, ProgressBar, SegmentedToggle
 import { DealNav } from '../components/DealNav';
 import { accent, brand, brandInk, neutral, onFill } from '@apex/ui-tokens';
 import { useUnsavedWarning } from '../lib/unsaved';
-import { reviewedUnits } from '../lib/extraction-review';
+import { reviewedUnits, reviewedScheme, schemeAssumptions, type SchemeAssumptions } from '../lib/extraction-review';
 import { manualDefaultsFor, manualIsRunnable, type ManualState, type ManualUnit } from '../lib/auto-defaults';
 
 // ---------- types ----------
@@ -247,6 +247,14 @@ export default function AutoAppraisal() {
   const [run, setRun] = useState<RunState | null>(null);
   const [acceptedRun, setAcceptedRun] = useState<RunState | null>(null);
   const [unitDraft, setUnitDraft] = useState<{ run: RunState; units: Extraction['units'] } | null>(null);
+  const [schemeDraft, setSchemeDraft] = useState<{ run: RunState; values: SchemeAssumptions } | null>(null);
+  const reviewScheme = run ? (schemeDraft?.run === run ? schemeDraft.values : schemeAssumptions(run.extraction, run.buildPerSqft)) : null;
+  const updateScheme = (patch: Partial<SchemeAssumptions>) => {
+    if (!run || !reviewScheme) return;
+    setAcceptedRun(null);
+    setSchemeDraft({ run, values: { ...reviewScheme, ...patch } });
+  };
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewPending, setReviewPending] = useState(false);
   const reviewUnits = unitDraft && unitDraft.run === run ? unitDraft.units : run?.extraction.units ?? [];
   const reviewDocumentIds = [...new Set([...(run?.sourceDocuments ?? []).map(d => d.id), ...(run?.references ?? []).map(r => r.documentId)])];
@@ -258,7 +266,8 @@ export default function AutoAppraisal() {
     ? 'A source changed since extraction. Reload the source documents and extract again before recording this review.'
     : 'A referenced source changed. Clear the affected reference, select the current document and check its page or location again.';
   const reviewAccepted = !!run && acceptedRun === run && referencesValid && !sourcesChanged;
-  const reviewDirty = !!run && unitDraft?.run === run && JSON.stringify(reviewUnits) !== JSON.stringify(run.extraction.units);
+  const reviewDirty = !!run && ((unitDraft?.run === run && JSON.stringify(reviewUnits) !== JSON.stringify(run.extraction.units)) ||
+    (schemeDraft?.run === run && JSON.stringify(reviewScheme) !== JSON.stringify(schemeAssumptions(run.extraction, run.buildPerSqft))));
   useUnsavedWarning(reviewDirty || (!!run?.references?.length && !reviewAccepted), 'extraction corrections and source references');
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
@@ -293,6 +302,7 @@ export default function AutoAppraisal() {
     const docIds = [...selectedDocs];
     if (reviewDirty || whatIf.isPending || save.isPending || reviewPending || phase === 'loading' || (notes.trim().length < 10 && docIds.length === 0)) return;
     setError(null);
+    setReviewError(null);
     setPhase('loading');
     try {
       const res = await extract.mutateAsync({ notes, documentIds: docIds, buildPerSqft: buildRate });
@@ -350,6 +360,7 @@ export default function AutoAppraisal() {
       confidence: 'Manual entry',
     };
     setError(null);
+    setReviewError(null);
     setPhase('loading');
     try {
       const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: buildRate });
@@ -381,15 +392,17 @@ export default function AutoAppraisal() {
   const applyReview = async () => {
     if (!run || reviewPending || whatIf.isPending) return;
     const current = run;
-    setError(null);
+    setReviewError(null);
     setReviewPending(true);
     try {
-      const extraction = { ...current.extraction, units: reviewedUnits(current.extraction.units, reviewUnits) };
-      const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: current.buildPerSqft });
-      setRun(latest => latest === current ? { ...current, extraction, indicative } : latest);
+      const corrected = await reviewedScheme(current.extraction, reviewScheme!);
+      const extraction = { ...corrected.extraction, units: reviewedUnits(current.extraction.units, reviewUnits) };
+      const indicative = await utils.client.autoAppraisal.compute.query({ extraction, buildPerSqft: corrected.buildPerSqft });
+      setAcceptedRun(null);
+      setRun(latest => latest === current ? { ...current, extraction, buildPerSqft: corrected.buildPerSqft, indicative } : latest);
       setChat([]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not apply corrections.');
+      setReviewError(e instanceof Error ? e.message : 'Could not apply corrections.');
     } finally {
       setReviewPending(false);
     }
@@ -448,6 +461,7 @@ export default function AutoAppraisal() {
     setRun(null);
     setChat([]);
     setError(null);
+    setReviewError(null);
   };
 
   // ---- result derivations (display only — all money from the server indicative) ----
@@ -894,7 +908,7 @@ export default function AutoAppraisal() {
                         </div>
                         {(readableDocs.length > 0 || reference) && <fieldset disabled={reviewDirty} className="mt-3 space-y-2">
                           <legend className="text-[12px] font-semibold">Input source reference</legend>
-                          <p className="text-[11px] text-ink-2">User-entered reference; page existence and drawing measurements are not verified. Apply unit corrections before editing references.</p>
+                          <p className="text-[11px] text-ink-2">User-entered reference; page existence and drawing measurements are not verified. Apply input corrections before editing references.</p>
                           <label className="block text-[12px]">Source document for unit {index + 1}
                             <select className="w-full" value={reference?.documentId ?? ''} onChange={e => setReference({ documentId: e.target.value, version: roomDocs?.documents.find(d => d.id === e.target.value)?.version, page: null, locator: '' })}>
                               <option value="">No structured reference</option>
@@ -910,6 +924,29 @@ export default function AutoAppraisal() {
                       </fieldset>;
                     })}
                   </div>
+                  {reviewScheme && <fieldset disabled={reviewPending || whatIf.isPending || save.isPending} className="mt-4 rounded-panel border border-border-std p-3">
+                    <legend className="text-[12px] font-semibold px-1">Review scheme assumptions</legend>
+                    <p className="mb-3 text-[12px] text-ink-2">These values may include default assumptions where documents were silent. Check them against your sources; changing a value does not verify it. Build cost uses £ per square foot and CIL uses £ per square metre.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <NumBox label="Review Build cost £ per sq ft" value={reviewScheme.buildPerSqft} onChange={value => updateScheme({ buildPerSqft: value })} />
+                      <NumBox label="Review NIA / GIA efficiency %" value={reviewScheme.efficiency} onChange={value => updateScheme({ efficiency: value })} />
+                      <NumBox label="Review Asking land price £" value={reviewScheme.asking} onChange={value => updateScheme({ asking: value })} />
+                      <NumBox label="Review CIL £ per sq m" value={reviewScheme.cilPerSqm} onChange={value => updateScheme({ cilPerSqm: value })} />
+                      <NumBox label="Review S106 £" value={reviewScheme.s106} onChange={value => updateScheme({ s106: value })} />
+                      <NumBox label="Review Professional fees %" value={reviewScheme.profFee} onChange={value => updateScheme({ profFee: value })} />
+                      <NumBox label="Review Contingency %" value={reviewScheme.contingency} onChange={value => updateScheme({ contingency: value })} />
+                      <NumBox label="Review Target profit on GDV %" value={reviewScheme.targetProfit} onChange={value => updateScheme({ targetProfit: value })} />
+                      <NumBox label="Review Acquisition costs %" value={reviewScheme.acq} onChange={value => updateScheme({ acq: value })} />
+                      <NumBox label="Review Agent fees %" value={reviewScheme.agent} onChange={value => updateScheme({ agent: value })} />
+                      <NumBox label="Review Legal fees %" value={reviewScheme.legal} onChange={value => updateScheme({ legal: value })} />
+                      <NumBox label="Review Senior debt LTC %" value={reviewScheme.finance.ltc} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, ltc: value } })} />
+                      <NumBox label="Review Annual interest rate %" value={reviewScheme.finance.rate} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, rate: value } })} />
+                      <NumBox label="Review Build period months" value={reviewScheme.finance.period} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, period: value } })} />
+                      <NumBox label="Review Sales period months" value={reviewScheme.finance.sales} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, sales: value } })} />
+                      <NumBox label="Review Arrangement fee %" value={reviewScheme.finance.arrFee} onChange={value => updateScheme({ finance: { ...reviewScheme.finance, arrFee: value } })} />
+                    </div>
+                  </fieldset>}
+                  {reviewError && <FormError className="mt-3">{reviewError}</FormError>}
                   <Button className="mt-3" variant="secondary" onClick={applyReview} loading={reviewPending} disabled={!reviewDirty || whatIf.isPending || save.isPending}>Apply corrections and recalculate</Button>
               {run.skipped.length > 0 && (
                 <div role="status" className="mt-2 text-[11px] text-ink-2 text-center leading-relaxed max-w-[560px] mx-auto">

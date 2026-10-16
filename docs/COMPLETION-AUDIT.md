@@ -947,3 +947,30 @@ journeys and four offline recovery regressions passed. Exact-head CI/release
 evidence is recorded on the PR before release. Public assets were visually inspected.
 The commercial/operator/provider and professional acceptance blockers remain
 open; a rebrand does not establish production readiness.
+
+## Scheme assumption review before appraisal acceptance — 16 October 2026
+
+Resumed the hourly improvement loop at the owner's request; reconciled main
+and found no competing open PR. The next document-to-appraisal gap was direct
+review of scheme assumptions: only unit count/area/value could be corrected.
+Auto-Appraisal now exposes build cost, efficiency, asking land price, CIL/S106,
+fees, contingency, profit target and finance terms before source acceptance.
+Corrections invalidate acceptance, block competing runs/saves and recalculate
+through the existing deterministic API. Invalid assumptions and failed requests
+retain the draft with an inline error. A successful recalculation requires fresh
+acceptance, then saves the corrected inputs under the existing server-attributed,
+input-bound source review. Existing unit citations and worked-example disclosure
+remain intact. Validators reuse the saved-appraisal bounds and load on demand.
+No new provider calls, credentials, arithmetic, schema or data migration.
+
+Local evidence: 414 web tests, strict typecheck, production build and bundle
+limits passed. The browser journey covers mixed unit/scheme correction, invalid
+programme, failed computation/retry, renewed consent, saved input values and
+engine-calculated CIL (stored to pennies), reload and invalidation after a later
+edit. Manual-entry and both source-version regressions passed. The review form
+was checked at 390px. Exact-commit CI and delivery state are recorded on the PR.
+
+Next: distinguish extracted versus defaulted assumptions at individual-field
+level and reconcile them against representative real project documents. This
+increment improves review control; it does not establish model extraction
+accuracy, measured drawing take-off, provider activation or professional acceptance.
