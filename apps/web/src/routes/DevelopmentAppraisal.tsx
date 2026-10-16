@@ -626,6 +626,20 @@ export default function DevelopmentAppraisal() {
                 {saved.sourceReview.documents.some(d => d.status !== 'unchanged') && <p className="font-semibold">A reviewed source is superseded, changed or missing. Check the source record before relying on this appraisal.</p>}
                 {saved.sourceReview.omissions.length > 0 && <p className="font-semibold">The review recorded incomplete source coverage. Read the reported omissions below.</p>}
                 <details>
+                  <summary className="cursor-pointer font-semibold">Original extracted unit schedule</summary>
+                  <div className="mt-2 space-y-2 break-words">
+                    <p>Historical server output before corrections, not the current unit schedule. Row numbers refer only to this original extraction; no match to current units is inferred. Values, confidence and source text are not independently verified.</p>
+                    {!saved.sourceReview.originalExtractedUnits ? <p>No original extracted unit schedule was recorded for this review.</p> : !saved.sourceReview.originalExtractedUnits.length ? <p>The original extraction contained no unit rows.</p> : <ol className="space-y-3">
+                      {saved.sourceReview.originalExtractedUnits.map((unit, index) => <li key={index}>
+                        <p className="font-semibold">Original row {index + 1}: {unit.label}</p>
+                        <p>Count: {unit.count} · Area per unit (sq ft): {unit.area} · Sales value (£ per sq ft): {unit.value}</p>
+                        <p>Original confidence label: {unit.conf}</p>
+                        <p className="whitespace-pre-wrap">Original source text (unverified): {unit.source}</p>
+                      </li>)}
+                    </ol>}
+                  </div>
+                </details>
+                <details>
                   <summary className="cursor-pointer font-semibold">Original versus saved assumptions</summary>
                   <div className="mt-2 space-y-2">
                     <p>Compares original server output with the last saved inputs. Differences do not establish who changed a value or whether it is correct.</p>
