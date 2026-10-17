@@ -1997,7 +1997,7 @@ test('the hub shows what is waiting on you, and stops showing it once decided', 
   await expect(page.getByText('Deal tools')).toBeVisible();
 
   const run = `${Date.now()}`.slice(-6);
-  const versionId = await page.evaluate(async (tag) => {
+  const version = await page.evaluate(async (tag) => {
     const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
     const list = await fetch('/trpc/deals.list', { headers: auth });
     const id = (await list.json()).result.data.json.deals.find((d: { name: string }) => d.name.startsWith('Stour Valley')).id;
@@ -2013,7 +2013,9 @@ test('the hub shows what is waiting on you, and stops showing it once decided', 
     });
     const vid = (await r.json()).result.data.json.id;
     await fetch('/trpc/appraisal.submitForReview', { method: 'POST', headers: auth, body: JSON.stringify({ json: { versionId: vid } }) });
-    return vid;
+    const versions = await fetch('/trpc/appraisal.versions?input=' + encodeURIComponent(JSON.stringify({ json: id })), { headers: auth });
+    const opened = (await versions.json()).result.data.json.find((v: { id: string }) => v.id === vid);
+    return { id: vid, updatedAt: opened.updatedAt };
   }, run);
 
   // the Hub is the root route
@@ -2026,13 +2028,14 @@ test('the hub shows what is waiting on you, and stops showing it once decided', 
   await expect(queue.getByText('GDV').first()).toBeVisible();
 
   // decide it, and the queue lets it go
-  await page.evaluate(async (vid) => {
+  await page.evaluate(async (opened) => {
     const auth = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
-    await fetch('/trpc/appraisal.review', {
+    const decision = await fetch('/trpc/appraisal.review', {
       method: 'POST', headers: auth,
-      body: JSON.stringify({ json: { versionId: vid, decision: 'approve', note: 'Checked' } }),
+      body: JSON.stringify({ json: { versionId: opened.id, expectedUpdatedAt: opened.updatedAt, decision: 'approve', note: 'Checked' } }),
     });
-  }, versionId);
+    if (!decision.ok) throw Error('Review decision failed: ' + (await decision.json()).error?.json?.message);
+  }, version);
 
   await page.goto('/');
   await page.waitForTimeout(600);

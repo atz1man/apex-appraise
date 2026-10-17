@@ -51,7 +51,7 @@ describe('the review round trip', () => {
   it('refuses an approval from a seat that does not carry the responsibility', async () => {
     const v = await current();
     await expect(
-      callerFor({ ...T.principal, role: 'SURVEYOR' }).appraisal.review({ versionId: v.id, decision: 'approve' } as never),
+      callerFor({ ...T.principal, role: 'SURVEYOR' }).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' } as never),
     ).rejects.toThrow(/Admin/i);
     expect((await current()).reviewStatus).toBe('in_review');
   });
@@ -59,13 +59,13 @@ describe('the review round trip', () => {
   it('will not send work back without saying why', async () => {
     const v = await current();
     await expect(
-      callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'request_changes' } as never),
+      callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'request_changes' } as never),
     ).rejects.toThrow(/what needs changing/i);
   });
 
   it('records who approved it and when', async () => {
     const v = await current();
-    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'approve', note: 'Rates check out' } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve', note: 'Rates check out' } as never);
     const after = await current();
     expect(after.reviewStatus).toBe('approved');
     expect(after.reviewedById).toBe(T.principal.userId);
@@ -108,7 +108,7 @@ describe('an approved version cannot be quietly changed', () => {
   it('cannot be decided on twice', async () => {
     const approved = await prisma.appraisal.findFirstOrThrow({ where: { dealId: T.dealId, label: 'Base' } });
     await expect(
-      callerFor(T.principal).appraisal.review({ versionId: approved.id, decision: 'request_changes', note: 'changed my mind' } as never),
+      callerFor(T.principal).appraisal.review({ versionId: approved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: approved.id } })).updatedAt, decision: 'request_changes', note: 'changed my mind' } as never),
     ).rejects.toThrow(/only a version in review/i);
   });
 });
@@ -148,7 +148,7 @@ describe('resubmission', () => {
   it('clears the previous decision, which referred to a version that no longer exists in that form', async () => {
     const v = await current();
     await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
-    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'request_changes', note: 'Check the contingency' } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'request_changes', note: 'Check the contingency' } as never);
     expect((await current()).reviewStatus).toBe('changes_requested');
 
     await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
@@ -161,7 +161,7 @@ describe('resubmission', () => {
   it('states plainly when one person did both halves', async () => {
     const v = await current();
     await callerFor(T.principal).appraisal.submitForReview({ versionId: v.id } as never);
-    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'approve' } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' } as never);
 
     const versions = (await callerFor(T.principal).appraisal.versions(T.dealId)) as Array<{
       isCurrent: boolean;
@@ -187,7 +187,7 @@ describe('what the printed report can learn about a signature', () => {
     } as never);
     const v = await current();
     await callerFor(analyst).appraisal.submitForReview({ versionId: v.id } as never);
-    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'approve' } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' } as never);
 
     const cur = (await callerFor(T.principal).appraisal.getCurrent(T.dealId)) as {
       reviewStatus: string;
@@ -243,7 +243,7 @@ describe('the queue across deals', () => {
 
   it('shows an analyst nothing to review, but does show their own work coming back', async () => {
     const v = await current();
-    await callerFor(T.principal).appraisal.review({ versionId: v.id, decision: 'request_changes', note: 'Contingency looks light' } as never);
+    await callerFor(T.principal).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'request_changes', note: 'Contingency looks light' } as never);
 
     const asAnalyst = (await callerFor(analyst).appraisal.reviewQueue()) as {
       awaitingReview: unknown[];
@@ -307,8 +307,8 @@ describe('two admins deciding one version at once', () => {
       const queuedBefore = await prisma.webhookDelivery.count({ where: { orgId: R.orgId } });
 
       const settled = await Promise.allSettled([
-        c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never),
-        c.appraisal.review({ versionId: saved.id, decision: 'request_changes', note: 'Check the build rate.' } as never),
+        c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'approve' } as never),
+        c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'request_changes', note: 'Check the build rate.' } as never),
       ]);
       expect(settled.filter((r) => r.status === 'fulfilled'), `round ${round}: exactly one decision is accepted`).toHaveLength(1);
       for (const r of settled) {
@@ -361,10 +361,10 @@ describe('two admins deciding one version at once', () => {
     const c = callerFor(R.principal);
     const saved = (await c.appraisal.save({ dealId: R.dealId, input: input(), label: 'Base' } as never)) as { id: string };
     await c.appraisal.submitForReview({ versionId: saved.id } as never);
-    await c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never);
+    await c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'approve' } as never);
 
     await expect(
-      c.appraisal.review({ versionId: saved.id, decision: 'request_changes', note: 'Too late.' } as never),
+      c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'request_changes', note: 'Too late.' } as never),
     ).rejects.toThrow(/only a version in review/i);
     expect((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).reviewStatus).toBe('approved');
     expect(await decisionEvents(R.dealId)).toHaveLength(1);
@@ -380,7 +380,7 @@ describe('review transitions keep the snapshot they read', () => {
     await c.appraisal.submitForReview({ versionId: saved.id } as never);
     const realUpdate = prisma.appraisal.update.bind(prisma.appraisal);
     const spy = vi.spyOn(prisma.appraisal, 'update').mockImplementationOnce(async (args) => {
-      await c.appraisal.review({ versionId: saved.id, decision: 'approve', note: 'Signed' } as never);
+      await c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'approve', note: 'Signed' } as never);
       return realUpdate(args);
     });
     try {
@@ -412,7 +412,7 @@ describe('review transitions keep the snapshot they read', () => {
       return realUpdate(args);
     });
     try {
-      await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'Old snapshot' } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision, note: 'Old snapshot' } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
     } finally {
       spy.mockRestore();
       prisma.appraisal.updateMany = realUpdate;
@@ -424,8 +424,28 @@ describe('review transitions keep the snapshot they read', () => {
     expect(row.approvalPin).toBeNull();
     expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action: { in: ['approved an appraisal version', 'requested changes to an appraisal version'] } } })).toBe(0);
     expect(await prisma.webhookDelivery.count({ where: { orgId: R.orgId } })).toBe(0);
-    await c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never);
+    await c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'approve' } as never);
     const verified = await c.appraisal.verifyApproved({ versionId: saved.id } as never);
     expect(verified).toMatchObject({ inputsUnchanged: true, figuresMatch: true, engineVersion: { same: true } });
+  });
+});
+
+
+describe('the revision the reviewer actually opened', () => {
+  it.each(['approve', 'request_changes'] as const)('refuses a stale %s and requires a revision', async (decision) => {
+    const R = await makeTenant('Stale reviewer');
+    const c = callerFor(R.principal);
+    const saved = await c.appraisal.save({ dealId: R.dealId, input: input() } as never);
+    await c.appraisal.submitForReview({ versionId: saved.id });
+    const opened = (await c.appraisal.versions(R.dealId)).find(v => v.id === saved.id)!;
+    await c.appraisal.save({ dealId: R.dealId, input: input(170), expectedUpdatedAt: opened.updatedAt } as never);
+    await c.appraisal.submitForReview({ versionId: saved.id });
+    const before = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+    await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'Old evidence', expectedUpdatedAt: opened.updatedAt })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'No revision' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).toEqual(before);
+    expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action: { in: ['approved an appraisal version', 'requested changes to an appraisal version'] } } })).toBe(0);
+    const refreshed = (await c.appraisal.versions(R.dealId)).find(v => v.id === saved.id)!;
+    await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'Checked updated evidence', expectedUpdatedAt: refreshed.updatedAt })).resolves.toMatchObject({ status: decision === 'approve' ? 'approved' : 'changes_requested' });
   });
 });

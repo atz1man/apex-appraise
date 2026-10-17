@@ -95,7 +95,7 @@ describe('leaving COMPLETED withdraws the out-turn other firms would read', () =
       orderBy: { updatedAt: 'desc' },
     });
     await admin().appraisal.submitForReview({ versionId: version.id } as never);
-    await admin().appraisal.review({ versionId: version.id, decision: 'approve' } as never);
+    await admin().appraisal.review({ versionId: version.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: version.id } })).updatedAt, decision: 'approve' } as never);
     await admin().cost.createPlanFromAppraisal({ dealId: T.dealId } as never);
     const pkgs = await prisma.costPackage.findMany({ where: { dealId: T.dealId } });
     for (const pk of pkgs) {

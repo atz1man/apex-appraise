@@ -2074,12 +2074,13 @@ function ReviewRow({
   version,
   dealId,
 }: {
-  version: { id: string; label: string; review: { status: string; submittedBy: string | null; reviewedBy: string | null; note: string | null; selfApproved: boolean } };
+  version: { id: string; label: string; updatedAt: Date; review: { status: string; submittedBy: string | null; reviewedBy: string | null; note: string | null; selfApproved: boolean } };
   dealId: string;
 }) {
   // Each keyed version owns its draft: deciding on another row must not copy
   // or clear this reviewer note.
   const [note, setNote] = useState('');
+  const [reloading, setReloading] = useState(false);
   const utils = trpc.useUtils();
   const principal = getPrincipal();
   const isAdmin = principal?.role === 'ADMIN';
@@ -2138,7 +2139,7 @@ function ReviewRow({
             onChange={(e) => setNote(e.target.value)}
           />
           <div className="flex gap-2">
-            <Button writes size="sm" loading={decide.isPending} onClick={() => decide.mutate({ versionId: version.id, decision: 'approve', note: note.trim() || undefined })}>
+            <Button writes size="sm" loading={decide.isPending} onClick={() => decide.mutate({ versionId: version.id, expectedUpdatedAt: version.updatedAt, decision: 'approve', note: note.trim() || undefined })}>
               Approve
             </Button>
             <Button
@@ -2146,14 +2147,22 @@ function ReviewRow({
               variant="secondary"
               size="sm"
               disabled={!note.trim() || decide.isPending}
-              onClick={() => decide.mutate({ versionId: version.id, decision: 'request_changes', note: note.trim() })}
+              onClick={() => decide.mutate({ versionId: version.id, expectedUpdatedAt: version.updatedAt, decision: 'request_changes', note: note.trim() })}
             >
               Request changes
             </Button>
           </div>
         </div>
       )}
-      {decide.error && <div className="text-[11.5px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>{decide.error.message}</div>}
+      {decide.error && <div className="text-[11.5px]" role="alert">
+        <p>{decide.error.message}</p>
+        <Button variant="secondary" size="sm" loading={reloading} onClick={async () => {
+          setReloading(true);
+          try { await utils.appraisal.versions.fetch(dealId, { staleTime: 0, retry: false }); decide.reset(); }
+          catch { /* Keep the conflict and note visible so reload can be retried. */ }
+          finally { setReloading(false); }
+        }}>Reload versions</Button>
+      </div>}
       {submit.error && <div className="text-[11.5px]" style={{ color: 'rgb(var(--status-red, 178 58 46))' }}>{submit.error.message}</div>}
     </div>
   );

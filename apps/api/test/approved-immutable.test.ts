@@ -43,7 +43,7 @@ beforeAll(async () => {
   await caller().appraisal.save({ dealId: T.dealId, input: input(), label: 'For signature' } as never);
   const v = await current();
   await caller().appraisal.submitForReview({ versionId: v.id });
-  await caller().appraisal.review({ versionId: v.id, decision: 'approve' });
+  await caller().appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' });
   const approved = await current();
   expect(approved.reviewStatus, 'the fixture never got the version approved').toBe('approved');
 }, 180_000);

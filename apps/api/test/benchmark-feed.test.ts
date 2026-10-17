@@ -59,7 +59,7 @@ const approve = async (t: Tenant, dealId: string, label: string, rate = 110) => 
   await save(t, dealId, label, rate);
   const v = await current(dealId);
   await admin(t).appraisal.submitForReview({ versionId: v.id });
-  await admin(t).appraisal.review({ versionId: v.id, decision: 'approve' });
+  await admin(t).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' });
   return prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
 };
 

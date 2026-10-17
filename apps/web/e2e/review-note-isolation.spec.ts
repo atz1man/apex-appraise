@@ -70,3 +70,67 @@ test('an administrator reviews two analyst versions without mixing their notes',
     await expect(page.locator('[data-approval-check]')).toHaveAttribute('data-approval-check', 'verified');
   } finally { await analystContext.close(); }
 });
+
+
+test('a stale reviewer reloads the version without losing their note', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Deal tools')).toBeVisible();
+    const dealId = await page.evaluate(async () => {
+      const headers = { authorization: `Bearer ${localStorage.getItem('apex_token')}`, 'content-type': 'application/json' };
+      const call = async (path: string, json: unknown) => {
+        const response = await fetch(`/trpc/${path}`, { method: 'POST', headers, body: JSON.stringify({ json }) });
+        const body = await response.json();
+        if (!body.result?.data) throw new Error(`${path}: ${body.error?.json?.message}`);
+        return body.result.data.json;
+      };
+      const deal = await call('deals.create', { name: `Review notes ${Date.now()}`, address: 'Synthetic review site', postcode: 'BH1 1AA', assetType: 'RESIDENTIAL', stage: 'APPRAISAL' });
+      const input = {
+        units: [{ label: 'flats', count: 4, area: 750, cap: 420 }], efficiency: 85,
+        trades: [{ label: 'Build', rate: 110 }], profFeePct: 11, contingencyPct: 5, otherCosts: [],
+        finance: { ltcPct: 60, ratePct: 7.5, periodMonths: 18, salesMonths: 4, arrangementFeePct: 1.5, spendProfile: 'scurve' },
+        site: { mode: 'residual', landFixed: 0, acqPct: 6.8 }, disposal: { agentPct: 1.5, legalPct: 0.5 }, targetProfitOnGdvPct: 20,
+      };
+      await call('appraisal.save', { dealId: deal.id, input, label: 'Foundation review' });
+      await call('appraisal.save', { dealId: deal.id, input: { ...input, contingencyPct: 7 }, label: 'Market review', asNewVersion: true });
+      return deal.id;
+    });
+
+  await page.goto(`/deal/${dealId}/appraisal`);
+  await page.getByRole('button', { name: /^Versions/ }).click();
+  const row = page.locator('[data-version="Market review"]');
+  await row.getByRole('button', { name: 'Submit for review', exact: true }).click();
+  await expect(row.getByText('IN REVIEW', { exact: true })).toBeVisible();
+  const note = row.getByPlaceholder('Note — required when sending it back');
+  await note.fill('Evidence checked on my open copy');
+  // Another person edits/resubmits using real API calls without refreshing this screen.
+  await page.evaluate(async (id) => {
+    const headers = { authorization: 'Bearer ' + localStorage.getItem('apex_token'), 'content-type': 'application/json' };
+    const response = await fetch('/trpc/appraisal.getCurrent?input=' + encodeURIComponent(JSON.stringify({ json: id })), { headers });
+    const held = (await response.json()).result.data.json;
+    const call = async (path: string, json: unknown) => {
+      const r = await fetch('/trpc/' + path, { method: 'POST', headers, body: JSON.stringify({ json }) });
+      if (!r.ok) throw Error(path + ': ' + (await r.json()).error?.json?.message);
+    };
+    await call('appraisal.save', { dealId: id, input: JSON.parse(JSON.stringify({ ...held.input, contingencyPct: 9 }, (_key, value) => value === null ? undefined : value)), expectedUpdatedAt: held.updatedAt });
+    await call('appraisal.submitForReview', { versionId: held.id });
+  }, dealId);
+  await row.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(row.getByRole('alert')).toContainText('after you opened it');
+  await expect(note).toHaveValue('Evidence checked on my open copy');
+  await expect(row.getByText('APPROVED', { exact: true })).toHaveCount(0);
+  await page.route('**/trpc/appraisal.versions*', route => route.abort('failed'));
+  await row.getByRole('button', { name: 'Reload versions', exact: true }).click();
+  await expect(row.getByRole('button', { name: 'Reload versions', exact: true })).toBeEnabled();
+  await expect(row.getByRole('alert')).toContainText('after you opened it');
+  await expect(note).toHaveValue('Evidence checked on my open copy');
+  await page.unroute('**/trpc/appraisal.versions*');
+  await row.getByRole('button', { name: 'Reload versions', exact: true }).click();
+  await expect(row.getByRole('alert')).toHaveCount(0);
+  await expect(note).toHaveValue('Evidence checked on my open copy');
+  await note.fill('Updated evidence checked after reload');
+  await row.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(row.getByText('APPROVED', { exact: true })).toBeVisible();
+  await page.goto(`/deal/${dealId}/report`);
+  await expect(page.locator('[data-approval-check]')).toHaveAttribute('data-approval-check', 'verified');
+});

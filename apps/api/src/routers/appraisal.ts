@@ -839,6 +839,7 @@ export const appraisalRouter = router({
     .input(
       z.object({
         versionId: z.string(),
+        expectedUpdatedAt: z.coerce.date().optional(),
         decision: z.enum(['approve', 'request_changes']),
         note: z.string().max(500).optional(),
       }),
@@ -855,6 +856,10 @@ export const appraisalRouter = router({
       if (input.decision === 'request_changes' && !input.note?.trim()) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Say what needs changing.' });
       }
+      await assertUnchanged({
+        what: 'appraisal review', current: v.updatedAt, expected: input.expectedUpdatedAt,
+        advice: 'Reload the versions and check the updated appraisal before deciding again.',
+      });
       const status = input.decision === 'approve' ? 'approved' : 'changes_requested';
       /**
        * Compare-and-set. The check above answers a stale screen cheaply; it
