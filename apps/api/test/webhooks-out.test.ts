@@ -137,6 +137,106 @@ describe('delivery', () => {
     expect(row.responseCode).toBe(200);
   });
 
+  it.each([200, 503, 'timeout'] as const)('preserves the delivery outcome when endpoint statistics fail (%s)', async (outcome) => {
+    const t = await makeTenant(`Stats-${outcome}`);
+    const endpoint = await addEndpoint(t, 'https://a.example.com/stats', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'stats' });
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    const now = new Date(Date.now() + 1000);
+    let statisticsWrites = 0;
+    const broken = new Proxy(prisma, {
+      get(target, prop, receiver) {
+        if (prop !== 'webhookEndpoint') return Reflect.get(target, prop, receiver);
+        return new Proxy(target.webhookEndpoint, {
+          get(delegate, key, delegateReceiver) {
+            if (key !== 'update') return Reflect.get(delegate, key, delegateReceiver);
+            return async (args: Parameters<typeof delegate.update>[0]) => {
+              if (args.where.id === endpoint.id) {
+                statisticsWrites++;
+                throw new Error('statistics unavailable');
+              }
+              return delegate.update(args);
+            };
+          },
+        });
+      },
+    });
+    let posts = 0;
+    await expect(drainWebhooks(broken, {
+      now: () => now,
+      deliver: async (_url, _body, headers) => {
+        if (headers['apex-delivery'] !== row.id) return { status: 200 };
+        posts++;
+        if (outcome === 'timeout') throw new Error('receiver timeout');
+        return { status: outcome };
+      },
+    })).rejects.toThrow('statistics unavailable');
+    const saved = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(posts).toBe(1);
+    expect(statisticsWrites).toBe(1);
+    expect(saved.attempts).toBe(1);
+    expect(saved.status).toBe(outcome === 200 ? 'delivered' : 'pending');
+    expect(saved.responseCode).toBe(outcome === 'timeout' ? null : outcome);
+    expect(saved.error).toBe(outcome === 200 ? null : outcome === 'timeout' ? 'receiver timeout' : 'HTTP 503');
+    expect(saved.deliveredAt).toEqual(outcome === 200 ? now : null);
+    if (outcome !== 200) expect(saved.nextAttemptAt.getTime()).toBe(now.getTime() + 30_000);
+    await drainWebhooks(prisma, {
+      now: () => new Date(now.getTime() + CLAIM_LEASE_MS),
+      deliver: async (_url, _body, headers) => {
+        if (headers['apex-delivery'] === row.id) posts++;
+        return { status: 200 };
+      },
+    });
+    expect(posts).toBe(outcome === 200 ? 1 : 2);
+    const recovered = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(recovered.status).toBe('delivered');
+    expect(recovered.attempts).toBe(outcome === 200 ? 1 : 2);
+  });
+
+  it('reports a persistence failure once and recovers the unrecorded outcome after its lease', async () => {
+    const t = await makeTenant('Outcome-write');
+    await addEndpoint(t, 'https://a.example.com/persist', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'persist' });
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    const now = new Date(Date.now() + 1000);
+    let writes = 0;
+    const broken = new Proxy(prisma, {
+      get(target, prop, receiver) {
+        if (prop !== 'webhookDelivery') return Reflect.get(target, prop, receiver);
+        return new Proxy(target.webhookDelivery, {
+          get(delegate, key, delegateReceiver) {
+            if (key !== 'update') return Reflect.get(delegate, key, delegateReceiver);
+            return async (args: Parameters<typeof delegate.update>[0]) => {
+              if (args.where.id === row.id) {
+                writes++;
+                throw new Error('outcome unavailable');
+              }
+              return delegate.update(args);
+            };
+          },
+        });
+      },
+    });
+    const ids: string[] = [];
+    const deliver = async (_url: string, _body: string, headers: Record<string, string>) => {
+      if (headers['apex-delivery'] === row.id) ids.push(headers['apex-delivery']);
+      return { status: 200 };
+    };
+    await expect(drainWebhooks(broken, { now: () => now, deliver })).rejects.toThrow('outcome unavailable');
+    expect(writes).toBe(1);
+    const held = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(held.status).toBe('pending');
+    expect(held.attempts).toBe(0);
+    expect(held.nextAttemptAt.getTime()).toBe(now.getTime() + CLAIM_LEASE_MS);
+    await drainWebhooks(prisma, { now: () => new Date(now.getTime() + CLAIM_LEASE_MS - 1), deliver });
+    expect(ids).toEqual([row.id]);
+    await drainWebhooks(prisma, { now: () => new Date(now.getTime() + CLAIM_LEASE_MS), deliver });
+    expect(ids).toEqual([row.id, row.id]); // receiver deduplication is still necessary
+    const saved = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(saved.status).toBe('delivered');
+    expect(saved.attempts).toBe(1);
+  });
+
   it('retries a failure and gives up after the last attempt', async () => {
     const t = await makeTenant('Hooks3');
     await addEndpoint(t, 'https://a.example.com/down', ['deal.created']);
