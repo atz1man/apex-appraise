@@ -789,39 +789,44 @@ export const appraisalRouter = router({
       if (v.reviewStatus === 'approved') {
         throw new TRPCError({ code: 'CONFLICT', message: 'That version is already approved.' });
       }
-      const row = await ctx.prisma.appraisal.update({
-        where: { id: v.id, orgId: ctx.principal.orgId, updatedAt: v.updatedAt, reviewStatus: v.reviewStatus },
-        data: {
-          reviewStatus: 'in_review',
-          updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
-          submittedById: ctx.principal.userId,
-          submittedAt: new Date(),
-          // a resubmission clears the previous decision: the note referred to a
-          // version that no longer exists in that form
-          reviewedById: null,
-          reviewedAt: null,
-          reviewNote: null,
-        },
-      }).catch((error) => {
-        if (error?.code === 'P2025') throw new TRPCError({
-          code: 'CONFLICT', message: 'This appraisal changed while you were submitting it. Reload and review the current version before submitting again.',
+      // A submission and its evidence must either all commit or remain retryable.
+      const submissionContext = ctx;
+      return ctx.prisma.$transaction(async (tx) => {
+        const ctx = { ...submissionContext, prisma: tx as typeof submissionContext.prisma };
+        const row = await ctx.prisma.appraisal.update({
+          where: { id: v.id, orgId: ctx.principal.orgId, updatedAt: v.updatedAt, reviewStatus: v.reviewStatus },
+          data: {
+            reviewStatus: 'in_review',
+            updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
+            submittedById: ctx.principal.userId,
+            submittedAt: new Date(),
+            // a resubmission clears the previous decision: the note referred to a
+            // version that no longer exists in that form
+            reviewedById: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+        }).catch((error) => {
+          if (error?.code === 'P2025') throw new TRPCError({
+            code: 'CONFLICT', message: 'This appraisal changed while you were submitting it. Reload and review the current version before submitting again.',
+          });
+          throw error;
         });
-        throw error;
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: 'submitted an appraisal version for review', target: v.label, ip: ctx.ip,
+        }, { strict: true });
+        const submittedDeal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
+        await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.submitted', {
+          dealId: v.dealId,
+          dealName: submittedDeal?.name ?? null,
+          appraisalId: row.id,
+          label: row.label,
+          submittedBy: ctx.principal.name,
+          submittedAt: row.submittedAt,
+        }, { strict: true });
+        return { id: row.id, status: row.reviewStatus };
       });
-      await recordAudit(ctx.prisma, {
-        orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
-        action: 'submitted an appraisal version for review', target: v.label, ip: ctx.ip,
-      });
-      const submittedDeal = await ctx.prisma.deal.findUnique({ where: { id: v.dealId }, select: { name: true } });
-      await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.submitted', {
-        dealId: v.dealId,
-        dealName: submittedDeal?.name ?? null,
-        appraisalId: row.id,
-        label: row.label,
-        submittedBy: ctx.principal.name,
-        submittedAt: row.submittedAt,
-      });
-      return { id: row.id, status: row.reviewStatus };
     }),
 
   /**
