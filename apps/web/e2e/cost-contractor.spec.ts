@@ -34,9 +34,14 @@ test('sends only the contractor, not the figures the page happened to be holding
   const dropdown = page.locator('select[aria-label^="Contractor for"]').first();
   await expect(dropdown).toBeVisible();
 
-  const [req] = await Promise.all([
+  const nextContractor = await dropdown.evaluate((element: HTMLSelectElement) =>
+    Array.from(element.options).find((option) => option.value && option.value !== element.value)?.value);
+  expect(nextContractor, 'the fixture needs a different contractor to prove a persisted change').toBeTruthy();
+
+  const [req, response] = await Promise.all([
     page.waitForRequest((r) => r.url().includes('cost.upsertPackage')),
-    dropdown.selectOption({ index: 1 }),
+    page.waitForResponse((r) => r.url().includes('cost.upsertPackage') && r.request().method() === 'POST'),
+    dropdown.selectOption(nextContractor!),
   ]);
 
   // tRPC batches: the body is {"0":{"json":{...}}}, not {"json":{...}}
@@ -57,6 +62,14 @@ test('sends only the contractor, not the figures the page happened to be holding
    * wrote nothing would satisfy every assertion above.
    */
   const chosen = (JSON.parse(req.postData() ?? '{}') as Record<string, { json: { contractorId: string } }>)['0']!.json.contractorId;
+  // A request being sent is not a completed save: reloading at that point can
+  // cancel it. Check the tRPC outcome before testing persistence on reload.
+  expect(response.ok()).toBe(true);
+  const result = await response.json();
+  for (const item of Array.isArray(result) ? result : [result]) {
+    expect(item.error).toBeUndefined();
+    expect(item.result).toBeDefined();
+  }
   await page.reload();
   const reloaded = page.locator('select[aria-label^="Contractor for"]').first();
   await expect(reloaded).toHaveValue(chosen);

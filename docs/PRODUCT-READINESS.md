@@ -788,3 +788,21 @@ exactly-once receipt. Receivers still need delivery-ID deduplication. Next: insp
 whether the batch-wide clock can give later candidates shortened or expired
 leases, using controlled clocks. Release and professional acceptance remain
 separate evidence gates.
+
+### Contractor-save browser release gate — 17 October 2026
+
+PR #97 merged as `590043eca8d433e4a1dc0f545e23fedacbd1b55b`, but its
+main CI run 39035800777 failed one browser test (239 passed): the contractor
+selection test reloaded immediately after observing the outgoing request, before
+waiting for the save response. Deployment was held; its built images were not
+released. Application tests/build and PostgreSQL schema passed.
+
+The browser test now waits for the POST response, checks HTTP and tRPC success,
+and only then reloads to verify persistence. Each run selects a different
+contractor rather than potentially reselecting the saved value. The narrow
+payload assertion still forbids sending budget/committed/spent/forecast fields.
+Ten repeated local browser journeys passed with the final test. This changes
+only the test and readiness record; no application behavior or customer data.
+Full exact-head CI is recorded on the repair PR. Next: merge the repair after
+CI, require green CI on the merged release, then deploy #97 and this repair
+together. The old Apex host stays stopped with autostart disabled.
