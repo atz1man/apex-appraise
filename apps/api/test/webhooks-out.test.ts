@@ -320,6 +320,40 @@ describe('delivery', () => {
     expect(final.deliveredAt).toBeNull();
   });
 
+  it.each([200, 503])('uses fresh claim/signature and completion times within a slow batch (%s)', async (status) => {
+    const t = await makeTenant('Batch-clock');
+    const endpoint = await addEndpoint(t, 'https://a.example.com/batch', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { ordinal: 1 });
+    await emitWebhook(prisma, t.orgId, 'deal.created', { ordinal: 2 });
+    const rows = await prisma.webhookDelivery.findMany({ where: { orgId: t.orgId }, orderBy: { createdAt: 'asc' } });
+    let clock = Math.max(...rows.map((r) => r.nextAttemptAt.getTime())) + 1000;
+    const start = clock;
+    const observations: Array<{ claim: number; signatureValid: boolean; id: string }> = [];
+    await drainWebhooks(prisma, {
+      now: () => new Date(clock),
+      deliver: async (_url, body, headers) => {
+        if (!rows.some((r) => r.id === headers['apex-delivery'])) return { status: 200 };
+        const held = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: headers['apex-delivery'] } });
+        observations.push({ id: held.id, claim: held.nextAttemptAt.getTime(),
+          signatureValid: verifySignature(endpoint.secret, headers['apex-signature']!, body, { now: Math.floor(clock / 1000) }) });
+        clock += observations.length === 1 ? 360_000 : 10_000;
+        return { status };
+      },
+    });
+    expect(observations).toHaveLength(2);
+    expect(observations.map((o) => o.claim)).toEqual([start + CLAIM_LEASE_MS, start + 360_000 + CLAIM_LEASE_MS]);
+    expect(observations.every((o) => o.signatureValid)).toBe(true);
+    for (const [index, observation] of observations.entries()) {
+      const saved = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: observation.id } });
+      const finished = start + (index === 0 ? 360_000 : 370_000);
+      expect(saved.attempts).toBe(1);
+      expect(saved.status).toBe(status === 200 ? 'delivered' : 'pending');
+      if (status === 200) expect(saved.deliveredAt?.getTime()).toBe(finished);
+      else expect(saved.nextAttemptAt.getTime()).toBe(finished + 30_000);
+    }
+    expect((await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } })).lastAttemptAt?.getTime()).toBe(clock);
+  });
+
   it('retries a failure and gives up after the last attempt', async () => {
     const t = await makeTenant('Hooks3');
     await addEndpoint(t, 'https://a.example.com/down', ['deal.created']);

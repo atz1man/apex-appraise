@@ -806,3 +806,21 @@ only the test and readiness record; no application behavior or customer data.
 Full exact-head CI is recorded on the repair PR. Next: merge the repair after
 CI, require green CI on the merged release, then deploy #97 and this repair
 together. The old Apex host stays stopped with autostart disabled.
+
+### Notification batch timing — 17 October 2026
+
+The worker captured one time for the whole batch. Slow earlier requests could
+leave later claims already expired, signatures outside the receiver tolerance,
+and retries due before their intended backoff elapsed. Claims and signatures now
+use a fresh time per candidate; completion timestamps, endpoint attempt time and
+retry scheduling use the time after the request finishes. Claim fencing remains.
+
+Two controlled-clock cases advance a batch by six minutes and then ten seconds,
+covering HTTP success and failure. They verify each lease, signature freshness,
+completion timestamp and full retry delay. Both fail against the previous worker.
+All 50 delivery/resumption tests and API typecheck pass. No real external calls,
+customer writes, schema changes or financial-engine changes. Full exact-head CI
+and deployment evidence belong on the PR. This does not guarantee exactly-once
+external receipt or fix historical statistics. Next product priority is verified
+email ownership and customer activation, followed by actual recovery acceptance;
+commercial/provider details remain owner-supplied and unconfirmed.

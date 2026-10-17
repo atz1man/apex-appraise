@@ -279,7 +279,8 @@ async function recordAttempt(
 export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}): Promise<{ sent: number; failed: number }> {
   const deliver = opts.deliver ?? postWebhook;
 
-  const now = opts.now?.() ?? new Date();
+  const readClock = opts.now ?? (() => new Date());
+  const now = readClock();
 
   /**
    * Only what is actually due. Without the nextAttemptAt bound this took every
@@ -296,6 +297,8 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
   let sent = 0;
   let failed = 0;
   for (const d of candidates) {
+    // Earlier requests can make the batch clock stale before this claim starts.
+    const now = readClock();
     // Claim it, or leave it to whoever did. See CLAIM_LEASE_MS.
     const claimUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
     const { count } = await prisma.webhookDelivery.updateMany({
@@ -326,6 +329,7 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
     }
     const ok = responseCode !== null && responseCode >= 200 && responseCode < 300;
     const nextAttempt = d.attempts + 1;
+    const finishedAt = readClock();
     // Only transport errors belong to the catch above. A persistence/statistics
     // failure must reach the worker's error logger, not rewrite a delivered row
     // as pending or count the same HTTP attempt twice. If persistence fails,
@@ -338,13 +342,13 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
         attempts: { increment: 1 },
         responseCode,
         status: ok ? 'delivered' : nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
-        deliveredAt: ok ? now : null,
+        deliveredAt: ok ? finishedAt : null,
         error,
-        ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
+        ...(ok ? {} : { nextAttemptAt: new Date(finishedAt.getTime() + retryDelayMs(nextAttempt)) }),
       },
     });
     if (completed.count !== 1) continue;
-    await recordAttempt(prisma, d.endpoint, ok, now);
+    await recordAttempt(prisma, d.endpoint, ok, finishedAt);
     ok ? sent++ : failed++;
   }
   return { sent, failed };
