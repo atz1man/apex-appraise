@@ -764,3 +764,27 @@ deduplicate. Endpoint statistics may remain stale after their write fails; no
 historical outcomes are repaired. Next: inspect claim completion fencing when a
 worker outlives its lease, using isolated concurrency tests. Professional and
 paid-provider acceptance remain separate release requirements.
+
+### Notification claim completion fencing — 17 October 2026
+
+An expired worker could previously overwrite the outcome recorded by a replacement
+worker, reopening a delivered notification or discarding its retry schedule.
+Completion now conditionally matches the pending status, loaded attempt count and
+exact lease timestamp. A superseded worker cannot change the delivery, endpoint
+statistics or drain counters. Claim acquisition also checks the loaded attempt
+count so a stale candidate cannot silently take a changed attempt.
+
+Validation: 48 delivery/resumption API tests and API typecheck passed. Three
+forced interleavings cover late HTTP failure, success and timeout after a newer
+worker finishes. All three fail against the previous implementation. A fourth
+case holds the replacement POST in flight while the old worker finishes; removing
+the lease-timestamp match makes that case fail. Endpoints are created through the
+router and queued rows use the real test database; all outbound delivery is
+stubbed. No external subscribers contacted, customer records changed, schema or
+financial calculation changes. Exact-commit CI is recorded on the PR.
+
+This fences stored outcomes; it cannot undo a request already sent or guarantee
+exactly-once receipt. Receivers still need delivery-ID deduplication. Next: inspect
+whether the batch-wide clock can give later candidates shortened or expired
+leases, using controlled clocks. Release and professional acceptance remain
+separate evidence gates.

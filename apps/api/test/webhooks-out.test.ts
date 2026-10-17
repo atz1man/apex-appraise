@@ -205,13 +205,13 @@ describe('delivery', () => {
         if (prop !== 'webhookDelivery') return Reflect.get(target, prop, receiver);
         return new Proxy(target.webhookDelivery, {
           get(delegate, key, delegateReceiver) {
-            if (key !== 'update') return Reflect.get(delegate, key, delegateReceiver);
-            return async (args: Parameters<typeof delegate.update>[0]) => {
-              if (args.where.id === row.id) {
+            if (key !== 'updateMany') return Reflect.get(delegate, key, delegateReceiver);
+            return async (args: Parameters<typeof delegate.updateMany>[0]) => {
+              if (args.where?.id === row.id && args.data.attempts) {
                 writes++;
                 throw new Error('outcome unavailable');
               }
-              return delegate.update(args);
+              return delegate.updateMany(args);
             };
           },
         });
@@ -235,6 +235,89 @@ describe('delivery', () => {
     const saved = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
     expect(saved.status).toBe('delivered');
     expect(saved.attempts).toBe(1);
+  });
+
+  it.each([[503, 200], [200, 503], ['timeout', 503]] as const)(
+    'ignores an expired worker result (%s) after a newer claim finishes (%s)',
+    async (oldStatus, newStatus) => {
+      const t = await makeTenant('Lease-race');
+      const endpoint = await addEndpoint(t, 'https://a.example.com/lease', ['deal.created']);
+      await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'lease' });
+      const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+      const start = new Date(Date.now() + 1000);
+      let newerRow: typeof row | undefined;
+      let newerEndpoint: Awaited<ReturnType<typeof prisma.webhookEndpoint.findUniqueOrThrow>> | undefined;
+      const postedIds: string[] = [];
+      const result = await drainWebhooks(prisma, {
+        now: () => start,
+        deliver: async (_url, _body, headers) => {
+          if (headers['apex-delivery'] !== row.id) return { status: 200 };
+          postedIds.push(headers['apex-delivery']);
+          // The first request is still in flight when another worker recovers
+          // the expired claim. Both use the same receiver deduplication ID.
+          await drainWebhooks(prisma, {
+            now: () => new Date(start.getTime() + CLAIM_LEASE_MS),
+            deliver: async (_newUrl, _newBody, newHeaders) => {
+              if (newHeaders['apex-delivery'] !== row.id) return { status: 200 };
+              postedIds.push(newHeaders['apex-delivery']);
+              return { status: newStatus };
+            },
+          });
+          newerRow = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+          newerEndpoint = await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } });
+          if (oldStatus === 'timeout') throw new Error('late timeout');
+          return { status: oldStatus };
+        },
+      });
+      expect(postedIds).toEqual([row.id, row.id]);
+      expect(newerRow?.attempts).toBe(1);
+      expect(newerRow?.responseCode).toBe(newStatus);
+      expect(await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } })).toEqual(newerRow);
+      expect(await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } })).toEqual(newerEndpoint);
+      expect(result.failed).toBe(0); // stale completion is not a newly recorded failure
+    },
+  );
+
+  it('fences the old worker while the replacement claim is still in flight', async () => {
+    const t = await makeTenant('Lease-held');
+    const endpoint = await addEndpoint(t, 'https://a.example.com/held', ['deal.created']);
+    await emitWebhook(prisma, t.orgId, 'deal.created', { dealId: 'held' });
+    const row = await prisma.webhookDelivery.findFirstOrThrow({ where: { orgId: t.orgId } });
+    const start = new Date(Date.now() + 1000);
+    let releaseOld!: () => void;
+    let oldStarted!: () => void;
+    const oldGate = new Promise<void>((resolve) => { releaseOld = resolve; });
+    const started = new Promise<void>((resolve) => { oldStarted = resolve; });
+    const oldDrain = drainWebhooks(prisma, {
+      now: () => start,
+      deliver: async (_url, _body, headers) => {
+        if (headers['apex-delivery'] === row.id) {
+          oldStarted();
+          await oldGate;
+        }
+        return { status: 200 };
+      },
+    });
+    await started;
+    await drainWebhooks(prisma, {
+      now: () => new Date(start.getTime() + CLAIM_LEASE_MS),
+      deliver: async (_url, _body, headers) => {
+        if (headers['apex-delivery'] === row.id) {
+          const held = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+          const stats = await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } });
+          releaseOld();
+          await oldDrain;
+          expect(await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } })).toEqual(held);
+          expect(await prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } })).toEqual(stats);
+        }
+        return { status: 503 };
+      },
+    });
+    const final = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(final.status).toBe('pending');
+    expect(final.responseCode).toBe(503);
+    expect(final.attempts).toBe(1);
+    expect(final.deliveredAt).toBeNull();
   });
 
   it('retries a failure and gives up after the last attempt', async () => {
