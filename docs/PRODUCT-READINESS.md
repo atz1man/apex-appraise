@@ -713,3 +713,26 @@ No customer records or real webhook destinations were contacted.
 Full exact-head CI is recorded on the PR. This does not backfill previously lost
 events or prove receipt by an external subscriber. Next: review submission records
 for the same durability gap, then assess delivery-worker recovery separately.
+
+### Durable review submissions — 17 October 2026
+
+Submission now commits the conditional version transition, submission audit and
+applicable notification queue entries in one transaction, using the strict helper
+modes introduced for decisions. A persistence failure leaves the prior timestamp,
+status and reviewer fields intact. This matters especially for resubmission:
+a returned version must not lose its reviewer note before the new submission and
+its evidence commit. Delivery remains asynchronous; no external request occurs
+inside the transaction. Approved-version and concurrent-change guards remain.
+
+Validation: 64 targeted review/webhook/provenance/immutability API tests, API
+typecheck and eight browser review/report/date journeys passed. Four injected
+faults cover audit and queue writes for draft and returned versions; each verifies
+complete row rollback, no partial audit/delivery, then one successful retry with
+a matching submitted timestamp. Restoring failure suppression makes all four
+regressions fail. Isolated PostgreSQL independently verified submission audit and
+queue rollback/retry. No customer writes or external webhook calls were used.
+
+Exact-head CI and delivery evidence are recorded on the PR. Historical lost events
+are not reconstructed, and a queued notification does not prove external receipt.
+Next: inspect delivery-worker claim/retry behavior and test interrupted delivery
+without contacting real subscribers. No professional acceptance is implied.
