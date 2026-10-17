@@ -444,7 +444,7 @@ describe('covenant.breached', () => {
     const saved = (await caller.appraisal.save(input as never)) as { id: string };
     await caller.appraisal.submitForReview({ versionId: saved.id } as never);
     await callerFor({ ...t.principal, role: 'ADMIN' }).appraisal.review({
-      versionId: saved.id, decision: 'approve',
+      versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision: 'approve',
     } as never);
     return saved.id;
   };

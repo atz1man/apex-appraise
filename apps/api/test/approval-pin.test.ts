@@ -61,7 +61,7 @@ beforeAll(async () => {
   await admin(T).appraisal.save({ dealId: T.dealId, input: input(), label: 'For signature' } as never);
   const v = await current(T.dealId);
   await admin(T).appraisal.submitForReview({ versionId: v.id });
-  await admin(T).appraisal.review({ versionId: v.id, decision: 'approve' });
+  await admin(T).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve' });
   approvedId = v.id;
 }, 120_000);
 
@@ -91,7 +91,7 @@ describe('at approval', () => {
     expect(v.engineVersion).toBeNull();
     expect(v.approvalPin).toBeNull();
     await admin(T).appraisal.submitForReview({ versionId: v.id });
-    await admin(T).appraisal.review({ versionId: v.id, decision: 'request_changes', note: 'Not yet' });
+    await admin(T).appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'request_changes', note: 'Not yet' });
     const back = await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
     expect(back.approvalPin).toBeNull();
     expect(back.engineVersion).toBeNull();

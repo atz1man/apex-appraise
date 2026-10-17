@@ -660,3 +660,27 @@ belongs on the PR; this entry is not a deployment or professional acceptance cla
 Next: verify client-held review snapshots and failure recovery for audit/webhook
 recording. This increment guards changes during a request; it does not yet require
 the review screen to send the revision the reviewer originally opened.
+
+### Reviewer-held revision — 17 October 2026
+
+Review decisions now require the timestamp returned with the version the reviewer
+opened. An absent timestamp is refused; an edited/resubmitted version is refused
+as stale even if it is back in review. The database compare-and-set from PR #92
+still covers changes after this check. Both approval and requests for changes use
+the displayed revision; historical versions remain reviewable.
+
+The conflict presents a Reload versions action and preserves the reviewer's note.
+Reload explicitly bypasses fresh-cache reuse, disables duplicate reload clicks,
+and clears the conflict only after a successful fetch. A failed fetch leaves the
+note and retry action available. Existing older clients must refresh to send the
+new required review timestamp. No schema or engine changes are involved.
+
+Validation: 78 targeted API tests, API/web typechecks and 30 UI safeguards passed.
+Removing the new check makes both stale-review regression cases fail. Browser
+coverage exercises a real edit/resubmission behind an open review screen, refused
+approval, failed reload, successful reload with preserved note, fresh approval
+and verified report. Existing analyst/admin notes and report/date journeys pass.
+Full exact-head CI and delivery evidence are recorded on the PR. No production
+records, provider settings or credentials were changed during this increment.
+Next priority: failure recovery for approval audit/webhook recording; successful
+CI alone is not professional acceptance or customer-release readiness.

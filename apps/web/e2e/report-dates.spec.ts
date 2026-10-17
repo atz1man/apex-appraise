@@ -148,7 +148,7 @@ test('the signature block dates a signature only when there was one', async ({ p
     return page.locator('body').innerText();
   };
   const current = () =>
-    call(page, 'appraisal.getCurrent', id) as Promise<{ id: string; reviewedAt: string | null }>;
+    call(page, 'appraisal.getCurrent', id) as Promise<{ id: string; updatedAt: string; reviewedAt: string | null }>;
 
   // ---- unapproved: says so, and prints no signing date ----
   const draft = await redbookText();
@@ -158,13 +158,9 @@ test('the signature block dates a signature only when there was one', async ({ p
 
   // ---- approved: dated when it was signed off, not when it is read ----
   const version = await current();
-  for (const [path, body] of [
-    ['appraisal.submitForReview', { versionId: version.id }],
-    ['appraisal.review', { versionId: version.id, decision: 'approve' }],
-  ] as const) {
-    const res = await mutate(page, path, body);
-    expect(res, `${path} failed: ${res.err}`).toMatchObject({ ok: true });
-  }
+  expect(await mutate(page, 'appraisal.submitForReview', { versionId: version.id })).toMatchObject({ ok: true });
+  const submitted = await current();
+  expect(await mutate(page, 'appraisal.review', { versionId: version.id, expectedUpdatedAt: submitted.updatedAt, decision: 'approve' })).toMatchObject({ ok: true });
   const signed = await current();
   expect(
     signed.reviewedAt,

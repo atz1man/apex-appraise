@@ -83,7 +83,7 @@ describe('a restored version is a new version', () => {
      */
     const v = await current();
     await caller().appraisal.submitForReview({ versionId: v.id } as never);
-    await caller().appraisal.review({ versionId: v.id, decision: 'approve', note: 'Rates check out' } as never);
+    await caller().appraisal.review({ versionId: v.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } })).updatedAt, decision: 'approve', note: 'Rates check out' } as never);
     expect((await current()).reviewStatus).toBe('approved');
 
     await caller().appraisal.restore({ dealId: T.dealId, versionId: v.id } as never);

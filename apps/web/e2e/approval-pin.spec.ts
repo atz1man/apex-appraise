@@ -52,7 +52,9 @@ test('both reports state that the figures were verified against the approved rec
       },
     });
     await call('appraisal.submitForReview', { versionId: saved.id });
-    await call('appraisal.review', { versionId: saved.id, decision: 'approve' });
+    const versionsResponse = await fetch('/trpc/appraisal.versions?input=' + encodeURIComponent(JSON.stringify({ json: id })), { headers: auth });
+    const version = (await versionsResponse.json()).result.data.json.find((v: { id: string }) => v.id === saved.id);
+    await call('appraisal.review', { versionId: saved.id, expectedUpdatedAt: version.updatedAt, decision: 'approve' });
     return id;
   }, tag);
 
