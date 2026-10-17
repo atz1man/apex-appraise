@@ -100,6 +100,36 @@ describe('a login lockout', () => {
 });
 
 describe('reset-request throttling', () => {
+  it.each(['new', 'expired', 'active'] as const)('counts simultaneous requests atomically in a %s window', async (state) => {
+    const email = `concurrent-${state}@firm.co.uk`;
+    if (state !== 'new') await prisma.authThrottle.create({ data: {
+      key: `reset:${email}`, count: state === 'active' ? 2 : 30,
+      windowStart: new Date(Date.now() - (state === 'expired' ? 16 * 60_000 : 1000)),
+    } });
+    const results = await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      index % 2 ? B.tooManyResetRequests(clientB, email) : tooManyResetRequests(prisma, email)));
+    expect(results.filter((blocked) => !blocked)).toHaveLength(state === 'active' ? 1 : 3);
+    expect((await prisma.authThrottle.findUniqueOrThrow({ where: { key: `reset:${email}` } })).count)
+      .toBe(state === 'active' ? 14 : 12);
+  });
+
+  it('does not permit mail when the throttle store is unavailable', async () => {
+    const broken = new Proxy(prisma, {
+      get(target, prop, receiver) {
+        if (prop !== 'authThrottle') return Reflect.get(target, prop, receiver);
+        return new Proxy(target.authThrottle, {
+          get(delegate, key, delegateReceiver) {
+            if (['findUnique', 'updateMany', 'upsert'].includes(String(key))) {
+              return async () => { throw new Error('throttle unavailable'); };
+            }
+            return Reflect.get(delegate, key, delegateReceiver);
+          },
+        });
+      },
+    });
+    await expect(tooManyResetRequests(broken, 'unavailable@firm.co.uk')).rejects.toThrow('throttle unavailable');
+  });
+
   it('allows three then refuses, shared across instances', async () => {
     const email = 'mailbomb@firm.co.uk';
     expect(await tooManyResetRequests(prisma, email)).toBe(false);

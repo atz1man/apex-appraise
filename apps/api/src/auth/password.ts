@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@prisma/client';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 /**
@@ -113,14 +114,24 @@ export const hashResetToken = (token: string) => createHash('sha256').update(tok
 const RESET_MAX = 3;
 const RESET_WINDOW_MS = 15 * 60 * 1000;
 
-export async function tooManyResetRequests(db: ThrottleStore, email: string): Promise<boolean> {
+export async function tooManyResetRequests(db: Pick<PrismaClient, 'authThrottle'>, email: string): Promise<boolean> {
   const key = `reset:${email}`;
-  const row = await db.authThrottle.findUnique({ where: { key } }).catch(() => null);
-  const fresh = row && Date.now() - row.windowStart.getTime() < RESET_WINDOW_MS;
-  const count = (fresh ? row.count : 0) + 1;
-  const data = { count, windowStart: fresh ? row.windowStart : new Date(), lockedUntil: null };
-  await db.authThrottle.upsert({ where: { key }, create: { key, ...data }, update: data }).catch(() => undefined);
-  return count > RESET_MAX;
+  const now = new Date();
+  // Only an expired window can be reset. Concurrent callers cannot erase the
+  // count of a window another caller has just opened.
+  await db.authThrottle.updateMany({
+    where: { key, windowStart: { lte: new Date(now.getTime() - RESET_WINDOW_MS) } },
+    data: { count: 0, windowStart: now, lockedUntil: null },
+  });
+  const row = await db.authThrottle.upsert({
+    where: { key },
+    create: { key, count: 1, windowStart: now, lockedUntil: null },
+    update: { count: { increment: 1 } },
+    select: { count: true },
+  });
+  // Fail closed on database errors: no allowance was recorded, so no reset
+  // email may be sent. The public request still does not reveal account state.
+  return row.count > RESET_MAX;
 }
 
 /**
