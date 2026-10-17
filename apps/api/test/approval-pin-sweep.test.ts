@@ -20,6 +20,13 @@ describe('the sweep itself', () => {
     expect(a, 'the classifier no longer sees appraisal.review — the walk is broken').toContain('appraisal.review');
   });
 
+  it('distinguishes compared review state from assigned review state in either property order', () => {
+    expect(approves('async () => ctx.prisma.appraisal.update({ where: { id, reviewStatus: existing.reviewStatus }, data: { efficiency: 80 } });')).toBe(false);
+    expect(approves('async () => ctx.prisma.appraisal.updateMany({ data: { reviewStatus: "draft" }, where: { reviewStatus: "approved" } });')).toBe(false);
+    expect(approves('async () => ctx.prisma.appraisal.update({ where: { reviewStatus: "draft" }, data: { reviewStatus: "approved" } });')).toBe(true);
+    expect(approves('async () => ctx.prisma.appraisal.update({ where: { id }, data: condition ? { reviewStatus: status } : { reviewStatus: "draft" } });')).toBe(true);
+  });
+
   it('finds what it is meant to find', () => {
     const rogue = "async () => { await ctx.prisma.appraisal.updateMany({ where: { id }, data: { reviewStatus: \"approved\", reviewedAt: new Date() } }); }";
     expect(approves(rogue) && !/pinFor\(/.test(rogue) && !/approvalPin/.test(rogue)).toBe(true);
