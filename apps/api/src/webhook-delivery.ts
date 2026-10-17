@@ -297,9 +297,10 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
   let failed = 0;
   for (const d of candidates) {
     // Claim it, or leave it to whoever did. See CLAIM_LEASE_MS.
+    const claimUntil = new Date(now.getTime() + CLAIM_LEASE_MS);
     const { count } = await prisma.webhookDelivery.updateMany({
-      where: { id: d.id, status: 'pending', nextAttemptAt: { lte: now } },
-      data: { nextAttemptAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
+      where: { id: d.id, status: 'pending', attempts: d.attempts, nextAttemptAt: { lte: now } },
+      data: { nextAttemptAt: claimUntil },
     });
     if (count !== 1) continue;
 
@@ -329,8 +330,10 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
     // failure must reach the worker's error logger, not rewrite a delivered row
     // as pending or count the same HTTP attempt twice. If persistence fails,
     // the existing claim lease allows recovery; receivers must deduplicate IDs.
-    await prisma.webhookDelivery.update({
-      where: { id: d.id },
+    // A newer worker may have recovered this lease while the POST was in flight.
+    // Only the owner of this exact claim may record an outcome or endpoint stats.
+    const completed = await prisma.webhookDelivery.updateMany({
+      where: { id: d.id, status: 'pending', attempts: d.attempts, nextAttemptAt: claimUntil },
       data: {
         attempts: { increment: 1 },
         responseCode,
@@ -340,6 +343,7 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
         ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
       },
     });
+    if (completed.count !== 1) continue;
     await recordAttempt(prisma, d.endpoint, ok, now);
     ok ? sent++ : failed++;
   }
