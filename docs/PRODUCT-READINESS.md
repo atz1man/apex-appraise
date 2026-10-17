@@ -824,3 +824,27 @@ and deployment evidence belong on the PR. This does not guarantee exactly-once
 external receipt or fix historical statistics. Next product priority is verified
 email ownership and customer activation, followed by actual recovery acceptance;
 commercial/provider details remain owner-supplied and unconfirmed.
+
+### Recovery email throttle concurrency — 17 October 2026
+
+Before adding activation mail, recovery inspection found that concurrent reset
+requests read the same count and overwrote each other. Store errors were also
+swallowed, granting unrecorded allowances. Reset throttling now resets only an
+expired window through a conditional write and uses an atomic increment/upsert
+for each request. Database errors stop processing before account lookup/mail.
+The existing three-request, fifteen-minute policy and uniform account response
+are retained. Login-failure counting is unchanged and requires a separate audit.
+
+Evidence: four new regressions fail on the prior implementation: concurrent new,
+expired and active windows, plus a failed throttle store. 29 API tests across
+throttling, recovery, cleanup and cascade passed with API typecheck. Two isolated
+PostgreSQL clients sent 24 concurrent requests per window; exactly three were
+allowed for new/expired windows and one for an active window already at two.
+Six signup/SSO recovery browser journeys passed after starting the local servers
+(the first browser attempt failed because the web server was not running).
+No external mail was sent; no live credentials, customer data or schema changed.
+Full exact-head CI is recorded on the PR. This is a prerequisite safeguard, not
+completed email verification or proof of inbox delivery. Next: verified-email
+activation with expiring single-use links and atomic resend limits; separately
+inspect login-failure counting under concurrency. Owner/provider details remain
+pending as directed, without blocking independent engineering work.
