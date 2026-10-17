@@ -405,17 +405,17 @@ describe('review transitions keep the snapshot they read', () => {
     const saved = await c.appraisal.save({ dealId: R.dealId, input: input(), label: 'Base' } as never);
     await c.appraisal.submitForReview({ versionId: saved.id } as never);
     const held = await prisma.appraisal.update({ where: { id: saved.id }, data: { updatedAt: new Date(Date.now() + 1000) } });
-    const realUpdate = prisma.appraisal.updateMany.bind(prisma.appraisal);
-    const spy = vi.spyOn(prisma.appraisal, 'updateMany').mockImplementationOnce(async (args) => {
+    const realUpdate = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, '$transaction').mockImplementationOnce(async (args: any, options: any) => {
       await c.appraisal.save({ dealId: R.dealId, input: input(150), expectedUpdatedAt: held.updatedAt } as never);
       await c.appraisal.submitForReview({ versionId: saved.id } as never);
-      return realUpdate(args);
+      return realUpdate(args, options);
     });
     try {
       await expect(c.appraisal.review({ versionId: saved.id, expectedUpdatedAt: (await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).updatedAt, decision, note: 'Old snapshot' } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
     } finally {
       spy.mockRestore();
-      prisma.appraisal.updateMany = realUpdate;
+      prisma.$transaction = realUpdate;
     }
     const row = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
     expect(row.reviewStatus).toBe('in_review');
@@ -447,5 +447,58 @@ describe('the revision the reviewer actually opened', () => {
     expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action: { in: ['approved an appraisal version', 'requested changes to an appraisal version'] } } })).toBe(0);
     const refreshed = (await c.appraisal.versions(R.dealId)).find(v => v.id === saved.id)!;
     await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'Checked updated evidence', expectedUpdatedAt: refreshed.updatedAt })).resolves.toMatchObject({ status: decision === 'approve' ? 'approved' : 'changes_requested' });
+  });
+});
+
+
+describe('durable review decisions', () => {
+  it.each([['audit', 'approve'], ['audit', 'request_changes'], ['approval queue', 'approve'], ['covenant queue', 'approve']] as const)('rolls back a failed %s write for %s and allows one clean retry', async (failure, decisionType) => {
+    const R = await makeTenant('Durable review');
+    const c = callerFor(R.principal);
+    await prisma.organisation.update({ where: { id: R.orgId }, data: { contributesBenchmarks: true } });
+    await prisma.orgPolicy.upsert({ where: { orgId: R.orgId }, create: { orgId: R.orgId, covMinProfitOnCostPct: 99 }, update: { covMinProfitOnCostPct: 99 } });
+    await prisma.webhookEndpoint.create({ data: { orgId: R.orgId, url: 'https://lender.example/hook', secret: 'x', events: 'appraisal.approved,covenant.breached', active: true, createdById: R.userId } });
+    const saved = await c.appraisal.save({ dealId: R.dealId, input: input() } as never);
+    await c.appraisal.submitForReview({ versionId: saved.id });
+    const held = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+    const decision = { versionId: saved.id, expectedUpdatedAt: held.updatedAt, decision: decisionType, note: 'Check the evidence' };
+    const action = decisionType === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version';
+    const realTransaction = prisma.$transaction.bind(prisma);
+    let injected = false;
+    const spy = vi.spyOn(prisma, '$transaction').mockImplementationOnce((callback: any, options: any) => realTransaction(async (tx) => {
+      const faulted = new Proxy(tx, { get(target, key) {
+        const delegate = Reflect.get(target, key);
+        if (key !== 'activityEvent' && key !== 'webhookDelivery') return delegate;
+        return new Proxy(delegate, { get(model, method) {
+          const original = Reflect.get(model, method);
+          if (method !== 'create' && method !== 'createMany') return original;
+          return async (args: any) => {
+            const event = args.data?.[0]?.event;
+            const shouldFail = (failure === 'audit' && key === 'activityEvent' && args.data.action === action)
+              || (failure === 'approval queue' && event === 'appraisal.approved')
+              || (failure === 'covenant queue' && event === 'covenant.breached');
+            if (shouldFail) { injected = true; throw new Error('Injected durability failure'); }
+            return original.call(model, args);
+          };
+        } });
+      } });
+      return callback(faulted);
+    }, options));
+    try {
+      await expect(c.appraisal.review(decision)).rejects.toThrow('Injected durability failure');
+    } finally {
+      spy.mockRestore();
+      prisma.$transaction = realTransaction;
+    }
+    expect(injected, 'the failed persistence path was not exercised').toBe(true);
+    expect(await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).toEqual(held);
+    expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action } })).toBe(0);
+    expect(await prisma.webhookDelivery.count({ where: { orgId: R.orgId } })).toBe(0);
+    expect(await prisma.benchmarkPoint.count({ where: { dealId: R.dealId } })).toBe(0);
+    await c.appraisal.review(decision);
+    expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action } })).toBe(1);
+    expect((await prisma.webhookDelivery.findMany({ where: { orgId: R.orgId } })).map(d => d.event).sort()).toEqual(decisionType === 'approve' ? ['appraisal.approved', 'covenant.breached'] : []);
+    expect(await prisma.benchmarkPoint.count({ where: { dealId: R.dealId } })).toBe(decisionType === 'approve' ? 3 : 0);
+    if (decisionType === 'approve') expect(await c.appraisal.verifyApproved({ versionId: saved.id })).toMatchObject({ inputsUnchanged: true, figuresMatch: true });
   });
 });

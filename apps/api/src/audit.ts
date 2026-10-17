@@ -32,7 +32,7 @@ export interface AuditEvent {
   ip?: string | null;
 }
 
-export async function recordAudit(prisma: PrismaClient, e: AuditEvent) {
+export async function recordAudit(prisma: PrismaClient, e: AuditEvent, options?: { strict: boolean }) {
   try {
     await prisma.activityEvent.create({
       data: {
@@ -45,7 +45,8 @@ export async function recordAudit(prisma: PrismaClient, e: AuditEvent) {
         ip: e.ip ?? null,
       },
     });
-  } catch {
+  } catch (error) {
+    if (options?.strict) throw error;
     // Auditing must never be the reason a legitimate action fails. A sign-in that
     // is refused because the audit write failed turns a logging fault into an
     // outage — the event is lost, which is bad, but the alternative is worse.

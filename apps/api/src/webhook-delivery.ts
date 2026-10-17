@@ -201,6 +201,7 @@ export async function emitWebhook(
   orgId: string,
   event: WebhookEvent,
   payload: unknown,
+  options?: { strict: boolean },
 ): Promise<number> {
   try {
     /**
@@ -225,7 +226,8 @@ export async function emitWebhook(
       data: wanted.map((e) => ({ orgId, endpointId: e.id, event, payload: body })),
     });
     return wanted.length;
-  } catch {
+  } catch (error) {
+    if (options?.strict) throw error;
     // an event that cannot be queued must not take down the action that caused it
     return 0;
   }
