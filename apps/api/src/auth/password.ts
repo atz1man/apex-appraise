@@ -58,27 +58,29 @@ export async function checkLockout(db: ThrottleStore, email: string): Promise<{ 
   return { locked: false };
 }
 
-export async function recordFailure(db: Pick<PrismaClient, '$transaction'>, email: string): Promise<void> {
+export async function recordFailure(db: Pick<PrismaClient, 'authThrottle' | '$transaction'>, email: string): Promise<void> {
   const key = `login:${email}`;
   // Publish the count and resulting lock together. Atomic increments preserve
   // simultaneous failures; the conditional expiry reset cannot erase a new lock.
-  await db.$transaction(async (tx) => {
-    const now = new Date();
-    await tx.authThrottle.updateMany({
+  const now = new Date();
+  // A batch transaction needs no JS round trips while holding SQLite's writer
+  // lock, and gives Postgres the same atomic three-statement operation.
+  await db.$transaction([
+    db.authThrottle.updateMany({
       where: { key, lockedUntil: { lte: now } },
       data: { count: 0, lockedUntil: null, windowStart: now },
-    });
-    await tx.authThrottle.upsert({
+    }),
+    db.authThrottle.upsert({
       where: { key },
       create: { key, count: 1, windowStart: now },
       update: { count: { increment: 1 } },
-    });
+    }),
     // Requests already in flight must not extend an established lock.
-    await tx.authThrottle.updateMany({
+    db.authThrottle.updateMany({
       where: { key, count: { gte: MAX_FAILURES }, lockedUntil: null },
       data: { lockedUntil: new Date(now.getTime() + LOCK_MS) },
-    });
-  });
+    }),
+  ]);
 }
 
 export async function recordSuccess(db: ThrottleStore, email: string): Promise<void> {

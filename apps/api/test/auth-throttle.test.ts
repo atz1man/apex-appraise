@@ -112,20 +112,13 @@ describe('a login lockout', () => {
     await prisma.authThrottle.create({ data: { key: `login:${email}`, count: 4, windowStart: new Date() } });
     const broken = new Proxy(prisma, { get(target, prop, receiver) {
       if (prop !== '$transaction') return Reflect.get(target, prop, receiver);
-      return (fn: (tx: any) => Promise<void>) => target.$transaction(async (tx) => {
-        const delegate = new Proxy(tx.authThrottle, { get(table, key, delegateReceiver) {
-          if (key === 'updateMany') return async (args: any) => {
-            if (args.data.lockedUntil) throw new Error('lock write failed');
-            return table.updateMany(args);
-          };
-          return Reflect.get(table, key, delegateReceiver);
-        } });
-        return fn(new Proxy(tx, { get(client, key, clientReceiver) {
-          return key === 'authThrottle' ? delegate : Reflect.get(client, key, clientReceiver);
-        } }));
-      });
+      return (operations: any[]) => target.$transaction([
+        ...operations.slice(0, 2),
+        // A database failure at lock publication must undo the increment.
+        target.authThrottle.create({ data: { key: `login:${email}`, count: 99, windowStart: new Date() } }),
+      ]);
     } });
-    await expect(recordFailure(broken, email)).rejects.toThrow('lock write failed');
+    await expect(recordFailure(broken, email)).rejects.toThrow(/Unique constraint/);
     expect((await prisma.authThrottle.findUniqueOrThrow({ where: { key: `login:${email}` } })).count).toBe(4);
     await recordFailure(prisma, email);
     expect((await checkLockout(prisma, email)).locked).toBe(true);

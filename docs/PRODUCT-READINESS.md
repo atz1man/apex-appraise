@@ -874,3 +874,10 @@ No schema, financial, live credential or customer-data changes. Exact-commit CI
 and release status belong on the PR. Verified-email activation and actual inbox
 delivery remain open; this increment closes the related concurrency audit only.
 Next: expiring single-use activation links and atomic resend limits.
+
+The first PR CI run exposed SQLite writer timeouts with the interactive
+transaction on Linux, despite local SQLite and PostgreSQL passing. Replaced it
+with a batch transaction: identical ordered writes, no JavaScript round trips
+while holding the write lock. Repeated the 64 API tests, typecheck and isolated
+PostgreSQL replay successfully. Full CI must pass on the revised commit before
+this is a release candidate.
