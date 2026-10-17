@@ -848,3 +848,29 @@ completed email verification or proof of inbox delivery. Next: verified-email
 activation with expiring single-use links and atomic resend limits; separately
 inspect login-failure counting under concurrency. Owner/provider details remain
 pending as directed, without blocking independent engineering work.
+
+### Concurrent sign-in failure lockout — 18 October 2026
+
+The follow-on audit of the shared authentication guard reproduced lost failure
+counts in new, active and expired login windows. A failed database read also
+answered as unlocked. Failure recording now uses an atomic increment and
+conditional expiry reset inside the same transaction as publishing the lock.
+Already-running failures do not extend an established lock. Lockout reads and
+failure writes propagate storage errors instead of silently allowing progress.
+The existing five-failure/fifteen-minute policy and successful-login recovery
+remain; already-in-flight credential checks are not a strict five-request quota.
+
+Four new regressions fail on the old implementation. Additional tests inject a
+lock-publication failure and verify rollback/retry, and drive concurrent wrong
+passwords through the real auth router followed by refusal and expiry recovery.
+64 API tests (throttle, recovery, SSO recovery, cleanup and cascade), API typecheck
+and six browser signup/SSO recovery journeys passed. The router test initially
+used a fixture label with a space, producing an invalid email; correcting the
+fixture allowed the intended journey to run. Isolated PostgreSQL: two clients,
+24 concurrent failures for each of three window states, every failure counted,
+shared lock established and existing lock expiry preserved. Diff reviewed.
+
+No schema, financial, live credential or customer-data changes. Exact-commit CI
+and release status belong on the PR. Verified-email activation and actual inbox
+delivery remain open; this increment closes the related concurrency audit only.
+Next: expiring single-use activation links and atomic resend limits.

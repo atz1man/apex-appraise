@@ -48,37 +48,37 @@ const MAX_FAILURES = 5;
 const LOCK_MS = 15 * 60 * 1000;
 
 /** Anything that can talk to the AuthThrottle table — the real client, or a test's. */
-type ThrottleStore = {
-  authThrottle: {
-    findUnique(args: { where: { key: string } }): Promise<{ key: string; count: number; windowStart: Date; lockedUntil: Date | null } | null>;
-    upsert(args: any): Promise<unknown>;
-    delete(args: { where: { key: string } }): Promise<unknown>;
-    deleteMany(args?: any): Promise<{ count: number }>;
-  };
-};
+type ThrottleStore = Pick<PrismaClient, 'authThrottle'>;
 
 export async function checkLockout(db: ThrottleStore, email: string): Promise<{ locked: boolean; retryAfterMins?: number }> {
-  const row = await db.authThrottle.findUnique({ where: { key: `login:${email}` } }).catch(() => null);
+  const row = await db.authThrottle.findUnique({ where: { key: `login:${email}` } });
   if (row?.lockedUntil && row.lockedUntil.getTime() > Date.now()) {
     return { locked: true, retryAfterMins: Math.ceil((row.lockedUntil.getTime() - Date.now()) / 60_000) };
   }
   return { locked: false };
 }
 
-export async function recordFailure(db: ThrottleStore, email: string): Promise<void> {
+export async function recordFailure(db: Pick<PrismaClient, '$transaction'>, email: string): Promise<void> {
   const key = `login:${email}`;
-  const row = await db.authThrottle.findUnique({ where: { key } }).catch(() => null);
-  const expired = row?.lockedUntil ? row.lockedUntil.getTime() <= Date.now() : false;
-  // a lock that has run out starts the count again rather than leaving the user
-  // one failure from another fifteen minutes
-  const count = (expired ? 0 : (row?.count ?? 0)) + 1;
-  const locking = count >= MAX_FAILURES;
-  const data = {
-    count: locking ? 0 : count,
-    lockedUntil: locking ? new Date(Date.now() + LOCK_MS) : expired ? null : (row?.lockedUntil ?? null),
-    windowStart: row && !expired ? row.windowStart : new Date(),
-  };
-  await db.authThrottle.upsert({ where: { key }, create: { key, ...data }, update: data }).catch(() => undefined);
+  // Publish the count and resulting lock together. Atomic increments preserve
+  // simultaneous failures; the conditional expiry reset cannot erase a new lock.
+  await db.$transaction(async (tx) => {
+    const now = new Date();
+    await tx.authThrottle.updateMany({
+      where: { key, lockedUntil: { lte: now } },
+      data: { count: 0, lockedUntil: null, windowStart: now },
+    });
+    await tx.authThrottle.upsert({
+      where: { key },
+      create: { key, count: 1, windowStart: now },
+      update: { count: { increment: 1 } },
+    });
+    // Requests already in flight must not extend an established lock.
+    await tx.authThrottle.updateMany({
+      where: { key, count: { gte: MAX_FAILURES }, lockedUntil: null },
+      data: { lockedUntil: new Date(now.getTime() + LOCK_MS) },
+    });
+  });
 }
 
 export async function recordSuccess(db: ThrottleStore, email: string): Promise<void> {
