@@ -133,3 +133,67 @@ describe('exhausted database retries', () => {
     expect(await prisma.appraisal.count({ where: { dealId: tenant.dealId, isCurrent: true } })).toBe(1);
   });
 });
+
+describe('edits overlapping after the initial stamp check', () => {
+  it('allows exactly one simultaneous edit, including when the stored clock is ahead', async () => {
+    const tenant = await makeTenant('Overlap');
+    await callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never);
+    const opened = await prisma.appraisal.findFirstOrThrow({ where: { dealId: tenant.dealId, isCurrent: true } });
+    const stamp = new Date(Date.now() + 1000);
+    await prisma.appraisal.update({ where: { id: opened.id }, data: { updatedAt: stamp } });
+    const realFind = prisma.appraisal.findFirst.bind(prisma.appraisal);
+    let readers = 0;
+    let release!: () => void;
+    const bothRead = new Promise<void>(resolve => { release = resolve; });
+    const find = vi.spyOn(prisma.appraisal, 'findFirst').mockImplementation(async (...args: any[]) => {
+      const row = await (realFind as any)(...args);
+      if (args[0]?.where?.dealId === tenant.dealId && args[0]?.where?.isCurrent === true) {
+        if (++readers === 2) release();
+        await bothRead;
+      }
+      return row;
+    });
+    let results: PromiseSettledResult<unknown>[];
+    try {
+      results = await Promise.allSettled([4, 9].map(count => callerFor(tenant.principal).appraisal.save({
+        dealId: tenant.dealId, input: input({ units: [{ label: 'Concurrent', count, area: 750, cap: 420 }] }), expectedUpdatedAt: stamp,
+      } as never)));
+    } finally { find.mockRestore(); prisma.appraisal.findFirst = realFind; }
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+    const refused = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+    expect(refused.reason.code).toBe('CONFLICT');
+    const saved = await prisma.appraisal.findUniqueOrThrow({ where: { id: opened.id } });
+    const winner = results.findIndex(r => r.status === 'fulfilled');
+    expect(JSON.parse(saved.units)[0].count).toBe([4, 9][winner]);
+    expect(saved.updatedAt.getTime()).toBeGreaterThan(stamp.getTime());
+  });
+});
+
+it.each(['approved', 'demoted'] as const)('refuses a late edit when its version was %s after the initial read', async state => {
+  const tenant = await makeTenant(`Late-${state}`);
+  await callerFor(tenant.principal).appraisal.save({ dealId: tenant.dealId, input: input() } as never);
+  const opened = await prisma.appraisal.findFirstOrThrow({ where: { dealId: tenant.dealId, isCurrent: true } });
+  const realUpdate = prisma.appraisal.update.bind(prisma.appraisal);
+  let changed = false;
+  const update = vi.spyOn(prisma.appraisal, 'update').mockImplementation(async (...args: any[]) => {
+    if (!changed && args[0]?.where?.id === opened.id) {
+      changed = true;
+      // Hold the timestamp equal to prove the state predicates independently.
+      await realUpdate({ where: { id: opened.id }, data: {
+        ...(state === 'approved' ? { reviewStatus: 'approved' } : { isCurrent: false }), updatedAt: opened.updatedAt,
+      } });
+    }
+    return (realUpdate as any)(...args);
+  });
+  try {
+    await expect(callerFor(tenant.principal).appraisal.save({
+      dealId: tenant.dealId, input: input({ efficiency: 60 }), expectedUpdatedAt: opened.updatedAt,
+    } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
+  } finally { update.mockRestore(); prisma.appraisal.update = realUpdate; }
+  const after = await prisma.appraisal.findUniqueOrThrow({ where: { id: opened.id } });
+  expect(after.efficiency).toBe(opened.efficiency);
+  expect(after.resultCache).toBe(opened.resultCache);
+  if (state === 'approved') expect(after.reviewStatus).toBe('approved');
+  else expect(after.isCurrent).toBe(false);
+});

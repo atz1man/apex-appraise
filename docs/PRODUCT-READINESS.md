@@ -605,3 +605,27 @@ production capacity claim. The original CI 409 had no message, so its precise
 cause remains unproven; this addresses a reproduced failure class rather than
 retroactively identifying that event. Full exact-head CI is recorded on PR #90.
 Next: review the combined candidate and its release evidence before deployment.
+
+### Atomic in-place appraisal edits — 17 October 2026
+
+A deterministic overlap test found two edits could both pass the timestamp
+precheck and then both succeed, silently replacing the first edit. In-place
+appraisal updates now compare the opened timestamp, organisation, deal, current
+flag and review state in the database write itself. A failed comparison returns
+CONFLICT with reload/reapply guidance. A successful edit advances its timestamp
+even within the same clock tick or when the stored timestamp is ahead.
+
+The regression holds both initial reads until both callers have read the same
+snapshot: before the fix both succeeded; afterward one wins and its values persist.
+Additional tests change approval/current state between precheck and write while
+holding timestamps equal, proving late edits cannot overwrite those transitions.
+Existing review withdrawal, first-version, version-branching and stamp requirements
+remain. No schema or financial-engine change is involved.
+
+Validation: API typecheck, 43 targeted API tests and four real browser editor/
+refresh/conflict/reload/export journeys passed. An isolated PostgreSQL run of the
+same forced overlap verified one winner, a CONFLICT loser, winner persistence
+and monotonic timestamp advance. No production records were changed. Exact-head
+CI/release evidence is recorded on the PR. This closes the in-place edit window;
+it is not a claim that every workflow's concurrency has been audited. Next:
+release this safeguard after exact-commit checks and review approval transitions.

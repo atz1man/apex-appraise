@@ -431,10 +431,9 @@ export const appraisalRouter = router({
          * for whoever forgets next. Not needed to CREATE a version or to branch a
          * new one — only to edit a row somebody else may be holding.
          *
-         * Compared to the millisecond, which is what @updatedAt records. Two
-         * saves inside the same millisecond would still race; that is a window
-         * far shorter than a person, and the consequence is only the behaviour
-         * this replaces.
+         * The friendly preflight check is not a lock. The write below must also
+         * match the opened timestamp, current flag and review state atomically.
+         * Advance the stamp even within one clock tick or after clock rollback.
          */
         await assertUnchanged({
           what: `version “${existing.label}”`,
@@ -448,12 +447,24 @@ export const appraisalRouter = router({
         });
 
         const withdrawn = existing.reviewStatus === 'in_review';
-        row = await ctx.prisma.appraisal.update({
-          where: { id: existing.id },
-          data: withdrawn
-            ? { ...data, reviewStatus: 'draft', submittedById: null, submittedAt: null }
-            : data,
-        });
+        const now = new Date();
+        const updatedAt = now.getTime() > existing.updatedAt.getTime()
+          ? now : new Date(existing.updatedAt.getTime() + 1);
+        try {
+          row = await ctx.prisma.appraisal.update({
+            where: { id: existing.id, orgId: ctx.principal.orgId, dealId: input.dealId,
+              isCurrent: true, updatedAt: input.expectedUpdatedAt, reviewStatus: existing.reviewStatus },
+            data: withdrawn
+              ? { ...data, updatedAt, reviewStatus: 'draft', submittedById: null, submittedAt: null }
+              : { ...data, updatedAt },
+          });
+        } catch (error) {
+          if ((error as { code?: string })?.code === 'P2025') throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'This appraisal changed while you were saving. Reload to see the current version, then reapply your changes or save a new version.',
+          });
+          throw error;
+        }
         if (withdrawn) {
           await recordAudit(ctx.prisma, {
             orgId: ctx.principal.orgId, dealId: input.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
