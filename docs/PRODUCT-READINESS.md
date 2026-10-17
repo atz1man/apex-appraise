@@ -629,3 +629,9 @@ and monotonic timestamp advance. No production records were changed. Exact-head
 CI/release evidence is recorded on the PR. This closes the in-place edit window;
 it is not a claim that every workflow's concurrency has been audited. Next:
 release this safeguard after exact-commit checks and review approval transitions.
+
+CI initially identified a classifier false positive: approval sweeps treated the
+new reviewStatus WHERE predicate as a status write. The shared detector now parses
+only update data properties, with positive cases for real/dynamic approvals and
+negative cases for predicates in either property order. No path exemption was
+added. All 57 targeted API/review/classifier tests pass after this correction.

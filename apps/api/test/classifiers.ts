@@ -5,24 +5,40 @@
  * router — the benchmark feed and the approval pin — and a classifier written
  * twice is one edit away from meaning different things in each.
  *
- * Only the text INSIDE an update call is read, and only the value written to
- * `reviewStatus` is judged: a literal that is not "approved" is not an
- * approval; a variable might be. Two shapes a token-level match got wrong:
- * `restore` destructures `reviewStatus: _rs` OUT of a snapshot (not a write),
- * and a lookahead placed after `\s*` backtracked past itself and matched the
- * very `in_review` literal it was written to exclude. And the resolver source
- * read at run time has been through the transpiler, where every literal is
- * double-quoted — a classifier matching `'approved'` saw no approval path at
- * all and would have passed vacuously.
+ * Parse update-call data properties so a reviewStatus in `where` is not
+ * mistaken for approval. Literal draft/review/refusal writes cannot approve;
+ * dynamic values may. This also handles ternaries and transpiled quote styles.
+ * Regression cases must prove both real approvals and comparison-only updates.
  */
-const UPDATE_CALL = /prisma\.appraisal\.(?:update|updateMany)\(([\s\S]{0,800}?)\)\s*;/g;
-const NOT_AN_APPROVAL = /^(?:["'](?:draft|in_review|changes_requested)["']|true|false)$/;
+import ts from 'typescript';
 
-/** writes an appraisal row's reviewStatus to something that can be "approved" */
-export const approves = (s: string): boolean =>
-  [...s.matchAll(UPDATE_CALL)].some(([, call]) =>
-    [...call!.matchAll(/reviewStatus:\s*([^,}\n]+)/g)].some(([, value]) => !NOT_AN_APPROVAL.test(value!.trim())),
-  );
+/** Read actual update data, not predicates that merely compare review state. */
+export function approves(source: string): boolean {
+  const file = ts.createSourceFile('resolver.ts', `const resolver = ${source};`, ts.ScriptTarget.Latest, true);
+  let found = false;
+  const inspectData = (node: ts.Node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(file).replace(/['"]/g, '') === 'reviewStatus') {
+      const value = node.initializer;
+      const harmless = ts.isStringLiteral(value) && ['draft', 'in_review', 'changes_requested'].includes(value.text)
+        || value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword;
+      if (!harmless) found = true;
+    }
+    ts.forEachChild(node, inspectData);
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && /prisma\.appraisal\.(?:update|updateMany)$/.test(node.expression.getText(file))) {
+      const argument = node.arguments[0];
+      if (argument && ts.isObjectLiteralExpression(argument)) {
+        for (const property of argument.properties) {
+          if (ts.isPropertyAssignment(property) && property.name.getText(file).replace(/['"]/g, '') === 'data') inspectData(property.initializer);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+}
 
 /** writes a deal's stage */
 export const completes = (s: string): boolean => /prisma\.deal\.update\(/.test(s) && /\bstage:/.test(s);
