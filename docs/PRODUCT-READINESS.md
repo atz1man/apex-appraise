@@ -736,3 +736,31 @@ Exact-head CI and delivery evidence are recorded on the PR. Historical lost even
 are not reconstructed, and a queued notification does not prove external receipt.
 Next: inspect delivery-worker claim/retry behavior and test interrupted delivery
 without contacting real subscribers. No professional acceptance is implied.
+
+### Notification outcome integrity — 17 October 2026
+
+The delivery worker previously caught endpoint-statistics and delivery-record
+write failures as though the external request had failed. After an HTTP success,
+a statistics failure could rewrite a delivered row to pending and count one POST
+twice. The worker now catches transport failures only and persists the outcome
+once. Persistence/statistics failures reach the existing worker error logger.
+A recorded success stays delivered; HTTP errors and timeouts retain their actual
+outcome, attempt count and backoff. No schema or financial calculation changes.
+
+Validation: 44 webhook delivery/resumption API tests and API typecheck passed.
+New cases create endpoints through the router, queue real database rows, inject
+statistics failures after 200/503/timeout responses, and verify the next drain
+never resends a recorded success. An outcome-write failure preserves the claim
+lease, reports the failure and recovers using the same delivery ID after expiry.
+Restoring the old worker makes three new fault cases fail; timeout is a control.
+All delivery functions are stubbed; no external subscriber was contacted.
+One initial existing timeout-backoff test reported zero attempts and passed on
+rerun; the final expanded targeted suite passed. Full exact-head CI is recorded
+on the PR and remains the release gate.
+
+Limits: this is at-least-once delivery, not exactly-once. A successful POST whose
+outcome cannot be saved can still be retried with the same ID; receivers must
+deduplicate. Endpoint statistics may remain stale after their write fails; no
+historical outcomes are repaired. Next: inspect claim completion fencing when a
+worker outlives its lease, using isolated concurrency tests. Professional and
+paid-provider acceptance remain separate release requirements.

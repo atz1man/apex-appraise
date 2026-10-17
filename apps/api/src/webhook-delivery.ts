@@ -314,41 +314,34 @@ export async function drainWebhooks(prisma: PrismaClient, opts: EmitOptions = {}
       'apex-event': d.event,
       'apex-delivery': d.id,
     };
+    let responseCode: number | null = null;
+    let error: string | null = null;
     try {
-      const { status } = await deliver(d.endpoint.url, d.payload, headers);
-      const ok = status >= 200 && status < 300;
-      const nextAttempt = d.attempts + 1;
-      await prisma.webhookDelivery.update({
-        where: { id: d.id },
-        data: {
-          attempts: { increment: 1 },
-          responseCode: status,
-          status: ok ? 'delivered' : nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
-          deliveredAt: ok ? now : null,
-          error: ok ? null : `HTTP ${status}`,
-          // back off before the next one; harmless on a delivered or failed row
-          ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
-        },
-      });
-      await recordAttempt(prisma, d.endpoint, ok, now);
-      ok ? sent++ : failed++;
+      const response = await deliver(d.endpoint.url, d.payload, headers);
+      responseCode = response.status;
+      if (responseCode < 200 || responseCode >= 300) error = `HTTP ${responseCode}`;
     } catch (e) {
-      failed++;
-      const nextAttempt = d.attempts + 1;
-      await prisma.webhookDelivery.update({
-        where: { id: d.id },
-        data: {
-          attempts: { increment: 1 },
-          status: nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
-          error: e instanceof Error ? e.message.slice(0, 300) : 'delivery failed',
-          // a refused connection or a timeout backs off exactly like an HTTP error;
-          // it is the likelier failure of the two and was the one still hammering
-          nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)),
-        },
-      });
-      // and the endpoint hears about it, which until now it did not
-      await recordAttempt(prisma, d.endpoint, false, now);
+      error = e instanceof Error ? e.message.slice(0, 300) : 'delivery failed';
     }
+    const ok = responseCode !== null && responseCode >= 200 && responseCode < 300;
+    const nextAttempt = d.attempts + 1;
+    // Only transport errors belong to the catch above. A persistence/statistics
+    // failure must reach the worker's error logger, not rewrite a delivered row
+    // as pending or count the same HTTP attempt twice. If persistence fails,
+    // the existing claim lease allows recovery; receivers must deduplicate IDs.
+    await prisma.webhookDelivery.update({
+      where: { id: d.id },
+      data: {
+        attempts: { increment: 1 },
+        responseCode,
+        status: ok ? 'delivered' : nextAttempt >= MAX_ATTEMPTS ? 'failed' : 'pending',
+        deliveredAt: ok ? now : null,
+        error,
+        ...(ok ? {} : { nextAttemptAt: new Date(now.getTime() + retryDelayMs(nextAttempt)) }),
+      },
+    });
+    await recordAttempt(prisma, d.endpoint, ok, now);
+    ok ? sent++ : failed++;
   }
   return { sent, failed };
 }
