@@ -790,9 +790,10 @@ export const appraisalRouter = router({
         throw new TRPCError({ code: 'CONFLICT', message: 'That version is already approved.' });
       }
       const row = await ctx.prisma.appraisal.update({
-        where: { id: v.id },
+        where: { id: v.id, orgId: ctx.principal.orgId, updatedAt: v.updatedAt, reviewStatus: v.reviewStatus },
         data: {
           reviewStatus: 'in_review',
+          updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
           submittedById: ctx.principal.userId,
           submittedAt: new Date(),
           // a resubmission clears the previous decision: the note referred to a
@@ -801,6 +802,11 @@ export const appraisalRouter = router({
           reviewedAt: null,
           reviewNote: null,
         },
+      }).catch((error) => {
+        if (error?.code === 'P2025') throw new TRPCError({
+          code: 'CONFLICT', message: 'This appraisal changed while you were submitting it. Reload and review the current version before submitting again.',
+        });
+        throw error;
       });
       await recordAudit(ctx.prisma, {
         orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
@@ -882,18 +888,21 @@ export const appraisalRouter = router({
       const reviewedAt = new Date();
       const pin = input.decision === 'approve' ? pinFor(v, reviewedAt) : null;
       const { count } = await ctx.prisma.appraisal.updateMany({
-        where: { id: v.id, reviewStatus: 'in_review' },
+        where: { id: v.id, orgId: ctx.principal.orgId, reviewStatus: 'in_review', updatedAt: v.updatedAt },
         data: {
+          updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
           reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt, reviewNote: input.note?.trim() || null,
           ...(pin ? { engineVersion: pin.engineVersion, approvalPin: JSON.stringify(pin) } : {}),
         },
       });
       if (count !== 1) {
-        // somebody else decided first — the same sentence a stale screen gets
+        // A decision or edit/resubmission invalidated the snapshot used for the pin.
         const now = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id }, select: { reviewStatus: true } });
         throw new TRPCError({
           code: 'CONFLICT',
-          message: `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
+          message: now.reviewStatus === 'in_review'
+            ? 'This appraisal changed during review. Reload and check the resubmitted version before deciding again.'
+            : `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
         });
       }
       const row = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });

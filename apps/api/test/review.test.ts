@@ -1,5 +1,5 @@
 import { ENGINE_VERSION } from '@apex/appraisal-engine';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { callerFor, makeTenant, prisma, resetDatabase, type Tenant } from './harness.js';
 
 /**
@@ -368,5 +368,64 @@ describe('two admins deciding one version at once', () => {
     ).rejects.toThrow(/only a version in review/i);
     expect((await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } })).reviewStatus).toBe('approved');
     expect(await decisionEvents(R.dealId)).toHaveLength(1);
+  });
+});
+
+
+describe('review transitions keep the snapshot they read', () => {
+  it('does not reopen an approval when a submission was delayed', async () => {
+    const R = await makeTenant('Late submission');
+    const c = callerFor(R.principal);
+    const saved = await c.appraisal.save({ dealId: R.dealId, input: input(), label: 'Base' } as never);
+    await c.appraisal.submitForReview({ versionId: saved.id } as never);
+    const realUpdate = prisma.appraisal.update.bind(prisma.appraisal);
+    const spy = vi.spyOn(prisma.appraisal, 'update').mockImplementationOnce(async (args) => {
+      await c.appraisal.review({ versionId: saved.id, decision: 'approve', note: 'Signed' } as never);
+      return realUpdate(args);
+    });
+    try {
+      await expect(c.appraisal.submitForReview({ versionId: saved.id } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
+    } finally {
+      spy.mockRestore();
+      prisma.appraisal.update = realUpdate;
+    }
+    const row = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+    expect(row.reviewStatus).toBe('approved');
+    expect(row.reviewNote).toBe('Signed');
+    expect(row.approvalPin).not.toBeNull();
+    expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action: 'submitted an appraisal version for review' } })).toBe(1);
+  });
+
+  it.each(['approve', 'request_changes'] as const)('refuses a delayed %s after editing and resubmitting', async (decision) => {
+    const R = await makeTenant('Resubmission race');
+    await prisma.webhookEndpoint.create({
+      data: { orgId: R.orgId, url: 'https://lender.example/hook', secret: 'x', events: 'appraisal.approved', active: true, createdById: R.userId },
+    });
+    const c = callerFor(R.principal);
+    const saved = await c.appraisal.save({ dealId: R.dealId, input: input(), label: 'Base' } as never);
+    await c.appraisal.submitForReview({ versionId: saved.id } as never);
+    const held = await prisma.appraisal.update({ where: { id: saved.id }, data: { updatedAt: new Date(Date.now() + 1000) } });
+    const realUpdate = prisma.appraisal.updateMany.bind(prisma.appraisal);
+    const spy = vi.spyOn(prisma.appraisal, 'updateMany').mockImplementationOnce(async (args) => {
+      await c.appraisal.save({ dealId: R.dealId, input: input(150), expectedUpdatedAt: held.updatedAt } as never);
+      await c.appraisal.submitForReview({ versionId: saved.id } as never);
+      return realUpdate(args);
+    });
+    try {
+      await expect(c.appraisal.review({ versionId: saved.id, decision, note: 'Old snapshot' } as never)).rejects.toMatchObject({ code: 'CONFLICT' });
+    } finally {
+      spy.mockRestore();
+      prisma.appraisal.updateMany = realUpdate;
+    }
+    const row = await prisma.appraisal.findUniqueOrThrow({ where: { id: saved.id } });
+    expect(row.reviewStatus).toBe('in_review');
+    expect(row.updatedAt.getTime()).toBeGreaterThan(held.updatedAt.getTime());
+    expect(JSON.parse(row.trades)[0].rate).toBe(150);
+    expect(row.approvalPin).toBeNull();
+    expect(await prisma.activityEvent.count({ where: { dealId: R.dealId, action: { in: ['approved an appraisal version', 'requested changes to an appraisal version'] } } })).toBe(0);
+    expect(await prisma.webhookDelivery.count({ where: { orgId: R.orgId } })).toBe(0);
+    await c.appraisal.review({ versionId: saved.id, decision: 'approve' } as never);
+    const verified = await c.appraisal.verifyApproved({ versionId: saved.id } as never);
+    expect(verified).toMatchObject({ inputsUnchanged: true, figuresMatch: true, engineVersion: { same: true } });
   });
 });

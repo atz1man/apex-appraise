@@ -635,3 +635,28 @@ new reviewStatus WHERE predicate as a status write. The shared detector now pars
 only update data properties, with positive cases for real/dynamic approvals and
 negative cases for predicates in either property order. No path exemption was
 added. All 57 targeted API/review/classifier tests pass after this correction.
+
+### Approval snapshot transitions — 17 October 2026
+
+Forced interleavings reproduced two gaps after the in-place edit fix: a delayed
+submission could reopen an approved version and erase its reviewer details; a
+review decision could approve stale inputs after an edit withdrew and resubmitted
+the same version. The latter could pin an earlier snapshot to newer inputs.
+
+Submission now conditionally matches its read timestamp, review state and tenant.
+Decisions additionally match the timestamp used to build the approval pin. Both
+transitions advance that timestamp monotonically, including same-tick changes and
+future stored timestamps. Conflicts give reload/review guidance before any audit
+or webhook side effect. Historical version review remains supported.
+
+All three forced races failed before the fix and pass afterward. The targeted
+54-test API set and API typecheck pass; three real browser checks cover analyst
+submission, administrator approval/return notes, and approval verification on both
+reports. Tests also confirm refused stale decisions create no decision event or
+approval webhook, and a fresh approval verifies against the resubmitted inputs.
+No production/customer records or provider calls were used. Exact-head CI evidence
+belongs on the PR; this entry is not a deployment or professional acceptance claim.
+
+Next: verify client-held review snapshots and failure recovery for audit/webhook
+recording. This increment guards changes during a request; it does not yet require
+the review screen to send the revision the reviewer originally opened.
