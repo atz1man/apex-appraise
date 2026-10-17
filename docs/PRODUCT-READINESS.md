@@ -684,3 +684,32 @@ Full exact-head CI and delivery evidence are recorded on the PR. No production
 records, provider settings or credentials were changed during this increment.
 Next priority: failure recovery for approval audit/webhook recording; successful
 CI alone is not professional acceptance or customer-release readiness.
+
+### Durable review decision records — 17 October 2026
+
+Approval and return decisions previously committed their status before writing
+the decision audit and outbound notification queue. Those helpers suppress errors
+by default, so a database write failure could leave a signed version with a lost
+audit or notification and no safe retry of the approval action.
+
+Review now commits the conditional status/pin update, decision audit, consented
+benchmark changes and applicable approval/covenant delivery records in one database
+transaction. The decision audit and queue helpers use an explicit strict mode in
+this workflow; unrelated callers keep their existing behavior. Delivery to an
+external endpoint still happens later through the existing worker. No external
+network call occurs inside this transaction, and no schema or engine changes are
+required. Client revision and atomic state guards remain in place.
+
+Validation: 69 targeted review/approval/webhook/benchmark API tests, 21 related
+provenance/approval/benchmark sweep tests, API typecheck and eight browser review/
+report/date journeys passed. Four injected failures cover approval audit, return
+audit, approval queue and covenant queue; each leaves the version and timestamp
+unchanged with no partial decision event, queue entry or benchmark contribution.
+A clean retry creates exactly one decision and each applicable delivery. Restoring
+failure suppression makes all four regression cases fail. A disposable PostgreSQL
+replay independently verified audit/queue rollback and retry with matching pins.
+No customer records or real webhook destinations were contacted.
+
+Full exact-head CI is recorded on the PR. This does not backfill previously lost
+events or prove receipt by an external subscriber. Next: review submission records
+for the same durability gap, then assess delivery-worker recovery separately.

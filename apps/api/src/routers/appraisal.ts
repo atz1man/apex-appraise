@@ -892,115 +892,120 @@ export const appraisalRouter = router({
        */
       const reviewedAt = new Date();
       const pin = input.decision === 'approve' ? pinFor(v, reviewedAt) : null;
-      const { count } = await ctx.prisma.appraisal.updateMany({
-        where: { id: v.id, orgId: ctx.principal.orgId, reviewStatus: 'in_review', updatedAt: v.updatedAt },
-        data: {
-          updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
-          reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt, reviewNote: input.note?.trim() || null,
-          ...(pin ? { engineVersion: pin.engineVersion, approvalPin: JSON.stringify(pin) } : {}),
-        },
-      });
-      if (count !== 1) {
-        // A decision or edit/resubmission invalidated the snapshot used for the pin.
-        const now = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id }, select: { reviewStatus: true } });
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: now.reviewStatus === 'in_review'
-            ? 'This appraisal changed during review. Reload and check the resubmitted version before deciding again.'
-            : `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
-        });
-      }
-      const row = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
-      await recordAudit(ctx.prisma, {
-        orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
-        action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
-        target: v.label, ip: ctx.ip,
-      });
-      /**
-       * Tell anyone who asked. Queued, not delivered here: approving a valuation
-       * must not wait on someone else's server, nor fail because it is down.
-       */
-      if (input.decision === 'approve') {
-        const deal = await ctx.prisma.deal.findUniqueOrThrow({
-          where: { id: v.dealId },
-          select: { id: true, name: true, address: true, postcode: true, assetType: true, stage: true },
-        });
-        const result = computeAppraisal(appraisalRowToEngineInput(row));
-        /**
-         * The firm's committed position is what the benchmark pool is made of,
-         * and approval is the moment a figure becomes that. Consent is checked
-         * inside the feed; a firm that has not opted in contributes nothing.
-         */
-        await feedApproved(ctx.prisma, ctx.principal.orgId, deal, row, {
-          userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
-        });
-        await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.approved', {
-          dealId: v.dealId,
-          dealName: deal?.name ?? null,
-          appraisalId: row.id,
-          label: row.label,
-          approvedBy: ctx.principal.name,
-          approvedAt: row.reviewedAt,
-          gdv: Math.round(result.gdv * 100) / 100,
-          profit: Math.round(result.profit * 100) / 100,
-          profitOnCost: result.poc,
-          /**
-           * What the approval was pinned to. A lender's system storing this
-           * event can later ask `verifyApproved` — or recompute from the
-           * inputs it was given — and know whether the figure it holds is the
-           * one the engine of that day produced. Without it the event named a
-           * GDV and nothing that could ever check it.
-           */
-          engineVersion: pin!.engineVersion,
-          inputHash: pin!.inputHash,
-        });
-
-        /**
-         * And separately, if the figures just approved break one of the firm's
-         * own facility covenants.
-         *
-         * Emitted at APPROVAL rather than on every save, because approval is the
-         * firm's committed position and that is what a lender's covenant applies
-         * to — a draft that dips under a limit for an afternoon is not a breach,
-         * and reporting it as one would train everybody to ignore the alert.
-         * Approval is also discrete, so this needs no stored previous state to
-         * avoid re-sending the same breach.
-         *
-         * The alert nobody was getting: this event has been offered to
-         * integrators since outbound webhooks shipped — an endpoint could
-         * subscribe, and org.createWebhook would accept it — and nothing has ever
-         * emitted it. A lender's system watching for a breach heard silence, and
-         * silence from a covenant monitor reads as "no breaches".
-         */
-        const policy = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
-        const covenants = testCovenants(
-          { facility: result.facility, totalCost: result.totalCost, gdv: result.gdv, profit: result.profit },
-          {
-            ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
-            ltcMaxPct: policy?.covLtcMaxPct ?? null,
-            minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
+      // The decision, audit and queued deliveries are one durable unit. External
+      // delivery happens later; a database failure must leave this version retryable.
+      const reviewContext = ctx;
+      return ctx.prisma.$transaction(async (tx) => {
+        const ctx = { ...reviewContext, prisma: tx as typeof reviewContext.prisma };
+        const { count } = await ctx.prisma.appraisal.updateMany({
+          where: { id: v.id, orgId: ctx.principal.orgId, reviewStatus: 'in_review', updatedAt: v.updatedAt },
+          data: {
+            updatedAt: new Date(Math.max(Date.now(), v.updatedAt.getTime() + 1)),
+            reviewStatus: status, reviewedById: ctx.principal.userId, reviewedAt, reviewNote: input.note?.trim() || null,
+            ...(pin ? { engineVersion: pin.engineVersion, approvalPin: JSON.stringify(pin) } : {}),
           },
-        );
-        if (covenants.breaches.length > 0) {
-          await emitWebhook(ctx.prisma, ctx.principal.orgId, 'covenant.breached', {
+        });
+        if (count !== 1) {
+          // A decision or edit/resubmission invalidated the snapshot used for the pin.
+          const now = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id }, select: { reviewStatus: true } });
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: now.reviewStatus === 'in_review'
+              ? 'This appraisal changed during review. Reload and check the resubmitted version before deciding again.'
+              : `“${v.label}” is ${now.reviewStatus.replace('_', ' ')} — only a version in review can be decided on.`,
+          });
+        }
+        const row = await ctx.prisma.appraisal.findUniqueOrThrow({ where: { id: v.id } });
+        await recordAudit(ctx.prisma, {
+          orgId: ctx.principal.orgId, dealId: v.dealId, userId: ctx.principal.userId, actor: ctx.principal.name,
+          action: input.decision === 'approve' ? 'approved an appraisal version' : 'requested changes to an appraisal version',
+          target: v.label, ip: ctx.ip,
+        }, { strict: true });
+        /**
+         * Tell anyone who asked. Queued, not delivered here: approving a valuation
+         * must not wait on someone else's server, nor fail because it is down.
+         */
+        if (input.decision === 'approve') {
+          const deal = await ctx.prisma.deal.findUniqueOrThrow({
+            where: { id: v.dealId },
+            select: { id: true, name: true, address: true, postcode: true, assetType: true, stage: true },
+          });
+          const result = computeAppraisal(appraisalRowToEngineInput(row));
+          /**
+           * The firm's committed position is what the benchmark pool is made of,
+           * and approval is the moment a figure becomes that. Consent is checked
+           * inside the feed; a firm that has not opted in contributes nothing.
+           */
+          await feedApproved(ctx.prisma, ctx.principal.orgId, deal, row, {
+            userId: ctx.principal.userId, name: ctx.principal.name, ip: ctx.ip,
+          });
+          await emitWebhook(ctx.prisma, ctx.principal.orgId, 'appraisal.approved', {
             dealId: v.dealId,
             dealName: deal?.name ?? null,
             appraisalId: row.id,
             label: row.label,
             approvedBy: ctx.principal.name,
             approvedAt: row.reviewedAt,
-            breaches: covenants.breaches.map((b) => ({
-              key: b.key,
-              label: b.label,
-              actualPct: Math.round(b.actualPct * 100) / 100,
-              limitPct: b.limitPct,
-              direction: b.direction,
-              headroomPts: Math.round(b.headroomPts * 100) / 100,
-            })),
-          });
+            gdv: Math.round(result.gdv * 100) / 100,
+            profit: Math.round(result.profit * 100) / 100,
+            profitOnCost: result.poc,
+            /**
+             * What the approval was pinned to. A lender's system storing this
+             * event can later ask `verifyApproved` — or recompute from the
+             * inputs it was given — and know whether the figure it holds is the
+             * one the engine of that day produced. Without it the event named a
+             * GDV and nothing that could ever check it.
+             */
+            engineVersion: pin!.engineVersion,
+            inputHash: pin!.inputHash,
+          }, { strict: true });
+          /**
+           * And separately, if the figures just approved break one of the firm's
+           * own facility covenants.
+           *
+           * Emitted at APPROVAL rather than on every save, because approval is the
+           * firm's committed position and that is what a lender's covenant applies
+           * to — a draft that dips under a limit for an afternoon is not a breach,
+           * and reporting it as one would train everybody to ignore the alert.
+           * Approval is also discrete, so this needs no stored previous state to
+           * avoid re-sending the same breach.
+           *
+           * The alert nobody was getting: this event has been offered to
+           * integrators since outbound webhooks shipped — an endpoint could
+           * subscribe, and org.createWebhook would accept it — and nothing has ever
+           * emitted it. A lender's system watching for a breach heard silence, and
+           * silence from a covenant monitor reads as "no breaches".
+           */
+          const policy = await ctx.prisma.orgPolicy.findUnique({ where: { orgId: ctx.principal.orgId } });
+          const covenants = testCovenants(
+            { facility: result.facility, totalCost: result.totalCost, gdv: result.gdv, profit: result.profit },
+            {
+              ltgdvMaxPct: policy?.covLtgdvMaxPct ?? null,
+              ltcMaxPct: policy?.covLtcMaxPct ?? null,
+              minProfitOnCostPct: policy?.covMinProfitOnCostPct ?? null,
+            },
+          );
+          if (covenants.breaches.length > 0) {
+            await emitWebhook(ctx.prisma, ctx.principal.orgId, 'covenant.breached', {
+              dealId: v.dealId,
+              dealName: deal?.name ?? null,
+              appraisalId: row.id,
+              label: row.label,
+              approvedBy: ctx.principal.name,
+              approvedAt: row.reviewedAt,
+              breaches: covenants.breaches.map((b) => ({
+                key: b.key,
+                label: b.label,
+                actualPct: Math.round(b.actualPct * 100) / 100,
+                limitPct: b.limitPct,
+                direction: b.direction,
+                headroomPts: Math.round(b.headroomPts * 100) / 100,
+              })),
+            }, { strict: true });
+          }
         }
-      }
-      return { id: row.id, status: row.reviewStatus };
+        return { id: row.id, status: row.reviewStatus };
+      });
     }),
 
   /**
