@@ -307,3 +307,23 @@ scratch cleanup rather than claiming verified contents. Twelve regression cases
 failed on the previous revision; the updated restore/backup suite passes 44
 checks, plus API typecheck and shell syntax. Exact-head CI must be rerun after
 this change; earlier green evidence is not evidence for the amended candidate.
+
+## Watchdog delivery retries — 18 October 2026
+
+The operational watchdog previously persisted a state transition before sending
+its alert. Failed webhook delivery therefore suppressed subsequent retries; a
+first-run outage also sent nothing. It now alerts on initial outage, acknowledges
+state only after successful configured delivery, and exits unsuccessfully when
+alert delivery fails even if the app has recovered. Successful state writes use
+atomic replacement. A healthy initial baseline remains silent; alerts use the
+PlotMerit name.
+
+Six checks pass, including real curl against a loopback readiness/webhook server:
+failed outage delivery, retry, duplicate suppression and recovery. Three original
+regressions failed against the old script. API typecheck, shell syntax and diff
+checks pass. Full exact-head CI is recorded on the PR. No external message was
+sent and no scheduler, live credential or production application was changed.
+The command requires serial scheduling and one state file per monitored host;
+delivery may repeat after ambiguous responses or failed state persistence.
+External monitoring activation and a named incident owner remain launch gates,
+alongside real provider and production recovery acceptance.

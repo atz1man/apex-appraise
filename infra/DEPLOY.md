@@ -268,6 +268,15 @@ to alert on failure; the redirected log examples below do not deliver email by t
 */5 * * * * cd /opt/apex-appraise && ALERT_WEBHOOK=https://hooks.slack.com/... ./infra/watchdog.sh https://app.yourdomain.co.uk >> /var/log/apex-watchdog.log 2>&1
 ```
 
+The watchdog sends an initial outage alert and alerts on later state changes.
+It records the new state only after a configured webhook accepts the message;
+failed delivery exits non-zero and retries on the next check if the condition
+persists. A healthy first check establishes a silent baseline. Configure a
+webhook accepting a JSON `text` field and a separate scheduler-failure alert.
+Use one state file per monitored host and run checks serially. Delivery is at
+least once: a lost response or failed state write can cause duplicate alerts.
+This script does not establish that an external monitor or incident owner exists.
+
 These run from cron, which has no shell environment, so both scripts begin by
 checking that `docker compose` can read its own configuration — it interpolates
 the whole file for `exec`, so a missing `JWT_SECRET` or `POSTGRES_PASSWORD`
