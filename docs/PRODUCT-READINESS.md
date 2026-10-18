@@ -916,3 +916,28 @@ company configuration, treatment of historical unverified accounts and abandoned
 pending registrations remain open. The active public demo is not proof of email
 ownership. Exact-head CI and deployment evidence belong on the PR. Next: review
 this migration/release and close actual delivery acceptance when configured.
+
+### Mail service stall recovery — 18 October 2026
+
+Activation revealed a reliability gap in the shared mail path: Nodemailer's
+default connection wait is two minutes and socket inactivity wait ten minutes.
+Signup could therefore keep waiting instead of returning its delivery-failure
+state. SMTP connection, DNS and greeting waits are now capped at ten seconds,
+and socket inactivity at twenty seconds. Shorter configured values and existing
+credentials/TLS/provider options are preserved. Invalid SMTP configuration now
+returns the same sanitized failure result instead of escaping before the catch.
+
+A loopback SMTP fixture proves silent-greeting timeout (~10s), stalled dialogue
+closure (~20s), successful delivery to a responsive fixture and customer signup
+returning emailSent=false while keeping access pending. The silent-server test
+fails against the previous code at its 15-second deadline. Configuration tests
+cover caps, shorter values, credentials/TLS preservation and sanitized malformed
+configuration. 21 API tests and API typecheck pass; nine activation/signup/SSO
+browser checks pass against the restarted local API. Diff and whitespace reviewed.
+
+These are transport-phase and inactivity limits, not a whole-request deadline
+or proof that a provider did not queue a message before a lost acknowledgement.
+No external email, provider activation, credential change or deployment occurred
+for these local checks. Exact-commit CI/release evidence belongs on the PR.
+Actual inbox delivery remains blocked on configured mail acceptance; independent
+next work is pending-signup recovery and trial timing before activation.
