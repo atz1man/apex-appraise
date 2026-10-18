@@ -28,6 +28,7 @@ export default function VerifyEmail() {
       <h1 className="text-[22px] font-bold mt-3 mb-3">Verify your email</h1>
       {verify.isSuccess ? <p role="status" className="text-ink-2 mb-4">Your email is verified. You can now sign in to your workspace.</p> : <>
         <p role="status" className="text-ink-2 mb-4">{message}</p>
+        <p className="text-ink-2 mb-4">For a new trial workspace, your 14 days begin when you verify your email.</p>
         {token && <Button className="w-full mb-4" loading={verify.isPending} disabled={resend.isPending} onClick={() => {
           if (verify.isPending) return;
           setError('');

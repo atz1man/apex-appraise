@@ -18,6 +18,7 @@ import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
 import { openFor } from '../sealed-fields.js';
+import { trialEndFrom } from '../trial.js';
 
 /** the accounts prisma/seed.ts creates for a demo instance, in the order the login page lists them */
 export const DEMO_ACCOUNTS = [
@@ -331,11 +332,26 @@ export const authRouter = router({
     .mutation(async ({ ctx, input }) => {
       const hash = hashResetToken(input.token);
       const now = new Date();
-      const changed = await ctx.prisma.user.updateMany({
-        where: { emailVerificationHash: hash, emailVerificationRequired: true, emailVerifiedAt: null, emailVerificationExpiresAt: { gt: now } },
-        data: { emailVerifiedAt: now, emailVerificationHash: null, emailVerificationExpiresAt: null },
+      const pending = await ctx.prisma.user.findFirst({ where: { emailVerificationHash: hash } });
+      const refuse = () => new TRPCError({ code: 'BAD_REQUEST', message: 'This verification link is invalid or has expired. Request a new link.' });
+      if (!pending) throw refuse();
+      await ctx.prisma.$transaction(async tx => {
+        // Claim the credential before any read in the transaction. Only the
+        // winning activation may start a trial; retries cannot extend it.
+        const changed = await tx.user.updateMany({
+          where: { id: pending.id, emailVerificationHash: hash, emailVerificationRequired: true, emailVerifiedAt: null, emailVerificationExpiresAt: { gt: now } },
+          data: { emailVerifiedAt: now, emailVerificationHash: null, emailVerificationExpiresAt: null },
+        });
+        if (changed.count !== 1) throw refuse();
+        const trial = await tx.organisation.updateMany({
+          where: { id: pending.orgId, plan: 'TRIAL', stripeSubscriptionId: null, subscriptionStatus: null },
+          data: { trialEndsAt: trialEndFrom(now) },
+        });
+        await tx.activityEvent.create({ data: {
+          orgId: pending.orgId, userId: pending.id, actor: pending.name,
+          action: 'verified email', target: trial.count ? `Trial ends ${trialEndFrom(now).toISOString()}` : 'Email ownership confirmed', ip: ctx.ip,
+        } });
       });
-      if (changed.count !== 1) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This verification link is invalid or has expired. Request a new link.' });
       return { verified: true };
     }),
 

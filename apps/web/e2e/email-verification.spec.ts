@@ -16,6 +16,7 @@ test('customer signup waits for email verification and reports unavailable deliv
   await expect(page).toHaveURL(/\/verify-email$/);
   await expect(page.getByRole('heading', { name: 'Verify your email' })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('could not send');
+  await expect(page.getByText('your 14 days begin when you verify your email', { exact: false })).toBeVisible();
   await expect(page.getByLabel('Email address')).toHaveValue('customer@example.test');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
