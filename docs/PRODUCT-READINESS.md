@@ -963,3 +963,11 @@ Exact-commit CI and deployment evidence belong on the PR. Actual inbox delivery,
 commercial setup and professional acceptance remain open. Next independent
 engineering priority: recovery and retention of abandoned pending signups,
 without deleting existing customer work or inventing email ownership evidence.
+
+The first activation CI run exposed a scanner gap: lost-update discovery only
+recognised `prisma` writes, missing `tx` transaction writes. It now discovers both,
+with a positive/negative probe. Existing task updates are recognised by their
+expected-snapshot predicate and conflict refusal, with probes that remove each;
+`task-edit` regressions also pass. Extraction updates only source status against
+prepared document identity, so its documented no-held-content classification is
+explicit. No application guard was weakened to satisfy the scanner.

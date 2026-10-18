@@ -37,7 +37,13 @@ const procedures = () => (appRouter as unknown as { _def: { procedures: Record<s
 const mutations = () => Object.entries(procedures()).filter(([, p]) => p._def.type === 'mutation');
 
 /** does the resolver update an existing row of any model? */
-const updatesARow = (src: string) => /prisma\.\w+\.(update|updateMany|upsert)\(/.test(src);
+const updatesARow = (src: string) => /(?:prisma|tx)\.\w+\.(update|updateMany|upsert)\(/.test(src);
+
+// A full expected snapshot in updateMany's predicate is also optimistic
+// concurrency. Its defaults are comparison values, never replacement data.
+// task-edit.test.ts proves stale fields and simultaneous writers are refused.
+const comparesSnapshot = (src: string) => /updateMany\(\{\s*where:\s*\{[^}]*\.\.\.input\.expected\b/.test(src)
+  && /if\s*\(changed\.count !== 1\)\s*throw new [\w.]*TRPCError\(\{\s*code:\s*['"]CONFLICT['"]/.test(src);
 
 const unwrap = (schema: z.ZodTypeAny | undefined): z.ZodTypeAny | undefined => {
   const def = (schema as unknown as { _def: Record<string, any> })?._def;
@@ -80,6 +86,7 @@ const hasDefault = (f: z.ZodTypeAny) => {
  * the point: all six defects above were a judgement nobody made.
  */
 const HOLDS_NOTHING: Record<string, string> = {
+  'autoAppraisal.extract': 'new notes and selected source IDs request extraction; only extraction status is written, conditional on the exact prepared document identity. No client-held document content is replaced.',
   'auth.verifyEmail': 'a single-use random credential from an email, consumed conditionally; no loaded row is submitted.',
   'auth.resendVerification': 'an address typed now; rotates a pending credential, never a client-held revision.',
   'auth.ssoComplete':
@@ -101,9 +108,20 @@ const HOLDS_NOTHING: Record<string, string> = {
 };
 
 describe('the sweep itself', () => {
+  it('recognises writes through the transaction client', () => {
+    expect(updatesARow('await tx.user.updateMany({ where: { id } })')).toBe(true);
+    expect(updatesARow('await tx.user.findUnique({ where: { id } })')).toBe(false);
+  });
   it('finds the procedures that update a row, from the real resolvers', () => {
     const writers = mutations().filter(([, p]) => updatesARow(String(p._def.resolver ?? '')));
     expect(writers.length, 'no row-updating mutation was found — the walk is broken').toBeGreaterThan(30);
+  });
+
+  it('requires both the expected snapshot and conflict refusal for conditional writes', () => {
+    const src = String(procedures()['tasks.update']._def.resolver);
+    expect(comparesSnapshot(src)).toBe(true);
+    expect(comparesSnapshot(src.replace('...input.expected', ''))).toBe(false);
+    expect(comparesSnapshot(src.replace('changed.count !== 1', 'false'))).toBe(false);
   });
 
   it('has no stale entries', () => {
@@ -129,7 +147,7 @@ describe('every mutation that writes back a row somebody was holding', () => {
       if (!held.length) continue;
 
       const stamped = /assertUnchanged\(/.test(src);
-      if (stamped) continue;
+      if (stamped || comparesSnapshot(src)) continue;
 
       /**
        * A default is checked FIRST, and regardless of how much is held.
