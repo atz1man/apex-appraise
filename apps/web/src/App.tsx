@@ -63,6 +63,7 @@ const Settings = lazy(() => import('./routes/Settings'));
 const Investors = lazy(() => import('./routes/Investors'));
 const Register = lazy(() => import('./routes/Register'));
 const ForgotPassword = lazy(() => import('./routes/ForgotPassword'));
+const VerifyEmail = lazy(() => import('./routes/VerifyEmail'));
 const ResetPassword = lazy(() => import('./routes/ResetPassword'));
 const SsoCallback = lazy(() => import('./routes/SsoCallback'));
 const ApiDocs = lazy(() => import('./routes/ApiDocs'));
@@ -371,6 +372,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot" element={<ForgotPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/reset" element={<ResetPassword />} />
           {/* the redirect URI auth.ssoStart hands the identity provider */}
           <Route path="/sso/callback" element={<SsoCallback />} />

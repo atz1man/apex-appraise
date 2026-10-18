@@ -73,6 +73,8 @@ const SENSITIVE = [
   'auth.login',
   'auth.recoveryLogin',
   'auth.requestPasswordReset',
+  'auth.verifyEmail',
+  'auth.resendVerification',
   'auth.resetPassword',
   'org.register',
 ];

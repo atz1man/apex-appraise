@@ -36,6 +36,7 @@ export const ROUTE_TITLES: Record<string, string> = {
   '/login': 'Sign in',
   '/register': 'Create your workspace',
   '/forgot': 'Reset your password',
+  '/verify-email': 'Verify your email',
   '/reset': 'Choose a new password',
   '/sso/callback': 'Signing you in',
   '/welcome': 'UK development appraisals, end to end',

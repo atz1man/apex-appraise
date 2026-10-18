@@ -226,3 +226,8 @@ export function resetEmail(name: string, appUrl: string, token: string) {
     ].join('\n'),
   };
 }
+
+/** The fragment keeps the verification credential out of HTTP access logs. */
+export function verificationEmail(token: string) {
+  return { subject: 'Verify your PlotMerit email address', text: `Verify your email address to activate your workspace:\n\n${APP_URL()}/verify-email#token=${encodeURIComponent(token)}\n\nThis link expires in one hour and works once. If you requested another link, use the most recent one. If you did not request a workspace, ignore this email.` };
+}

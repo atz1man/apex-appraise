@@ -13,7 +13,7 @@ import {
   verifyPassword,
 } from '../auth/password.js';
 import { matchRecoveryCode } from '../auth/sso-recovery.js';
-import { APP_URL, recoveryUsedEmail, resetEmail, sendMail, ssoResetEmail } from '../email.js';
+import { APP_URL, verificationEmail, recoveryUsedEmail, resetEmail, sendMail, ssoResetEmail } from '../email.js';
 import { authedProcedure, publicProcedure, router } from '../trpc.js';
 import { AUDIT, recordAudit } from '../audit.js';
 import { authRequest, connectionForEmail, discover, exchangeCode, fetchJwks, resolveUser, verifyIdToken } from '../sso.js';
@@ -114,6 +114,9 @@ export const authRouter = router({
         await recordFailure(ctx.prisma, email);
         await audit(AUDIT.signInFailed, email);
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid email or password' });
+      }
+      if (user.emailVerificationRequired && !user.emailVerifiedAt) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Verify your email address before signing in. Request a new verification link if needed.' });
       }
       await recordSuccess(ctx.prisma, email);
       await audit(AUDIT.signIn, email);
@@ -322,6 +325,39 @@ export const authRouter = router({
     const present = new Set(found.map((f) => f.email));
     return DEMO_ACCOUNTS.filter((a) => present.has(a.email));
   }),
+
+  verifyEmail: publicProcedure
+    .input(z.object({ token: z.string().min(20).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const hash = hashResetToken(input.token);
+      const now = new Date();
+      const changed = await ctx.prisma.user.updateMany({
+        where: { emailVerificationHash: hash, emailVerificationRequired: true, emailVerifiedAt: null, emailVerificationExpiresAt: { gt: now } },
+        data: { emailVerifiedAt: now, emailVerificationHash: null, emailVerificationExpiresAt: null },
+      });
+      if (changed.count !== 1) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This verification link is invalid or has expired. Request a new link.' });
+      return { verified: true };
+    }),
+
+  resendVerification: publicProcedure
+    .input(z.object({ email: z.string().trim().email().max(254) }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+      const response = { accepted: true };
+      if (await tooManyResetRequests(ctx.prisma, `verify:${email}`)) return response;
+      const user = await ctx.prisma.user.findUnique({ where: { email } });
+      if (!user?.emailVerificationRequired || user.emailVerifiedAt) return response;
+      const next = newResetToken();
+      const changed = await ctx.prisma.user.updateMany({
+        where: { id: user.id, emailVerifiedAt: null },
+        data: { emailVerificationHash: next.hash, emailVerificationExpiresAt: next.expiresAt },
+      });
+      if (changed.count === 1) {
+        const mail = verificationEmail(next.token);
+        await sendMail(user.orgId, email, mail.subject, mail.text);
+      }
+      return response;
+    }),
 
   /** Begin an SSO sign-in for whichever workspace claims this domain. */
   ssoStart: publicProcedure

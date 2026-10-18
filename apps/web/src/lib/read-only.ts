@@ -43,6 +43,8 @@ export const VIEWER_MAY_RUN = [
   'auth.ssoComplete',
   'auth.requestPasswordReset',
   'auth.resetPassword',
+  'auth.verifyEmail',
+  'auth.resendVerification',
   'org.register',
   'engagement.sign',
   /**

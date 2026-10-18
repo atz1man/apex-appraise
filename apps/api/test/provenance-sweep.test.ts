@@ -63,6 +63,10 @@ const HELPERS: Array<{ call: RegExp; name: string; source: string }> = [
  * of the thirty-two this sweep found had been a decision nobody made.
  */
 const NO_PROVENANCE: Record<string, string> = {
+  'auth.verifyEmail':
+    'the conditional emailVerifiedAt timestamp is the durable proof record itself; no appraisal or customer-supplied figure changes.',
+  'auth.resendVerification':
+    'rotates a pending activation credential and records the request in AuthThrottle. Does not establish identity or grant access.',
   'appraisal.downloadToken':
     'mints a short-lived token for the caller’s own download. The download itself is recorded where it happens, in reports.ts — recording the token as well would double every export in the trail.',
   'auth.ssoStart':

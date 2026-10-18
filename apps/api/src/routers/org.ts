@@ -6,9 +6,10 @@ import { computeAppraisal, depositsHeldAt, jvWaterfall, type AppraisalInput } fr
 import { DEFAULT_REGION, REGIONS } from '@apex/types/regions';
 import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
-import { checkLockout, hashPassword, recordFailure } from '../auth/password.js';
+import { checkLockout, hashPassword, newResetToken, recordFailure } from '../auth/password.js';
+import { demoFallbacksAllowed } from '../demo-mode.js';
 import { newRecoveryCodes } from '../auth/sso-recovery.js';
-import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, welcomeEmail } from '../email.js';
+import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, verificationEmail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
 import { exportWorkspace } from '../org-export.js';
 import { assertExclusiveStripeCustomer, stopWorkspaceBilling } from '../billing.js';
@@ -126,9 +127,11 @@ export const orgRouter = router({
         await recordFailure(ctx.prisma, `register:${email}`);
         throw new TRPCError({ code: 'CONFLICT', message: 'An account with this email already exists' });
       }
-      // A signup either creates a usable workspace or creates nothing. In
+      // A signup creates a complete workspace (pending verification in customer mode) or nothing. In
       // particular, concurrent requests for one email must not strand an org
       // after the unique User.email constraint rejects the losing request.
+      const verificationRequired = !demoFallbacksAllowed();
+      const verification = verificationRequired ? newResetToken() : null;
       let registered;
       try {
         registered = await ctx.prisma.$transaction(async tx => {
@@ -140,6 +143,9 @@ export const orgRouter = router({
               orgId: org.id, email, password: hashPassword(input.password),
               name: input.name, role: 'ADMIN', principalType: 'internal',
               initials: initialsOf(input.name),
+              emailVerificationRequired: verificationRequired,
+              emailVerificationHash: verification?.hash,
+              emailVerificationExpiresAt: verification?.expiresAt,
             },
           });
           await tx.integrationConnection.createMany({
@@ -154,10 +160,16 @@ export const orgRouter = router({
         throw error;
       }
       const { org, user } = registered;
-      const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
+      const token = verificationRequired ? '' : jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '12h' });
+      let emailSent = false;
+      if (verification) {
+        const mail = verificationEmail(verification.token);
+        emailSent = (await sendMail(org.id, email, mail.subject, mail.text)).emailed;
+      }
       const welcome = welcomeEmail(user.name, org.name, APP_URL());
-      void sendMail(org.id, email, welcome.subject, welcome.text);
+      if (!verificationRequired) void sendMail(org.id, email, welcome.subject, welcome.text);
       return {
+        verificationRequired, emailSent,
         token,
         principal: {
           userId: user.id,

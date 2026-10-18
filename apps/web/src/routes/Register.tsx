@@ -15,6 +15,10 @@ export default function Register() {
     // this screen shows the error where it happened; see App.tsx
     meta: { inlineError: true },
     onSuccess: (res) => {
+      if (res.verificationRequired) {
+        navigate('/verify-email', { replace: true, state: { email: form.email.trim(), emailSent: res.emailSent } });
+        return;
+      }
       setSession(res.token, res.principal as StoredPrincipal);
       navigate('/', { replace: true });
     },

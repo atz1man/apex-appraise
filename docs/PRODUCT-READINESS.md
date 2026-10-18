@@ -881,3 +881,38 @@ with a batch transaction: identical ordered writes, no JavaScript round trips
 while holding the write lock. Repeated the 64 API tests, typecheck and isolated
 PostgreSQL replay successfully. Full CI must pass on the revised commit before
 this is a release candidate.
+
+### Customer-mode email activation — 18 October 2026
+
+New self-serve customer-mode accounts now wait for proof of email ownership:
+registration returns no session, password login refuses pending accounts, and
+the bearer-session resolver independently rejects them. Verification uses a
+random 256-bit credential, stored only as a digest, expiring after one hour and
+consumed by a conditional update. The email carries its credential in a URL
+fragment, and the recipient explicitly confirms it; opening/scanning a link
+does not activate an account. Existing accounts retain access without invented
+verification evidence. Development and explicitly enabled demo signup retain
+the existing immediate-entry flow, with emailVerifiedAt left empty.
+
+The verification screen handles delivery failure, expiry, confirmation and
+resends. Resends return the same public response for unknown/already-verified
+addresses, use the shared atomic three-per-fifteen-minute throttle and cannot
+reopen a verified account. Only the latest issued link works. Verification and
+resend use the strict HTTP rate-limit bucket. Workspace erasure includes the
+new namespaced throttle key. PostgreSQL migration adds nullable proof fields
+and a false-by-default requirement flag; no financial data is rewritten.
+
+Evidence: 86 targeted API tests, API/web typechecks and 58 UI guard tests pass.
+Nine browser checks pass, including three intercepted UI cases for customer
+signup/delivery failure, expired-link/resend and confirmation. The first expiry
+browser fixture assumed an unbatched tRPC request; corrected it to inspect the
+actual batch payload. A separate local browser journey with a synthetic pending
+account exercised real HTTP login refusal, persisted verification and successful
+sign-in, then erased that fixture. No external mail was sent. Removing the
+pending-account bearer guard makes the activation regression fail.
+
+Not yet production acceptance: real SMTP delivery/reputation, owner contact and
+company configuration, treatment of historical unverified accounts and abandoned
+pending registrations remain open. The active public demo is not proof of email
+ownership. Exact-head CI and deployment evidence belong on the PR. Next: review
+this migration/release and close actual delivery acceptance when configured.

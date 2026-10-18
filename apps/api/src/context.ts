@@ -91,7 +91,7 @@ export async function principalFromAuthHeader(
     const user = await db.user.findUnique({ where: { id: payload.sub } });
     // no row: the account is gone, and the token with it. This is what makes
     // removing a team member take effect on their very next request.
-    if (!user || issuedBefore(payload.iat, user.sessionsValidFrom)) return null;
+    if (!user || (user.emailVerificationRequired && !user.emailVerifiedAt) || issuedBefore(payload.iat, user.sessionsValidFrom)) return null;
     return {
       userId: user.id,
       orgId: user.orgId,

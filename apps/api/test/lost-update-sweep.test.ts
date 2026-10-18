@@ -80,6 +80,8 @@ const hasDefault = (f: z.ZodTypeAny) => {
  * the point: all six defects above were a judgement nobody made.
  */
 const HOLDS_NOTHING: Record<string, string> = {
+  'auth.verifyEmail': 'a single-use random credential from an email, consumed conditionally; no loaded row is submitted.',
+  'auth.resendVerification': 'an address typed now; rotates a pending credential, never a client-held revision.',
   'auth.ssoComplete':
     'an authorisation code and the state that was minted with it — received during the flow, never read off a row.',
   'auth.resetPassword':
