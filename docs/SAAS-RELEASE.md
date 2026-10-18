@@ -297,3 +297,13 @@ CI additionally runs the existing disposable PostgreSQL backup/restore journey.
 No production database, backup, credential or retention policy was changed.
 An actual isolated production restore with uploaded-file reconciliation and an
 identified operator remains a launch acceptance requirement.
+
+Review of the same recovery candidate found another false-PASS path: invalid
+`MIN_ROWS` comparisons could skip the refusal branch, and removing all whitespace
+could turn multiple count lines into a different number. The command now requires
+a positive bounded minimum before database operations and validates each restored
+count as one bounded nonnegative integer. Invalid or missing output fails with
+scratch cleanup rather than claiming verified contents. Twelve regression cases
+failed on the previous revision; the updated restore/backup suite passes 44
+checks, plus API typecheck and shell syntax. Exact-head CI must be rerun after
+this change; earlier green evidence is not evidence for the amended candidate.

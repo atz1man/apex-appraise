@@ -9,7 +9,7 @@ const script = fileURLToPath(new URL('../../../infra/restore-check.sh', import.m
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach(root => rmSync(root, { recursive: true, force: true })));
 // Real runbook control flow, isolated fake PostgreSQL/container boundaries.
-function run(mode: string, managed: boolean) {
+function run(mode: string, managed: boolean, minimum = '1') {
   const root = mkdtempSync(join(tmpdir(), 'restore-cleanup-')); roots.push(root);
   const bin = join(root, 'bin'), backups = join(root, 'backup files');
   mkdirSync(bin); mkdirSync(backups);
@@ -22,7 +22,7 @@ printf '%s\\n' "$*" >> "$FIXTURE_ROOT/calls"
 case "$*" in
  *'CREATE DATABASE'*) [ "$FIXTURE_MODE" != collision ] ;;
  *'DROP DATABASE'*) [ "$FIXTURE_MODE" != cleanupfailed ] && [ "$FIXTURE_MODE" != bothfailed ] ;;
- *'Organisation'*) echo 1 ;;
+ *'Organisation'*) case "$FIXTURE_MODE" in badcount) echo invalid ;; emptycount) : ;; multiline) printf '1\\n2\\n' ;; emptydb) echo 0 ;; *) echo 1 ;; esac ;;
  *'Deal'*) echo 2 ;;
  *'information_schema'*) echo 3 ;;
  *) exit 91 ;;
@@ -41,7 +41,7 @@ esac
 `);
   const result = spawnSync('bash', [script, backups], {
     cwd: root, encoding: 'utf8', timeout: 10_000,
-    env: { PATH: `${bin}:/usr/bin:/bin`, FIXTURE_ROOT: root, FIXTURE_MODE: mode,
+    env: { PATH: `${bin}:/usr/bin:/bin`, FIXTURE_ROOT: root, FIXTURE_MODE: mode, MIN_ROWS: minimum,
       ...(managed ? { BACKUP_DB_URL: 'postgresql://fixture.invalid/apex?sslmode=require' } : {}) },
   });
   expect(result.error).toBeUndefined();
@@ -84,6 +84,19 @@ describe.each([true, false])('restore cleanup (managed=%s)', managed => {
   it('cleans up after termination during restore', () => {
     const result = run('interrupted', managed);
     expect(result.status).toBe(143);
+    expect(result.calls).toContain('DROP DATABASE');
+    expect(result.stdout).not.toContain('PASS');
+  });
+  it.each(['0', '-1', 'invalid', '999999999999999999999999'])('refuses invalid minimum %s before database writes', minimum => {
+    const result = run('ok', managed, minimum);
+    expect(result.status).not.toBe(0);
+    expect(result.calls).toBe('');
+    expect(result.stderr).toContain('MIN_ROWS');
+    expect(result.stdout).not.toContain('PASS');
+  });
+  it.each(['badcount', 'emptycount', 'multiline', 'emptydb'])('refuses unusable restored counts: %s', mode => {
+    const result = run(mode, managed);
+    expect(result.status).not.toBe(0);
     expect(result.calls).toContain('DROP DATABASE');
     expect(result.stdout).not.toContain('PASS');
   });
