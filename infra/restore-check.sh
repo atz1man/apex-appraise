@@ -12,21 +12,29 @@
 # is enough, and it costs a few seconds:
 #   0 4 1 * * cd /opt/apex-appraise && ./infra/restore-check.sh /var/backups/apex >> /var/log/apex-restore-check.log 2>&1
 #
-# It NEVER touches the live database. It creates apex_restore_check_<pid>,
+# It NEVER touches the live database. It creates a unique apex_restore_check_ database,
 # restores into that, counts, and drops it — including if it fails part-way.
 #
 # Environment:
 #   BACKUP_DB_URL   a superuser-capable connection to the SERVER (managed
 #                   Postgres). Unset: use the compose `db` service.
 #   MIN_ROWS        fail if the restored Organisation count is below this
-#                   (default 1). A dump that restores cleanly and is EMPTY is a
+#                   (1–999999999, default 1). A dump that restores cleanly and is EMPTY is a
 #                   backup of nothing, and it passes every check but this one.
 set -euo pipefail
 
 BACKUP_DIR="${1:-./backups}"
 MIN_ROWS="${MIN_ROWS:-1}"
-CHECK_DB="apex_restore_check_$$"
+CHECK_DB="apex_restore_check_$$_${RANDOM}"
+SCRATCH_CREATED=0
 now() { date -u +%FT%TZ; }
+
+# Validate before connecting or creating anything. Invalid integer comparisons
+# inside an `if` otherwise skip the failure branch and can fall through to PASS.
+if [[ ! "$MIN_ROWS" =~ ^[1-9][0-9]{0,8}$ ]]; then
+  echo "$(now) FAILED: MIN_ROWS must be an integer from 1 to 999999999." >&2
+  exit 1
+fi
 
 LATEST="$(ls -1t "$BACKUP_DIR"/apex-*.dump 2>/dev/null | head -1 || true)"
 if [ -z "$LATEST" ]; then
@@ -75,13 +83,27 @@ else
 fi
 
 cleanup() {
-  psql_srv -c "DROP DATABASE IF EXISTS $CHECK_DB;" >/dev/null 2>&1 || true
+  [ "$SCRATCH_CREATED" = 1 ] || return 0
+  if ! psql_srv -c "DROP DATABASE $CHECK_DB;" >/dev/null 2>&1; then
+    echo "$(now) FAILED: could not remove scratch database $CHECK_DB; operator cleanup is required." >&2
+    return 1
+  fi
+  SCRATCH_CREATED=0
 }
-trap cleanup EXIT
+finish() {
+  local status=$?
+  trap - EXIT
+  if ! cleanup; then status=1; fi
+  exit "$status"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "$(now) restoring into $CHECK_DB"
-psql_srv -c "DROP DATABASE IF EXISTS $CHECK_DB;" >/dev/null
+# CREATE must fail on a collision. Never delete a database we did not create.
 psql_srv -c "CREATE DATABASE $CHECK_DB;" >/dev/null
+SCRATCH_CREATED=1
 
 if ! restore_into; then
   echo "$(now) FAILED: $(basename "$LATEST") did not restore. This backup would not have saved you." >&2
@@ -90,16 +112,30 @@ fi
 
 # Restoring cleanly is not the same as restoring your data. Count something a
 # real workspace must have.
-ORGS="$(psql_chk -tAc 'SELECT count(*) FROM "Organisation";' | tr -d '[:space:]')"
-DEALS="$(psql_chk -tAc 'SELECT count(*) FROM "Deal";' | tr -d '[:space:]')"
-TABLES="$(psql_chk -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '[:space:]')"
+ORGS="$(psql_chk -tAc 'SELECT count(*) FROM "Organisation";')"
+DEALS="$(psql_chk -tAc 'SELECT count(*) FROM "Deal";')"
+TABLES="$(psql_chk -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")"
+
+# psql -tA returns one unpadded integer. Do not join separate output lines into
+# a different count. Bound arithmetic below the shell's signed integer limit.
+for count in "$ORGS" "$DEALS" "$TABLES"; do
+  if [[ ! "$count" =~ ^(0|[1-9][0-9]{0,17})$ ]]; then
+    echo "$(now) FAILED: restored row counts were not valid integers." >&2
+    exit 1
+  fi
+done
 
 echo "$(now) restored: $TABLES tables, $ORGS organisation(s), $DEALS deal(s)"
 
-if [ "${ORGS:-0}" -lt "$MIN_ROWS" ]; then
+if [ "$ORGS" -lt "$MIN_ROWS" ]; then
   echo "$(now) FAILED: restored database holds $ORGS organisation(s), expected at least $MIN_ROWS." >&2
   echo "$(now) The archive was valid and the restore was clean — it is the CONTENTS that are missing." >&2
   exit 1
 fi
 
+# Cleanup is part of success; leave the EXIT trap to handle failed restores.
+if ! cleanup; then
+  trap - EXIT
+  exit 1
+fi
 echo "$(now) PASS — $(basename "$LATEST") restores and contains data"
