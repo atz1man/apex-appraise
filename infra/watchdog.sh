@@ -3,8 +3,8 @@
 #
 #   ./infra/watchdog.sh https://app.yourdomain.co.uk
 #
-# Cron every five minutes. Non-zero exit means DOWN, so cron's MAILTO reaches you
-# even if you never configure a webhook:
+# Cron every five minutes. Non-zero exit means DOWN or alert delivery failure.
+# Configure the scheduler to alert on failure; redirected logs do not send mail:
 #   */5 * * * * cd /opt/apex-appraise && ./infra/watchdog.sh https://app.yourdomain.co.uk >> /var/log/apex-watchdog.log 2>&1
 #
 # It checks /ready, not /health. /health only says the process is running, which
@@ -16,8 +16,8 @@
 # exactly like a monitor that is silent because everything is fine.
 #
 # Environment:
-#   ALERT_WEBHOOK   POSTed {"text": "..."} on a state CHANGE — Slack and Discord
-#                   both accept that shape directly.
+#   ALERT_WEBHOOK   endpoint accepting {"text": "..."} on a state change,
+#                   and on an initial outage. Failed delivery retries next run.
 #   STATE_FILE      where the last known state lives (default /tmp/apex-watchdog.state)
 #   TIMEOUT         seconds to wait (default 10)
 set -euo pipefail
@@ -29,7 +29,8 @@ TIMEOUT="${TIMEOUT:-10}"
 now() { date -u +%FT%TZ; }
 
 BODY_FILE="$(mktemp)"
-trap 'rm -f "$BODY_FILE"' EXIT
+STATE_TEMP=""
+trap 'rm -f "$BODY_FILE"; [ -z "$STATE_TEMP" ] || rm -f "$STATE_TEMP"' EXIT
 
 # NOT `curl -f`. With -f curl exits non-zero on a 503, so an `|| echo 000`
 # fallback CONCATENATES onto the code curl already printed ("503000"), and -f
@@ -61,21 +62,29 @@ else
 fi
 
 PREV="$(cat "$STATE_FILE" 2>/dev/null || echo unknown)"
-echo "$STATE" > "$STATE_FILE"
 echo "$(now) $STATE — $DETAIL"
 
 # Alert on the EDGE, not on every tick. A monitor that pages every five minutes
 # for the same outage trains you to ignore it, and the recovery is worth knowing
 # about too.
-if [ -n "${ALERT_WEBHOOK:-}" ] && [ "$STATE" != "$PREV" ] && [ "$PREV" != "unknown" ]; then
+if [ -n "${ALERT_WEBHOOK:-}" ] && [ "$STATE" != "$PREV" ] && { [ "$PREV" != "unknown" ] || [ "$STATE" = "down" ]; }; then
   if [ "$STATE" = "down" ]; then
-    TEXT="🔴 Apex Appraise is DOWN — $DETAIL ($URL)"
+    TEXT="🔴 PlotMerit is DOWN — $DETAIL ($URL)"
   else
-    TEXT="🟢 Apex Appraise is back — $URL"
+    TEXT="🟢 PlotMerit is back — $URL"
   fi
-  curl -fsS -m 10 -X POST -H 'content-type: application/json' \
+  if ! curl -fsS -m 10 -X POST -H 'content-type: application/json' \
     -d "$(printf '{"text":%s}' "$(printf '%s' "$TEXT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")" \
-    "$ALERT_WEBHOOK" >/dev/null 2>&1 || echo "$(now) WARNING: could not reach ALERT_WEBHOOK" >&2
+    "$ALERT_WEBHOOK" >/dev/null 2>&1; then
+    echo "$(now) FAILED: could not reach ALERT_WEBHOOK; state retained for retry." >&2
+    exit 1
+  fi
 fi
 
+# Acknowledge only after successful delivery (or when no alert was needed).
+# Atomic replacement avoids a partially written state after interruption.
+STATE_TEMP="$(mktemp "${STATE_FILE}.XXXXXX")"
+printf '%s\n' "$STATE" > "$STATE_TEMP"
+mv "$STATE_TEMP" "$STATE_FILE"
+STATE_TEMP=""
 [ "$STATE" = "up" ]
