@@ -51,6 +51,20 @@ test('a rejected signup keeps the inputs and offers account recovery', async ({ 
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue('customer@example.test');
   await expect(page.getByRole('button', { name: 'Create workspace', exact: true })).toBeEnabled();
   expect(attempts).toBe(1);
+  let resends = 0;
+  await page.route('**/trpc/auth.resendVerification*', route => {
+    resends++;
+    expect(route.request().postDataJSON()['0'].json.email).toBe('customer@example.test');
+    return route.fulfill({ json: { result: { data: { json: { accepted: true } } } } });
+  });
+  await page.getByRole('link', { name: 'Continue email verification' }).click();
+  await expect(page).toHaveURL(/\/verify-email$/);
+  await expect(page.getByLabel('Email address')).toHaveValue('customer@example.test');
+  expect(resends).toBe(0);
+  expect(page.url()).not.toContain('customer');
+  await page.getByRole('button', { name: 'Request a new verification link' }).click();
+  await expect(page.getByRole('status')).toContainText('If this address has a pending account');
+  expect(resends).toBe(1);
 });
 
 test('signup prevents repeat submissions while pending and recovers from a service failure', async ({ page }) => {
@@ -96,6 +110,7 @@ test('signup prevents repeat submissions while pending and recovers from a servi
   await expect(page.getByText('Service temporarily unavailable. Please try again.')).toBeVisible();
   await expect(page.getByLabel('Confirm password')).toBeFocused();
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue('retry@example.test');
+  await expect(page.getByRole('link', { name: 'Continue email verification' })).toBeVisible();
   await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
   await expect.poll(() => attempts).toBe(2);
   await expect(page.getByText('Service temporarily unavailable. Please try again.')).toBeVisible();
@@ -110,4 +125,16 @@ test('pasted email whitespace still discovers enforced single sign-on', async ({
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill('  customer@example.test  ');
   await expect(page.getByRole('button', { name: 'Continue with single sign-on', exact: true })).toBeVisible();
   await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
+});
+
+
+test('sign-in carries the typed email into verification without sending a message', async ({ page }) => {
+  let sends = 0;
+  await page.route('**/trpc/auth.resendVerification*', route => { sends++; return route.abort(); });
+  await page.goto('/login');
+  await page.getByLabel('Email', { exact: true }).fill('  pending@example.test  ');
+  await page.getByRole('link', { name: 'Verify email or request a new link' }).click();
+  await expect(page.getByLabel('Email address')).toHaveValue('pending@example.test');
+  expect(sends).toBe(0);
+  expect(page.url()).not.toContain('pending@');
 });
