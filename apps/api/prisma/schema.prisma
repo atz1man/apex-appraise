@@ -68,6 +68,11 @@ model User {
   buyerUnitId String? // set when principalType=buyer
   // Password reset. The token is stored HASHED: a leaked database row must not be
   // a working reset link, and this table is exactly what leaks.
+  /// Required for new customer-mode signups, without inventing proof for existing users.
+  emailVerificationRequired Boolean @default(false)
+  emailVerifiedAt DateTime?
+  emailVerificationHash String?
+  emailVerificationExpiresAt DateTime?
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
   /// Sessions issued before this moment are dead. Bumped whenever the password
@@ -982,7 +987,8 @@ model IntegrationConnection {
 model AuthThrottle {
   /// "login:<email>", "reset:<email>", "login:register:<email>" — the last is
   /// what registration throttling produces, since it passes "register:<email>"
-  /// as the subject and checkLockout prefixes it. See throttleKeysFor().
+  /// as the subject and checkLockout prefixes it. Verification uses "reset:verify:<email>".
+  /// See throttleKeysFor().
   key         String    @id
   count       Int       @default(0)
   /// when the current counting window opened

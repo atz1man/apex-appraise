@@ -142,8 +142,9 @@ describe('erasure reaches the table with no org id', () => {
       await recordFailure(prisma, email);
       await recordFailure(prisma, `register:${email}`);
       await tooManyResetRequests(prisma, email);
+      await tooManyResetRequests(prisma, `verify:${email}`);
     }
-    expect(await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(goneEmail) } } })).toBe(3);
+    expect(await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(goneEmail) } } })).toBe(4);
 
     await prisma.$transaction(await orgCascadeDeletes(prisma, doomed.orgId));
 
@@ -154,7 +155,7 @@ describe('erasure reaches the table with no org id', () => {
     expect(
       await prisma.authThrottle.count({ where: { key: { in: throttleKeysFor(keptEmail) } } }),
       'deleting one firm cleared another firm’s lockouts',
-    ).toBe(3);
+    ).toBe(4);
   });
 
   it('knows every key shape the throttle can write', async () => {
@@ -168,6 +169,7 @@ describe('erasure reaches the table with no org id', () => {
     await recordFailure(prisma, email);
     await recordFailure(prisma, `register:${email}`);
     await tooManyResetRequests(prisma, email);
+    await tooManyResetRequests(prisma, `verify:${email}`);
 
     const written = await prisma.authThrottle.findMany({ where: { key: { contains: email } }, select: { key: true } });
     expect(written.map((r) => r.key).sort()).toEqual([...throttleKeysFor(email)].sort());
