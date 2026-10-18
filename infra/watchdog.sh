@@ -36,18 +36,31 @@ trap 'rm -f "$BODY_FILE"; [ -z "$STATE_TEMP" ] || rm -f "$STATE_TEMP"' EXIT
 # fallback CONCATENATES onto the code curl already printed ("503000"), and -f
 # throws away the response body — which is the half that says WHY it is not
 # ready. We want the status code whatever it is, and the body with it.
-CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' --max-time "$TIMEOUT" "${URL%/}/ready" 2>/dev/null)" || true
+TRANSFER_OK=1
+CODE="$(curl -sS -o "$BODY_FILE" -w '%{http_code}' --max-time "$TIMEOUT" "${URL%/}/ready" 2>/dev/null)" || TRANSFER_OK=0
 CODE="${CODE:-000}"
 BODY="$(tr -d '\n' < "$BODY_FILE" 2>/dev/null | head -c 400 || true)"
 
-if [ "$CODE" = "200" ] && ! grep -q '"service":"apex-api"' <<<"$BODY"; then
-  # A 200 that is not the API answering. The usual cause is a proxy serving the
-  # SPA's index.html for /ready — which is what nginx did before /ready had a
-  # location block, and it makes this watchdog report "up" forever with the API
-  # and the database both dead. Checking the body means a misroute reads as an
-  # outage rather than as good news.
+ready_body() {
+  python3 - "$BODY_FILE" <<'PYTHON'
+import json, sys
+try:
+    with open(sys.argv[1]) as source:
+        body = json.load(source)
+    valid = (body.get("service") == "apex-api" and body.get("ok") is True
+             and body.get("checks", {}).get("database", {}).get("ok") is True)
+except (ValueError, OSError, AttributeError, TypeError):
+    valid = False
+sys.exit(0 if valid else 1)
+PYTHON
+}
+
+if [ "$TRANSFER_OK" != 1 ]; then
   STATE=down
-  DETAIL="200 but not the API — something is answering /ready instead of it (proxy misroute?)"
+  DETAIL="readiness transfer failed or timed out; no complete response"
+elif [ "$CODE" = "200" ] && ! ready_body; then
+  STATE=down
+  DETAIL="HTTP 200 without positive API and database readiness evidence"
 elif [ "$CODE" = "200" ]; then
   STATE=up
   DETAIL="ready"

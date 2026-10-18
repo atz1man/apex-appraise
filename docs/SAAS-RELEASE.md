@@ -327,3 +327,21 @@ The command requires serial scheduling and one state file per monitored host;
 delivery may repeat after ambiguous responses or failed state persistence.
 External monitoring activation and a named incident owner remain launch gates,
 alongside real provider and production recovery acceptance.
+
+## Watchdog readiness evidence — 18 October 2026
+
+Following the alert-delivery fix, the monitor still treated an HTTP 200 body
+containing the literal API name as healthy, even if JSON reported failure or curl
+had timed out after receiving headers. It now requires a successful completed
+transfer and parsed JSON identifying the API with both overall and database
+`ok` booleans true. Malformed, incomplete, missing or negative evidence fails
+closed; harmless JSON whitespace is accepted.
+
+Fourteen watchdog tests pass. Eight added regressions failed on the old script.
+The real-curl loopback journey deliberately returns HTTP 200 with negative
+database evidence, then tests alert retry, suppression and recovery. Typecheck,
+shell syntax and diff checks pass. A read-only live probe with alerts disabled
+confirmed PlotMerit ready. Exact-head CI is recorded on the PR. No external
+messages, live credentials, scheduler or application deployment changed. External
+monitoring activation, incident ownership and real recovery/provider acceptance
+remain separate launch requirements.

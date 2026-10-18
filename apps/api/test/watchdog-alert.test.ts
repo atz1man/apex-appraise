@@ -25,17 +25,18 @@ if [[ "$*" = *'-X POST'* ]]; then
   [ "$ALERT_FAIL" != 1 ]; exit $?
 fi
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = '-o' ]; then shift; printf '{"service":"apex-api"}' > "$1"; fi
+  if [ "$1" = '-o' ]; then shift; printf '%s' "$READY_BODY" > "$1"; fi
   shift
 done
 printf '%s' "$HTTP_CODE"
+exit "$CURL_EXIT"
 `, { mode: 0o755 });
   return {
-    run(code: string, fails = false, webhook = true) {
+    run(code: string, fails = false, webhook = true, body = JSON.stringify({ service: 'apex-api', ok: true, checks: { database: { ok: true } } }), curlExit = 0) {
       const result = spawnSync('bash', [script, 'https://fixture.invalid'], {
         encoding: 'utf8', timeout: 10_000,
         env: { PATH: `${bin}:/usr/bin:/bin`, STATE_FILE: state, FIXTURE_ROOT: root,
-          HTTP_CODE: code, ALERT_FAIL: fails ? '1' : '0', ...(webhook ? { ALERT_WEBHOOK: 'https://alert.invalid' } : {}) },
+          HTTP_CODE: code, READY_BODY: body, CURL_EXIT: String(curlExit), ALERT_FAIL: fails ? '1' : '0', ...(webhook ? { ALERT_WEBHOOK: 'https://alert.invalid' } : {}) },
       });
       expect(result.error).toBeUndefined();
       return { ...result, state: existsSync(state) ? readFileSync(state, 'utf8').trim() : undefined,
@@ -97,8 +98,9 @@ it('retries and recovers through real curl and a loopback HTTP webhook', async (
   const alerts: string[] = [];
   const server = createServer((req, res) => {
     if (req.url === '/ready') {
-      res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ service: 'apex-api', ok: ready }));
+      // A proxy may rewrite the status; the body must still govern readiness.
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ service: 'apex-api', ok: ready, checks: { database: { ok: ready } } }));
     } else if (req.url === '/alert' && req.method === 'POST') {
       let body = ''; req.on('data', chunk => { body += chunk; });
       req.on('end', () => {
@@ -135,4 +137,29 @@ it('retries and recovers through real curl and a loopback HTTP webhook', async (
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
+});
+
+
+describe('watchdog readiness evidence', () => {
+  it.each([
+    '{"service":"apex-api","ok":false,"checks":{"database":{"ok":false}}}',
+    '{"service":"apex-api","ok":true}',
+    '{"service":"apex-api","ok":true,"checks":{"database":{"ok":false}}}',
+    '{"service":"apex-api","ok":"true","checks":{"database":{"ok":true}}}',
+    '<html>"service":"apex-api"</html>',
+    '{"service":"apex-api",',
+  ])('refuses HTTP 200 without positive structured readiness: %s', body => {
+    const result = fixture('up').run('200', false, false, body);
+    expect(result.status).toBe(1);
+    expect(result.state).toBe('down');
+  });
+  it('accepts whitespace-formatted readiness evidence', () => {
+    const body = JSON.stringify({ service: 'apex-api', ok: true, checks: { database: { ok: true } } }, null, 2);
+    expect(fixture().run('200', false, false, body).status).toBe(0);
+  });
+  it('refuses a transfer failure even when curl received HTTP 200 and a positive body', () => {
+    const result = fixture('up').run('200', false, false, undefined, 28);
+    expect(result.status).toBe(1);
+    expect(result.state).toBe('down');
+  });
 });
