@@ -2,12 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkLockout,
+  hashPassword,
   pruneAuthThrottles,
   recordFailure,
   recordSuccess,
   tooManyResetRequests,
 } from '../src/auth/password.js';
-import { prisma, resetDatabase } from './harness.js';
+import { anonymous, makeTenant, prisma, resetDatabase } from './harness.js';
 
 /**
  * The login lockout and the reset throttle lived in two process-local Maps, and
@@ -79,6 +80,60 @@ describe('a login lockout', () => {
     for (let i = 0; i < 2; i++) await B.recordFailure(clientB, email);
 
     expect((await checkLockout(prisma, email)).locked, 'three here plus two there was not five anywhere').toBe(true);
+  });
+
+  it.each(['new', 'expired', 'active'] as const)('locks concurrent failures in a %s window', async (state) => {
+    const email = `login-concurrent-${state}@firm.co.uk`;
+    if (state !== 'new') await prisma.authThrottle.create({ data: {
+      key: `login:${email}`, count: state === 'active' ? 2 : 0,
+      windowStart: new Date(Date.now() - 20 * 60_000),
+      lockedUntil: state === 'expired' ? new Date(Date.now() - 1000) : null,
+    } });
+    await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      index % 2 ? B.recordFailure(clientB, email) : recordFailure(prisma, email)));
+    expect((await B.checkLockout(clientB, email)).locked).toBe(true);
+    const row = await prisma.authThrottle.findUniqueOrThrow({ where: { key: `login:${email}` } });
+    expect(row.count).toBe(state === 'active' ? 14 : 12);
+    const until = row.lockedUntil;
+    await recordFailure(prisma, email);
+    expect((await prisma.authThrottle.findUniqueOrThrow({ where: { key: row.key } })).lockedUntil).toEqual(until);
+  });
+
+  it('refuses to assume an unavailable lockout store is unlocked', async () => {
+    const broken = new Proxy(prisma, { get(target, prop, receiver) {
+      if (prop === 'authThrottle') return { findUnique: async () => { throw new Error('throttle unavailable'); } };
+      return Reflect.get(target, prop, receiver);
+    } });
+    await expect(checkLockout(broken, 'unavailable@firm.co.uk')).rejects.toThrow('throttle unavailable');
+  });
+
+  it('rolls back the increment if publishing the lock fails', async () => {
+    const email = 'rollback@firm.co.uk';
+    await prisma.authThrottle.create({ data: { key: `login:${email}`, count: 4, windowStart: new Date() } });
+    const broken = new Proxy(prisma, { get(target, prop, receiver) {
+      if (prop !== '$transaction') return Reflect.get(target, prop, receiver);
+      return (operations: any[]) => target.$transaction([
+        ...operations.slice(0, 2),
+        // A database failure at lock publication must undo the increment.
+        target.authThrottle.create({ data: { key: `login:${email}`, count: 99, windowStart: new Date() } }),
+      ]);
+    } });
+    await expect(recordFailure(broken, email)).rejects.toThrow(/Unique constraint/);
+    expect((await prisma.authThrottle.findUniqueOrThrow({ where: { key: `login:${email}` } })).count).toBe(4);
+    await recordFailure(prisma, email);
+    expect((await checkLockout(prisma, email)).locked).toBe(true);
+  });
+
+  it('refuses sign-in after concurrent wrong passwords, then allows recovery after expiry', async () => {
+    const tenant = await makeTenant('Loginburst');
+    const user = await prisma.user.update({ where: { id: tenant.userId }, data: { password: hashPassword('correct-password') } });
+    const results = await Promise.allSettled(Array.from({ length: 12 }, () =>
+      anonymous().auth.login({ email: user.email, password: 'wrong-password' })));
+    expect(results.every(result => result.status === 'rejected')).toBe(true);
+    await expect(anonymous().auth.login({ email: user.email, password: 'correct-password' })).rejects.toThrow(/locked/);
+    await prisma.authThrottle.update({ where: { key: `login:${user.email}` }, data: { lockedUntil: new Date(Date.now() - 1000) } });
+    expect((await anonymous().auth.login({ email: user.email, password: 'correct-password' })).token).toBeTruthy();
+    expect(await prisma.authThrottle.findUnique({ where: { key: `login:${user.email}` } })).toBeNull();
   });
 
   it('a successful sign-in clears the count, on every instance', async () => {
