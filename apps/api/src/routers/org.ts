@@ -131,6 +131,12 @@ export const orgRouter = router({
       // particular, concurrent requests for one email must not strand an org
       // after the unique User.email constraint rejects the losing request.
       const verificationRequired = !demoFallbacksAllowed();
+      // Do not reserve an address/create an unusable workspace when this
+      // deployment cannot even attempt activation delivery. A configured SMTP
+      // service can still fail; that remains the existing pending/retry flow.
+      if (verificationRequired && !process.env.SMTP_URL?.trim()) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'New workspace signup is temporarily unavailable because verification email is unavailable. No account was created. Please try again later. Existing customers can still sign in.' });
+      }
       const verification = verificationRequired ? newResetToken() : null;
       let registered;
       try {

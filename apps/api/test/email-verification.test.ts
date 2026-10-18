@@ -15,6 +15,7 @@ let sequence = 0;
 async function signup() {
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('DEMO_MODE', '0');
+  vi.stubEnv('SMTP_URL', 'smtp://synthetic-mail.example.test');
   const email = `verify-${++sequence}@example.test`;
   const result = await anonymous().org.register({ orgName: 'Verify firm', name: 'Test Owner', email, password: 'long-test-password' });
   const mail = vi.mocked(sendMail).mock.calls.at(-1)!;
@@ -24,6 +25,19 @@ async function signup() {
   return { email, result, token, user };
 }
 describe('customer email activation', () => {
+  it.each(['', '   '])('refuses new customer signup without mail configuration (%j), leaving no records', async smtp => {
+    vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('DEMO_MODE', '0'); vi.stubEnv('SMTP_URL', smtp);
+    const before = { orgs: await prisma.organisation.count(), users: await prisma.user.count(), integrations: await prisma.integrationConnection.count() };
+    await expect(anonymous().org.register({ orgName: 'Unavailable firm', name: 'Test Owner', email: `unavailable-${++sequence}@example.test`, password: 'long-test-password' })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: expect.stringContaining('No account was created') });
+    expect({ orgs: await prisma.organisation.count(), users: await prisma.user.count(), integrations: await prisma.integrationConnection.count() }).toEqual(before);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+  it('preserves existing pending-account recovery while mail is unavailable', async () => {
+    const { email, user } = await signup();
+    vi.stubEnv('SMTP_URL', '');
+    await expect(anonymous().org.register({ orgName: 'Retry firm', name: 'Test Owner', email, password: 'long-test-password' })).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerificationHash).toBe(user.emailVerificationHash);
+  });
   it('requires proof before password or bearer access and consumes a link once', async () => {
     const { email, result, token, user } = await signup();
     expect(result.verificationRequired).toBe(true);

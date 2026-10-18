@@ -138,3 +138,24 @@ test('sign-in carries the typed email into verification without sending a messag
   expect(sends).toBe(0);
   expect(page.url()).not.toContain('pending@');
 });
+
+test('unavailable verification delivery explains that no account was created and preserves the form', async ({ page }) => {
+  await page.route('**/trpc/org.register*', route => route.fulfill({ status: 412, json: { error: { json: {
+    message: 'New workspace signup is temporarily unavailable because verification email is unavailable. No account was created. Please try again later. Existing customers can still sign in.',
+    code: -32012, data: { code: 'PRECONDITION_FAILED', httpStatus: 412, path: 'org.register' },
+  } } } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/register');
+  await page.getByLabel('Organisation name').fill('Customer firm');
+  await page.getByLabel('Your name').fill('Customer Owner');
+  await page.getByLabel('Email', { exact: true }).fill('customer@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('long-test-password');
+  await page.getByLabel('Confirm password').fill('long-test-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('No account was created');
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue('customer@example.test');
+  await expect(page.getByRole('button', { name: 'Create workspace', exact: true })).toBeEnabled();
+  await expect(page.getByRole('link', { name: 'Continue email verification' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
