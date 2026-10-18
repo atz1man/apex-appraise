@@ -25,6 +25,16 @@ async function signup() {
   return { email, result, token, user };
 }
 describe('customer email activation', () => {
+  it('publishes only configuration availability and keeps the server gate current', async () => {
+    vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('DEMO_MODE', '0');
+    vi.stubEnv('SMTP_URL', 'smtp://synthetic:private@localhost');
+    expect(await anonymous().org.registrationAvailability()).toEqual({ available: true });
+    vi.stubEnv('SMTP_URL', '');
+    expect(await anonymous().org.registrationAvailability()).toEqual({ available: false });
+    await expect(anonymous().org.register({ orgName: 'Changed config', name: 'Test Owner', email: 'changed-availability@example.test', password: 'long-test-password' })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    vi.stubEnv('DEMO_MODE', '1');
+    expect(await anonymous().org.registrationAvailability()).toEqual({ available: true });
+  });
   it.each(['', '   '])('refuses new customer signup without mail configuration (%j), leaving no records', async smtp => {
     vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('DEMO_MODE', '0'); vi.stubEnv('SMTP_URL', smtp);
     const before = { orgs: await prisma.organisation.count(), users: await prisma.user.count(), integrations: await prisma.integrationConnection.count() };

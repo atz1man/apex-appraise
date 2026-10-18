@@ -8,6 +8,7 @@ import { JWT_SECRET } from '../context.js';
 import { P, toPence } from '../mappers.js';
 import { checkLockout, hashPassword, newResetToken, recordFailure } from '../auth/password.js';
 import { demoFallbacksAllowed } from '../demo-mode.js';
+import { signupAvailable } from '../signup-availability.js';
 import { newRecoveryCodes } from '../auth/sso-recovery.js';
 import { APP_URL, inviteEmail, mailboxEnabled, readMailbox, sendMail, verificationEmail, welcomeEmail } from '../email.js';
 import { orgCascadeDeletes } from '../org-delete.js';
@@ -107,6 +108,8 @@ export const orgRouter = router({
     messages: readMailbox(ctx.principal.orgId),
   })),
 
+  registrationAvailability: publicProcedure.query(() => ({ available: signupAvailable() })),
+
   /** Self-serve tenant onboarding: new organisation + its first (admin) user. */
   register: publicProcedure
     .input(
@@ -134,7 +137,7 @@ export const orgRouter = router({
       // Do not reserve an address/create an unusable workspace when this
       // deployment cannot even attempt activation delivery. A configured SMTP
       // service can still fail; that remains the existing pending/retry flow.
-      if (verificationRequired && !process.env.SMTP_URL?.trim()) {
+      if (!signupAvailable()) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'New workspace signup is temporarily unavailable because verification email is unavailable. No account was created. Please try again later. Existing customers can still sign in.' });
       }
       const verification = verificationRequired ? newResetToken() : null;

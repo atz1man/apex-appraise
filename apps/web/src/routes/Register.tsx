@@ -11,6 +11,8 @@ export default function Register() {
   const [form, setForm] = useState({ orgName: '', name: '', email: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
   const [serverError, setServerError] = useState('');
+  const availability = trpc.org.registrationAvailability.useQuery(undefined, { retry: false, meta: { inlineError: true } });
+  const canRegister = availability.data?.available === true && !availability.isError;
   const register = trpc.org.register.useMutation({
     // this screen shows the error where it happened; see App.tsx
     meta: { inlineError: true },
@@ -30,7 +32,7 @@ export default function Register() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (register.isPending) return;
+    if (register.isPending || !canRegister) return;
     setServerError('');
     const next: typeof errors = {};
     if (form.orgName.trim().length < 2) next.orgName = 'Give your organisation a name (at least 2 characters).';
@@ -125,6 +127,22 @@ export default function Register() {
             Start a 14-day trial in your own workspace. Create your first deal, review the assumptions and save an
             appraisal.
           </p>
+          {!canRegister && (
+            <div className="mb-4">
+              {availability.isError
+                ? <FormError>We could not check signup availability. Please retry before entering your details.</FormError>
+                : <p role="status" className="text-[12.5px] text-ink-2">
+                    {availability.isPending ? 'Checking signup availability…' : 'New workspace signup is temporarily unavailable. Existing customers can still sign in or continue email verification.'}
+                  </p>}
+              {!availability.isPending && <Button type="button" className="mt-3" loading={availability.isFetching} onClick={() => void availability.refetch()}>Check signup availability again</Button>}
+              <div className="mt-3 flex flex-wrap gap-3 text-[12px]">
+                <Link to="/login" className="text-brand-ink underline">Sign in to an existing account</Link>
+                <Link to="/verify-email" state={{ email: form.email.trim() }} className="text-brand-ink underline">Continue email verification</Link>
+              </div>
+            </div>
+          )}
+          <fieldset disabled={!canRegister}>
+            <legend className="sr-only">Workspace details</legend>
           {field('Organisation name', 'orgName', { autoFocus: true, autoComplete: 'organization' })}
           {field('Your name', 'name', { autoComplete: 'name' })}
           {field('Email', 'email', { type: 'email', autoComplete: 'email' })}
@@ -160,6 +178,7 @@ export default function Register() {
           <Button type="submit" className="w-full" loading={register.isPending}>
             {register.isPending ? 'Creating your workspace…' : 'Create workspace'}
           </Button>
+          </fieldset>
           <p className="mt-3 text-[11.5px] text-ink-3 leading-relaxed">
             Read our{' '}
             <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
