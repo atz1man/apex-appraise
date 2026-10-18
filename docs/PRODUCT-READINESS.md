@@ -1012,3 +1012,28 @@ integration counts. No external mail was sent. Diff and whitespace reviewed.
 Exact-commit CI and release evidence belong on the PR. Next: expose signup
 availability before the customer fills the form; actual delivery acceptance and
 safe retention policy for abandoned registrations remain open.
+
+### Signup availability before data entry — 18 October 2026
+
+Registration now reads a public, read-only availability flag before enabling the
+workspace fields. Missing customer-mode mail configuration shows a temporary
+closure with retry, sign-in and verification-recovery links. A failed check is
+reported as unknown availability, not a confirmed closure; fields remain disabled
+until a successful available response. Normal submission preserves keyboard
+focus and existing duplicate-submit protection.
+
+The query and registration enforcement share one configuration rule. It returns
+only available=true/false, no provider details or credentials. Server enforcement
+still rejects a configuration change after an earlier available response; a
+configured mail service is not represented as delivery acceptance.
+
+22 API checks (activation, route reachability and query purity), 422 web tests,
+both typechecks and 11 browser checks pass. Browser cases cover loading, closure,
+query failure, explicit retry, recovery links, mobile layout and existing entry
+journeys. A separate real local customer-mode query with no SMTP disabled the
+form before input and preserved verification navigation, with zero signup
+requests. The first browser run caught focus loss from disabling the entire
+fieldset during submission; retaining the existing read-only input behaviour
+fixed it. No external email or credentials changed. Exact-head CI/release evidence
+belongs on the PR. Next: provider delivery acceptance and safe pending-account
+retention; neither is inferred from this configuration flag.
