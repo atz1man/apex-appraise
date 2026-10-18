@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { setSession, trpc, type StoredPrincipal } from '../lib/trpc';
 import { BrandMark, Button, FormError } from '../components/ui';
 import { heroGradient } from '@apex/ui-tokens';
@@ -189,7 +189,7 @@ export default function Login() {
           {justReset && !error && (
             <div className="text-[12px] text-status-green mb-3">Password updated — sign in with it below.</div>
           )}
-          <a href="/verify-email" className="block text-[12px] text-brand-ink mb-3">Verify email or request a new link</a>
+          <Link to="/verify-email" state={{ email: email.trim() }} className="block text-[12px] text-brand-ink mb-3">Verify email or request a new link</Link>
           {error && <FormError className="text-[12px] mb-3">{error}</FormError>}
           {passwordAllowed && (
             <Button type="submit" className="w-full" loading={login.isPending}>

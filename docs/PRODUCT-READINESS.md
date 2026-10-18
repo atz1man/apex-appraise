@@ -971,3 +971,22 @@ expected-snapshot predicate and conflict refusal, with probes that remove each;
 `task-edit` regressions also pass. Extraction updates only source status against
 prepared document identity, so its documented no-held-content classification is
 explicit. No application guard was weakened to satisfy the scanner.
+
+### Resume an unfinished signup — 18 October 2026
+
+A customer retrying an unfinished signup reached a duplicate-account error whose
+recovery choices only offered sign-in and password reset. Signup errors now also
+offer Continue email verification, including uncertain service failures where the
+workspace may already have been created. The entered email travels in router
+state, not a URL; passwords are not transferred. Sign-in's verification link also
+preserves the typed address. Navigation does not send mail: resend remains an
+explicit action using the existing opaque, throttled server endpoint.
+
+Eight local browser checks cover duplicate signup, transient failure, private
+email continuity, no automatic resend and explicit recovery. A separate real
+local pending-account journey hit the duplicate endpoint, followed the link and
+rotated the credential only after resend, preserving one unverified account; its
+synthetic rows were removed. All 422 web tests and web typecheck pass. No provider
+mail was sent. Exact-commit CI/release evidence belongs on the PR. Retention of
+abandoned registrations and real mail acceptance remain outstanding; this change
+does not erase records or grant access based on an entered address.
