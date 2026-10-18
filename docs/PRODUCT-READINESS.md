@@ -990,3 +990,25 @@ synthetic rows were removed. All 422 web tests and web typecheck pass. No provid
 mail was sent. Exact-commit CI/release evidence belongs on the PR. Retention of
 abandoned registrations and real mail acceptance remain outstanding; this change
 does not erase records or grant access based on an entered address.
+
+### Refuse unusable signup when mail is absent — 18 October 2026
+
+The active API's read-only configuration check showed no SMTP transport. Customer
+signup previously created a pending workspace anyway, reserving the address even
+though no verification mail could be attempted. Customer-mode registration now
+refuses missing or whitespace-only SMTP configuration before any organisation,
+user or integration creation, with a clear no-account-created error. Existing
+account lookup remains first, so pending-account recovery still follows its
+existing path. Explicit demo/development signup remains usable.
+
+Presence of SMTP is not proof it works: configured delivery failure still creates
+a pending account with honest emailSent=false and the retry flow. No provider
+activation is claimed, and no live credential was changed.
+
+24 targeted API tests and API typecheck pass; nine entry/verification browser
+checks pass. A separate browser journey used the real local customer-mode HTTP
+server without SMTP: 412, preserved form, and unchanged organisation/user/
+integration counts. No external mail was sent. Diff and whitespace reviewed.
+Exact-commit CI and release evidence belong on the PR. Next: expose signup
+availability before the customer fills the form; actual delivery acceptance and
+safe retention policy for abandoned registrations remain open.
