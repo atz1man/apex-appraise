@@ -12,7 +12,21 @@ let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   const url = process.env.SMTP_URL;
   if (!url) return null;
-  if (!transporter) transporter = nodemailer.createTransport(url);
+  if (!transporter) {
+    // Nodemailer accepts these numeric SMTP options in the connection URL.
+    // Cap long/default waits, while preserving an operator's shorter budget
+    // and the existing authentication, TLS and provider options.
+    const bounded = new URL(url);
+    if (!['smtp:', 'smtps:'].includes(bounded.protocol)) throw new Error('Invalid SMTP protocol');
+    for (const [name, limit] of Object.entries({
+      connectionTimeout: 10_000, greetingTimeout: 10_000,
+      socketTimeout: 20_000, dnsTimeout: 10_000,
+    })) {
+      const configured = Number(bounded.searchParams.get(name));
+      bounded.searchParams.set(name, String(Number.isFinite(configured) && configured > 0 ? Math.min(configured, limit) : limit));
+    }
+    transporter = nodemailer.createTransport(bounded.toString());
+  }
   return transporter;
 }
 
@@ -78,18 +92,18 @@ export function readMailbox(orgId: string): typeof mailbox {
  * so that a new email-shaped flow cannot be added without deciding whose it is.
  */
 export async function sendMail(orgId: string, to: string, subject: string, text: string): Promise<{ emailed: boolean }> {
-  const t = getTransporter();
-  if (!t) {
-    // Reset links and temporary passwords are credentials. Logs have a different
-    // audience and retention policy from the tenant-scoped demo mailbox.
-    console.log('[email:not-sent] SMTP is not configured; no message was delivered.');
-    if (mailboxEnabled()) {
-      mailbox.push({ orgId, to, subject, text, at: new Date().toISOString() });
-      if (mailbox.length > MAILBOX_LIMIT) mailbox.shift();
-    }
-    return { emailed: false };
-  }
   try {
+    const t = getTransporter();
+    if (!t) {
+      // Reset links and temporary passwords are credentials. Logs have a different
+      // audience and retention policy from the tenant-scoped demo mailbox.
+      console.log('[email:not-sent] SMTP is not configured; no message was delivered.');
+      if (mailboxEnabled()) {
+        mailbox.push({ orgId, to, subject, text, at: new Date().toISOString() });
+        if (mailbox.length > MAILBOX_LIMIT) mailbox.shift();
+      }
+      return { emailed: false };
+    }
     await t.sendMail({ from: FROM(), to, subject, text });
     return { emailed: true };
   } catch {
