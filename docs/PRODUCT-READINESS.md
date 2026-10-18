@@ -941,3 +941,33 @@ No external email, provider activation, credential change or deployment occurred
 for these local checks. Exact-commit CI/release evidence belongs on the PR.
 Actual inbox delivery remains blocked on configured mail acceptance; independent
 next work is pending-signup recovery and trial timing before activation.
+
+### Activation preserves the full trial — 18 October 2026
+
+A delayed verification email could consume the customer's trial before they
+could sign in. Successful first activation now sets a new, unsubscribed TRIAL
+workspace's expiry to fourteen days after its verified timestamp. The original
+signup clock remains provisional until activation; no existing paid or recorded
+subscription state is changed. Conditional credential consumption, trial update
+and an activation audit event commit together. A replay cannot extend the trial,
+and an audit failure rolls everything back so the link remains retryable.
+
+34 API tests cover activation, concurrent consumption, expiry, replay, billing
+preservation, audit failure rollback, signup and trial rules. API and web
+typechecks pass. Seven signup/verification browser checks pass. A separate real
+local browser activation of a synthetic delayed account persisted proof, exactly
+fourteen days and one audit event; its fixture was removed afterwards. No mail
+provider was called. The verification page explains when the trial begins.
+
+Exact-commit CI and deployment evidence belong on the PR. Actual inbox delivery,
+commercial setup and professional acceptance remain open. Next independent
+engineering priority: recovery and retention of abandoned pending signups,
+without deleting existing customer work or inventing email ownership evidence.
+
+The first activation CI run exposed a scanner gap: lost-update discovery only
+recognised `prisma` writes, missing `tx` transaction writes. It now discovers both,
+with a positive/negative probe. Existing task updates are recognised by their
+expected-snapshot predicate and conflict refusal, with probes that remove each;
+`task-edit` regressions also pass. Extraction updates only source status against
+prepared document identity, so its documented no-held-content classification is
+explicit. No application guard was weakened to satisfy the scanner.

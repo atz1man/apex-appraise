@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { anonymous, prisma, resetDatabase } from './harness.js';
 import { hashResetToken } from '../src/auth/password.js';
 import { JWT_SECRET, principalFromAuthHeader } from '../src/context.js';
+import { trialEndFrom } from '../src/trial.js';
 import { sendMail } from '../src/email.js';
 vi.mock('../src/email.js', async importOriginal => ({
   ...await importOriginal<typeof import('../src/email.js')>(),
@@ -62,6 +63,41 @@ describe('customer email activation', () => {
     await anonymous().auth.verifyEmail({ token: current });
     await anonymous().auth.resendVerification({ email });
     expect(sendMail).toHaveBeenCalledTimes(3);
+  });
+  it('starts the full trial on activation after a delivery delay, only once', async () => {
+    const { token, user } = await signup();
+    const expired = new Date(Date.now() - 86400000);
+    await prisma.organisation.update({ where: { id: user.orgId }, data: { trialEndsAt: expired } });
+    await anonymous().auth.verifyEmail({ token });
+    const verified = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    const org = await prisma.organisation.findUniqueOrThrow({ where: { id: user.orgId } });
+    expect(org.trialEndsAt).toEqual(trialEndFrom(verified.emailVerifiedAt!));
+    await expect(anonymous().auth.verifyEmail({ token })).rejects.toThrow(/invalid/);
+    expect((await prisma.organisation.findUniqueOrThrow({ where: { id: org.id } })).trialEndsAt).toEqual(org.trialEndsAt);
+    expect(await prisma.activityEvent.count({ where: { orgId: org.id, action: 'verified email' } })).toBe(1);
+  });
+  it('rolls back proof and trial together if the activation audit cannot be recorded', async () => {
+    const { token, user } = await signup();
+    const before = await prisma.organisation.findUniqueOrThrow({ where: { id: user.orgId } });
+    await prisma.$executeRawUnsafe(`CREATE TRIGGER fail_activation_audit BEFORE INSERT ON ActivityEvent WHEN NEW.action = 'verified email' BEGIN SELECT RAISE(ABORT, 'test audit failure'); END`);
+    try {
+      await expect(anonymous().auth.verifyEmail({ token })).rejects.toThrow();
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerifiedAt).toBeNull();
+      expect((await prisma.organisation.findUniqueOrThrow({ where: { id: user.orgId } })).trialEndsAt).toEqual(before.trialEndsAt);
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER fail_activation_audit');
+    }
+    await expect(anonymous().auth.verifyEmail({ token })).resolves.toEqual({ verified: true });
+  });
+  it.each([
+    { plan: 'GROWTH', stripeSubscriptionId: null, subscriptionStatus: null },
+    { plan: 'TRIAL', stripeSubscriptionId: 'existing-subscription', subscriptionStatus: 'unpaid' },
+  ])('does not override existing billing state on activation: %j', async billing => {
+    const { token, user } = await signup();
+    const end = new Date(Date.now() - 86400000);
+    await prisma.organisation.update({ where: { id: user.orgId }, data: { ...billing, trialEndsAt: end } });
+    await anonymous().auth.verifyEmail({ token });
+    expect(await prisma.organisation.findUniqueOrThrow({ where: { id: user.orgId } })).toMatchObject({ ...billing, trialEndsAt: end });
   });
   it('reports failed initial delivery honestly and keeps the account locked', async () => {
     vi.mocked(sendMail).mockResolvedValueOnce({ emailed: false });
