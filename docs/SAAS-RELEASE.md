@@ -276,3 +276,24 @@ promise rejects. The synthetic restore step has a five-minute limit. CI checks
 serving again after the recovery drill, so passing the pre-drill check cannot
 hide a service damaged during the exercise. The never-settling transport test
 also passed in isolation; it does not depend on earlier tests initializing fetch.
+
+## Restore-check scratch database lifecycle — 18 October 2026
+
+The database recovery check previously printed PASS and swallowed a failed
+scratch-database drop. It also dropped a PID-derived database name before
+creating it, so a name collision could delete another drill's data. The command
+now uses a randomized name, refuses CREATE collisions, and only drops a database
+after its own CREATE succeeds. Cleanup is required before PASS. Failed restore
+and handled termination paths attempt cleanup; a failed drop exits unsuccessfully
+and names the scratch database for operator recovery without printing credentials.
+An uncatchable process kill or lost CREATE acknowledgement still needs operator
+inventory; this is not a claim of guaranteed cleanup across process/server loss.
+
+Command-level regressions execute both managed and compose paths for success,
+name collision, restore failure, cleanup failure, combined failures and TERM.
+Eight assertions failed against the previous script. The bounded suite plus
+backup regressions passes 28 checks; API typecheck and shell syntax are checked.
+CI additionally runs the existing disposable PostgreSQL backup/restore journey.
+No production database, backup, credential or retention policy was changed.
+An actual isolated production restore with uploaded-file reconciliation and an
+identified operator remains a launch acceptance requirement.

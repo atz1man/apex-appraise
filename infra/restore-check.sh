@@ -12,7 +12,7 @@
 # is enough, and it costs a few seconds:
 #   0 4 1 * * cd /opt/apex-appraise && ./infra/restore-check.sh /var/backups/apex >> /var/log/apex-restore-check.log 2>&1
 #
-# It NEVER touches the live database. It creates apex_restore_check_<pid>,
+# It NEVER touches the live database. It creates a unique apex_restore_check_ database,
 # restores into that, counts, and drops it — including if it fails part-way.
 #
 # Environment:
@@ -25,7 +25,8 @@ set -euo pipefail
 
 BACKUP_DIR="${1:-./backups}"
 MIN_ROWS="${MIN_ROWS:-1}"
-CHECK_DB="apex_restore_check_$$"
+CHECK_DB="apex_restore_check_$$_${RANDOM}"
+SCRATCH_CREATED=0
 now() { date -u +%FT%TZ; }
 
 LATEST="$(ls -1t "$BACKUP_DIR"/apex-*.dump 2>/dev/null | head -1 || true)"
@@ -75,13 +76,27 @@ else
 fi
 
 cleanup() {
-  psql_srv -c "DROP DATABASE IF EXISTS $CHECK_DB;" >/dev/null 2>&1 || true
+  [ "$SCRATCH_CREATED" = 1 ] || return 0
+  if ! psql_srv -c "DROP DATABASE $CHECK_DB;" >/dev/null 2>&1; then
+    echo "$(now) FAILED: could not remove scratch database $CHECK_DB; operator cleanup is required." >&2
+    return 1
+  fi
+  SCRATCH_CREATED=0
 }
-trap cleanup EXIT
+finish() {
+  local status=$?
+  trap - EXIT
+  if ! cleanup; then status=1; fi
+  exit "$status"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "$(now) restoring into $CHECK_DB"
-psql_srv -c "DROP DATABASE IF EXISTS $CHECK_DB;" >/dev/null
+# CREATE must fail on a collision. Never delete a database we did not create.
 psql_srv -c "CREATE DATABASE $CHECK_DB;" >/dev/null
+SCRATCH_CREATED=1
 
 if ! restore_into; then
   echo "$(now) FAILED: $(basename "$LATEST") did not restore. This backup would not have saved you." >&2
@@ -102,4 +117,9 @@ if [ "${ORGS:-0}" -lt "$MIN_ROWS" ]; then
   exit 1
 fi
 
+# Cleanup is part of success; leave the EXIT trap to handle failed restores.
+if ! cleanup; then
+  trap - EXIT
+  exit 1
+fi
 echo "$(now) PASS — $(basename "$LATEST") restores and contains data"
