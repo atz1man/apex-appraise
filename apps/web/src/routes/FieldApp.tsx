@@ -6,7 +6,7 @@ import { assetLabel } from '@apex/types/asset-classes';
 import { trpc, getPrincipal, getToken } from '../lib/trpc';
 import { awaitingAttribution, canSend, queueSentence, roomIndexFor, type QueuedPhoto } from '../lib/photo-queue';
 import { bringForward, drainOnce, forgetAttributed } from '../lib/photo-drain';
-import { indexedDbPhotoStore, memoryPhotoStore, type PhotoStore } from '../lib/photo-store';
+import { indexedDbPhotoStore, type PhotoStore } from '../lib/photo-store';
 import { fM, formatMoneyFull, n0 } from '../lib/format';
 import { useUnits } from '../lib/region';
 import { Button, Spinner, TopBar , writeAttrs} from '../components/ui';
@@ -313,14 +313,10 @@ export default function FieldApp() {
   /**
    * Where a photograph waits for a connection.
    *
-   * IndexedDB, with the in-memory store as the fallback — a browser that refuses
-   * it (a private window, a full quota) loses durability, not the camera. Chosen
-   * once per mount, because the store is identity for the drain.
+   * Capture requires durable storage; refusing a write must be visible.
    */
-  const storeRef = useRef<PhotoStore | null>(null);
-  if (!storeRef.current) {
-    storeRef.current = typeof indexedDB === 'undefined' ? memoryPhotoStore() : indexedDbPhotoStore;
-  }
+  const storeRef = useRef<PhotoStore>(indexedDbPhotoStore);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const [queued, setQueued] = useState<QueuedPhoto[]>([]);
   /** Records whose upload is in the air right now — what holds the send. */
   const [inFlight, setInFlight] = useState<string[]>([]);
@@ -494,18 +490,24 @@ export default function FieldApp() {
       const roomIndex = current;
       const roomName = rooms[roomIndex]?.name ?? 'Area';
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await storeRef.current!.put(
-        {
-          localId,
-          dealId,
-          roomName,
-          roomIndex,
-          takenAt: new Date().toISOString().slice(0, 10),
-          queuedAt: Date.now(),
-          attempts: 0,
-        },
-        blob,
-      );
+      try {
+        await storeRef.current!.put(
+          {
+            localId,
+            dealId,
+            roomName,
+            roomIndex,
+            takenAt: new Date().toISOString().slice(0, 10),
+            queuedAt: Date.now(),
+            attempts: 0,
+          },
+          blob,
+        );
+      } catch {
+        setCaptureError('Photograph not saved. Device storage is unavailable or full. Keep the original photo if available. Free space or enable browser storage, then add or retake the photograph.');
+        return;
+      }
+      setCaptureError(null);
       await refreshQueue();
       void drain();
     },
@@ -927,6 +929,8 @@ export default function FieldApp() {
             e.target.value = '';
           }}
         />
+
+        {captureError && <p role="alert" className="mt-3 text-sm text-status-red">{captureError}</p>}
 
         {/* current area card */}
         {rooms[current] && (

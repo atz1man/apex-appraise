@@ -1037,3 +1037,24 @@ fieldset during submission; retaining the existing read-only input behaviour
 fixed it. No external email or credentials changed. Exact-head CI/release evidence
 belongs on the PR. Next: provider delivery acceptance and safe pending-account
 retention; neither is inferred from this configuration flag.
+
+### Field capture storage failure — 19 October 2026
+
+The field photo queue previously swallowed device-storage errors and resolved
+writes at IndexedDB request success, before the transaction committed. Full or
+unavailable storage could silently discard a capture. The field app now requires
+a committed durable write and displays an explicit capture failure with recovery
+instructions; it no longer substitutes a volatile queue when IndexedDB is absent.
+
+Browser regression cases inject quota failure, unavailable storage and a transaction
+abort after request success. Each must show failure without a filed/waiting claim,
+then recover by adding the photo again, survive reload and upload exactly one row.
+Existing photo attribution and project handover journeys remain relevant regressions.
+This does not certify offline notes, multi-tab deduplication, physical camera/device
+acceptance or browser-storage eviction safety. Next priority: durable inspection
+notes and measurements, including reload/reconnection and office review.
+
+Local validation: web TypeScript and all 422 web unit tests passed; ten browser
+journeys passed across field offline capture, project context and follow-up handover.
+All three new storage-failure cases failed against the previous storage implementation
+at the missing error assertion. The fixed implementation was restored afterwards.
