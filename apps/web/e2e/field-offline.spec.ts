@@ -82,7 +82,10 @@ async function freshDeal(page: Page, label: string) {
 async function openInspection(page: Page, name: string) {
   await page.goto('/field');
   await page.getByText(name, { exact: true }).click();
-  await page.getByRole('button', { name: /Start inspection|Inspection/ }).first().click();
+  const restore = page.getByRole('button', { name: 'Restore device draft' });
+  await expect(restore.or(page.getByRole('button', { name: /^(Start|Continue|Review) inspection$/ }).first())).toBeVisible();
+  if (await restore.isVisible()) await restore.click();
+  await page.getByRole('button', { name: /^(Start|Continue|Review) inspection$/ }).first().click();
 }
 
 async function photoRows(page: Page, dealId: string) {
@@ -154,7 +157,7 @@ test('a photograph taken with no connection survives a reload and goes on its ow
     'the queue did not drain once the connection returned',
   ).toHaveText('1 filed', { timeout: 30_000 });
   await expect(page.getByText('WAITING')).toHaveCount(0);
-  await expect(page.getByText(/saved on this device|waiting for a connection/)).toHaveCount(0);
+  await expect(page.getByText(/photographs? (still to upload|waiting for a connection)/)).toHaveCount(0);
 
   /** A row, with a file behind it — the same bar `field-photos.spec.ts` sets. */
   const rows = await photoRows(page, dealId);
@@ -276,3 +279,44 @@ for (const failure of ['quota', 'abort', 'unavailable'] as const) {
     expect(await photoRows(page, id)).toHaveLength(1);
   });
 }
+
+test('inspection notes and ratings survive reload and clear only after project save', async ({ page }) => {
+  await signIn(page);
+  const { id, name } = await freshDeal(page, 'Field draft');
+  await openInspection(page, name);
+  await page.getByLabel('Notes for Exterior').fill('Water ingress observed near the north wall');
+  await page.getByRole('button', { name: 'Condition 2', exact: true }).click();
+  await expect(page.getByText('Draft saved on this device.', { exact: false })).toBeVisible();
+  await page.reload();
+  await openInspection(page, name);
+  await expect(page.getByLabel('Notes for Exterior')).toHaveValue('Water ingress observed near the north wall');
+  await expect(page.getByText('C2', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Inspection saved to the project.', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('plotmerit-field-draft-v1:')))).toEqual([]);
+  await page.reload();
+  await page.goto(`/field?dealId=${id}`);
+  await expect(page.getByRole('button', { name: 'Continue inspection', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore device draft' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continue inspection', exact: true }).click();
+  await expect(page.getByLabel('Notes for Exterior')).toHaveValue('Water ingress observed near the north wall');
+});
+
+test('device draft storage failure leaves editable notes and warns instead of claiming safety', async ({ page }) => {
+  await signIn(page);
+  const { name } = await freshDeal(page, 'Field draft quota');
+  await openInspection(page, name);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('plotmerit-field-draft-v1:')) throw new DOMException('Full', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  await page.getByLabel('Notes for Exterior').fill('Do not lose this observation');
+  await expect(page.getByRole('alert').filter({ hasText: 'Device draft could not be saved' })).toBeVisible();
+  await expect(page.getByLabel('Notes for Exterior')).toHaveValue('Do not lose this observation');
+  await expect(page.getByText('Draft saved on this device.', { exact: false })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Inspection saved to the project.', { exact: true })).toBeVisible();
+});

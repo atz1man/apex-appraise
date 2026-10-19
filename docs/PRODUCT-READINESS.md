@@ -1058,3 +1058,31 @@ Local validation: web TypeScript and all 422 web unit tests passed; ten browser
 journeys passed across field offline capture, project context and follow-up handover.
 All three new storage-failure cases failed against the previous storage implementation
 at the missing error assertion. The fixed implementation was restored afterwards.
+
+### Field inspection device drafts — 19 October 2026
+
+Field notes, condition ratings, photo references and reconciliation inputs now
+have a device recovery copy, keyed by account user and project. Opening a project
+requires its authorised server query before offering recovery; the operative must
+choose restore or confirmed discard. No draft is automatically submitted. Recovery
+retains its original concurrency timestamp, and the existing server conflict guard
+refuses a stale overwrite. The conflict panel's separate latest-version tab bypasses
+device recovery so it can show the actual office record without replacing the draft.
+
+The UI confirms local storage separately from project save. Quota/access failures
+leave edits in memory with an explicit warning. Successful project saves clear the
+submitted device copy; edits made during the request remain eligible for backup.
+Malformed recovery records are reported and preserved rather than silently erased.
+
+Limits: this is browser-local recovery, not a fully offline app-shell or authorisation
+cache. Reopening needs a connection to load the authorised project. Browser clearing,
+eviction, private-session termination and simultaneous editing of the same device
+copy in multiple tabs remain limitations. No production customer records are used in
+the synthetic browser journeys. Physical-device acceptance remains outstanding.
+
+Validation: web TypeScript and 432 unit tests passed. Ten targeted browser journeys
+passed, including notes/ratings recovery and successful project save, device quota
+failure, photo queue regressions, and stale-draft refusal after a newer desk edit.
+Removing the device write caused the recovery test to fail at the missing notes
+following reload. Next priority is physical-device/offline-shell acceptance and
+explicit handling of simultaneous device drafts, not automatic background submission.

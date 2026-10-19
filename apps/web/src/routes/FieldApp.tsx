@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { fieldDraftKey, parseFieldDraft, fieldDraftContent, type FieldDraft } from '../lib/field-draft';
 import { InspectionConflict } from '../components/InspectionConflict';
 import { SiteMap } from '../components/SiteMap';
 import { assetLabel } from '@apex/types/asset-classes';
@@ -180,6 +181,12 @@ export default function FieldApp() {
   const [hydratedFor, setHydratedFor] = useState('');
   // Keep the concurrency stamp with the editable snapshot, not live query data.
   const [held, setHeld] = useState<Date | null>(null);
+  const draftKey = searchParams.get('deviceDraft') !== 'ignore' && getPrincipal()?.userId && dealId ? fieldDraftKey(getPrincipal()!.userId, dealId) : '';
+  const [draftBaseline, setDraftBaseline] = useState('');
+  const [recoverable, setRecoverable] = useState<FieldDraft | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [draftStorageError, setDraftStorageError] = useState(false);
+  const [draftReadFailed, setDraftReadFailed] = useState(false);
 
   useEffect(() => {
     if (!dealId || inspection === undefined || hydratedFor === dealId) return;
@@ -192,10 +199,44 @@ export default function FieldApp() {
       setWeights(DEFAULT_WEIGHTS);
       setValue(null);
     }
+    setDraftBaseline(fieldDraftContent({
+      rooms: inspection?.rooms.length ? inspection.rooms : defaultRooms(),
+      weights: inspection?.approachWeights ?? DEFAULT_WEIGHTS,
+      value: inspection?.reconciledValue ?? null,
+    }));
+    setRecoverable(null);
+    setDraftNotice(null);
+    setDraftStorageError(false);
+    setDraftReadFailed(false);
+    try {
+      const raw = draftKey ? localStorage.getItem(draftKey) : null;
+      if (raw) setRecoverable(parseFieldDraft(raw));
+    } catch {
+      setDraftStorageError(true);
+      setDraftReadFailed(true);
+      setDraftNotice('Device draft could not be read. Keep this page open until your inspection is saved to the project.');
+    }
     setHeld(inspection?.updatedAt ?? null);
     setCurrent(0);
     setHydratedFor(dealId);
-  }, [dealId, inspection, hydratedFor]);
+  }, [dealId, inspection, hydratedFor, draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || hydratedFor !== dealId || recoverable || draftReadFailed || !draftBaseline) return;
+    const content = fieldDraftContent({ rooms, weights, value });
+    try {
+      if (content === draftBaseline) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      localStorage.setItem(draftKey, JSON.stringify({ rooms, weights, value, held: held?.toISOString() ?? null }));
+      setDraftStorageError(false);
+      setDraftNotice('Draft saved on this device. Save to the project to share it with the office.');
+    } catch {
+      setDraftStorageError(true);
+      setDraftNotice('Device draft could not be saved. Keep this page open and save to the project before leaving.');
+    }
+  }, [draftKey, dealId, hydratedFor, recoverable, draftReadFailed, draftBaseline, rooms, weights, value, held]);
 
   const rated = rooms.filter((r) => r.condition > 0).length;
   // the count of photographs FILED, which is what the record claims — a shot
@@ -225,7 +266,19 @@ export default function FieldApp() {
    * it will not.
    */
   const save = trpc.inspections.save.useMutation({
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
+      // A late response for another project must not replace the open project's stamp.
+      if (variables.dealId !== dealId) return;
+      setDraftBaseline(fieldDraftContent({ rooms: variables.rooms.map(r => ({ ...r, notes: r.notes ?? '', photos: r.photos ?? [] })), weights: variables.approachWeights, value: variables.reconciledValue }));
+      try {
+        if (draftKey) localStorage.removeItem(draftKey);
+        setDraftNotice('Inspection saved to the project.');
+        setDraftStorageError(false);
+        setDraftReadFailed(false);
+      } catch {
+        setDraftNotice('Inspection saved to the project, but the older device draft could not be removed.');
+        setDraftStorageError(true);
+      }
       setHeld(res.updatedAt);
       utils.inspections.get.invalidate();
       /**
@@ -587,7 +640,7 @@ export default function FieldApp() {
   const readyPct = Math.round((readiness.filter(([, ok]) => ok).length / readiness.length) * 100);
 
   const conflict = save.error?.data?.code === 'CONFLICT' && save.variables?.dealId === dealId ? (
-    <InspectionConflict dealId={dealId} latestUrl={`/field?dealId=${dealId}`}
+    <InspectionConflict dealId={dealId} latestUrl={`/field?dealId=${dealId}&deviceDraft=ignore`}
       draft={{ source: 'field', baseUpdatedAt: held, rooms, reconciledValue: value, approachWeights: weights }} />
   ) : null;
 
@@ -1351,18 +1404,43 @@ export default function FieldApp() {
     </>
   );
 
+  const draftRecovery = deal && hydratedFor === dealId && screen !== 'appraisals' ? (
+    <div className="px-4 py-2 text-xs bg-surface border-b border-line" role={draftStorageError ? 'alert' : 'status'}>
+      {recoverable ? <>
+        <p>A device draft is available. Restore it before editing, or keep the saved project version. Nothing is sent automatically.</p>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <Button size="sm" onClick={() => {
+            setRooms(recoverable.rooms); setWeights(recoverable.weights); setValue(recoverable.value);
+            setHeld(recoverable.held ? new Date(recoverable.held) : null);
+            setRecoverable(null);
+            setDraftNotice('Device draft restored. Save to the project to share it; newer office changes will be checked.');
+          }}>Restore device draft</Button>
+          <Button size="sm" variant="secondary" onClick={() => {
+            if (!confirm('Discard this device draft and keep the saved project version?')) return;
+            try { localStorage.removeItem(draftKey); setRecoverable(null); setDraftNotice(null); }
+            catch { setDraftStorageError(true); setDraftNotice('Device draft could not be removed.'); }
+          }}>Discard device draft</Button>
+        </div>
+        {draftStorageError && <p role="alert">{draftNotice}</p>}
+      </> : draftNotice}
+    </div>
+  ) : null;
+
   const screens = dealsLoading && !deals.length ? (
     <div className="flex-1 flex items-center justify-center"><Spinner /></div>
   ) : requestedDeal && !deal && screen !== 'appraisals' ? (
     <div role="status" className="p-6 text-[13px]"><p>{dealsError ? 'The project could not be loaded.' : 'This project is unavailable in your workspace.'}</p><Button className="mt-3" onClick={() => { setSearchParams({}); setDealId(''); setScreen('appraisals'); }}>Choose a project</Button></div>
+  ) : deal && hydratedFor !== dealId && !inspectionError && screen !== 'appraisals' ? (
+    <div role="status" className="p-6 text-sm">Loading inspection and device draft…</div>
   ) : (
     <>
+      {draftRecovery}
       {screen === 'appraisals' && appraisalsScreen}
-      {screen === 'detail' && detailScreen}
-      {screen === 'inspection' && inspectionScreen}
-      {screen === 'comps' && compsScreen}
-      {screen === 'valuation' && valuationScreen}
-      {screen === 'sent' && sentScreen}
+      {!recoverable && screen === 'detail' && detailScreen}
+      {!recoverable && screen === 'inspection' && inspectionScreen}
+      {!recoverable && screen === 'comps' && compsScreen}
+      {!recoverable && screen === 'valuation' && valuationScreen}
+      {!recoverable && screen === 'sent' && sentScreen}
     </>
   );
 
