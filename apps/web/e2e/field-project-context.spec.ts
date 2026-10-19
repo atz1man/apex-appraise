@@ -108,6 +108,11 @@ for (const surface of ['field', 'workbench'] as const) test(`${surface} refresh 
       });
       await expect(page.getByText('Desk evidence checked', { exact: false })).toBeVisible();
     }
+    if (surface === 'field') {
+      await page.reload();
+      await page.getByRole('button', { name: 'Restore device draft' }).click();
+      await page.getByRole('button', { name: 'Review inspection', exact: true }).click();
+    }
     await expect(notes).toHaveValue(draft);
     const saveResponse = page.waitForResponse(r => r.url().includes('inspections.save') && r.request().method() === 'POST');
     await page.getByRole('button', { name: surface === 'field' ? 'Save' : 'Save valuation', exact: true }).click();
