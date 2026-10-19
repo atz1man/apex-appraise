@@ -230,3 +230,49 @@ test('a photograph uploaded but not yet named is still attributed after a reload
     )
     .toEqual([rows[0]!.id]);
 });
+
+for (const failure of ['quota', 'abort', 'unavailable'] as const) {
+  test(`failed device photo storage (${failure}) is visible and can recover`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await signIn(page);
+    const { id, name } = await freshDeal(page, `Field Storage ${failure}`);
+    await openInspection(page, name);
+    await page.route('**/uploads/photo', (route) => route.abort());
+    await page.evaluate((kind) => {
+      const originalPut = IDBObjectStore.prototype.put;
+      const originalOpen = IDBFactory.prototype.open;
+      (window as any).restorePhotoStorage = () => {
+        IDBObjectStore.prototype.put = originalPut;
+        IDBFactory.prototype.open = originalOpen;
+      };
+      if (kind === 'unavailable') {
+        IDBFactory.prototype.open = () => { throw new DOMException('Unavailable', 'SecurityError'); };
+      } else {
+        IDBObjectStore.prototype.put = function (...args) {
+          if (this.name !== 'photo-queue') return originalPut.apply(this, args);
+          if (kind === 'quota') throw new DOMException('Full', 'QuotaExceededError');
+          const request = originalPut.apply(this, args);
+          // Request success is not transaction success: a late abort loses the row.
+          request.addEventListener('success', () => this.transaction.abort());
+          return request;
+        };
+      }
+    }, failure);
+    await page.locator('input[type=file]').setInputFiles({ name: 'storage.jpg', mimeType: 'image/jpeg', buffer: JPEG });
+    await expect(page.getByRole('alert').filter({ hasText: 'Photograph not saved' })).toBeVisible();
+    await expect(page.getByText(/\d+ filed/).first()).toHaveText('0 filed');
+    await expect(page.getByText(/saved on this device/)).toHaveCount(0);
+    expect(await photoRows(page, id)).toHaveLength(0);
+    await page.evaluate(() => (window as any).restorePhotoStorage());
+    await page.locator('input[type=file]').setInputFiles({ name: 'storage.jpg', mimeType: 'image/jpeg', buffer: JPEG });
+    await expect(page.getByText(/\d+ filed/).first()).toHaveText('0 filed · 1 waiting');
+    await expect(page.getByRole('alert').filter({ hasText: 'Photograph not saved' })).toHaveCount(0);
+    await page.reload();
+    await openInspection(page, name);
+    await expect(page.getByText(/\d+ filed/).first()).toHaveText('0 filed · 1 waiting');
+    await page.unroute('**/uploads/photo');
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect(page.getByText(/\d+ filed/).first()).toHaveText('1 filed');
+    expect(await photoRows(page, id)).toHaveLength(1);
+  });
+}

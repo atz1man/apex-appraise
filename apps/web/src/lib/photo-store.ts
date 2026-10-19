@@ -13,11 +13,9 @@
  * tested in a Node environment with no `indexedDB`. `e2e/field-offline.spec.ts`
  * is what exercises the real one, in a real browser, across a real reload.
  *
- * Every method answers rather than throwing. A surveyor whose browser refuses
- * IndexedDB — a private window, a locked-down device, a quota that is full —
- * must still be able to take photographs and upload them; they lose durability,
- * not the camera. The caller treats an empty store as an empty queue, which is
- * what it is.
+ * Capture writes reject on unavailable storage, quota errors or aborted commits.
+ * The caller must not promise durability until the transaction completes.
+ * Reads and queue maintenance retain their existing best-effort behaviour.
  *
  * NOT closed, and said rather than implied: two TABS of the field app share this
  * store and could both find the same record unsent and upload it, which would
@@ -82,10 +80,26 @@ const tx = async <T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRe
   });
 };
 
-/** The real store. A failure of any kind reads as "nothing queued". */
+/** Device storage: capture succeeds only after a committed write. */
 export const indexedDbPhotoStore: PhotoStore = {
   async put(record, blob) {
-    await tx('readwrite', (s) => s.put({ localId: record.localId, record, blob }));
+    const db = await open();
+    if (!db) throw new Error('Device photo storage is unavailable');
+    await new Promise<void>((resolve, reject) => {
+      const fail = () => {
+        db.close();
+        reject(new Error('Photograph could not be saved on this device'));
+      };
+      try {
+        const transaction = db.transaction(STORE, 'readwrite');
+        transaction.oncomplete = () => { db.close(); resolve(); };
+        transaction.onabort = fail;
+        transaction.onerror = fail;
+        transaction.objectStore(STORE).put({ localId: record.localId, record, blob });
+      } catch {
+        fail();
+      }
+    });
   },
   /**
    * Read and write in ONE transaction, not two.
@@ -134,9 +148,7 @@ export const indexedDbPhotoStore: PhotoStore = {
 /**
  * The same contract, in memory.
  *
- * Not a test double for its own sake: it is what the field app falls back to when
- * `indexedDB` is absent, so the camera keeps working where durability cannot. It
- * is also what makes the queue's behaviour drivable in a unit test.
+ * Used for isolated queue decision tests; the field app requires durable storage.
  */
 export function memoryPhotoStore(): PhotoStore {
   const rows = new Map<string, StoredPhoto>();
